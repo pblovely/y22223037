@@ -62,7 +62,13 @@
   .card h3{ margin:0 0 6px 0; font-size:14px; color:var(--navy); }
   .card p.desc{ font-size:12.5px; color:var(--gray); margin:0 0 12px 0; }
   .perm-tag{ display:inline-block; font-size:11px; padding:3px 8px; margin:3px 4px 0 0; background:#eee; color:var(--navy); border:1px solid var(--navy); }
-  .inline-form{ display:flex; gap:8px; margin-bottom:16px; flex-wrap:wrap; }
+  .inline-form{ display:flex; gap:0; margin-bottom:16px; flex-wrap:wrap; }
+  .inline-form input, .inline-form select{ margin-left:-1px; }
+  .inline-form input:first-child, .inline-form select:first-child{ margin-left:0; }
+  .inline-form button{ margin-left:6px; }
+  .field-row{ display:flex; gap:0; flex-wrap:wrap; }
+  .field-row .field{ margin-left:-1px; }
+  .field-row .field:first-child{ margin-left:0; }
   .inline-form input{ flex:1; min-width:140px; padding:9px 10px; border:1px solid #c7c7c7; font-size:13px; }
   .list-row{ display:flex; justify-content:space-between; align-items:center; padding:10px 12px; border:1px solid var(--line); border-top:none; font-size:13.5px; }
   .list-row:first-of-type{ border-top:1px solid var(--line); }
@@ -203,14 +209,13 @@
 
       <div class="card" style="max-width:1400px;">
         <h3>모델 등록 (기본정보)</h3>
-        <p class="desc">모델군·기본모델명·용량·전산모델명·출고가·펫네임을 등록합니다. 색상은 등록 후 추가합니다.</p>
+        <p class="desc">모델군·기본모델명·용량·전산모델명·출고가·펫네임 중 아는 것만 채워서 등록해도 됩니다. 나중에 "모델 수정"으로 채우면 됩니다. 출고가는 VAT포함 금액만 입력하면 VAT별도는 자동 계산됩니다.</p>
         <div class="inline-form" style="flex-wrap:nowrap;overflow-x:auto;">
           <input type="text" id="model-group-input" placeholder="모델군 (예: 폴립256)" style="min-width:110px;">
           <input type="text" id="model-base-input" placeholder="기본모델명 (예: SM-F776N)" style="min-width:130px;">
-          <input type="text" id="model-capacity-input" placeholder="용량 (예: 256GB)" style="min-width:90px;">
+          <input type="text" id="model-capacity-input" placeholder="용량 (선택)" style="min-width:90px;">
           <input type="text" id="model-system-input" placeholder="전산모델명 (예: SM-F776N256)" style="min-width:140px;">
-          <input type="number" id="model-price-ex-input" placeholder="출고가(VAT별도)" style="min-width:110px;">
-          <input type="number" id="model-price-inc-input" placeholder="출고가(VAT포함)" style="min-width:110px;">
+          <input type="number" id="model-price-inc-input" placeholder="출고가(VAT포함)" style="min-width:120px;">
           <input type="text" id="model-pet-input" placeholder="펫네임" style="min-width:120px;">
           <input type="text" id="model-nick-input" placeholder="닉네임(자유)" style="min-width:100px;">
           <button class="btn small" style="flex-shrink:0;" onclick="addModel()">모델 등록</button>
@@ -361,14 +366,14 @@
         <h3 style="margin-top:0;">재고 입고 등록</h3>
         <p class="desc">모델·색상을 선택하면 전산모델명·삼성코드·출고가가 자동으로 채워집니다.</p>
 
-        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <div class="field-row">
           <div class="field" style="flex:1;min-width:150px;"><label>입고처</label><select id="item-source-select"><option value="">선택</option></select></div>
           <div class="field" style="flex:1;min-width:130px;"><label>제조사</label><select id="item-manufacturer-select"><option value="">선택</option></select></div>
           <div class="field" style="flex:1;min-width:110px;"><label>통신사</label><select id="item-carrier-select"></select></div>
           <div class="field" style="flex:1;min-width:130px;"><label>위치</label><select id="item-location-select"><option value="">선택</option></select></div>
         </div>
 
-        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <div class="field-row">
           <div class="field" style="flex:1;min-width:160px;">
             <label>모델 (모델명+기가수)</label>
             <select id="item-model-select" onchange="onItemModelChange()"><option value="">모델을 선택하세요</option></select>
@@ -380,7 +385,7 @@
           <div class="field" style="flex:1;min-width:130px;"><label>현재상태</label><select id="item-status-select"></select></div>
         </div>
 
-        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <div class="field-row">
           <div class="field" style="flex:1;min-width:130px;"><label>입고 방식</label>
             <select id="item-entry-type" onchange="toggleEntryType()">
               <option value="qty">수량으로 입력</option>
@@ -393,12 +398,12 @@
         </div>
 
         <div style="border-top:1px solid var(--line);margin:10px 0;padding-top:10px;">
-        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <div class="field-row">
           <div class="field" style="flex:1;min-width:120px;"><label>출고가</label><input type="number" id="item-listprice-input"></div>
           <div class="field" style="flex:1;min-width:120px;"><label>입고가</label><input type="number" id="item-purchaseprice-input" oninput="updateProfitDisplay()"></div>
           <div class="field" style="flex:1;min-width:110px;"><label>입고할인율</label><input type="number" step="0.001" id="item-purchasediscount-input" placeholder="예: 0.002"></div>
         </div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <div class="field-row">
           <div class="field" style="flex:1;min-width:130px;"><label>판매처 (선택)</label><select id="item-dest-select"><option value="">해당없음</option></select></div>
           <div class="field" style="flex:1;min-width:120px;"><label>판매가 (선택)</label><input type="number" id="item-saleprice-input" oninput="updateProfitDisplay()"></div>
           <div class="field" style="flex:1;min-width:110px;"><label>판매할인율 (선택)</label><input type="number" step="0.001" id="item-salediscount-input"></div>
@@ -406,7 +411,7 @@
         </div>
         </div>
 
-        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <div class="field-row">
           <div class="field" style="flex:1;min-width:130px;"><label>주문요청일</label><input type="date" id="item-orderdate-input"></div>
           <div class="field" style="flex:1;min-width:130px;"><label>입고일</label><input type="date" id="item-indate-input"></div>
           <div class="field" style="flex:1;min-width:130px;"><label>출고일 (선택)</label><input type="date" id="item-outdate-input"></div>
@@ -958,17 +963,18 @@
       wrap.querySelector('[data-edit-model]').onclick = async ()=>{
         const modelGroup = prompt("모델군", m.modelGroup); if(modelGroup===null) return;
         const baseModel = prompt("기본모델명", m.baseModel); if(baseModel===null) return;
-        const capacity = prompt("용량", m.capacity); if(capacity===null) return;
+        const capacity = prompt("용량 (선택)", m.capacity); if(capacity===null) return;
         const systemModel = prompt("전산모델명", m.systemModel); if(systemModel===null) return;
-        const priceExInput = prompt("출고가(VAT별도)", m.priceExVat||""); if(priceExInput===null) return;
-        const priceIncInput = prompt("출고가(VAT포함)", m.priceIncVat||""); if(priceIncInput===null) return;
+        const priceIncInput = prompt("출고가 (VAT포함, 입력하면 VAT별도는 자동계산)", m.priceIncVat||""); if(priceIncInput===null) return;
         const petName = prompt("펫네임", m.petName||""); if(petName===null) return;
         const nickname = prompt("닉네임", m.nickname||""); if(nickname===null) return;
 
+        const priceIncVat = priceIncInput?Number(priceIncInput):null;
         const newFields = {
           modelGroup: modelGroup.trim(), baseModel: baseModel.trim(), capacity: capacity.trim(),
-          systemModel: systemModel.trim(), priceExVat: priceExInput?Number(priceExInput):null,
-          priceIncVat: priceIncInput?Number(priceIncInput):null, petName: petName.trim(), nickname: nickname.trim()
+          systemModel: systemModel.trim(),
+          priceIncVat, priceExVat: priceIncVat ? Math.round(priceIncVat/1.1) : null,
+          petName: petName.trim(), nickname: nickname.trim()
         };
         await updateDoc(doc(db, "inventoryModels", m.id), newFields);
 
@@ -1044,18 +1050,25 @@
     const baseModel = document.getElementById("model-base-input").value.trim();
     const capacity = document.getElementById("model-capacity-input").value.trim();
     const systemModel = document.getElementById("model-system-input").value.trim();
-    const priceEx = document.getElementById("model-price-ex-input").value;
     const priceInc = document.getElementById("model-price-inc-input").value;
     const petName = document.getElementById("model-pet-input").value.trim();
     const nickname = document.getElementById("model-nick-input").value.trim();
-    if(!modelGroup || !baseModel || !capacity){ alert("모델군, 기본모델명, 용량은 필수입니다."); return; }
+
+    if(!modelGroup && !baseModel && !systemModel){
+      alert("모델군, 기본모델명, 전산모델명 중 최소 하나는 입력해주세요. (나머지는 나중에 수정 가능)");
+      return;
+    }
+    const priceIncVat = priceInc ? Number(priceInc) : null;
+    const priceExVat = priceIncVat ? Math.round(priceIncVat / 1.1) : null;
+
     await addDoc(collection(db, "inventoryModels"), {
-      modelGroup, baseModel, capacity, systemModel,
-      priceExVat: priceEx?Number(priceEx):null, priceIncVat: priceInc?Number(priceInc):null,
+      modelGroup: modelGroup || baseModel || systemModel,
+      baseModel, capacity, systemModel,
+      priceExVat, priceIncVat,
       petName, nickname, colors: []
     });
-    logAction("모델 등록", modelGroup + " " + capacity);
-    ["model-group-input","model-base-input","model-capacity-input","model-system-input","model-price-ex-input","model-price-inc-input","model-pet-input","model-nick-input"]
+    logAction("모델 등록", (modelGroup || baseModel || systemModel) + " " + capacity);
+    ["model-group-input","model-base-input","model-capacity-input","model-system-input","model-price-inc-input","model-pet-input","model-nick-input"]
       .forEach(id=> document.getElementById(id).value = "");
     loadModelAdminList();
   };
