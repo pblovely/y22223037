@@ -247,6 +247,35 @@
         </div>
         <div id="carrier-list"></div>
       </div>
+
+      <div class="card">
+        <h3>제조사 관리</h3>
+        <div class="inline-form">
+          <input type="text" id="new-manufacturer-input" placeholder="예: 삼성전자">
+          <button class="btn small" onclick="addManufacturer()">추가</button>
+        </div>
+        <div id="manufacturer-list"></div>
+      </div>
+
+      <div class="card">
+        <h3>위치 관리</h3>
+        <p class="desc">단말기가 현재 보관된 위치(사무실·지점 등) 목록입니다.</p>
+        <div class="inline-form">
+          <input type="text" id="new-location-input" placeholder="예: 천안사무실">
+          <button class="btn small" onclick="addLocation()">추가</button>
+        </div>
+        <div id="location-list"></div>
+      </div>
+
+      <div class="card">
+        <h3>현재상태 관리</h3>
+        <p class="desc">기본값 보유중/판매가 자동 등록되어 있습니다. 필요한 상태값을 자유롭게 추가하세요 (예: 개통완료).</p>
+        <div class="inline-form">
+          <input type="text" id="new-status-input" placeholder="예: 개통완료">
+          <button class="btn small" onclick="addStatusOption()">추가</button>
+        </div>
+        <div id="status-option-list"></div>
+      </div>
     </div>
 
     <!-- ===== 관리자: 사용자 관리 ===== -->
@@ -327,53 +356,60 @@
 
     <!-- 재고 1건 등록 팝업 -->
     <div id="item-modal-overlay" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.55);z-index:1000;align-items:center;justify-content:center;">
-      <div style="background:#fff;border:2px solid var(--navy);max-width:680px;width:92%;max-height:88vh;overflow-y:auto;padding:26px;position:relative;">
+      <div style="background:#fff;border:2px solid var(--navy);max-width:760px;width:94%;max-height:90vh;overflow-y:auto;padding:26px;position:relative;">
         <button onclick="closeItemModal()" style="position:absolute;top:14px;right:14px;background:none;border:1px solid var(--navy);width:28px;height:28px;cursor:pointer;font-size:14px;">✕</button>
         <h3 style="margin-top:0;">재고 입고 등록</h3>
-        <p class="desc">모델·색상을 선택하고, 수량으로 넣을지 IMEI로 개별 등록할지 선택하세요.</p>
+        <p class="desc">모델·색상을 선택하면 전산모델명·삼성코드·출고가가 자동으로 채워집니다.</p>
+
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <div class="field" style="flex:1;min-width:150px;"><label>입고처</label><select id="item-source-select"><option value="">선택</option></select></div>
+          <div class="field" style="flex:1;min-width:130px;"><label>제조사</label><select id="item-manufacturer-select"><option value="">선택</option></select></div>
+          <div class="field" style="flex:1;min-width:110px;"><label>통신사</label><select id="item-carrier-select"></select></div>
+          <div class="field" style="flex:1;min-width:130px;"><label>위치</label><select id="item-location-select"><option value="">선택</option></select></div>
+        </div>
+
         <div style="display:flex;gap:8px;flex-wrap:wrap;">
           <div class="field" style="flex:1;min-width:160px;">
-            <label>모델</label>
+            <label>모델 (모델명+기가수)</label>
             <select id="item-model-select" onchange="onItemModelChange()"><option value="">모델을 선택하세요</option></select>
           </div>
           <div class="field" style="flex:1;min-width:160px;">
-            <label>색상 (삼성모델명)</label>
+            <label>색상 (삼성코드)</label>
             <select id="item-color-select"><option value="">모델을 먼저 선택하세요</option></select>
           </div>
+          <div class="field" style="flex:1;min-width:130px;"><label>현재상태</label><select id="item-status-select"></select></div>
         </div>
+
         <div style="display:flex;gap:8px;flex-wrap:wrap;">
-          <div class="field" style="flex:1;min-width:120px;">
-            <label>통신사</label>
-            <select id="item-carrier-select"></select>
-          </div>
-          <div class="field" style="flex:1;min-width:130px;">
-            <label>입고처</label>
-            <select id="item-source-select"><option value="">입고처를 선택하세요</option></select>
-          </div>
-          <div class="field" style="flex:1;min-width:130px;">
-            <label>출고처 (선택)</label>
-            <select id="item-dest-select"><option value="">해당없음</option></select>
-          </div>
-          <div class="field" style="flex:1;min-width:130px;">
-            <label>입고 방식</label>
+          <div class="field" style="flex:1;min-width:130px;"><label>입고 방식</label>
             <select id="item-entry-type" onchange="toggleEntryType()">
               <option value="qty">수량으로 입력</option>
-              <option value="imei">IMEI 개별 입력</option>
+              <option value="imei">일련번호 개별 입력</option>
             </select>
           </div>
-        </div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;">
           <div class="field" id="item-qty-field" style="flex:1;min-width:90px;"><label>수량</label><input type="number" id="item-qty-input" value="1"></div>
-          <div class="field" id="item-imei-field" style="flex:1;min-width:150px;display:none;"><label>IMEI</label><input type="text" id="item-imei-input"></div>
-          <div class="field" style="flex:1;min-width:120px;"><label>매입단가(개당)</label><input type="number" id="item-price-input"></div>
-          <div class="field" style="flex:1;min-width:130px;"><label>상태</label>
-            <select id="item-status-select"><option value="재고">재고</option><option value="개통완료">개통완료</option><option value="판매완료">판매완료</option></select>
-          </div>
+          <div class="field" id="item-serial-field" style="flex:1;min-width:130px;display:none;"><label>일련번호</label><input type="text" id="item-serial-input"></div>
+          <div class="field" style="flex:1;min-width:150px;"><label>IMEI (선택)</label><input type="text" id="item-imei-input"></div>
+        </div>
+
+        <div style="border-top:1px solid var(--line);margin:10px 0;padding-top:10px;">
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <div class="field" style="flex:1;min-width:120px;"><label>출고가</label><input type="number" id="item-listprice-input"></div>
+          <div class="field" style="flex:1;min-width:120px;"><label>입고가</label><input type="number" id="item-purchaseprice-input" oninput="updateProfitDisplay()"></div>
+          <div class="field" style="flex:1;min-width:110px;"><label>입고할인율</label><input type="number" step="0.001" id="item-purchasediscount-input" placeholder="예: 0.002"></div>
         </div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <div class="field" style="flex:1;min-width:130px;"><label>판매처 (선택)</label><select id="item-dest-select"><option value="">해당없음</option></select></div>
+          <div class="field" style="flex:1;min-width:120px;"><label>판매가 (선택)</label><input type="number" id="item-saleprice-input" oninput="updateProfitDisplay()"></div>
+          <div class="field" style="flex:1;min-width:110px;"><label>판매할인율 (선택)</label><input type="number" step="0.001" id="item-salediscount-input"></div>
+          <div class="field" style="flex:1;min-width:110px;"><label>수익 (자동계산)</label><input type="text" id="item-profit-display" disabled style="background:#f2f2f2;"></div>
+        </div>
+        </div>
+
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <div class="field" style="flex:1;min-width:130px;"><label>주문요청일</label><input type="date" id="item-orderdate-input"></div>
           <div class="field" style="flex:1;min-width:130px;"><label>입고일</label><input type="date" id="item-indate-input"></div>
           <div class="field" style="flex:1;min-width:130px;"><label>출고일 (선택)</label><input type="date" id="item-outdate-input"></div>
-          <div class="field" style="flex:1;min-width:130px;"><label>결산일 (선택)</label><input type="date" id="item-settledate-input"></div>
         </div>
         <button class="btn small" onclick="addInventoryItem()">재고 등록</button>
       </div>
@@ -736,6 +772,103 @@
     });
   }
 
+  // ---------- 제조사 ----------
+  function loadManufacturerList(){
+    (async ()=>{
+      const snap = await getDocs(collection(db,"manufacturers"));
+      if(snap.empty){ await addDoc(collection(db,"manufacturers"), { name:"삼성전자" }); }
+      renderEditableList({
+        collectionName:"manufacturers", listElId:"manufacturer-list", label:"제조사",
+        reload: loadManufacturerList,
+        cascadeList:[{collection:"inventoryItems", field:"manufacturer"}],
+        afterChange: loadManufacturersIntoSelect
+      });
+    })();
+  }
+  window.addManufacturer = async function(){
+    const input = document.getElementById("new-manufacturer-input");
+    const name = input.value.trim();
+    if(!name) return;
+    await addDoc(collection(db, "manufacturers"), { name });
+    logAction("제조사 추가", name);
+    input.value = ""; loadManufacturerList();
+  };
+  async function loadManufacturersIntoSelect(){
+    const sel = document.getElementById("item-manufacturer-select");
+    sel.innerHTML = '<option value="">선택</option>';
+    const snap = await getDocs(query(collection(db, "manufacturers"), orderBy("name")));
+    snap.forEach(d=>{
+      const opt = document.createElement("option");
+      opt.value = d.data().name; opt.textContent = d.data().name;
+      sel.appendChild(opt);
+    });
+  }
+
+  // ---------- 위치 ----------
+  function loadLocationList(){
+    renderEditableList({
+      collectionName:"locations", listElId:"location-list", label:"위치",
+      reload: loadLocationList,
+      cascadeList:[{collection:"inventoryItems", field:"location"}],
+      afterChange: loadLocationsIntoSelect
+    });
+  }
+  window.addLocation = async function(){
+    const input = document.getElementById("new-location-input");
+    const name = input.value.trim();
+    if(!name) return;
+    await addDoc(collection(db, "locations"), { name });
+    logAction("위치 추가", name);
+    input.value = ""; loadLocationList();
+  };
+  async function loadLocationsIntoSelect(){
+    const sel = document.getElementById("item-location-select");
+    sel.innerHTML = '<option value="">선택</option>';
+    const snap = await getDocs(query(collection(db, "locations"), orderBy("name")));
+    snap.forEach(d=>{
+      const opt = document.createElement("option");
+      opt.value = d.data().name; opt.textContent = d.data().name;
+      sel.appendChild(opt);
+    });
+  }
+
+  // ---------- 현재상태 ----------
+  async function ensureDefaultStatuses(){
+    const snap = await getDocs(collection(db, "statusOptions"));
+    if(snap.empty){
+      for(const name of ["보유중","판매"]){ await addDoc(collection(db,"statusOptions"), { name }); }
+    }
+  }
+  function loadStatusOptionList(){
+    ensureDefaultStatuses().then(()=>{
+      renderEditableList({
+        collectionName:"statusOptions", listElId:"status-option-list", label:"현재상태",
+        reload: loadStatusOptionList,
+        cascadeList:[{collection:"inventoryItems", field:"status"}],
+        afterChange: loadStatusesIntoSelect
+      });
+    });
+  }
+  window.addStatusOption = async function(){
+    const input = document.getElementById("new-status-input");
+    const name = input.value.trim();
+    if(!name) return;
+    await addDoc(collection(db, "statusOptions"), { name });
+    logAction("현재상태 추가", name);
+    input.value = ""; loadStatusOptionList();
+  };
+  async function loadStatusesIntoSelect(){
+    await ensureDefaultStatuses();
+    const sel = document.getElementById("item-status-select");
+    sel.innerHTML = "";
+    const snap = await getDocs(query(collection(db, "statusOptions"), orderBy("name")));
+    snap.forEach(d=>{
+      const opt = document.createElement("option");
+      opt.value = d.data().name; opt.textContent = d.data().name;
+      sel.appendChild(opt);
+    });
+  }
+
   // ---------- 모델(용량 단위) + 색상별 SKU ----------
   async function fetchModelsCache(){
     const snap = await getDocs(query(collection(db, "inventoryModels"), orderBy("modelGroup")));
@@ -952,13 +1085,22 @@
       opt.textContent = c.color + " (" + c.sku + ")";
       colorSel.appendChild(opt);
     });
-    const priceInput = document.getElementById("item-price-input");
-    if(!priceInput.value && m.priceExVat){ priceInput.value = m.priceExVat; }
+    const listPriceInput = document.getElementById("item-listprice-input");
+    const purchasePriceInput = document.getElementById("item-purchaseprice-input");
+    if(!listPriceInput.value && m.priceExVat){ listPriceInput.value = m.priceExVat; }
+    if(!purchasePriceInput.value && m.priceExVat){ purchasePriceInput.value = m.priceExVat; }
   };
   window.toggleEntryType = function(){
     const type = document.getElementById("item-entry-type").value;
     document.getElementById("item-qty-field").style.display = (type==="qty") ? "block" : "none";
-    document.getElementById("item-imei-field").style.display = (type==="imei") ? "block" : "none";
+    document.getElementById("item-serial-field").style.display = (type==="imei") ? "block" : "none";
+  };
+  window.updateProfitDisplay = function(){
+    const sale = Number(document.getElementById("item-saleprice-input").value) || 0;
+    const purchase = Number(document.getElementById("item-purchaseprice-input").value) || 0;
+    const disp = document.getElementById("item-profit-display");
+    if(sale && purchase){ disp.value = (sale - purchase).toLocaleString() + "원"; }
+    else{ disp.value = ""; }
   };
 
   // ---------- 재고 등록 팝업 ----------
@@ -1011,39 +1153,54 @@
     const color = colorSel.selectedOptions[0] ? colorSel.selectedOptions[0].dataset.color : "";
     const carrier = document.getElementById("item-carrier-select").value;
     const source = document.getElementById("item-source-select").value;
+    const manufacturer = document.getElementById("item-manufacturer-select").value;
+    const location = document.getElementById("item-location-select").value;
     const dest = document.getElementById("item-dest-select").value;
     const entryType = document.getElementById("item-entry-type").value;
-    const price = document.getElementById("item-price-input").value;
     const status = document.getElementById("item-status-select").value;
+    const listPrice = document.getElementById("item-listprice-input").value;
+    const purchasePrice = document.getElementById("item-purchaseprice-input").value;
+    const purchaseDiscount = document.getElementById("item-purchasediscount-input").value;
+    const salePrice = document.getElementById("item-saleprice-input").value;
+    const saleDiscount = document.getElementById("item-salediscount-input").value;
+    const imei = document.getElementById("item-imei-input").value.trim();
+    const orderDate = document.getElementById("item-orderdate-input").value || "";
     const inDate = document.getElementById("item-indate-input").value || new Date().toISOString().slice(0,10);
     const outDate = document.getElementById("item-outdate-input").value || "";
-    const settleDate = document.getElementById("item-settledate-input").value || "";
 
     const m = modelsCache.find(x=>x.id===modelId);
     if(!m || !sku){ alert("모델과 색상을 선택해주세요."); return; }
     if(!source){ alert("입고처를 선택해주세요."); return; }
+    if(!status){ alert("현재상태를 선택해주세요."); return; }
+
+    const profit = (salePrice && purchasePrice) ? (Number(salePrice) - Number(purchasePrice)) : null;
 
     const base = {
       modelGroup:m.modelGroup, baseModel:m.baseModel, capacity:m.capacity, systemModel:m.systemModel,
-      petName: m.petName || "", color, sku, carrier, source, destination:dest,
-      price: price?Number(price):null, status, inDate, outDate, settleDate, createdAt: serverTimestamp()
+      petName: m.petName || "", color, sku, carrier, source, manufacturer, location, destination:dest,
+      listPrice: listPrice?Number(listPrice):null,
+      purchasePrice: purchasePrice?Number(purchasePrice):null,
+      purchaseDiscount: purchaseDiscount?Number(purchaseDiscount):null,
+      salePrice: salePrice?Number(salePrice):null,
+      saleDiscount: saleDiscount?Number(saleDiscount):null,
+      profit, imei, status, orderDate, inDate, outDate, createdAt: serverTimestamp()
     };
 
     if(entryType==="qty"){
       const qty = Number(document.getElementById("item-qty-input").value) || 1;
-      await addDoc(collection(db,"inventoryItems"), { ...base, entryType:"qty", quantity:qty, imei:"" });
+      await addDoc(collection(db,"inventoryItems"), { ...base, entryType:"qty", quantity:qty, serialNumber:"" });
       logAction("재고 입고(수량)", m.modelGroup+" "+color+" / "+carrier+" / "+qty+"대");
     }else{
-      const imei = document.getElementById("item-imei-input").value.trim();
-      if(!imei){ alert("IMEI를 입력해주세요."); return; }
-      const dupSnap = await getDocs(query(collection(db,"inventoryItems"), where("imei","==",imei)));
+      const serialNumber = document.getElementById("item-serial-input").value.trim();
+      if(!serialNumber){ alert("일련번호를 입력해주세요."); return; }
+      const dupSnap = await getDocs(query(collection(db,"inventoryItems"), where("serialNumber","==",serialNumber)));
       if(!dupSnap.empty){
-        alert("이미 등록된 IMEI입니다 (" + imei + "). 중복 등록할 수 없습니다.");
+        alert("이미 등록된 일련번호입니다 (" + serialNumber + "). 중복 등록할 수 없습니다.");
         return;
       }
-      await addDoc(collection(db,"inventoryItems"), { ...base, entryType:"imei", quantity:1, imei });
-      logAction("재고 입고(IMEI)", m.modelGroup+" "+color+" / "+carrier+" / IMEI "+imei);
-      document.getElementById("item-imei-input").value = "";
+      await addDoc(collection(db,"inventoryItems"), { ...base, entryType:"imei", quantity:1, serialNumber });
+      logAction("재고 입고(일련번호)", m.modelGroup+" "+color+" / "+carrier+" / 일련번호 "+serialNumber);
+      document.getElementById("item-serial-input").value = "";
     }
     closeItemModal();
     loadInventoryList();
@@ -1078,24 +1235,30 @@
       items = items.filter(it =>
         (it.modelGroup||"").toLowerCase().includes(searchTerm) ||
         (it.baseModel||"").toLowerCase().includes(searchTerm) ||
-        (it.imei||"").toLowerCase().includes(searchTerm)
+        (it.imei||"").toLowerCase().includes(searchTerm) ||
+        (it.serialNumber||"").toLowerCase().includes(searchTerm)
       );
     }
 
-    const counts = { "재고":0, "개통완료":0, "판매완료":0 };
-    items.forEach(it=>{ if(counts[it.status] !== undefined) counts[it.status]++; else counts[it.status] = 1; });
+    const counts = {};
+    items.forEach(it=>{ const s = it.status||"미지정"; counts[s] = (counts[s]||0) + 1; });
     const total = items.length;
 
     function statCard(label, value, color){
-      return '<div style="flex:1;min-width:120px;border:1px solid var(--line);background:#fff;padding:12px 14px;">' +
+      return '<div style="flex:1;min-width:110px;border:1px solid var(--line);background:#fff;padding:12px 14px;">' +
         '<div style="font-size:11.5px;color:var(--gray);margin-bottom:4px;">'+label+'</div>' +
         '<div style="font-size:22px;font-weight:800;color:'+(color||'var(--navy)')+';">'+value+'</div></div>';
     }
-    statEl.innerHTML =
-      statCard("전체", total+"대") +
-      statCard("재고", counts["재고"]+"대") +
-      statCard("개통완료", counts["개통완료"]+"대", "#2e7d32") +
-      statCard("판매완료", counts["판매완료"]+"대", "#8a6d00");
+    let statHtml = statCard("전체", total+"대");
+    const statColors = ["#2e7d32","#8a6d00","#1565c0","#6a1b9a","#37474f"];
+    Object.keys(counts).sort().forEach((s,i)=>{
+      statHtml += statCard(s, counts[s]+"대", statColors[i % statColors.length]);
+    });
+    statEl.innerHTML = statHtml;
+
+    // 상태 드롭다운용 옵션 캐시
+    const statusSnap = await getDocs(query(collection(db,"statusOptions"), orderBy("name")));
+    const statusOptions = []; statusSnap.forEach(d=>statusOptions.push(d.data().name));
 
     if(items.length === 0){
       listEl.innerHTML = '<div class="list-empty">해당 조건의 재고가 없습니다.</div>';
@@ -1105,18 +1268,34 @@
     items.forEach(it=>{
       const row = document.createElement("div");
       row.className = "list-row";
-      row.style.alignItems = "center";
-      const qtyLabel = it.entryType==="imei" ? ("IMEI "+it.imei) : (it.quantity+"대");
-      let extra = "";
-      if(it.outDate) extra += " · 출고일 "+it.outDate;
-      if(it.settleDate) extra += " · 결산일 "+it.settleDate;
-      if(it.destination) extra += " · 출고처 "+it.destination;
+      row.style.alignItems = "flex-start";
+      row.style.flexWrap = "wrap";
+      const idLabel = it.entryType==="imei" ? ("일련번호 "+it.serialNumber) : (it.quantity+"대");
+
+      const parts = [];
+      parts.push('<b>'+buildModelLabel(it)+'</b>');
+      parts.push(it.carrier||"-");
+      if(it.manufacturer) parts.push(it.manufacturer);
+      parts.push('입고처 '+(it.source||"-"));
+      if(it.location) parts.push('위치 '+it.location);
+      parts.push(idLabel);
+      if(it.imei) parts.push('IMEI '+it.imei);
+      parts.push('출고가 '+(it.listPrice?Number(it.listPrice).toLocaleString()+'원':"-"));
+      parts.push('입고가 '+(it.purchasePrice?Number(it.purchasePrice).toLocaleString()+'원':"-"));
+      if(it.purchaseDiscount) parts.push('입고할인율 '+it.purchaseDiscount);
+      if(it.destination) parts.push('판매처 '+it.destination);
+      if(it.salePrice) parts.push('판매가 '+Number(it.salePrice).toLocaleString()+'원');
+      if(it.saleDiscount) parts.push('판매할인율 '+it.saleDiscount);
+      if(it.profit!==null && it.profit!==undefined) parts.push('수익 '+Number(it.profit).toLocaleString()+'원');
+      if(it.orderDate) parts.push('주문요청일 '+it.orderDate);
+      parts.push('입고일 '+it.inDate);
+      if(it.outDate) parts.push('출고일 '+it.outDate);
 
       const infoSpan = document.createElement("span");
-      infoSpan.style.fontSize = "12.5px";
-      infoSpan.innerHTML = '<b>'+buildModelLabel(it)+'</b> · '+it.carrier+' · '+
-        (it.source||"-")+' · '+qtyLabel+' · '+(it.price?Number(it.price).toLocaleString()+'원':"-")+
-        ' · 입고일 '+it.inDate+extra;
+      infoSpan.style.fontSize = "12px";
+      infoSpan.style.flex = "1";
+      infoSpan.style.minWidth = "260px";
+      infoSpan.innerHTML = parts.join(' · ');
 
       const controlSpan = document.createElement("span");
       controlSpan.style.display = "flex";
@@ -1127,7 +1306,7 @@
       statusSel.style.padding = "4px 6px";
       statusSel.style.border = "1px solid #c7c7c7";
       statusSel.style.fontSize = "12px";
-      ["재고","개통완료","판매완료"].forEach(s=>{
+      statusOptions.forEach(s=>{
         const opt = document.createElement("option");
         opt.value = s; opt.textContent = s;
         if(s === it.status) opt.selected = true;
@@ -1138,7 +1317,7 @@
         const oldStatus = it.status;
         if(newStatus === oldStatus) return;
         await updateDoc(doc(db,"inventoryItems",it.id), { status:newStatus });
-        logAction("재고 상태 변경", buildModelLabel(it)+" "+qtyLabel+" : "+oldStatus+" → "+newStatus);
+        logAction("재고 상태 변경", buildModelLabel(it)+" "+idLabel+" : "+oldStatus+" → "+newStatus);
         it.status = newStatus;
         loadInventoryList();
       };
@@ -1148,7 +1327,7 @@
       delBtn.onclick = async ()=>{
         if(confirm("이 재고 기록을 삭제하시겠습니까?")){
           await deleteDoc(doc(db,"inventoryItems",it.id));
-          logAction("재고 삭제", it.modelGroup+" "+(it.color||"")+" / "+qtyLabel);
+          logAction("재고 삭제", it.modelGroup+" "+(it.color||"")+" / "+idLabel);
           loadInventoryList();
         }
       };
@@ -1163,15 +1342,23 @@
 
   // ---------- 엑셀 일괄 업로드 ----------
   const CARRIER_ALIASES = { "LG":"LG","LG유플러스":"LG","U+":"LG","엘지":"LG","SK":"SK","SKT":"SK","SK텔레콤":"SK","KT":"KT" };
-  const TEMPLATE_HEADERS = ["모델군","색상","통신사","입고처","수량","매입단가","입고일","IMEI(선택,입력시1대)","상태"];
+  const TEMPLATE_HEADERS = ["입고처","주문요청","입고일","출고일","통신사","제조사","전산모델명","일련번호","색상","위치","현재상태","출고가","입고가","입고할인율","판매처","판매가","판매할인율","수익","모델명","기가수","삼성코드","IMEI"];
 
   window.downloadExcelTemplate = function(){
-    const sample = [TEMPLATE_HEADERS, ["플립256","핑크","SK","포피플","5","1530000","2026-07-23","","재고"]];
+    const sample = [TEMPLATE_HEADERS,
+      ["포피플","2026-07-23","2026-07-24","","LG","삼성전자","SM-R905N","1131704","그라파이트","천안사무실","보유중","2000000","1996000","0.002","","","","","","","",""]
+    ];
     const ws = XLSX.utils.aoa_to_sheet(sample);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "재고업로드");
     XLSX.writeFile(wb, "재고업로드_템플릿.xlsx");
   };
+
+  function excelDateToStr(v){
+    if(v instanceof Date) return v.toISOString().slice(0,10);
+    if(!v) return "";
+    return String(v).trim();
+  }
 
   window.handleExcelUpload = async function(){
     const fileInput = document.getElementById("excel-file-input");
@@ -1188,36 +1375,53 @@
     if(rows.length===0){ resultEl.innerHTML = '<div class="list-empty">읽을 데이터가 없습니다. 템플릿 형식을 확인해주세요.</div>'; return; }
 
     await fetchModelsCache();
-    const sourceSnap = await getDocs(collection(db,"inboundSources"));
-    const sourceNames = []; sourceSnap.forEach(d=>sourceNames.push(d.data().name));
-    const carrierSnap = await getDocs(collection(db,"carriers"));
-    const carrierNames = []; carrierSnap.forEach(d=>carrierNames.push(d.data().name));
+    const fetchNames = async (col)=>{ const s = await getDocs(collection(db,col)); const arr=[]; s.forEach(d=>arr.push(d.data().name)); return arr; };
+    const sourceNames = await fetchNames("inboundSources");
+    const destNames = await fetchNames("outboundDestinations");
+    const carrierNames = await fetchNames("carriers");
+    const manufacturerNames = await fetchNames("manufacturers");
+    const locationNames = await fetchNames("locations");
+    await ensureDefaultStatuses();
+    const statusNames = await fetchNames("statusOptions");
 
-    const existingImeiSnap = await getDocs(collection(db,"inventoryItems"));
-    const existingImeiSet = new Set();
-    existingImeiSnap.forEach(d=>{ const im = d.data().imei; if(im) existingImeiSet.add(im); });
-    const batchImeiSet = new Set();
+    const existingSerialSnap = await getDocs(collection(db,"inventoryItems"));
+    const existingSerialSet = new Set();
+    existingSerialSnap.forEach(d=>{ const s = d.data().serialNumber; if(s) existingSerialSet.add(String(s)); });
+    const batchSerialSet = new Set();
 
     const validRows = []; const errorRows = [];
 
     rows.forEach((row, idx)=>{
-      const excelRowNum = idx + 2; // 헤더가 1행
+      const excelRowNum = idx + 2;
       const errs = [];
 
-      const modelGroup = String(row["모델군"]||"").trim();
-      const colorName = String(row["색상"]||"").trim();
-      const carrierRaw = String(row["통신사"]||"").trim();
       const source = String(row["입고처"]||"").trim();
-      const qtyRaw = row["수량"];
-      const priceRaw = row["매입단가"];
-      let inDateRaw = row["입고일"];
-      const imei = String(row["IMEI(선택,입력시1대)"]||"").trim();
-      let status = String(row["상태"]||"재고").trim();
+      const orderDate = excelDateToStr(row["주문요청"]);
+      const inDate = excelDateToStr(row["입고일"]) || new Date().toISOString().slice(0,10);
+      const outDate = excelDateToStr(row["출고일"]);
+      const carrierRaw = String(row["통신사"]||"").trim();
+      const manufacturer = String(row["제조사"]||"").trim();
+      const systemModel = String(row["전산모델명"]||"").trim();
+      const serialNumber = String(row["일련번호"]||"").trim();
+      const colorName = String(row["색상"]||"").trim();
+      const location = String(row["위치"]||"").trim();
+      const status = String(row["현재상태"]||"").trim();
+      const listPrice = row["출고가"];
+      const purchasePrice = row["입고가"];
+      const purchaseDiscount = row["입고할인율"];
+      const dest = String(row["판매처"]||"").trim();
+      const salePrice = row["판매가"];
+      const saleDiscount = row["판매할인율"];
+      const baseModelRaw = String(row["모델명"]||"").trim();
+      const capacityRaw = String(row["기가수"]||"").trim();
+      const samsungCode = String(row["삼성코드"]||"").trim();
+      const imei = String(row["IMEI"]||"").trim();
 
-      if(!modelGroup) errs.push("모델군 비어있음");
-      if(!colorName) errs.push("색상 비어있음");
-      if(!carrierRaw) errs.push("통신사 비어있음");
       if(!source) errs.push("입고처 비어있음");
+      if(!carrierRaw) errs.push("통신사 비어있음");
+      if(!location) errs.push("위치 비어있음");
+      if(!status) errs.push("현재상태 비어있음");
+      if(!serialNumber) errs.push("일련번호 비어있음");
 
       let carrier = null;
       if(carrierRaw){
@@ -1226,46 +1430,62 @@
           const alias = CARRIER_ALIASES[carrierRaw.toUpperCase()] || CARRIER_ALIASES[carrierRaw];
           if(alias && carrierNames.includes(alias)) carrier = alias;
         }
+        if(!carrier) errs.push("통신사 인식 불가('"+carrierRaw+"') — "+carrierNames.join("/")+" 중 하나로 입력해주세요");
       }
-      if(carrierRaw && !carrier) errs.push("통신사 인식 불가('"+carrierRaw+"') — "+carrierNames.join("/")+" 중 하나로 입력해주세요");
+      if(source && !sourceNames.includes(source)) errs.push("미등록 입고처('"+source+"') — 관리자 페이지에서 먼저 등록 필요");
+      if(manufacturer && !manufacturerNames.includes(manufacturer)) errs.push("미등록 제조사('"+manufacturer+"')");
+      if(location && !locationNames.includes(location)) errs.push("미등록 위치('"+location+"')");
+      if(status && !statusNames.includes(status)) errs.push("미등록 현재상태('"+status+"') — 관리자 페이지에서 먼저 등록 필요");
+      if(dest && !destNames.includes(dest)) errs.push("미등록 판매처('"+dest+"')");
 
+      // 모델 매칭: 삼성코드 우선, 없으면 전산모델명+색상, 없으면 모델명+기가수+색상
       let model = null, colorObj = null;
-      if(modelGroup){
-        model = modelsCache.find(m=>m.modelGroup===modelGroup);
-        if(!model) errs.push("미등록 모델군('"+modelGroup+"') — 관리자 페이지에서 먼저 등록 필요");
+      if(samsungCode){
+        for(const m of modelsCache){
+          const found = (m.colors||[]).find(c=>c.sku===samsungCode);
+          if(found){ model = m; colorObj = found; break; }
+        }
+        if(!model) errs.push("삼성코드('"+samsungCode+"')로 등록된 모델을 찾을 수 없음");
+      }else if(systemModel){
+        model = modelsCache.find(m=>m.systemModel===systemModel);
+        if(!model) errs.push("미등록 전산모델명('"+systemModel+"') — 관리자 페이지에서 먼저 등록 필요");
         else if(colorName){
           colorObj = (model.colors||[]).find(c=>c.color===colorName);
           if(!colorObj) errs.push("미등록 색상('"+colorName+"') — 해당 모델에 색상 먼저 등록 필요");
-        }
+        }else errs.push("색상 비어있음");
+      }else if(baseModelRaw && capacityRaw){
+        model = modelsCache.find(m=>m.baseModel===baseModelRaw && m.capacity===capacityRaw);
+        if(!model) errs.push("미등록 모델명/기가수('"+baseModelRaw+" "+capacityRaw+"')");
+        else if(colorName){
+          colorObj = (model.colors||[]).find(c=>c.color===colorName);
+          if(!colorObj) errs.push("미등록 색상('"+colorName+"')");
+        }else errs.push("색상 비어있음");
+      }else{
+        errs.push("모델 정보 부족 (전산모델명 또는 모델명+기가수 또는 삼성코드 중 하나는 필요)");
       }
-      if(source && !sourceNames.includes(source)) errs.push("미등록 입고처('"+source+"') — 관리자 페이지에서 먼저 등록 필요");
 
-      let quantity = 1;
-      if(!imei){
-        quantity = Number(qtyRaw);
-        if(!qtyRaw || isNaN(quantity) || quantity<=0) errs.push("수량이 올바르지 않음");
+      if(serialNumber && (existingSerialSet.has(serialNumber) || batchSerialSet.has(serialNumber))){
+        errs.push("중복 일련번호('"+serialNumber+"')");
       }
-      if(imei){
-        if(existingImeiSet.has(imei) || batchImeiSet.has(imei)) errs.push("중복 IMEI('"+imei+"')");
-      }
-      if(!["재고","개통완료","판매완료"].includes(status)) status = "재고";
 
-      let inDate;
-      if(inDateRaw instanceof Date){ inDate = inDateRaw.toISOString().slice(0,10); }
-      else if(inDateRaw){ inDate = String(inDateRaw).trim(); }
-      else{ inDate = new Date().toISOString().slice(0,10); }
-
-      const price = priceRaw ? Number(priceRaw) : (model ? model.priceExVat : null);
+      const purchasePriceNum = purchasePrice ? Number(purchasePrice) : (model ? model.priceExVat : null);
+      const listPriceNum = listPrice ? Number(listPrice) : (model ? model.priceExVat : null);
+      const salePriceNum = salePrice ? Number(salePrice) : null;
+      const profit = (salePriceNum && purchasePriceNum) ? (salePriceNum - purchasePriceNum) : null;
 
       if(errs.length>0){
-        errorRows.push({ rowNum:excelRowNum, reasons:errs.join(" / "), raw:row });
+        errorRows.push({ rowNum:excelRowNum, reasons:errs.join(" / ") });
       }else{
-        if(imei) batchImeiSet.add(imei);
+        batchSerialSet.add(serialNumber);
         validRows.push({
           modelGroup:model.modelGroup, baseModel:model.baseModel, capacity:model.capacity, systemModel:model.systemModel,
-          petName: model.petName||"", color:colorName, sku:colorObj.sku, carrier, source, destination:"",
-          price: price||null, status, inDate, outDate:"", settleDate:"",
-          entryType: imei?"imei":"qty", quantity: imei?1:quantity, imei: imei||"",
+          petName: model.petName||"", color:colorObj.color, sku:colorObj.sku,
+          carrier, source, manufacturer, location, destination:dest,
+          listPrice:listPriceNum, purchasePrice:purchasePriceNum,
+          purchaseDiscount: purchaseDiscount?Number(purchaseDiscount):null,
+          salePrice:salePriceNum, saleDiscount: saleDiscount?Number(saleDiscount):null,
+          profit, imei, status, orderDate, inDate, outDate,
+          entryType:"imei", quantity:1, serialNumber,
           rowNum: excelRowNum
         });
       }
@@ -1357,9 +1577,13 @@
     if(tabId==="tab-team") loadTeamList();
     if(tabId==="tab-users") loadUserAdminList();
     if(tabId==="tab-logs") loadLogs();
-    if(tabId==="tab-inv-admin"){ loadModelAdminList(); loadSourceList(); loadDestList(); loadCarrierList(); }
+    if(tabId==="tab-inv-admin"){
+      loadModelAdminList(); loadSourceList(); loadDestList(); loadCarrierList();
+      loadManufacturerList(); loadLocationList(); loadStatusOptionList();
+    }
     if(tabId==="tab-inv-work"){
       loadModelsIntoItemSelect(); loadSourcesIntoSelect(); loadDestIntoSelect(); loadCarriersIntoSelect();
+      loadManufacturersIntoSelect(); loadLocationsIntoSelect(); loadStatusesIntoSelect();
       syncViewCheckboxes(); loadInventoryList();
       if(!document.getElementById("item-indate-input").value){
         document.getElementById("item-indate-input").value = new Date().toISOString().slice(0,10);
