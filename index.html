@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="ko">
 <head>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title id="page-title">유통폰 관리 대시보드</title>
@@ -269,6 +270,17 @@
 
     <!-- ===== 작업: 재고 등록(협업) ===== -->
     <div id="tab-inv-work" class="tab-panel">
+
+      <div class="card">
+        <h3>엑셀 일괄 업로드</h3>
+        <p class="desc">양식(템플릿)에 맞춰 채운 엑셀을 올리면 여러 건을 한 번에 등록할 수 있습니다. 문제있는 행은 등록하지 않고 이유를 알려드려요 — 그 행만 아래 "재고 입고 등록" 폼으로 수기 입력하시면 됩니다.</p>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px;">
+          <button class="btn small secondary" style="width:auto;" onclick="downloadExcelTemplate()">템플릿 다운로드</button>
+          <input type="file" id="excel-file-input" accept=".xlsx,.xls" style="font-size:13px;">
+          <button class="btn small" style="width:auto;" onclick="handleExcelUpload()">업로드 및 검증</button>
+        </div>
+        <div id="excel-result"></div>
+      </div>
 
       <div class="card">
         <h3>재고 입고 등록</h3>
@@ -956,6 +968,139 @@
       row.appendChild(controlSpan);
       listEl.appendChild(row);
     });
+  }
+
+  // ---------- 엑셀 일괄 업로드 ----------
+  const CARRIER_ALIASES = { "LG":"LG","LG유플러스":"LG","U+":"LG","엘지":"LG","SKT":"SKT","SK":"SKT","SK텔레콤":"SKT","KT":"KT" };
+  const TEMPLATE_HEADERS = ["모델군","색상","통신사","입고처","수량","매입단가","입고일","IMEI(선택,입력시1대)","상태"];
+
+  window.downloadExcelTemplate = function(){
+    const sample = [TEMPLATE_HEADERS, ["플립256","핑크","SKT","포피플","5","1530000","2026-07-23","","재고"]];
+    const ws = XLSX.utils.aoa_to_sheet(sample);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "재고업로드");
+    XLSX.writeFile(wb, "재고업로드_템플릿.xlsx");
+  };
+
+  window.handleExcelUpload = async function(){
+    const fileInput = document.getElementById("excel-file-input");
+    const resultEl = document.getElementById("excel-result");
+    if(!fileInput.files || fileInput.files.length===0){ alert("엑셀 파일을 먼저 선택해주세요."); return; }
+    resultEl.innerHTML = '<div class="list-empty">검증 중...</div>';
+
+    const file = fileInput.files[0];
+    const buf = await file.arrayBuffer();
+    const wb = XLSX.read(buf, { type:"array", cellDates:true });
+    const ws = wb.Sheets[wb.SheetNames[0]];
+    const rows = XLSX.utils.sheet_to_json(ws, { defval:"" });
+
+    if(rows.length===0){ resultEl.innerHTML = '<div class="list-empty">읽을 데이터가 없습니다. 템플릿 형식을 확인해주세요.</div>'; return; }
+
+    await fetchModelsCache();
+    const sourceSnap = await getDocs(collection(db,"inboundSources"));
+    const sourceNames = []; sourceSnap.forEach(d=>sourceNames.push(d.data().name));
+
+    const existingImeiSnap = await getDocs(collection(db,"inventoryItems"));
+    const existingImeiSet = new Set();
+    existingImeiSnap.forEach(d=>{ const im = d.data().imei; if(im) existingImeiSet.add(im); });
+    const batchImeiSet = new Set();
+
+    const validRows = []; const errorRows = [];
+
+    rows.forEach((row, idx)=>{
+      const excelRowNum = idx + 2; // 헤더가 1행
+      const errs = [];
+
+      const modelGroup = String(row["모델군"]||"").trim();
+      const colorName = String(row["색상"]||"").trim();
+      const carrierRaw = String(row["통신사"]||"").trim();
+      const source = String(row["입고처"]||"").trim();
+      const qtyRaw = row["수량"];
+      const priceRaw = row["매입단가"];
+      let inDateRaw = row["입고일"];
+      const imei = String(row["IMEI(선택,입력시1대)"]||"").trim();
+      let status = String(row["상태"]||"재고").trim();
+
+      if(!modelGroup) errs.push("모델군 비어있음");
+      if(!colorName) errs.push("색상 비어있음");
+      if(!carrierRaw) errs.push("통신사 비어있음");
+      if(!source) errs.push("입고처 비어있음");
+
+      const carrier = CARRIER_ALIASES[carrierRaw.toUpperCase()] || CARRIER_ALIASES[carrierRaw];
+      if(carrierRaw && !carrier) errs.push("통신사 인식 불가('"+carrierRaw+"') — LG/SKT/KT 중 하나로 입력해주세요");
+
+      let model = null, colorObj = null;
+      if(modelGroup){
+        model = modelsCache.find(m=>m.modelGroup===modelGroup);
+        if(!model) errs.push("미등록 모델군('"+modelGroup+"') — 관리자 페이지에서 먼저 등록 필요");
+        else if(colorName){
+          colorObj = (model.colors||[]).find(c=>c.color===colorName);
+          if(!colorObj) errs.push("미등록 색상('"+colorName+"') — 해당 모델에 색상 먼저 등록 필요");
+        }
+      }
+      if(source && !sourceNames.includes(source)) errs.push("미등록 입고처('"+source+"') — 관리자 페이지에서 먼저 등록 필요");
+
+      let quantity = 1;
+      if(!imei){
+        quantity = Number(qtyRaw);
+        if(!qtyRaw || isNaN(quantity) || quantity<=0) errs.push("수량이 올바르지 않음");
+      }
+      if(imei){
+        if(existingImeiSet.has(imei) || batchImeiSet.has(imei)) errs.push("중복 IMEI('"+imei+"')");
+      }
+      if(!["재고","개통완료","판매완료"].includes(status)) status = "재고";
+
+      let inDate;
+      if(inDateRaw instanceof Date){ inDate = inDateRaw.toISOString().slice(0,10); }
+      else if(inDateRaw){ inDate = String(inDateRaw).trim(); }
+      else{ inDate = new Date().toISOString().slice(0,10); }
+
+      const price = priceRaw ? Number(priceRaw) : (model ? model.priceExVat : null);
+
+      if(errs.length>0){
+        errorRows.push({ rowNum:excelRowNum, reasons:errs.join(" / "), raw:row });
+      }else{
+        if(imei) batchImeiSet.add(imei);
+        validRows.push({
+          modelGroup:model.modelGroup, baseModel:model.baseModel, capacity:model.capacity, systemModel:model.systemModel,
+          petName: model.petName||"", color:colorName, sku:colorObj.sku, carrier, source, destination:"",
+          price: price||null, status, inDate, outDate:"", settleDate:"",
+          entryType: imei?"imei":"qty", quantity: imei?1:quantity, imei: imei||"",
+          rowNum: excelRowNum
+        });
+      }
+    });
+
+    renderExcelValidation(validRows, errorRows);
+  };
+
+  function renderExcelValidation(validRows, errorRows){
+    const resultEl = document.getElementById("excel-result");
+    let html = '<div style="font-size:13px;font-weight:700;margin-bottom:8px;">검증 결과 — 정상 '+validRows.length+'건 / 오류 '+errorRows.length+'건</div>';
+    if(errorRows.length>0){
+      html += '<div class="list-empty" style="border-color:var(--danger);color:var(--danger);margin-bottom:10px;">';
+      errorRows.forEach(e=>{ html += (e.rowNum)+'행: '+e.reasons+'<br>'; });
+      html += '</div>';
+    }
+    resultEl.innerHTML = html;
+    if(validRows.length>0){
+      const btn = document.createElement("button");
+      btn.className = "btn small"; btn.style.width="auto";
+      btn.textContent = "정상 "+validRows.length+"건 일괄 등록";
+      btn.onclick = async ()=>{
+        if(!confirm(validRows.length+"건을 일괄 등록하시겠습니까?")) return;
+        for(const r of validRows){
+          const { rowNum, ...data } = r;
+          await addDoc(collection(db,"inventoryItems"), { ...data, createdAt: serverTimestamp() });
+        }
+        logAction("재고 엑셀 일괄등록", validRows.length+"건");
+        alert("등록이 완료되었습니다.");
+        document.getElementById("excel-result").innerHTML = "";
+        document.getElementById("excel-file-input").value = "";
+        loadInventoryList();
+      };
+      resultEl.appendChild(btn);
+    }
   }
 
   // ---------- 이력 ----------
