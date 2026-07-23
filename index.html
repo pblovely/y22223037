@@ -194,20 +194,25 @@
     <!-- ===== 관리자: 재고 기초설정 ===== -->
     <div id="tab-inv-admin" class="tab-panel">
       <div class="card">
+        <h3>샘플 데이터 일괄 등록</h3>
+        <p class="desc">삼성 폴립/폴드/울트라 시리즈(256GB·512GB, 색상 포함) 데이터를 한 번에 등록해서 화면을 미리 확인해볼 수 있습니다. 이미 같은 모델군이 있으면 건너뜁니다.</p>
+        <button class="btn small" onclick="seedSampleModels()">샘플 데이터 등록</button>
+        <div id="seed-msg" style="font-size:12px;color:var(--navy);margin-top:8px;display:none;"></div>
+      </div>
+
+      <div class="card" style="max-width:1400px;">
         <h3>모델 등록 (기본정보)</h3>
         <p class="desc">모델군·기본모델명·용량·전산모델명·출고가·펫네임을 등록합니다. 색상은 등록 후 추가합니다.</p>
-        <div class="inline-form">
-          <input type="text" id="model-group-input" placeholder="모델군 (예: 폴립256)">
-          <input type="text" id="model-base-input" placeholder="기본모델명 (예: SM-F776N)">
-          <input type="text" id="model-capacity-input" placeholder="용량 (예: 256GB)">
-          <input type="text" id="model-system-input" placeholder="전산모델명 (예: SM-F776N256)">
-        </div>
-        <div class="inline-form">
-          <input type="number" id="model-price-ex-input" placeholder="출고가(VAT별도)">
-          <input type="number" id="model-price-inc-input" placeholder="출고가(VAT포함)">
-          <input type="text" id="model-pet-input" placeholder="펫네임 (예: 갤럭시Z 플립7)">
-          <input type="text" id="model-nick-input" placeholder="닉네임(자유)">
-          <button class="btn small" onclick="addModel()">모델 등록</button>
+        <div class="inline-form" style="flex-wrap:nowrap;overflow-x:auto;">
+          <input type="text" id="model-group-input" placeholder="모델군 (예: 폴립256)" style="min-width:110px;">
+          <input type="text" id="model-base-input" placeholder="기본모델명 (예: SM-F776N)" style="min-width:130px;">
+          <input type="text" id="model-capacity-input" placeholder="용량 (예: 256GB)" style="min-width:90px;">
+          <input type="text" id="model-system-input" placeholder="전산모델명 (예: SM-F776N256)" style="min-width:140px;">
+          <input type="number" id="model-price-ex-input" placeholder="출고가(VAT별도)" style="min-width:110px;">
+          <input type="number" id="model-price-inc-input" placeholder="출고가(VAT포함)" style="min-width:110px;">
+          <input type="text" id="model-pet-input" placeholder="펫네임" style="min-width:120px;">
+          <input type="text" id="model-nick-input" placeholder="닉네임(자유)" style="min-width:100px;">
+          <button class="btn small" style="flex-shrink:0;" onclick="addModel()">모델 등록</button>
         </div>
         <div id="model-list"></div>
       </div>
@@ -233,9 +238,13 @@
       </div>
     </div>
 
-    <!-- ===== 관리자: 사용자 관리 (준비중) ===== -->
+    <!-- ===== 관리자: 사용자 관리 ===== -->
     <div id="tab-users" class="tab-panel">
-      <div class="card"><h3>사용자 관리</h3><p class="soon">가입 승인·추방·권한 부여 화면은 다음 업데이트에서 추가됩니다. 지금은 Firestore 콘솔에서 직접 처리해주세요.</p></div>
+      <div class="card" style="max-width:900px;">
+        <h3>사용자 관리</h3>
+        <p class="desc">승인 · 추방 · 권한 부여를 여기서 처리합니다. 변경 시 이력에 자동 기록됩니다.</p>
+        <div id="user-admin-list"></div>
+      </div>
     </div>
 
     <!-- ===== 관리자: 정산 설정 (준비중) ===== -->
@@ -325,6 +334,18 @@
           <br>
           <button class="btn small" onclick="saveViewSettings()">이 설정 저장 (내 계정에 유지)</button>
         </div>
+
+        <div id="status-summary" style="font-size:13px;color:var(--navy);margin-bottom:12px;font-weight:600;"></div>
+
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:end;margin-bottom:14px;background:#fafafa;border:1px solid var(--line);padding:10px;">
+          <div class="field" style="flex:1;min-width:130px;margin-bottom:0;"><label>날짜 조회</label><input type="date" id="filter-date"></div>
+          <div class="field" style="flex:1;min-width:130px;margin-bottom:0;"><label>기준</label>
+            <select id="filter-date-type"><option value="inDate">입고일</option><option value="outDate">출고일</option></select>
+          </div>
+          <button class="btn small" style="margin-bottom:0;" onclick="loadInventoryList()">조회</button>
+          <button class="btn small secondary" style="margin-bottom:0;" onclick="clearDateFilter()">초기화</button>
+        </div>
+
         <div id="inventory-list"></div>
       </div>
 
@@ -343,7 +364,7 @@
   import {
     getFirestore, doc, setDoc, getDoc, deleteDoc, serverTimestamp,
     collection, getDocs, addDoc, orderBy, query, limit,
-    updateDoc, arrayUnion, arrayRemove
+    updateDoc, arrayUnion, arrayRemove, where
   } from "https://www.gstatic.com/firebasejs/10.13.2/firebase-firestore.js";
 
   const firebaseConfig = {
@@ -476,6 +497,69 @@
     logAction("팀 추가", name);
     input.value = ""; loadTeamList();
   };
+
+  // ---------- 사용자 관리 ----------
+  const ALL_PERM_KEYS = ["dashboard","input","excelExport","userApproval","permissionManage","teamManage","inventorySettings","settlementSettings","siteSettings","dataReset"];
+
+  async function loadUserAdminList(){
+    const listEl = document.getElementById("user-admin-list");
+    listEl.innerHTML = '<div class="list-empty">불러오는 중...</div>';
+    const snap = await getDocs(collection(db, "users"));
+    if(snap.empty){ listEl.innerHTML = '<div class="list-empty">가입된 사용자가 없습니다.</div>'; return; }
+    listEl.innerHTML = "";
+    snap.forEach(d=>{
+      const u = d.data();
+      const uid = d.id;
+      const perms = u.permissions || {};
+      const statusLabel = u.status==="approved" ? "승인됨" : (u.status==="banned" ? "추방됨" : "대기중");
+      const statusColor = u.status==="approved" ? "var(--navy)" : (u.status==="banned" ? "var(--danger)" : "#b8860b");
+
+      const wrap = document.createElement("div");
+      wrap.style.border = "1px solid var(--line)"; wrap.style.borderTop = "none"; wrap.style.padding = "12px";
+
+      let permBoxes = "";
+      ALL_PERM_KEYS.forEach(k=>{
+        const checked = perms[k] ? "checked" : "";
+        permBoxes += '<label style="display:inline-flex;align-items:center;gap:4px;font-size:12px;margin-right:12px;margin-bottom:6px;">' +
+          '<input type="checkbox" class="perm-check" data-uid="'+uid+'" data-key="'+k+'" '+checked+'> ' + (PERMISSION_LABELS[k]||k) + '</label>';
+      });
+
+      wrap.innerHTML =
+        '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">' +
+        '<span style="font-size:13.5px;"><b>'+u.name+'</b> ('+u.username+') · 팀 '+(u.team||"-")+' · 생년월일 '+(u.birth||"-")+' · 휴대폰 '+(u.phone||"-")+
+        ' · <span style="color:'+statusColor+';font-weight:700;">'+statusLabel+'</span></span>' +
+        '<span>' +
+        '<button class="btn small" data-approve="'+uid+'" style="margin-right:6px;">승인</button>' +
+        '<button class="btn small danger" data-ban="'+uid+'">추방</button>' +
+        '</span></div>' +
+        '<div class="check-panel" style="margin-bottom:0;">'+permBoxes+
+        '<br><button class="btn small" data-save-perm="'+uid+'">권한 저장</button></div>';
+
+      listEl.appendChild(wrap);
+
+      wrap.querySelector('[data-approve]').onclick = async ()=>{
+        await updateDoc(doc(db,"users",uid), { status:"approved" });
+        logAction("사용자 승인", u.name + "(" + u.username + ")");
+        loadUserAdminList();
+      };
+      wrap.querySelector('[data-ban]').onclick = async ()=>{
+        if(confirm(u.name + "님을 추방하시겠습니까? 로그인이 즉시 제한됩니다.")){
+          await updateDoc(doc(db,"users",uid), { status:"banned" });
+          logAction("사용자 추방", u.name + "(" + u.username + ")");
+          loadUserAdminList();
+        }
+      };
+      wrap.querySelector('[data-save-perm]').onclick = async ()=>{
+        const newPerms = {};
+        wrap.querySelectorAll('.perm-check[data-uid="'+uid+'"]').forEach(cb=>{
+          newPerms[cb.dataset.key] = cb.checked;
+        });
+        await updateDoc(doc(db,"users",uid), { permissions:newPerms });
+        logAction("권한 변경", u.name + "(" + u.username + ") → " + Object.keys(newPerms).filter(k=>newPerms[k]).join(", "));
+        alert("권한이 저장되었습니다.");
+      };
+    });
+  }
 
   // ---------- 입고처 / 출고처 (범용 목록 관리) ----------
   async function loadSimpleList(collectionName, listElId, actionLabel, afterDeleteCb){
@@ -612,6 +696,43 @@
     });
   }
 
+  window.seedSampleModels = async function(){
+    const sampleData = [
+      { modelGroup:"플립256", baseModel:"SM-F776N", capacity:"256GB", systemModel:"SM-F776N256",
+        priceExVat:1530000, priceIncVat:1683000, petName:"갤럭시Z 플립7 256GB",
+        colors:[ {color:"핑크",sku:"SM-F776NLIAKOD"}, {color:"그라파이트",sku:"SM-F776NZKAKOD"}, {color:"크림",sku:"SM-F776NZWAKOD"} ] },
+      { modelGroup:"플립512", baseModel:"SM-F776N", capacity:"512GB", systemModel:"SM-F776N512",
+        priceExVat:1760000, priceIncVat:1936000, petName:"갤럭시Z 플립7 512GB",
+        colors:[ {color:"핑크",sku:"SM-F776NLIEKOD"}, {color:"그라파이트",sku:"SM-F776NZKEKOD"}, {color:"크림",sku:"SM-F776NZWEKOD"} ] },
+      { modelGroup:"폴드256", baseModel:"SM-F971N", capacity:"256GB", systemModel:"SM-F971N256",
+        priceExVat:2071000, priceIncVat:2278100, petName:"갤럭시Z 폴드7 256GB",
+        colors:[ {color:"라벤더",sku:"SM-F971NLVPKOD"}, {color:"그라파이트",sku:"SM-F971NZKPKOD"}, {color:"크림",sku:"SM-F971NZWPKOD"} ] },
+      { modelGroup:"폴드512", baseModel:"SM-F971N", capacity:"512GB", systemModel:"SM-F971N512",
+        priceExVat:2301000, priceIncVat:2531100, petName:"갤럭시Z 폴드7 512GB",
+        colors:[ {color:"라벤더",sku:"SM-F971NLVIKOD"}, {color:"그라파이트",sku:"SM-F971NZKIKOD"}, {color:"크림",sku:"SM-F971NZWIKOD"} ] },
+      { modelGroup:"울트라256", baseModel:"SM-F976N", capacity:"256GB", systemModel:"SM-F976N256",
+        priceExVat:2343000, priceIncVat:2577300, petName:"갤럭시Z 폴드7 울트라 256GB",
+        colors:[ {color:"그라파이트",sku:"SM-F976NZKPKOD"}, {color:"바이올렛쉐도우",sku:"SM-F976NZVPKOD"}, {color:"크림",sku:"SM-F976NZWPKOD"} ] },
+      { modelGroup:"울트라512", baseModel:"SM-F976N", capacity:"512GB", systemModel:"SM-F976N512",
+        priceExVat:2573000, priceIncVat:2830300, petName:"갤럭시Z 폴드7 울트라 512GB",
+        colors:[ {color:"그라파이트",sku:"SM-F976NZKIKOD"}, {color:"바이올렛쉐도우",sku:"SM-F976NZVIKOD"}, {color:"크림",sku:"SM-F976NZWIKOD"} ] }
+    ];
+
+    await fetchModelsCache();
+    const existingGroups = modelsCache.map(m=>m.modelGroup);
+    let addedCount = 0;
+    for(const s of sampleData){
+      if(existingGroups.includes(s.modelGroup)) continue;
+      await addDoc(collection(db,"inventoryModels"), { ...s, nickname:"" });
+      addedCount++;
+    }
+    logAction("샘플 데이터 일괄 등록", addedCount + "개 모델군 추가");
+    const msg = document.getElementById("seed-msg");
+    msg.style.display = "block";
+    msg.textContent = addedCount > 0 ? (addedCount + "개 모델군이 등록되었습니다.") : "이미 전부 등록되어 있어 추가된 항목이 없습니다.";
+    loadModelAdminList();
+  };
+
   window.addModel = async function(){
     const modelGroup = document.getElementById("model-group-input").value.trim();
     const baseModel = document.getElementById("model-base-input").value.trim();
@@ -731,6 +852,11 @@
     }else{
       const imei = document.getElementById("item-imei-input").value.trim();
       if(!imei){ alert("IMEI를 입력해주세요."); return; }
+      const dupSnap = await getDocs(query(collection(db,"inventoryItems"), where("imei","==",imei)));
+      if(!dupSnap.empty){
+        alert("이미 등록된 IMEI입니다 (" + imei + "). 중복 등록할 수 없습니다.");
+        return;
+      }
       await addDoc(collection(db,"inventoryItems"), { ...base, entryType:"imei", quantity:1, imei });
       logAction("재고 입고(IMEI)", m.modelGroup+" "+color+" / "+carrier+" / IMEI "+imei);
       document.getElementById("item-imei-input").value = "";
@@ -738,33 +864,97 @@
     loadInventoryList();
   };
 
+  window.clearDateFilter = function(){
+    document.getElementById("filter-date").value = "";
+    loadInventoryList();
+  };
+
   async function loadInventoryList(){
     const listEl = document.getElementById("inventory-list");
+    const summaryEl = document.getElementById("status-summary");
     listEl.innerHTML = "";
     const snap = await getDocs(query(collection(db,"inventoryItems"), orderBy("createdAt","desc")));
-    if(snap.empty){ listEl.innerHTML = '<div class="list-empty">등록된 재고가 없습니다.</div>'; return; }
-    snap.forEach(d=>{
-      const it = d.data();
+    if(snap.empty){
+      listEl.innerHTML = '<div class="list-empty">등록된 재고가 없습니다.</div>';
+      summaryEl.textContent = "";
+      return;
+    }
+
+    const filterDate = document.getElementById("filter-date").value;
+    const filterType = document.getElementById("filter-date-type").value;
+
+    let items = [];
+    snap.forEach(d=> items.push({ id:d.id, ...d.data() }));
+    if(filterDate){
+      items = items.filter(it => (it[filterType]||"") === filterDate);
+    }
+
+    const counts = { "재고":0, "개통완료":0, "판매완료":0 };
+    items.forEach(it=>{ if(counts[it.status] !== undefined) counts[it.status]++; else counts[it.status] = 1; });
+    summaryEl.textContent = "현재 상태 — 재고 " + counts["재고"] + "대 · 개통완료 " + counts["개통완료"] + "대 · 판매완료 " + counts["판매완료"] + "대" +
+      (filterDate ? "  (필터: " + (filterType==="inDate"?"입고일":"출고일") + " " + filterDate + ")" : "");
+
+    if(items.length === 0){
+      listEl.innerHTML = '<div class="list-empty">해당 조건의 재고가 없습니다.</div>';
+      return;
+    }
+
+    items.forEach(it=>{
       const row = document.createElement("div");
       row.className = "list-row";
+      row.style.alignItems = "center";
       const qtyLabel = it.entryType==="imei" ? ("IMEI "+it.imei) : (it.quantity+"대");
       let extra = "";
       if(it.outDate) extra += " · 출고일 "+it.outDate;
       if(it.settleDate) extra += " · 결산일 "+it.settleDate;
       if(it.destination) extra += " · 출고처 "+it.destination;
-      row.innerHTML = '<span style="font-size:12.5px;"><b>'+buildModelLabel(it)+'</b> · '+it.carrier+' · '+
+
+      const infoSpan = document.createElement("span");
+      infoSpan.style.fontSize = "12.5px";
+      infoSpan.innerHTML = '<b>'+buildModelLabel(it)+'</b> · '+it.carrier+' · '+
         (it.source||"-")+' · '+qtyLabel+' · '+(it.price?Number(it.price).toLocaleString()+'원':"-")+
-        ' · 입고일 '+it.inDate+extra+' · <b>'+it.status+'</b></span>';
+        ' · 입고일 '+it.inDate+extra;
+
+      const controlSpan = document.createElement("span");
+      controlSpan.style.display = "flex";
+      controlSpan.style.alignItems = "center";
+      controlSpan.style.gap = "6px";
+
+      const statusSel = document.createElement("select");
+      statusSel.style.padding = "4px 6px";
+      statusSel.style.border = "1px solid #c7c7c7";
+      statusSel.style.fontSize = "12px";
+      ["재고","개통완료","판매완료"].forEach(s=>{
+        const opt = document.createElement("option");
+        opt.value = s; opt.textContent = s;
+        if(s === it.status) opt.selected = true;
+        statusSel.appendChild(opt);
+      });
+      statusSel.onchange = async ()=>{
+        const newStatus = statusSel.value;
+        const oldStatus = it.status;
+        if(newStatus === oldStatus) return;
+        await updateDoc(doc(db,"inventoryItems",it.id), { status:newStatus });
+        logAction("재고 상태 변경", buildModelLabel(it)+" "+qtyLabel+" : "+oldStatus+" → "+newStatus);
+        it.status = newStatus;
+        loadInventoryList();
+      };
+
       const delBtn = document.createElement("button");
       delBtn.className = "btn small danger"; delBtn.textContent = "삭제";
       delBtn.onclick = async ()=>{
         if(confirm("이 재고 기록을 삭제하시겠습니까?")){
-          await deleteDoc(doc(db,"inventoryItems",d.id));
+          await deleteDoc(doc(db,"inventoryItems",it.id));
           logAction("재고 삭제", it.modelGroup+" "+(it.color||"")+" / "+qtyLabel);
           loadInventoryList();
         }
       };
-      row.appendChild(delBtn); listEl.appendChild(row);
+
+      controlSpan.appendChild(statusSel);
+      controlSpan.appendChild(delBtn);
+      row.appendChild(infoSpan);
+      row.appendChild(controlSpan);
+      listEl.appendChild(row);
     });
   }
 
@@ -820,6 +1010,7 @@
     if(btn) btn.classList.add("active");
 
     if(tabId==="tab-team") loadTeamList();
+    if(tabId==="tab-users") loadUserAdminList();
     if(tabId==="tab-logs") loadLogs();
     if(tabId==="tab-inv-admin"){ loadModelAdminList(); loadSourceList(); loadDestList(); }
     if(tabId==="tab-inv-work"){
