@@ -253,24 +253,35 @@
     <div id="tab-inventory" class="tab-panel">
 
       <div class="card">
-        <h3>모델 마스터</h3>
-        <p class="desc">제품 카탈로그입니다. 모델명·펫네임·출고가·닉네임을 등록해두면 재고 입고 시 선택해서 씁니다.</p>
+        <h3>모델 등록 (용량 단위 - 가격이 여기 딸립니다)</h3>
+        <p class="desc">모델군·기본모델명·용량·전산모델명·출고가를 등록합니다. 색상은 등록 후 아래에서 추가합니다.</p>
         <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;">
-          <input type="text" id="model-name-input" placeholder="모델명 (예: SM-S928N)" style="flex:1;min-width:140px;padding:9px 10px;border:1px solid #c7c7c7;font-size:13px;">
-          <input type="text" id="model-pet-input" placeholder="펫네임 (예: 갤럭시S24 울트라)" style="flex:1;min-width:140px;padding:9px 10px;border:1px solid #c7c7c7;font-size:13px;">
-          <input type="number" id="model-price-input" placeholder="출고가" style="width:120px;padding:9px 10px;border:1px solid #c7c7c7;font-size:13px;">
-          <input type="text" id="model-nick-input" placeholder="닉네임 (자유 입력)" style="width:140px;padding:9px 10px;border:1px solid #c7c7c7;font-size:13px;">
-          <button class="btn small" onclick="addModel()">모델 추가</button>
+          <input type="text" id="model-group-input" placeholder="모델군 (예: 폴립256)" style="flex:1;min-width:120px;padding:9px 10px;border:1px solid #c7c7c7;font-size:13px;">
+          <input type="text" id="model-base-input" placeholder="기본모델명 (예: SM-F776N)" style="flex:1;min-width:130px;padding:9px 10px;border:1px solid #c7c7c7;font-size:13px;">
+          <input type="text" id="model-capacity-input" placeholder="용량 (예: 256GB)" style="width:110px;padding:9px 10px;border:1px solid #c7c7c7;font-size:13px;">
+          <input type="text" id="model-system-input" placeholder="전산모델명 (예: SM-F776N256)" style="flex:1;min-width:150px;padding:9px 10px;border:1px solid #c7c7c7;font-size:13px;">
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;">
+          <input type="number" id="model-price-ex-input" placeholder="출고가 (VAT별도)" style="flex:1;min-width:130px;padding:9px 10px;border:1px solid #c7c7c7;font-size:13px;">
+          <input type="number" id="model-price-inc-input" placeholder="출고가 (VAT포함)" style="flex:1;min-width:130px;padding:9px 10px;border:1px solid #c7c7c7;font-size:13px;">
+          <input type="text" id="model-nick-input" placeholder="닉네임 (자유 입력)" style="flex:1;min-width:120px;padding:9px 10px;border:1px solid #c7c7c7;font-size:13px;">
+          <button class="btn small" onclick="addModel()">모델 등록</button>
         </div>
         <div id="model-list"></div>
       </div>
 
       <div class="card">
         <h3>재고 입고 등록</h3>
-        <p class="desc">실제 매입한 단말기 1대를 IMEI 단위로 등록합니다.</p>
-        <div class="field">
-          <label>모델</label>
-          <select id="item-model-select"><option value="">모델을 선택하세요</option></select>
+        <p class="desc">모델·색상을 선택하고, 수량으로 넣을지 IMEI로 개별 등록할지 선택하세요.</p>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <div class="field" style="flex:1;min-width:160px;">
+            <label>모델</label>
+            <select id="item-model-select" onchange="onItemModelChange()"><option value="">모델을 선택하세요</option></select>
+          </div>
+          <div class="field" style="flex:1;min-width:160px;">
+            <label>색상 (삼성모델명)</label>
+            <select id="item-color-select"><option value="">모델을 먼저 선택하세요</option></select>
+          </div>
         </div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;">
           <div class="field" style="flex:1;min-width:130px;">
@@ -285,14 +296,25 @@
             <label>매입처</label>
             <input type="text" id="item-source-input" placeholder="예: 포피플">
           </div>
-          <div class="field" style="flex:1;min-width:150px;">
-            <label>IMEI</label>
-            <input type="text" id="item-imei-input" placeholder="일련번호">
+          <div class="field" style="flex:1;min-width:130px;">
+            <label>입고 방식</label>
+            <select id="item-entry-type" onchange="toggleEntryType()">
+              <option value="qty">수량으로 입력</option>
+              <option value="imei">IMEI 개별 입력</option>
+            </select>
           </div>
         </div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <div class="field" id="item-qty-field" style="flex:1;min-width:100px;">
+            <label>수량</label>
+            <input type="number" id="item-qty-input" placeholder="대수" value="1">
+          </div>
+          <div class="field" id="item-imei-field" style="flex:1;min-width:150px;display:none;">
+            <label>IMEI</label>
+            <input type="text" id="item-imei-input" placeholder="일련번호">
+          </div>
           <div class="field" style="flex:1;min-width:120px;">
-            <label>매입단가</label>
+            <label>매입단가 (개당)</label>
             <input type="number" id="item-price-input" placeholder="원">
           </div>
           <div class="field" style="flex:1;min-width:130px;">
@@ -311,7 +333,7 @@
         <button class="btn small" onclick="addInventoryItem()">재고 등록</button>
       </div>
 
-      <div class="card" style="max-width:900px;">
+      <div class="card" style="max-width:960px;">
         <h3>재고 목록</h3>
         <div id="inventory-list"></div>
       </div>
@@ -353,7 +375,8 @@
   } from "https://www.gstatic.com/firebasejs/10.13.2/firebase-auth.js";
   import {
     getFirestore, doc, setDoc, getDoc, deleteDoc, serverTimestamp,
-    collection, getDocs, addDoc, orderBy, query, limit
+    collection, getDocs, addDoc, orderBy, query, limit,
+    updateDoc, arrayUnion, arrayRemove
   } from "https://www.gstatic.com/firebasejs/10.13.2/firebase-firestore.js";
 
   const firebaseConfig = {
@@ -569,51 +592,126 @@
     loadTeamList();
   };
 
-  // ---------- 모델 마스터 ----------
+  // ---------- 모델(용량 단위) + 색상별 SKU ----------
+  let modelsCache = []; // {id, ...data}
+
   async function loadModelList(){
     const listEl = document.getElementById("model-list");
     listEl.innerHTML = "";
-    const snap = await getDocs(query(collection(db, "inventoryModels"), orderBy("modelName")));
+    const snap = await getDocs(query(collection(db, "inventoryModels"), orderBy("modelGroup")));
+    modelsCache = [];
     if(snap.empty){
       listEl.innerHTML = '<div class="list-empty">등록된 모델이 없습니다.</div>';
       return;
     }
     snap.forEach(d=>{
       const m = d.data();
-      const row = document.createElement("div");
-      row.className = "list-row";
-      row.innerHTML = '<span><b>' + m.modelName + '</b> · ' + (m.petName||"-") + ' · 출고가 ' +
-        (m.releasePrice ? Number(m.releasePrice).toLocaleString() + '원' : "-") +
-        ' · 닉네임 ' + (m.nickname||"-") + '</span>';
-      const delBtn = document.createElement("button");
-      delBtn.className = "btn small danger";
-      delBtn.textContent = "삭제";
-      delBtn.onclick = async ()=>{
-        if(confirm(m.modelName + " 모델을 삭제하시겠습니까?")){
+      modelsCache.push({ id:d.id, ...m });
+      const colors = m.colors || [];
+
+      const wrap = document.createElement("div");
+      wrap.style.border = "1px solid var(--line)";
+      wrap.style.borderTop = "none";
+      wrap.style.padding = "10px 12px";
+
+      const priceEx = m.priceExVat ? Number(m.priceExVat).toLocaleString()+'원' : "-";
+      const priceInc = m.priceIncVat ? Number(m.priceIncVat).toLocaleString()+'원' : "-";
+
+      wrap.innerHTML =
+        '<div style="display:flex;justify-content:space-between;align-items:center;">' +
+        '<span style="font-size:13.5px;"><b>' + m.modelGroup + '</b> · ' + m.baseModel + ' · ' + m.capacity +
+        ' · 전산모델명 ' + m.systemModel + ' · 출고가(별도) ' + priceEx + ' / (포함) ' + priceInc +
+        (m.nickname ? ' · 닉네임 ' + m.nickname : '') + '</span>' +
+        '<button class="btn small danger" data-del-model="'+d.id+'">모델 삭제</button>' +
+        '</div>';
+
+      const colorArea = document.createElement("div");
+      colorArea.style.marginTop = "8px";
+      colorArea.style.paddingLeft = "4px";
+
+      if(colors.length === 0){
+        colorArea.innerHTML = '<span style="font-size:12px;color:var(--gray);">등록된 색상이 없습니다.</span>';
+      }else{
+        colors.forEach(c=>{
+          const tag = document.createElement("span");
+          tag.className = "perm-tag";
+          tag.style.cursor = "pointer";
+          tag.textContent = c.color + " (" + c.sku + ") ✕";
+          tag.title = "클릭하면 이 색상을 삭제합니다";
+          tag.onclick = async ()=>{
+            if(confirm(c.color + " 색상을 삭제하시겠습니까?")){
+              await updateDoc(doc(db, "inventoryModels", d.id), { colors: arrayRemove(c) });
+              logAction("색상 삭제", m.modelGroup + " / " + c.color);
+              loadModelList();
+              loadModelsIntoItemSelect();
+            }
+          };
+          colorArea.appendChild(tag);
+        });
+      }
+
+      const addColorRow = document.createElement("div");
+      addColorRow.style.display = "flex";
+      addColorRow.style.gap = "6px";
+      addColorRow.style.marginTop = "8px";
+      addColorRow.innerHTML =
+        '<input type="text" placeholder="색상명 (예: 핑크)" style="flex:1;padding:7px 8px;border:1px solid #c7c7c7;font-size:12.5px;" class="new-color-name">' +
+        '<input type="text" placeholder="삼성모델명 SKU (예: SM-F776NLIAKOD)" style="flex:1;padding:7px 8px;border:1px solid #c7c7c7;font-size:12.5px;" class="new-color-sku">' +
+        '<button class="btn small" data-add-color="'+d.id+'">색상 추가</button>';
+
+      wrap.appendChild(colorArea);
+      wrap.appendChild(addColorRow);
+      listEl.appendChild(wrap);
+
+      wrap.querySelector('[data-del-model]').onclick = async ()=>{
+        if(confirm(m.modelGroup + " 모델을 삭제하시겠습니까? (등록된 색상도 함께 삭제됩니다)")){
           await deleteDoc(doc(db, "inventoryModels", d.id));
-          logAction("모델 삭제", m.modelName);
+          logAction("모델 삭제", m.modelGroup);
           loadModelList();
           loadModelsIntoItemSelect();
         }
       };
-      row.appendChild(delBtn);
-      listEl.appendChild(row);
+      wrap.querySelector('[data-add-color]').onclick = async ()=>{
+        const nameInput = wrap.querySelector(".new-color-name");
+        const skuInput = wrap.querySelector(".new-color-sku");
+        const color = nameInput.value.trim();
+        const sku = skuInput.value.trim();
+        if(!color || !sku){ alert("색상명과 삼성모델명을 모두 입력해주세요."); return; }
+        await updateDoc(doc(db, "inventoryModels", d.id), { colors: arrayUnion({ color, sku }) });
+        logAction("색상 추가", m.modelGroup + " / " + color);
+        loadModelList();
+        loadModelsIntoItemSelect();
+      };
     });
   }
 
   window.addModel = async function(){
-    const name = document.getElementById("model-name-input").value.trim();
-    const pet = document.getElementById("model-pet-input").value.trim();
-    const price = document.getElementById("model-price-input").value;
-    const nick = document.getElementById("model-nick-input").value.trim();
-    if(!name){ alert("모델명은 필수입니다."); return; }
+    const modelGroup = document.getElementById("model-group-input").value.trim();
+    const baseModel = document.getElementById("model-base-input").value.trim();
+    const capacity = document.getElementById("model-capacity-input").value.trim();
+    const systemModel = document.getElementById("model-system-input").value.trim();
+    const priceEx = document.getElementById("model-price-ex-input").value;
+    const priceInc = document.getElementById("model-price-inc-input").value;
+    const nickname = document.getElementById("model-nick-input").value.trim();
+
+    if(!modelGroup || !baseModel || !capacity){
+      alert("모델군, 기본모델명, 용량은 필수입니다."); return;
+    }
     await addDoc(collection(db, "inventoryModels"), {
-      modelName:name, petName:pet, releasePrice: price ? Number(price) : null, nickname:nick
+      modelGroup, baseModel, capacity, systemModel,
+      priceExVat: priceEx ? Number(priceEx) : null,
+      priceIncVat: priceInc ? Number(priceInc) : null,
+      nickname,
+      colors: []
     });
-    logAction("모델 추가", name);
-    document.getElementById("model-name-input").value = "";
-    document.getElementById("model-pet-input").value = "";
-    document.getElementById("model-price-input").value = "";
+    logAction("모델 등록", modelGroup + " " + capacity);
+
+    document.getElementById("model-group-input").value = "";
+    document.getElementById("model-base-input").value = "";
+    document.getElementById("model-capacity-input").value = "";
+    document.getElementById("model-system-input").value = "";
+    document.getElementById("model-price-ex-input").value = "";
+    document.getElementById("model-price-inc-input").value = "";
     document.getElementById("model-nick-input").value = "";
     loadModelList();
     loadModelsIntoItemSelect();
@@ -622,39 +720,81 @@
   async function loadModelsIntoItemSelect(){
     const sel = document.getElementById("item-model-select");
     sel.innerHTML = '<option value="">모델을 선택하세요</option>';
-    const snap = await getDocs(query(collection(db, "inventoryModels"), orderBy("modelName")));
-    snap.forEach(d=>{
+    if(modelsCache.length === 0){
+      const snap = await getDocs(query(collection(db, "inventoryModels"), orderBy("modelGroup")));
+      modelsCache = [];
+      snap.forEach(d=> modelsCache.push({ id:d.id, ...d.data() }));
+    }
+    modelsCache.forEach(m=>{
       const opt = document.createElement("option");
-      opt.value = d.data().modelName;
-      opt.textContent = d.data().modelName + (d.data().petName ? " (" + d.data().petName + ")" : "");
+      opt.value = m.id;
+      opt.textContent = m.modelGroup + " (" + m.baseModel + " " + m.capacity + ")";
       sel.appendChild(opt);
     });
+    onItemModelChange();
   }
 
-  // ---------- 개별 재고(입고) ----------
+  window.onItemModelChange = function(){
+    const modelId = document.getElementById("item-model-select").value;
+    const colorSel = document.getElementById("item-color-select");
+    colorSel.innerHTML = "";
+    const m = modelsCache.find(x=>x.id === modelId);
+    if(!m || !m.colors || m.colors.length === 0){
+      colorSel.innerHTML = '<option value="">색상 없음 (모델에 색상을 먼저 등록하세요)</option>';
+      return;
+    }
+    m.colors.forEach(c=>{
+      const opt = document.createElement("option");
+      opt.value = c.sku;
+      opt.dataset.color = c.color;
+      opt.textContent = c.color + " (" + c.sku + ")";
+      colorSel.appendChild(opt);
+    });
+    // 모델의 출고가를 매입단가 기본값으로 채워줌 (수정 가능)
+    const priceInput = document.getElementById("item-price-input");
+    if(!priceInput.value && m.priceExVat){ priceInput.value = m.priceExVat; }
+  };
+
+  window.toggleEntryType = function(){
+    const type = document.getElementById("item-entry-type").value;
+    document.getElementById("item-qty-field").style.display = (type === "qty") ? "block" : "none";
+    document.getElementById("item-imei-field").style.display = (type === "imei") ? "block" : "none";
+  };
+
+  // ---------- 개별/수량 재고 입고 ----------
   window.addInventoryItem = async function(){
-    const model = document.getElementById("item-model-select").value;
+    const modelId = document.getElementById("item-model-select").value;
+    const colorSel = document.getElementById("item-color-select");
+    const sku = colorSel.value;
+    const color = colorSel.selectedOptions[0] ? colorSel.selectedOptions[0].dataset.color : "";
     const carrier = document.getElementById("item-carrier-select").value;
     const source = document.getElementById("item-source-input").value.trim();
-    const imei = document.getElementById("item-imei-input").value.trim();
+    const entryType = document.getElementById("item-entry-type").value;
     const price = document.getElementById("item-price-input").value;
-    const inDate = document.getElementById("item-date-input").value;
+    const inDate = document.getElementById("item-date-input").value || new Date().toISOString().slice(0,10);
     const status = document.getElementById("item-status-select").value;
 
-    if(!model || !imei){ alert("모델과 IMEI는 필수입니다."); return; }
+    const m = modelsCache.find(x=>x.id === modelId);
+    if(!m || !sku){ alert("모델과 색상을 선택해주세요."); return; }
 
-    await addDoc(collection(db, "inventoryItems"), {
-      model, carrier, source, imei,
+    const base = {
+      modelGroup:m.modelGroup, baseModel:m.baseModel, capacity:m.capacity,
+      systemModel:m.systemModel, color, sku, carrier, source,
       price: price ? Number(price) : null,
-      inDate: inDate || new Date().toISOString().slice(0,10),
-      status,
-      createdAt: serverTimestamp()
-    });
-    logAction("재고 입고 등록", model + " / " + carrier + " / IMEI " + imei);
+      inDate, status, createdAt: serverTimestamp()
+    };
 
-    document.getElementById("item-source-input").value = "";
-    document.getElementById("item-imei-input").value = "";
-    document.getElementById("item-price-input").value = "";
+    if(entryType === "qty"){
+      const qty = Number(document.getElementById("item-qty-input").value) || 1;
+      await addDoc(collection(db, "inventoryItems"), { ...base, entryType:"qty", quantity:qty, imei:"" });
+      logAction("재고 입고(수량)", m.modelGroup + " " + color + " / " + carrier + " / " + qty + "대");
+    }else{
+      const imei = document.getElementById("item-imei-input").value.trim();
+      if(!imei){ alert("IMEI를 입력해주세요."); return; }
+      await addDoc(collection(db, "inventoryItems"), { ...base, entryType:"imei", quantity:1, imei });
+      logAction("재고 입고(IMEI)", m.modelGroup + " " + color + " / " + carrier + " / IMEI " + imei);
+      document.getElementById("item-imei-input").value = "";
+    }
     loadInventoryList();
   };
 
@@ -670,16 +810,17 @@
       const it = d.data();
       const row = document.createElement("div");
       row.className = "list-row";
-      row.innerHTML = '<span style="font-size:12.5px;"><b>' + it.model + '</b> · ' + it.carrier + ' · ' +
-        (it.source||"-") + ' · IMEI ' + it.imei + ' · ' +
+      const qtyLabel = it.entryType === "imei" ? ("IMEI " + it.imei) : (it.quantity + "대");
+      row.innerHTML = '<span style="font-size:12.5px;"><b>' + it.modelGroup + '</b> ' + (it.color||"") + ' · ' + it.carrier + ' · ' +
+        (it.source||"-") + ' · ' + qtyLabel + ' · ' +
         (it.price ? Number(it.price).toLocaleString()+'원' : "-") + ' · ' + it.inDate + ' · <b>' + it.status + '</b></span>';
       const delBtn = document.createElement("button");
       delBtn.className = "btn small danger";
       delBtn.textContent = "삭제";
       delBtn.onclick = async ()=>{
-        if(confirm("IMEI " + it.imei + " 재고를 삭제하시겠습니까?")){
+        if(confirm("이 재고 기록을 삭제하시겠습니까?")){
           await deleteDoc(doc(db, "inventoryItems", d.id));
-          logAction("재고 삭제", it.model + " / IMEI " + it.imei);
+          logAction("재고 삭제", it.modelGroup + " " + (it.color||"") + " / " + qtyLabel);
           loadInventoryList();
         }
       };
@@ -706,8 +847,14 @@
     document.querySelector('.tab-btn[data-tab="'+tabId+'"]').classList.add("active");
     if(tabId === "tab-team") loadTeamList();
     if(tabId === "tab-logs") loadLogs();
-    if(tabId === "tab-inventory"){ loadModelList(); loadModelsIntoItemSelect(); loadInventoryList(); }
+    if(tabId === "tab-inventory") loadInventoryTabData();
   };
+
+  async function loadInventoryTabData(){
+    await loadModelList();
+    await loadModelsIntoItemSelect();
+    await loadInventoryList();
+  }
 
   function showMsg(elId, text, type){
     const el = document.getElementById(elId);
