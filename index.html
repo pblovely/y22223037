@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>맞춤제안 운영 대시보드</title>
+<title id="page-title">맞춤제안 운영 대시보드</title>
 <style>
   :root{
     --navy:#1f2d3d;
@@ -23,48 +23,164 @@
   }
   .screen{ display:none; min-height:100vh; }
   .screen.active{ display:flex; }
-  #auth-screen{ align-items:center; justify-content:center; }
-  .auth-box{ width:360px; background:#ffffff; border:2px solid var(--navy); padding:32px; }
-  .auth-box h1{ font-size:20px; margin:0 0 4px 0; color:var(--navy); letter-spacing:-0.5px; }
-  .auth-box .sub{ font-size:13px; color:var(--gray); margin-bottom:24px; }
+
+  /* ---------- 로그인/회원가입 공통 ---------- */
+  #auth-screen{
+    align-items:center;
+    justify-content:center;
+  }
+  .auth-box{
+    width:360px;
+    background:#ffffff;
+    border:2px solid var(--navy);
+    padding:32px;
+  }
+  .auth-box h1{
+    font-size:20px;
+    margin:0 0 4px 0;
+    color:var(--navy);
+    letter-spacing:-0.5px;
+  }
+  .auth-box .sub{
+    font-size:13px;
+    color:var(--gray);
+    margin-bottom:24px;
+  }
   .field{ margin-bottom:14px; }
-  .field label{ display:block; font-size:12px; font-weight:600; color:var(--navy); margin-bottom:4px; }
-  .field input{ width:100%; padding:10px 12px; border:1px solid #c7cdd4; font-size:14px; background:#fff; }
-  .field input:focus{ outline:none; border-color:var(--accent); }
-  .btn{ width:100%; padding:11px; background:var(--navy); color:#fff; border:none; font-size:14px; font-weight:700; cursor:pointer; letter-spacing:0.3px; }
+  .field label{
+    display:block;
+    font-size:12px;
+    font-weight:600;
+    color:var(--navy);
+    margin-bottom:4px;
+  }
+  .field input{
+    width:100%;
+    padding:10px 12px;
+    border:1px solid #c7cdd4;
+    font-size:14px;
+    background:#fff;
+  }
+  .field input:focus{
+    outline:none;
+    border-color:var(--accent);
+  }
+  .btn{
+    width:100%;
+    padding:11px;
+    background:var(--navy);
+    color:#fff;
+    border:none;
+    font-size:14px;
+    font-weight:700;
+    cursor:pointer;
+    letter-spacing:0.3px;
+  }
   .btn:hover{ background:var(--navy-dark); }
-  .btn.secondary{ background:#fff; color:var(--navy); border:1px solid var(--navy); margin-top:8px; }
-  .switch-link{ margin-top:16px; text-align:center; font-size:12.5px; color:var(--gray); }
-  .switch-link a{ color:var(--accent); cursor:pointer; font-weight:600; text-decoration:none; }
-  .msg{ font-size:12.5px; padding:8px 10px; margin-bottom:14px; border-left:3px solid var(--danger); background:#fdecea; color:var(--danger); display:none; }
+  .btn.secondary{
+    background:#fff;
+    color:var(--navy);
+    border:1px solid var(--navy);
+    margin-top:8px;
+  }
+  .switch-link{
+    margin-top:16px;
+    text-align:center;
+    font-size:12.5px;
+    color:var(--gray);
+  }
+  .switch-link a{
+    color:var(--accent);
+    cursor:pointer;
+    font-weight:600;
+    text-decoration:none;
+  }
+  .msg{
+    font-size:12.5px;
+    padding:8px 10px;
+    margin-bottom:14px;
+    border-left:3px solid var(--danger);
+    background:#fdecea;
+    color:var(--danger);
+    display:none;
+  }
   .msg.show{ display:block; }
-  .msg.info{ border-left-color:var(--accent); background:#eaf1fd; color:var(--accent); }
-  #app-screen{ display:none; flex-direction:column; width:100%; }
+  .msg.info{
+    border-left-color:var(--accent);
+    background:#eaf1fd;
+    color:var(--accent);
+  }
+
+  /* ---------- 로그인 후 대기/대시보드 쉘 ---------- */
+  #app-screen{
+    display:none;
+    flex-direction:column;
+    width:100%;
+  }
   #app-screen.active{ display:flex; }
-  .topbar{ background:var(--navy); color:#fff; padding:14px 24px; display:flex; justify-content:space-between; align-items:center; border-bottom:2px solid var(--navy-dark); }
+  .topbar{
+    background:var(--navy);
+    color:#fff;
+    padding:14px 24px;
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    border-bottom:2px solid var(--navy-dark);
+  }
   .topbar .title{ font-weight:700; font-size:15px; letter-spacing:0.3px; }
   .topbar .user-info{ display:flex; align-items:center; gap:14px; font-size:13px; }
-  .topbar button{ background:transparent; border:1px solid #fff; color:#fff; padding:6px 12px; font-size:12.5px; cursor:pointer; }
+  .topbar button{
+    background:transparent;
+    border:1px solid #fff;
+    color:#fff;
+    padding:6px 12px;
+    font-size:12.5px;
+    cursor:pointer;
+  }
   .topbar button:hover{ background:rgba(255,255,255,0.12); }
-  .pending-box{ margin:60px auto; width:420px; background:#fff; border:2px solid var(--navy); padding:32px; text-align:center; }
+
+  .pending-box{
+    margin:60px auto;
+    width:420px;
+    background:#fff;
+    border:2px solid var(--navy);
+    padding:32px;
+    text-align:center;
+  }
   .pending-box .icon{ font-size:32px; margin-bottom:12px; }
   .pending-box h2{ font-size:17px; color:var(--navy); margin:0 0 8px 0; }
   .pending-box p{ font-size:13px; color:var(--gray); line-height:1.6; }
   .pending-box.banned{ border-color:var(--danger); }
   .pending-box.banned h2{ color:var(--danger); }
+
   .main-content{ padding:28px; }
-  .card{ background:#fff; border:1px solid #d7dce2; padding:20px; margin-bottom:16px; }
+  .card{
+    background:#fff;
+    border:1px solid #d7dce2;
+    padding:20px;
+    margin-bottom:16px;
+  }
   .card h3{ margin:0 0 6px 0; font-size:14px; color:var(--navy); }
-  .perm-tag{ display:inline-block; font-size:11px; padding:3px 8px; margin:3px 4px 0 0; background:#eaf1fd; color:var(--accent); border:1px solid var(--accent); }
+  .perm-tag{
+    display:inline-block;
+    font-size:11px;
+    padding:3px 8px;
+    margin:3px 4px 0 0;
+    background:#eaf1fd;
+    color:var(--accent);
+    border:1px solid var(--accent);
+  }
 </style>
 </head>
 <body>
 
+<!-- ================= 로그인 / 회원가입 화면 ================= -->
 <div id="auth-screen" class="screen active">
   <div class="auth-box">
 
+    <!-- 로그인 폼 -->
     <div id="login-form">
-      <h1>맞춤제안 운영 대시보드</h1>
+      <h1 id="site-title-login">맞춤제안 운영 대시보드</h1>
       <div class="sub">아이디와 비밀번호를 입력하세요</div>
       <div id="login-msg" class="msg"></div>
       <div class="field">
@@ -81,6 +197,7 @@
       </div>
     </div>
 
+    <!-- 회원가입 폼 -->
     <div id="signup-form" style="display:none;">
       <h1>회원가입 요청</h1>
       <div class="sub">가입 후 관리자 승인이 필요합니다</div>
@@ -108,15 +225,17 @@
   </div>
 </div>
 
+<!-- ================= 로그인 후 화면 ================= -->
 <div id="app-screen" class="screen">
   <div class="topbar">
-    <div class="title">맞춤제안 운영 대시보드</div>
+    <div class="title" id="site-title-topbar">맞춤제안 운영 대시보드</div>
     <div class="user-info">
       <span id="topbar-username">-</span>
       <button onclick="handleLogout()">로그아웃</button>
     </div>
   </div>
 
+  <!-- 승인 대기 / 추방 상태 -->
   <div id="pending-view" style="display:none;">
     <div class="pending-box" id="pending-box">
       <div class="icon">⏳</div>
@@ -125,12 +244,24 @@
     </div>
   </div>
 
+  <!-- 승인된 사용자용 임시 대시보드 쉘 -->
   <div id="main-view" class="main-content" style="display:none;">
     <div class="card">
       <h3>환영합니다, <span id="welcome-name"></span>님</h3>
       <p style="font-size:13px;color:var(--gray);margin:0;">현재 부여된 권한:</p>
       <div id="perm-list" style="margin-top:8px;"></div>
     </div>
+    <div class="card" id="site-name-card" style="display:none;">
+      <h3>사이트 이름 설정</h3>
+      <p style="font-size:12.5px;color:var(--gray);margin:0 0 10px 0;">로그인 화면·상단바·브라우저 탭에 표시되는 이름을 변경합니다.</p>
+      <div style="display:flex;gap:8px;">
+        <input type="text" id="site-name-input" placeholder="예: 유통폰 관리 대시보드"
+          style="flex:1;padding:9px 10px;border:1px solid #c7cdd4;font-size:13px;">
+        <button class="btn" style="width:auto;padding:9px 18px;" onclick="saveSiteName()">저장</button>
+      </div>
+      <div id="site-name-msg" style="font-size:12px;color:var(--accent);margin-top:8px;display:none;">저장되었습니다.</div>
+    </div>
+
     <div class="card">
       <h3>다음 단계 안내</h3>
       <p style="font-size:13px;color:var(--gray);margin:0;">
@@ -140,6 +271,7 @@
   </div>
 </div>
 
+<!-- ================= Firebase 연동 ================= -->
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.2/firebase-app.js";
   import {
@@ -163,6 +295,7 @@
   const auth = getAuth(app);
   const db = getFirestore(app);
 
+  // 아이디를 내부적으로 가짜 이메일 형식으로 변환 (Firebase Auth는 이메일 방식만 지원)
   const EMAIL_DOMAIN = "@upsell.local";
   function toEmail(username){ return username.trim().toLowerCase() + EMAIL_DOMAIN; }
 
@@ -174,7 +307,44 @@
     permissionManage: "권한 설정 관리",
     inventorySettings: "재고설정 관리",
     settlementSettings: "정산설정 관리",
+    siteSettings: "사이트 설정 관리",
     dataReset: "데이터 초기화"
+  };
+
+  const DEFAULT_SITE_NAME = "맞춤제안 운영 대시보드";
+
+  function applySiteName(name){
+    const n = name || DEFAULT_SITE_NAME;
+    document.getElementById("page-title").textContent = n;
+    document.getElementById("site-title-login").textContent = n;
+    document.getElementById("site-title-topbar").textContent = n;
+  }
+
+  async function loadSiteName(){
+    try{
+      const snap = await getDoc(doc(db, "settings", "general"));
+      if(snap.exists() && snap.data().siteName){
+        applySiteName(snap.data().siteName);
+      }
+    }catch(err){
+      // 최초 실행 시 문서가 없을 수 있음 - 기본값 유지
+    }
+  }
+  loadSiteName();
+
+  window.saveSiteName = async function(){
+    const input = document.getElementById("site-name-input");
+    const val = input.value.trim();
+    if(!val){ return; }
+    try{
+      await setDoc(doc(db, "settings", "general"), { siteName: val }, { merge:true });
+      applySiteName(val);
+      const msg = document.getElementById("site-name-msg");
+      msg.style.display = "block";
+      setTimeout(()=>{ msg.style.display = "none"; }, 2000);
+    }catch(err){
+      alert("저장 중 오류가 발생했습니다: " + err.message);
+    }
   };
 
   function showMsg(elId, text, type){
@@ -196,6 +366,7 @@
     document.getElementById("login-form").style.display = "block";
   };
 
+  // ---------- 회원가입 ----------
   window.handleSignup = async function(){
     clearMsg("signup-msg");
     const name = document.getElementById("signup-name").value.trim();
@@ -217,11 +388,12 @@
       const cred = await createUserWithEmailAndPassword(auth, toEmail(username), pw);
       await setDoc(doc(db, "users", cred.user.uid), {
         name, username,
-        status: "pending",
+        status: "pending", // pending | approved | banned
         permissions: {
           dashboard:false, input:false, excelExport:false,
           userApproval:false, permissionManage:false,
-          inventorySettings:false, settlementSettings:false, dataReset:false
+          inventorySettings:false, settlementSettings:false,
+          siteSettings:false, dataReset:false
         },
         createdAt: serverTimestamp()
       });
@@ -238,6 +410,7 @@
     }
   };
 
+  // ---------- 로그인 ----------
   window.handleLogin = async function(){
     clearMsg("login-msg");
     const username = document.getElementById("login-username").value.trim();
@@ -247,15 +420,18 @@
     }
     try{
       await signInWithEmailAndPassword(auth, toEmail(username), pw);
+      // 이후 화면 전환은 onAuthStateChanged에서 처리
     }catch(err){
       showMsg("login-msg", "아이디 또는 비밀번호가 올바르지 않습니다.");
     }
   };
 
+  // ---------- 로그아웃 ----------
   window.handleLogout = async function(){
     await signOut(auth);
   };
 
+  // ---------- 로그인 상태 감지 ----------
   onAuthStateChanged(auth, async (user)=>{
     const authScreen = document.getElementById("auth-screen");
     const appScreen = document.getElementById("app-screen");
@@ -294,6 +470,15 @@
       const permListEl = document.getElementById("perm-list");
       permListEl.innerHTML = "";
       const perms = data.permissions || {};
+
+      const siteNameCard = document.getElementById("site-name-card");
+      if(perms.siteSettings){
+        siteNameCard.style.display = "block";
+        document.getElementById("site-name-input").value = document.getElementById("page-title").textContent;
+      }else{
+        siteNameCard.style.display = "none";
+      }
+
       const granted = Object.keys(perms).filter(k => perms[k]);
       if(granted.length === 0){
         permListEl.innerHTML = '<span style="font-size:12.5px;color:var(--gray);">부여된 권한이 없습니다. 관리자에게 요청해주세요.</span>';
