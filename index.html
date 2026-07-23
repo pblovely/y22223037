@@ -6,38 +6,27 @@
 <title id="page-title">유통폰 관리 대시보드</title>
 <style>
   :root{
-    --navy:#2b2b2b;      /* 주요 버튼/헤더 - 블랙 계열 */
+    --navy:#2b2b2b;
     --navy-dark:#161616;
-    --accent:#4a4a4a;    /* 포인트색 - 회색 계열 (파란색 아님) */
+    --accent:#4a4a4a;
     --bg:#f2f2f2;
     --danger:#c0392b;
     --gray:#6b6b6b;
     --line:#d4d4d4;
   }
   *{ box-sizing:border-box; border-radius:0 !important; }
-  body{
-    margin:0;
-    font-family: "AppFont","Pretendard","Malgun Gothic",sans-serif;
-    background:var(--bg);
-    color:#1a1a1a;
-  }
-  /* 커스텀 글씨체 자리 - 폰트 파일 업로드 후 여기 활성화 예정
-  @font-face{
-    font-family:"AppFont";
-    src:url("./fonts/custom-font.woff2") format("woff2");
-  }
-  */
+  body{ margin:0; font-family:"Pretendard","Malgun Gothic",sans-serif; background:var(--bg); color:#1a1a1a; }
   .screen{ display:none; min-height:100vh; }
   .screen.active{ display:flex; }
   #auth-screen{ align-items:center; justify-content:center; padding:24px 0; }
-  .auth-box{ width:380px; background:#ffffff; border:2px solid var(--navy); padding:32px; }
-  .auth-box h1{ font-size:19px; margin:0 0 4px 0; color:var(--navy); letter-spacing:-0.5px; }
+  .auth-box{ width:380px; background:#fff; border:2px solid var(--navy); padding:32px; }
+  .auth-box h1{ font-size:19px; margin:0 0 4px 0; color:var(--navy); }
   .auth-box .sub{ font-size:13px; color:var(--gray); margin-bottom:22px; }
   .field{ margin-bottom:13px; }
   .field label{ display:block; font-size:12px; font-weight:600; color:var(--navy); margin-bottom:4px; }
   .field input, .field select{ width:100%; padding:10px 12px; border:1px solid #c7c7c7; font-size:14px; background:#fff; font-family:inherit; }
   .field input:focus, .field select:focus{ outline:none; border-color:var(--accent); }
-  .btn{ width:100%; padding:11px; background:var(--navy); color:#fff; border:none; font-size:14px; font-weight:700; cursor:pointer; letter-spacing:0.3px; }
+  .btn{ width:100%; padding:11px; background:var(--navy); color:#fff; border:none; font-size:14px; font-weight:700; cursor:pointer; }
   .btn:hover{ background:var(--navy-dark); }
   .btn.secondary{ background:#fff; color:var(--navy); border:1px solid var(--navy); margin-top:8px; }
   .btn.small{ width:auto; padding:8px 16px; font-size:13px; }
@@ -47,11 +36,11 @@
   .switch-link a{ color:var(--accent); cursor:pointer; font-weight:700; text-decoration:none; }
   .msg{ font-size:12.5px; padding:8px 10px; margin-bottom:14px; border-left:3px solid var(--danger); background:#fdecea; color:var(--danger); display:none; }
   .msg.show{ display:block; }
-  .msg.info{ border-left-color:var(--accent); background:#eeeeee; color:var(--navy); }
+  .msg.info{ border-left-color:var(--accent); background:#eee; color:var(--navy); }
   #app-screen{ display:none; flex-direction:column; width:100%; }
   #app-screen.active{ display:flex; }
   .topbar{ background:var(--navy); color:#fff; padding:14px 24px; display:flex; justify-content:space-between; align-items:center; border-bottom:2px solid var(--navy-dark); }
-  .topbar .title{ font-weight:700; font-size:15px; letter-spacing:0.3px; }
+  .topbar .title{ font-weight:700; font-size:15px; }
   .topbar .user-info{ display:flex; align-items:center; gap:14px; font-size:13px; }
   .topbar button{ background:transparent; border:1px solid #fff; color:#fff; padding:6px 12px; font-size:12.5px; cursor:pointer; }
   .topbar button:hover{ background:rgba(255,255,255,0.15); }
@@ -61,93 +50,60 @@
   .pending-box p{ font-size:13px; color:var(--gray); line-height:1.6; white-space:pre-line; }
   .pending-box.banned{ border-color:var(--danger); }
   .pending-box.banned h2{ color:var(--danger); }
-  .main-content{ padding:0; }
-  .tabbar{ display:flex; background:#fff; border-bottom:1px solid var(--line); padding:0 24px; }
+  .group-label{ padding:12px 24px 4px 24px; font-size:11px; font-weight:700; color:var(--gray); letter-spacing:0.5px; background:#eaeaea; }
+  .tabbar{ display:flex; background:#fff; border-bottom:1px solid var(--line); padding:0 24px; flex-wrap:wrap; }
   .tab-btn{ padding:13px 18px; font-size:13.5px; font-weight:600; color:var(--gray); background:none; border:none; cursor:pointer; border-bottom:3px solid transparent; }
   .tab-btn.active{ color:var(--navy); border-bottom-color:var(--navy); }
   .tab-btn:hover{ color:var(--navy); }
   .tab-panel{ display:none; padding:24px; }
   .tab-panel.active{ display:block; }
-  .card{ background:#fff; border:1px solid var(--line); padding:20px; margin-bottom:16px; max-width:640px; }
+  .card{ background:#fff; border:1px solid var(--line); padding:20px; margin-bottom:16px; max-width:960px; }
   .card h3{ margin:0 0 6px 0; font-size:14px; color:var(--navy); }
   .card p.desc{ font-size:12.5px; color:var(--gray); margin:0 0 12px 0; }
   .perm-tag{ display:inline-block; font-size:11px; padding:3px 8px; margin:3px 4px 0 0; background:#eee; color:var(--navy); border:1px solid var(--navy); }
-  .inline-form{ display:flex; gap:8px; margin-bottom:16px; }
-  .inline-form input{ flex:1; padding:9px 10px; border:1px solid #c7c7c7; font-size:13px; }
+  .inline-form{ display:flex; gap:8px; margin-bottom:16px; flex-wrap:wrap; }
+  .inline-form input{ flex:1; min-width:140px; padding:9px 10px; border:1px solid #c7c7c7; font-size:13px; }
   .list-row{ display:flex; justify-content:space-between; align-items:center; padding:10px 12px; border:1px solid var(--line); border-top:none; font-size:13.5px; }
   .list-row:first-of-type{ border-top:1px solid var(--line); }
   .list-empty{ font-size:12.5px; color:var(--gray); padding:12px; border:1px dashed var(--line); }
   .soon{ font-size:13px; color:var(--gray); }
+  .check-panel{ border:1px solid var(--line); padding:12px; margin-bottom:14px; background:#fafafa; }
+  .check-panel label{ display:inline-flex; align-items:center; gap:5px; font-size:12.5px; margin-right:14px; margin-bottom:6px; }
 </style>
 </head>
 <body>
 
-<!-- ================= 로그인 / 회원가입 화면 ================= -->
+<!-- ================= 로그인 / 회원가입 ================= -->
 <div id="auth-screen" class="screen active">
   <div class="auth-box">
-
-    <!-- 로그인 폼 -->
     <div id="login-form">
       <h1 id="site-title-login">유통폰 관리 대시보드</h1>
       <div class="sub">아이디와 비밀번호를 입력하세요</div>
       <div id="login-msg" class="msg"></div>
-      <div class="field">
-        <label>아이디</label>
-        <input type="text" id="login-username" placeholder="아이디 입력">
-      </div>
-      <div class="field">
-        <label>비밀번호</label>
-        <input type="password" id="login-password" placeholder="비밀번호 입력">
-      </div>
+      <div class="field"><label>아이디</label><input type="text" id="login-username"></div>
+      <div class="field"><label>비밀번호</label><input type="password" id="login-password"></div>
       <button class="btn" onclick="handleLogin()">로그인</button>
-      <div class="switch-link">
-        계정이 없으신가요? <a onclick="showSignup()">회원가입 요청</a>
-      </div>
+      <div class="switch-link">계정이 없으신가요? <a onclick="showSignup()">회원가입 요청</a></div>
     </div>
 
-    <!-- 회원가입 폼 -->
     <div id="signup-form" style="display:none;">
       <h1>회원가입 요청</h1>
       <div class="sub">가입 후 관리자 승인이 필요합니다</div>
       <div id="signup-msg" class="msg"></div>
-      <div class="field">
-        <label>이름</label>
-        <input type="text" id="signup-name" placeholder="실명 입력">
-      </div>
-      <div class="field">
-        <label>아이디</label>
-        <input type="text" id="signup-username" placeholder="영문/숫자 아이디">
-      </div>
-      <div class="field">
-        <label>생년월일</label>
-        <input type="date" id="signup-birth">
-      </div>
-      <div class="field">
-        <label>휴대폰번호</label>
-        <input type="tel" id="signup-phone" placeholder="010-0000-0000">
-      </div>
-      <div class="field">
-        <label>소속팀</label>
-        <select id="signup-team">
-          <option value="">팀을 선택하세요</option>
-        </select>
-      </div>
-      <div class="field">
-        <label>비밀번호</label>
-        <input type="password" id="signup-password" placeholder="6자리 이상">
-      </div>
-      <div class="field">
-        <label>비밀번호 확인</label>
-        <input type="password" id="signup-password2" placeholder="비밀번호 재입력">
-      </div>
+      <div class="field"><label>이름</label><input type="text" id="signup-name"></div>
+      <div class="field"><label>아이디</label><input type="text" id="signup-username"></div>
+      <div class="field"><label>생년월일</label><input type="date" id="signup-birth"></div>
+      <div class="field"><label>휴대폰번호</label><input type="tel" id="signup-phone" placeholder="010-0000-0000"></div>
+      <div class="field"><label>소속팀</label><select id="signup-team"><option value="">팀을 선택하세요</option></select></div>
+      <div class="field"><label>비밀번호</label><input type="password" id="signup-password"></div>
+      <div class="field"><label>비밀번호 확인</label><input type="password" id="signup-password2"></div>
       <button class="btn" onclick="handleSignup()">가입 요청</button>
       <button class="btn secondary" onclick="showLogin()">취소하고 로그인으로</button>
     </div>
-
   </div>
 </div>
 
-<!-- ================= 로그인 후 화면 ================= -->
+<!-- ================= 로그인 후 ================= -->
 <div id="app-screen" class="screen">
   <div class="topbar">
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
@@ -157,18 +113,15 @@
     </div>
   </div>
 
-  <!-- 승인 대기 / 추방 상태 -->
   <div id="pending-view" style="display:none;">
     <div class="pending-box" id="pending-box">
       <img id="pending-icon-img" src="" style="display:none;">
       <h2 id="pending-title">승인 대기 중입니다</h2>
-      <p id="pending-desc">관리자가 계정을 승인하면 대시보드를 사용하실 수 있습니다.
-승인 전까지는 화면 접근이 제한됩니다.</p>
+      <p id="pending-desc"></p>
     </div>
   </div>
 
-  <!-- 승인된 사용자 화면 -->
-  <div id="main-view" class="main-content" style="display:none;">
+  <div id="main-view" style="display:none;">
 
     <div style="padding:20px 24px 0 24px;">
       <div class="card" style="margin-bottom:0;">
@@ -178,97 +131,135 @@
       </div>
     </div>
 
-    <div class="tabbar" id="tabbar">
-      <button class="tab-btn active" data-tab="tab-dashboard" onclick="switchTab('tab-dashboard')">대시보드</button>
-      <button class="tab-btn" data-tab="tab-site" id="tabbtn-site" onclick="switchTab('tab-site')" style="display:none;">사이트 설정</button>
-      <button class="tab-btn" data-tab="tab-team" id="tabbtn-team" onclick="switchTab('tab-team')" style="display:none;">팀 관리</button>
-      <button class="tab-btn" data-tab="tab-users" id="tabbtn-users" onclick="switchTab('tab-users')" style="display:none;">사용자 관리</button>
-      <button class="tab-btn" data-tab="tab-inventory" id="tabbtn-inventory" onclick="switchTab('tab-inventory')" style="display:none;">재고 설정</button>
-      <button class="tab-btn" data-tab="tab-settlement" id="tabbtn-settlement" onclick="switchTab('tab-settlement')" style="display:none;">정산 설정</button>
-      <button class="tab-btn" data-tab="tab-logs" id="tabbtn-logs" onclick="switchTab('tab-logs')" style="display:none;">이력</button>
-    </div>
-
-    <!-- 대시보드 (준비중) -->
-    <div id="tab-dashboard" class="tab-panel active">
-      <div class="card">
-        <h3>대시보드</h3>
-        <p class="soon">매입/매출/순위 등 실제 대시보드 화면은 다음 업데이트에서 채워질 예정입니다.</p>
+    <!-- 관리자 메뉴 -->
+    <div id="admin-group">
+      <div class="group-label">관리자 메뉴</div>
+      <div class="tabbar" id="admin-tabbar">
+        <button class="tab-btn" data-tab="tab-site" id="tabbtn-site" onclick="switchTab('tab-site')" style="display:none;">사이트 설정</button>
+        <button class="tab-btn" data-tab="tab-team" id="tabbtn-team" onclick="switchTab('tab-team')" style="display:none;">팀 관리</button>
+        <button class="tab-btn" data-tab="tab-inv-admin" id="tabbtn-inv-admin" onclick="switchTab('tab-inv-admin')" style="display:none;">재고 기초설정</button>
+        <button class="tab-btn" data-tab="tab-users" id="tabbtn-users" onclick="switchTab('tab-users')" style="display:none;">사용자 관리</button>
+        <button class="tab-btn" data-tab="tab-settlement" id="tabbtn-settlement" onclick="switchTab('tab-settlement')" style="display:none;">정산 설정</button>
+        <button class="tab-btn" data-tab="tab-logs" id="tabbtn-logs" onclick="switchTab('tab-logs')" style="display:none;">이력</button>
       </div>
     </div>
 
-    <!-- 사이트 설정 -->
+    <!-- 작업 메뉴 -->
+    <div id="work-group">
+      <div class="group-label">작업 메뉴 (협업)</div>
+      <div class="tabbar" id="work-tabbar">
+        <button class="tab-btn" data-tab="tab-dashboard" id="tabbtn-dashboard" onclick="switchTab('tab-dashboard')" style="display:none;">대시보드</button>
+        <button class="tab-btn" data-tab="tab-inv-work" id="tabbtn-inv-work" onclick="switchTab('tab-inv-work')" style="display:none;">재고 등록</button>
+      </div>
+    </div>
+
+    <!-- ===== 작업: 대시보드 ===== -->
+    <div id="tab-dashboard" class="tab-panel">
+      <div class="card"><h3>대시보드</h3><p class="soon">매입/매출/순위 등 실제 대시보드 화면은 다음 업데이트에서 채워질 예정입니다.</p></div>
+    </div>
+
+    <!-- ===== 관리자: 사이트 설정 ===== -->
     <div id="tab-site" class="tab-panel">
       <div class="card">
         <h3>사이트 이름</h3>
-        <p class="desc">로그인 화면·상단바·브라우저 탭에 표시되는 이름입니다.</p>
         <div class="inline-form">
-          <input type="text" id="site-name-input" placeholder="예: 유통폰 관리 대시보드">
+          <input type="text" id="site-name-input">
           <button class="btn small" onclick="saveSiteName()">저장</button>
         </div>
         <div id="site-name-msg" style="font-size:12px;color:var(--navy);display:none;">저장되었습니다.</div>
       </div>
-
       <div class="card">
         <h3>승인 대기 화면 문구</h3>
-        <p class="desc">승인 전 사용자에게 보이는 제목·설명 문구입니다.</p>
-        <div class="field">
-          <label>제목</label>
-          <input type="text" id="pending-title-input" placeholder="예: 승인 대기 중입니다">
-        </div>
-        <div class="field">
-          <label>설명</label>
-          <input type="text" id="pending-desc-input" placeholder="예: 관리자가 계정을 승인하면 이용 가능합니다">
-        </div>
-        <div class="field">
-          <label>아이콘 이미지 주소 (선택, 비워두면 아이콘 없음)</label>
-          <input type="text" id="pending-icon-input" placeholder="https://... 이미지 링크">
-        </div>
+        <div class="field"><label>제목</label><input type="text" id="pending-title-input"></div>
+        <div class="field"><label>설명</label><input type="text" id="pending-desc-input"></div>
+        <div class="field"><label>아이콘 이미지 주소 (선택)</label><input type="text" id="pending-icon-input" placeholder="https://..."></div>
         <button class="btn small" onclick="savePendingScreen()">저장</button>
         <div id="pending-screen-msg" style="font-size:12px;color:var(--navy);display:none;margin-top:8px;">저장되었습니다.</div>
       </div>
     </div>
 
-    <!-- 팀 관리 -->
+    <!-- ===== 관리자: 팀 관리 ===== -->
     <div id="tab-team" class="tab-panel">
       <div class="card">
         <h3>팀 관리</h3>
         <p class="desc">회원가입 시 선택하는 소속팀 목록입니다.</p>
         <div class="inline-form">
-          <input type="text" id="new-team-input" placeholder="새 팀 이름 입력">
+          <input type="text" id="new-team-input" placeholder="새 팀 이름">
           <button class="btn small" onclick="addTeam()">추가</button>
         </div>
         <div id="team-list"></div>
       </div>
     </div>
 
-    <!-- 사용자 관리 (준비중) -->
-    <div id="tab-users" class="tab-panel">
+    <!-- ===== 관리자: 재고 기초설정 ===== -->
+    <div id="tab-inv-admin" class="tab-panel">
       <div class="card">
-        <h3>사용자 관리</h3>
-        <p class="soon">가입 승인·추방·권한 부여 화면은 다음 업데이트에서 추가됩니다. 지금은 Firestore 콘솔에서 직접 처리해주세요.</p>
-      </div>
-    </div>
-
-    <!-- 재고 설정 -->
-    <div id="tab-inventory" class="tab-panel">
-
-      <div class="card">
-        <h3>모델 등록 (용량 단위 - 가격이 여기 딸립니다)</h3>
-        <p class="desc">모델군·기본모델명·용량·전산모델명·출고가를 등록합니다. 색상은 등록 후 아래에서 추가합니다.</p>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;">
-          <input type="text" id="model-group-input" placeholder="모델군 (예: 폴립256)" style="flex:1;min-width:120px;padding:9px 10px;border:1px solid #c7c7c7;font-size:13px;">
-          <input type="text" id="model-base-input" placeholder="기본모델명 (예: SM-F776N)" style="flex:1;min-width:130px;padding:9px 10px;border:1px solid #c7c7c7;font-size:13px;">
-          <input type="text" id="model-capacity-input" placeholder="용량 (예: 256GB)" style="width:110px;padding:9px 10px;border:1px solid #c7c7c7;font-size:13px;">
-          <input type="text" id="model-system-input" placeholder="전산모델명 (예: SM-F776N256)" style="flex:1;min-width:150px;padding:9px 10px;border:1px solid #c7c7c7;font-size:13px;">
+        <h3>모델 등록 (기본정보)</h3>
+        <p class="desc">모델군·기본모델명·용량·전산모델명·출고가·펫네임을 등록합니다. 색상은 등록 후 추가합니다.</p>
+        <div class="inline-form">
+          <input type="text" id="model-group-input" placeholder="모델군 (예: 폴립256)">
+          <input type="text" id="model-base-input" placeholder="기본모델명 (예: SM-F776N)">
+          <input type="text" id="model-capacity-input" placeholder="용량 (예: 256GB)">
+          <input type="text" id="model-system-input" placeholder="전산모델명 (예: SM-F776N256)">
         </div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;">
-          <input type="number" id="model-price-ex-input" placeholder="출고가 (VAT별도)" style="flex:1;min-width:130px;padding:9px 10px;border:1px solid #c7c7c7;font-size:13px;">
-          <input type="number" id="model-price-inc-input" placeholder="출고가 (VAT포함)" style="flex:1;min-width:130px;padding:9px 10px;border:1px solid #c7c7c7;font-size:13px;">
-          <input type="text" id="model-nick-input" placeholder="닉네임 (자유 입력)" style="flex:1;min-width:120px;padding:9px 10px;border:1px solid #c7c7c7;font-size:13px;">
+        <div class="inline-form">
+          <input type="number" id="model-price-ex-input" placeholder="출고가(VAT별도)">
+          <input type="number" id="model-price-inc-input" placeholder="출고가(VAT포함)">
+          <input type="text" id="model-pet-input" placeholder="펫네임 (예: 갤럭시Z 플립7)">
+          <input type="text" id="model-nick-input" placeholder="닉네임(자유)">
           <button class="btn small" onclick="addModel()">모델 등록</button>
         </div>
         <div id="model-list"></div>
       </div>
+
+      <div class="card">
+        <h3>입고처 종류</h3>
+        <p class="desc">단말기를 사오는 곳(매입처) 목록입니다. 재고 등록 시 여기서 선택합니다.</p>
+        <div class="inline-form">
+          <input type="text" id="new-source-input" placeholder="예: 포피플">
+          <button class="btn small" onclick="addSource()">추가</button>
+        </div>
+        <div id="source-list"></div>
+      </div>
+
+      <div class="card">
+        <h3>출고처 종류</h3>
+        <p class="desc">단말기가 나가는 곳(판매처·개통처) 목록입니다.</p>
+        <div class="inline-form">
+          <input type="text" id="new-dest-input" placeholder="예: 타 LG대리점">
+          <button class="btn small" onclick="addDestination()">추가</button>
+        </div>
+        <div id="dest-list"></div>
+      </div>
+    </div>
+
+    <!-- ===== 관리자: 사용자 관리 (준비중) ===== -->
+    <div id="tab-users" class="tab-panel">
+      <div class="card"><h3>사용자 관리</h3><p class="soon">가입 승인·추방·권한 부여 화면은 다음 업데이트에서 추가됩니다. 지금은 Firestore 콘솔에서 직접 처리해주세요.</p></div>
+    </div>
+
+    <!-- ===== 관리자: 정산 설정 (준비중) ===== -->
+    <div id="tab-settlement" class="tab-panel">
+      <div class="card"><h3>정산 설정</h3><p class="soon">지급예정일 등 정산 관련 기능은 다음 업데이트에서 추가됩니다.</p></div>
+    </div>
+
+    <!-- ===== 관리자: 이력 ===== -->
+    <div id="tab-logs" class="tab-panel">
+      <div class="card" style="max-width:800px;">
+        <h3>활동 이력</h3>
+        <p class="desc">관리자·팀원 조작이 자동으로 기록됩니다. 최근 100건까지 표시합니다.</p>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+          <label style="font-size:13px;display:flex;align-items:center;gap:6px;">
+            <input type="checkbox" id="log-select-all" onclick="toggleAllLogs(this)"> 전체 선택
+          </label>
+          <button class="btn small danger" onclick="deleteSelectedLogs()">선택 삭제</button>
+        </div>
+        <div id="log-list"></div>
+      </div>
+    </div>
+
+    <!-- ===== 작업: 재고 등록(협업) ===== -->
+    <div id="tab-inv-work" class="tab-panel">
 
       <div class="card">
         <h3>재고 입고 등록</h3>
@@ -284,17 +275,19 @@
           </div>
         </div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;">
-          <div class="field" style="flex:1;min-width:130px;">
+          <div class="field" style="flex:1;min-width:120px;">
             <label>통신사</label>
             <select id="item-carrier-select">
-              <option value="LG유플러스">LG유플러스</option>
-              <option value="SK텔레콤">SK텔레콤</option>
-              <option value="KT">KT</option>
+              <option value="LG">LG</option><option value="SKT">SKT</option><option value="KT">KT</option>
             </select>
           </div>
           <div class="field" style="flex:1;min-width:130px;">
-            <label>매입처</label>
-            <input type="text" id="item-source-input" placeholder="예: 포피플">
+            <label>입고처</label>
+            <select id="item-source-select"><option value="">입고처를 선택하세요</option></select>
+          </div>
+          <div class="field" style="flex:1;min-width:130px;">
+            <label>출고처 (선택)</label>
+            <select id="item-dest-select"><option value="">해당없음</option></select>
           </div>
           <div class="field" style="flex:1;min-width:130px;">
             <label>입고 방식</label>
@@ -305,62 +298,36 @@
           </div>
         </div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;">
-          <div class="field" id="item-qty-field" style="flex:1;min-width:100px;">
-            <label>수량</label>
-            <input type="number" id="item-qty-input" placeholder="대수" value="1">
+          <div class="field" id="item-qty-field" style="flex:1;min-width:90px;"><label>수량</label><input type="number" id="item-qty-input" value="1"></div>
+          <div class="field" id="item-imei-field" style="flex:1;min-width:150px;display:none;"><label>IMEI</label><input type="text" id="item-imei-input"></div>
+          <div class="field" style="flex:1;min-width:120px;"><label>매입단가(개당)</label><input type="number" id="item-price-input"></div>
+          <div class="field" style="flex:1;min-width:130px;"><label>상태</label>
+            <select id="item-status-select"><option value="재고">재고</option><option value="개통완료">개통완료</option><option value="판매완료">판매완료</option></select>
           </div>
-          <div class="field" id="item-imei-field" style="flex:1;min-width:150px;display:none;">
-            <label>IMEI</label>
-            <input type="text" id="item-imei-input" placeholder="일련번호">
-          </div>
-          <div class="field" style="flex:1;min-width:120px;">
-            <label>매입단가 (개당)</label>
-            <input type="number" id="item-price-input" placeholder="원">
-          </div>
-          <div class="field" style="flex:1;min-width:130px;">
-            <label>입고일</label>
-            <input type="date" id="item-date-input">
-          </div>
-          <div class="field" style="flex:1;min-width:130px;">
-            <label>상태</label>
-            <select id="item-status-select">
-              <option value="재고">재고</option>
-              <option value="개통완료">개통완료</option>
-              <option value="판매완료">판매완료</option>
-            </select>
-          </div>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <div class="field" style="flex:1;min-width:130px;"><label>입고일</label><input type="date" id="item-indate-input"></div>
+          <div class="field" style="flex:1;min-width:130px;"><label>출고일 (선택)</label><input type="date" id="item-outdate-input"></div>
+          <div class="field" style="flex:1;min-width:130px;"><label>결산일 (선택)</label><input type="date" id="item-settledate-input"></div>
         </div>
         <button class="btn small" onclick="addInventoryItem()">재고 등록</button>
       </div>
 
-      <div class="card" style="max-width:960px;">
-        <h3>재고 목록</h3>
+      <div class="card">
+        <h3>재고 목록 — 보기 설정 <button class="btn small secondary" style="width:auto;padding:6px 12px;" onclick="toggleViewPanel()">보기 설정 열기/닫기</button></h3>
+        <div class="check-panel" id="view-panel" style="display:none;">
+          <label><input type="checkbox" class="view-opt" value="baseModel"> 기본모델명</label>
+          <label><input type="checkbox" class="view-opt" value="capacity"> 용량</label>
+          <label><input type="checkbox" class="view-opt" value="combined"> 모델명+용량 결합</label>
+          <label><input type="checkbox" class="view-opt" value="systemModel"> 전산모델명</label>
+          <label><input type="checkbox" class="view-opt" value="sku"> 삼성모델명(SKU)</label>
+          <label><input type="checkbox" class="view-opt" value="petName"> 펫네임</label>
+          <br>
+          <button class="btn small" onclick="saveViewSettings()">이 설정 저장 (내 계정에 유지)</button>
+        </div>
         <div id="inventory-list"></div>
       </div>
 
-    </div>
-
-    <!-- 정산 설정 (준비중) -->
-    <div id="tab-settlement" class="tab-panel">
-      <div class="card">
-        <h3>정산 설정</h3>
-        <p class="soon">매입처·판매처·지급예정일 관리 기능은 다음 업데이트에서 추가됩니다.</p>
-      </div>
-    </div>
-
-    <!-- 활동 이력 -->
-    <div id="tab-logs" class="tab-panel">
-      <div class="card" style="max-width:800px;">
-        <h3>활동 이력</h3>
-        <p class="desc">관리자 조작(팀 추가/삭제, 설정 변경, 승인/추방 등)이 자동으로 기록됩니다. 최근 100건까지 표시합니다.</p>
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
-          <label style="font-size:13px;display:flex;align-items:center;gap:6px;">
-            <input type="checkbox" id="log-select-all" onclick="toggleAllLogs(this)"> 전체 선택
-          </label>
-          <button class="btn small danger" onclick="deleteSelectedLogs()">선택 삭제</button>
-        </div>
-        <div id="log-list"></div>
-      </div>
     </div>
 
   </div>
@@ -393,31 +360,37 @@
   const db = getFirestore(app);
 
   const EMAIL_DOMAIN = "@upsell.local";
-  function toEmail(username){ return username.trim().toLowerCase() + EMAIL_DOMAIN; }
+  function toEmail(u){ return u.trim().toLowerCase() + EMAIL_DOMAIN; }
 
   const PERMISSION_LABELS = {
-    dashboard: "대시보드 조회",
-    input: "작업페이지 입력",
-    excelExport: "엑셀 다운로드",
-    userApproval: "사용자 승인·추방",
-    permissionManage: "권한 설정 관리(전체 관리자)",
-    teamManage: "팀 관리",
-    inventorySettings: "재고설정 관리",
-    settlementSettings: "정산설정 관리",
-    siteSettings: "사이트 설정 관리",
-    dataReset: "데이터 초기화"
+    dashboard:"대시보드 조회", input:"작업페이지 입력", excelExport:"엑셀 다운로드",
+    userApproval:"사용자 승인·추방", permissionManage:"권한 설정 관리(전체 관리자)",
+    teamManage:"팀 관리", inventorySettings:"재고 기초설정 관리",
+    settlementSettings:"정산설정 관리", siteSettings:"사이트 설정 관리", dataReset:"데이터 초기화"
   };
-
   const DEFAULT_SITE_NAME = "유통폰 관리 대시보드";
   const DEFAULT_PENDING_TITLE = "승인 대기 중입니다";
   const DEFAULT_PENDING_DESC = "관리자가 계정을 승인하면 대시보드를 사용하실 수 있습니다.\n승인 전까지는 화면 접근이 제한됩니다.";
+  const DEFAULT_VIEW_SETTINGS = ["combined"];
 
-  // permissionManage(전체 관리자)를 가진 사람은 다른 세부 권한이 없어도
-  // 모든 관리 탭에 접근 가능하도록 처리 (기능이 늘어날 때마다 Firestore를 수동으로 안 고쳐도 되게)
   function hasPerm(perms, key){
     if(!perms) return false;
     if(perms.permissionManage === true) return true;
     return perms[key] === true;
+  }
+
+  let currentSettings = {};
+  let currentUser = { name:"알수없음", username:"unknown" };
+  let currentViewSettings = DEFAULT_VIEW_SETTINGS.slice();
+  let modelsCache = [];
+
+  async function logAction(action, detail){
+    try{
+      await addDoc(collection(db, "activityLogs"), {
+        actorName: currentUser.name, actorUsername: currentUser.username,
+        action, detail, createdAt: serverTimestamp()
+      });
+    }catch(err){}
   }
 
   function applySiteName(name){
@@ -426,150 +399,65 @@
     document.getElementById("site-title-login").textContent = n;
     document.getElementById("site-title-topbar").textContent = n;
   }
-
-  let currentSettings = {};
-  let currentUser = { name: "알수없음", username: "unknown" }; // 이력 기록용
-
-  async function logAction(action, detail){
-    try{
-      await addDoc(collection(db, "activityLogs"), {
-        actorName: currentUser.name,
-        actorUsername: currentUser.username,
-        action, detail,
-        createdAt: serverTimestamp()
-      });
-    }catch(err){ /* 로그 실패는 화면 동작을 막지 않음 */ }
-  }
-
-  async function loadLogs(){
-    const listEl = document.getElementById("log-list");
-    listEl.innerHTML = '<div class="list-empty">불러오는 중...</div>';
-    try{
-      const snap = await getDocs(query(collection(db, "activityLogs"), orderBy("createdAt","desc"), limit(100)));
-      if(snap.empty){
-        listEl.innerHTML = '<div class="list-empty">아직 기록된 활동이 없습니다.</div>';
-        return;
-      }
-      listEl.innerHTML = "";
-      document.getElementById("log-select-all").checked = false;
-      snap.forEach(d=>{
-        const l = d.data();
-        const t = l.createdAt && l.createdAt.toDate ? l.createdAt.toDate().toLocaleString("ko-KR") : "-";
-        const row = document.createElement("div");
-        row.className = "list-row";
-        row.style.display = "flex";
-        row.style.alignItems = "flex-start";
-        row.style.gap = "10px";
-        row.innerHTML =
-          '<input type="checkbox" class="log-check" data-id="' + d.id + '" style="margin-top:3px;">' +
-          '<div style="flex:1;">' +
-          '<div style="font-size:12px;color:var(--gray);margin-bottom:2px;">' + t + ' · ' + (l.actorName||"-") + '(' + (l.actorUsername||"-") + ')</div>' +
-          '<div style="font-size:13.5px;"><b>' + (l.action||"") + '</b> ' + (l.detail||"") + '</div>' +
-          '</div>';
-        listEl.appendChild(row);
-      });
-    }catch(err){
-      listEl.innerHTML = '<div class="list-empty">이력을 불러오지 못했습니다: ' + err.message + '</div>';
-    }
-  }
-
-  window.toggleAllLogs = function(masterCb){
-    document.querySelectorAll(".log-check").forEach(cb => cb.checked = masterCb.checked);
-  };
-
-  window.deleteSelectedLogs = async function(){
-    const checked = Array.from(document.querySelectorAll(".log-check:checked"));
-    if(checked.length === 0){ alert("삭제할 이력을 먼저 선택해주세요."); return; }
-    if(!confirm(checked.length + "건의 이력을 완전히 삭제하시겠습니까? 삭제된 이력은 복구할 수 없습니다.")) return;
-    for(const cb of checked){
-      await deleteDoc(doc(db, "activityLogs", cb.dataset.id));
-    }
-    await logAction("이력 삭제", checked.length + "건 삭제");
-    loadLogs();
-  };
-
-  async function loadSiteSettings(){
-    try{
-      const snap = await getDoc(doc(db, "settings", "general"));
-      if(snap.exists()){
-        currentSettings = snap.data();
-        applySiteName(currentSettings.siteName);
-        applyPendingScreen(currentSettings);
-      }
-    }catch(err){ /* 최초 실행 시 문서 없음 - 기본값 유지 */ }
-  }
-  loadSiteSettings();
-
   function applyPendingScreen(s){
     document.getElementById("pending-title").textContent = s.pendingTitle || DEFAULT_PENDING_TITLE;
     document.getElementById("pending-desc").textContent = s.pendingDesc || DEFAULT_PENDING_DESC;
     const img = document.getElementById("pending-icon-img");
-    if(s.pendingIconUrl){
-      img.src = s.pendingIconUrl;
-      img.style.display = "inline-block";
-    }else{
-      img.style.display = "none";
-    }
+    if(s.pendingIconUrl){ img.src = s.pendingIconUrl; img.style.display = "inline-block"; }
+    else{ img.style.display = "none"; }
   }
+  async function loadSiteSettings(){
+    try{
+      const snap = await getDoc(doc(db, "settings", "general"));
+      if(snap.exists()){ currentSettings = snap.data(); applySiteName(currentSettings.siteName); applyPendingScreen(currentSettings); }
+    }catch(err){}
+  }
+  loadSiteSettings();
 
   window.saveSiteName = async function(){
     const val = document.getElementById("site-name-input").value.trim();
     if(!val) return;
     await setDoc(doc(db, "settings", "general"), { siteName: val }, { merge:true });
-    applySiteName(val);
-    flashMsg("site-name-msg");
+    applySiteName(val); flashMsg("site-name-msg");
     logAction("사이트 이름 변경", "→ " + val);
   };
-
   window.savePendingScreen = async function(){
     const title = document.getElementById("pending-title-input").value.trim();
     const desc = document.getElementById("pending-desc-input").value.trim();
     const icon = document.getElementById("pending-icon-input").value.trim();
-    const payload = {
-      pendingTitle: title || DEFAULT_PENDING_TITLE,
-      pendingDesc: desc || DEFAULT_PENDING_DESC,
-      pendingIconUrl: icon || ""
-    };
+    const payload = { pendingTitle:title||DEFAULT_PENDING_TITLE, pendingDesc:desc||DEFAULT_PENDING_DESC, pendingIconUrl:icon||"" };
     await setDoc(doc(db, "settings", "general"), payload, { merge:true });
-    applyPendingScreen(payload);
-    flashMsg("pending-screen-msg");
+    applyPendingScreen(payload); flashMsg("pending-screen-msg");
     logAction("승인대기 화면 문구 변경", title || DEFAULT_PENDING_TITLE);
   };
-
   function flashMsg(elId){
     const el = document.getElementById(elId);
     el.style.display = "block";
     setTimeout(()=>{ el.style.display = "none"; }, 2000);
   }
 
-  // ---------- 팀 목록 ----------
+  // ---------- 팀 ----------
   async function loadTeamsIntoSelect(){
     const sel = document.getElementById("signup-team");
     sel.innerHTML = '<option value="">팀을 선택하세요</option>';
     const snap = await getDocs(query(collection(db, "teams"), orderBy("name")));
     snap.forEach(d=>{
       const opt = document.createElement("option");
-      opt.value = d.data().name;
-      opt.textContent = d.data().name;
+      opt.value = d.data().name; opt.textContent = d.data().name;
       sel.appendChild(opt);
     });
   }
-
   async function loadTeamList(){
     const listEl = document.getElementById("team-list");
     listEl.innerHTML = "";
     const snap = await getDocs(query(collection(db, "teams"), orderBy("name")));
-    if(snap.empty){
-      listEl.innerHTML = '<div class="list-empty">등록된 팀이 없습니다. 위에서 추가해주세요.</div>';
-      return;
-    }
+    if(snap.empty){ listEl.innerHTML = '<div class="list-empty">등록된 팀이 없습니다.</div>'; return; }
     snap.forEach(d=>{
       const row = document.createElement("div");
       row.className = "list-row";
-      row.innerHTML = `<span>${d.data().name}</span>`;
+      row.innerHTML = '<span>'+d.data().name+'</span>';
       const delBtn = document.createElement("button");
-      delBtn.className = "btn small danger";
-      delBtn.textContent = "삭제";
+      delBtn.className = "btn small danger"; delBtn.textContent = "삭제";
       delBtn.onclick = async ()=>{
         if(confirm(d.data().name + " 팀을 삭제하시겠습니까?")){
           await deleteDoc(doc(db, "teams", d.id));
@@ -577,110 +465,149 @@
           loadTeamList();
         }
       };
-      row.appendChild(delBtn);
-      listEl.appendChild(row);
+      row.appendChild(delBtn); listEl.appendChild(row);
     });
   }
-
   window.addTeam = async function(){
     const input = document.getElementById("new-team-input");
     const name = input.value.trim();
     if(!name) return;
     await addDoc(collection(db, "teams"), { name });
     logAction("팀 추가", name);
-    input.value = "";
-    loadTeamList();
+    input.value = ""; loadTeamList();
   };
 
-  // ---------- 모델(용량 단위) + 색상별 SKU ----------
-  let modelsCache = []; // {id, ...data}
-
-  async function loadModelList(){
-    const listEl = document.getElementById("model-list");
+  // ---------- 입고처 / 출고처 (범용 목록 관리) ----------
+  async function loadSimpleList(collectionName, listElId, actionLabel, afterDeleteCb){
+    const listEl = document.getElementById(listElId);
     listEl.innerHTML = "";
+    const snap = await getDocs(query(collection(db, collectionName), orderBy("name")));
+    if(snap.empty){ listEl.innerHTML = '<div class="list-empty">등록된 항목이 없습니다.</div>'; return; }
+    snap.forEach(d=>{
+      const row = document.createElement("div");
+      row.className = "list-row";
+      row.innerHTML = '<span>'+d.data().name+'</span>';
+      const delBtn = document.createElement("button");
+      delBtn.className = "btn small danger"; delBtn.textContent = "삭제";
+      delBtn.onclick = async ()=>{
+        if(confirm(d.data().name + " 항목을 삭제하시겠습니까?")){
+          await deleteDoc(doc(db, collectionName, d.id));
+          logAction(actionLabel + " 삭제", d.data().name);
+          loadSimpleList(collectionName, listElId, actionLabel, afterDeleteCb);
+          if(afterDeleteCb) afterDeleteCb();
+        }
+      };
+      row.appendChild(delBtn); listEl.appendChild(row);
+    });
+  }
+  function loadSourceList(){ loadSimpleList("inboundSources","source-list","입고처", loadSourcesIntoSelect); }
+  function loadDestList(){ loadSimpleList("outboundDestinations","dest-list","출고처", loadDestIntoSelect); }
+
+  window.addSource = async function(){
+    const input = document.getElementById("new-source-input");
+    const name = input.value.trim();
+    if(!name) return;
+    await addDoc(collection(db, "inboundSources"), { name });
+    logAction("입고처 추가", name);
+    input.value = ""; loadSourceList(); loadSourcesIntoSelect();
+  };
+  window.addDestination = async function(){
+    const input = document.getElementById("new-dest-input");
+    const name = input.value.trim();
+    if(!name) return;
+    await addDoc(collection(db, "outboundDestinations"), { name });
+    logAction("출고처 추가", name);
+    input.value = ""; loadDestList(); loadDestIntoSelect();
+  };
+  async function loadSourcesIntoSelect(){
+    const sel = document.getElementById("item-source-select");
+    sel.innerHTML = '<option value="">입고처를 선택하세요</option>';
+    const snap = await getDocs(query(collection(db, "inboundSources"), orderBy("name")));
+    snap.forEach(d=>{
+      const opt = document.createElement("option");
+      opt.value = d.data().name; opt.textContent = d.data().name;
+      sel.appendChild(opt);
+    });
+  }
+  async function loadDestIntoSelect(){
+    const sel = document.getElementById("item-dest-select");
+    sel.innerHTML = '<option value="">해당없음</option>';
+    const snap = await getDocs(query(collection(db, "outboundDestinations"), orderBy("name")));
+    snap.forEach(d=>{
+      const opt = document.createElement("option");
+      opt.value = d.data().name; opt.textContent = d.data().name;
+      sel.appendChild(opt);
+    });
+  }
+
+  // ---------- 모델(용량 단위) + 색상별 SKU ----------
+  async function fetchModelsCache(){
     const snap = await getDocs(query(collection(db, "inventoryModels"), orderBy("modelGroup")));
     modelsCache = [];
-    if(snap.empty){
-      listEl.innerHTML = '<div class="list-empty">등록된 모델이 없습니다.</div>';
-      return;
-    }
-    snap.forEach(d=>{
-      const m = d.data();
-      modelsCache.push({ id:d.id, ...m });
+    snap.forEach(d=> modelsCache.push({ id:d.id, ...d.data() }));
+  }
+
+  async function loadModelAdminList(){
+    await fetchModelsCache();
+    const listEl = document.getElementById("model-list");
+    listEl.innerHTML = "";
+    if(modelsCache.length === 0){ listEl.innerHTML = '<div class="list-empty">등록된 모델이 없습니다.</div>'; return; }
+    modelsCache.forEach(m=>{
       const colors = m.colors || [];
-
       const wrap = document.createElement("div");
-      wrap.style.border = "1px solid var(--line)";
-      wrap.style.borderTop = "none";
-      wrap.style.padding = "10px 12px";
-
+      wrap.style.border = "1px solid var(--line)"; wrap.style.borderTop = "none"; wrap.style.padding = "10px 12px";
       const priceEx = m.priceExVat ? Number(m.priceExVat).toLocaleString()+'원' : "-";
       const priceInc = m.priceIncVat ? Number(m.priceIncVat).toLocaleString()+'원' : "-";
-
       wrap.innerHTML =
         '<div style="display:flex;justify-content:space-between;align-items:center;">' +
-        '<span style="font-size:13.5px;"><b>' + m.modelGroup + '</b> · ' + m.baseModel + ' · ' + m.capacity +
-        ' · 전산모델명 ' + m.systemModel + ' · 출고가(별도) ' + priceEx + ' / (포함) ' + priceInc +
-        (m.nickname ? ' · 닉네임 ' + m.nickname : '') + '</span>' +
-        '<button class="btn small danger" data-del-model="'+d.id+'">모델 삭제</button>' +
-        '</div>';
+        '<span style="font-size:13.5px;"><b>'+m.modelGroup+'</b> · '+m.baseModel+' · '+m.capacity+
+        ' · 전산모델명 '+m.systemModel+' · 출고가(별도) '+priceEx+' / (포함) '+priceInc+
+        (m.petName ? ' · 펫네임 '+m.petName : '') + (m.nickname ? ' · 닉네임 '+m.nickname : '') + '</span>' +
+        '<button class="btn small danger" data-del-model="'+m.id+'">모델 삭제</button></div>';
 
       const colorArea = document.createElement("div");
       colorArea.style.marginTop = "8px";
-      colorArea.style.paddingLeft = "4px";
-
       if(colors.length === 0){
         colorArea.innerHTML = '<span style="font-size:12px;color:var(--gray);">등록된 색상이 없습니다.</span>';
       }else{
         colors.forEach(c=>{
           const tag = document.createElement("span");
-          tag.className = "perm-tag";
-          tag.style.cursor = "pointer";
+          tag.className = "perm-tag"; tag.style.cursor = "pointer";
           tag.textContent = c.color + " (" + c.sku + ") ✕";
-          tag.title = "클릭하면 이 색상을 삭제합니다";
           tag.onclick = async ()=>{
             if(confirm(c.color + " 색상을 삭제하시겠습니까?")){
-              await updateDoc(doc(db, "inventoryModels", d.id), { colors: arrayRemove(c) });
+              await updateDoc(doc(db, "inventoryModels", m.id), { colors: arrayRemove(c) });
               logAction("색상 삭제", m.modelGroup + " / " + c.color);
-              loadModelList();
-              loadModelsIntoItemSelect();
+              loadModelAdminList();
             }
           };
           colorArea.appendChild(tag);
         });
       }
-
       const addColorRow = document.createElement("div");
-      addColorRow.style.display = "flex";
-      addColorRow.style.gap = "6px";
-      addColorRow.style.marginTop = "8px";
+      addColorRow.style.display = "flex"; addColorRow.style.gap = "6px"; addColorRow.style.marginTop = "8px";
       addColorRow.innerHTML =
-        '<input type="text" placeholder="색상명 (예: 핑크)" style="flex:1;padding:7px 8px;border:1px solid #c7c7c7;font-size:12.5px;" class="new-color-name">' +
-        '<input type="text" placeholder="삼성모델명 SKU (예: SM-F776NLIAKOD)" style="flex:1;padding:7px 8px;border:1px solid #c7c7c7;font-size:12.5px;" class="new-color-sku">' +
-        '<button class="btn small" data-add-color="'+d.id+'">색상 추가</button>';
+        '<input type="text" placeholder="색상명" style="flex:1;padding:7px 8px;border:1px solid #c7c7c7;font-size:12.5px;" class="new-color-name">' +
+        '<input type="text" placeholder="삼성모델명 SKU" style="flex:1;padding:7px 8px;border:1px solid #c7c7c7;font-size:12.5px;" class="new-color-sku">' +
+        '<button class="btn small" data-add-color="'+m.id+'">색상 추가</button>';
 
-      wrap.appendChild(colorArea);
-      wrap.appendChild(addColorRow);
-      listEl.appendChild(wrap);
+      wrap.appendChild(colorArea); wrap.appendChild(addColorRow); listEl.appendChild(wrap);
 
       wrap.querySelector('[data-del-model]').onclick = async ()=>{
-        if(confirm(m.modelGroup + " 모델을 삭제하시겠습니까? (등록된 색상도 함께 삭제됩니다)")){
-          await deleteDoc(doc(db, "inventoryModels", d.id));
+        if(confirm(m.modelGroup + " 모델을 삭제하시겠습니까? (색상도 함께 삭제됩니다)")){
+          await deleteDoc(doc(db, "inventoryModels", m.id));
           logAction("모델 삭제", m.modelGroup);
-          loadModelList();
-          loadModelsIntoItemSelect();
+          loadModelAdminList();
         }
       };
       wrap.querySelector('[data-add-color]').onclick = async ()=>{
         const nameInput = wrap.querySelector(".new-color-name");
         const skuInput = wrap.querySelector(".new-color-sku");
-        const color = nameInput.value.trim();
-        const sku = skuInput.value.trim();
+        const color = nameInput.value.trim(); const sku = skuInput.value.trim();
         if(!color || !sku){ alert("색상명과 삼성모델명을 모두 입력해주세요."); return; }
-        await updateDoc(doc(db, "inventoryModels", d.id), { colors: arrayUnion({ color, sku }) });
+        await updateDoc(doc(db, "inventoryModels", m.id), { colors: arrayUnion({ color, sku }) });
         logAction("색상 추가", m.modelGroup + " / " + color);
-        loadModelList();
-        loadModelsIntoItemSelect();
+        loadModelAdminList();
       };
     });
   }
@@ -692,107 +619,120 @@
     const systemModel = document.getElementById("model-system-input").value.trim();
     const priceEx = document.getElementById("model-price-ex-input").value;
     const priceInc = document.getElementById("model-price-inc-input").value;
+    const petName = document.getElementById("model-pet-input").value.trim();
     const nickname = document.getElementById("model-nick-input").value.trim();
-
-    if(!modelGroup || !baseModel || !capacity){
-      alert("모델군, 기본모델명, 용량은 필수입니다."); return;
-    }
+    if(!modelGroup || !baseModel || !capacity){ alert("모델군, 기본모델명, 용량은 필수입니다."); return; }
     await addDoc(collection(db, "inventoryModels"), {
       modelGroup, baseModel, capacity, systemModel,
-      priceExVat: priceEx ? Number(priceEx) : null,
-      priceIncVat: priceInc ? Number(priceInc) : null,
-      nickname,
-      colors: []
+      priceExVat: priceEx?Number(priceEx):null, priceIncVat: priceInc?Number(priceInc):null,
+      petName, nickname, colors: []
     });
     logAction("모델 등록", modelGroup + " " + capacity);
-
-    document.getElementById("model-group-input").value = "";
-    document.getElementById("model-base-input").value = "";
-    document.getElementById("model-capacity-input").value = "";
-    document.getElementById("model-system-input").value = "";
-    document.getElementById("model-price-ex-input").value = "";
-    document.getElementById("model-price-inc-input").value = "";
-    document.getElementById("model-nick-input").value = "";
-    loadModelList();
-    loadModelsIntoItemSelect();
+    ["model-group-input","model-base-input","model-capacity-input","model-system-input","model-price-ex-input","model-price-inc-input","model-pet-input","model-nick-input"]
+      .forEach(id=> document.getElementById(id).value = "");
+    loadModelAdminList();
   };
 
   async function loadModelsIntoItemSelect(){
+    await fetchModelsCache();
     const sel = document.getElementById("item-model-select");
     sel.innerHTML = '<option value="">모델을 선택하세요</option>';
-    if(modelsCache.length === 0){
-      const snap = await getDocs(query(collection(db, "inventoryModels"), orderBy("modelGroup")));
-      modelsCache = [];
-      snap.forEach(d=> modelsCache.push({ id:d.id, ...d.data() }));
-    }
     modelsCache.forEach(m=>{
       const opt = document.createElement("option");
-      opt.value = m.id;
-      opt.textContent = m.modelGroup + " (" + m.baseModel + " " + m.capacity + ")";
+      opt.value = m.id; opt.textContent = m.modelGroup + " (" + m.baseModel + " " + m.capacity + ")";
       sel.appendChild(opt);
     });
     onItemModelChange();
   }
-
   window.onItemModelChange = function(){
     const modelId = document.getElementById("item-model-select").value;
     const colorSel = document.getElementById("item-color-select");
     colorSel.innerHTML = "";
-    const m = modelsCache.find(x=>x.id === modelId);
-    if(!m || !m.colors || m.colors.length === 0){
-      colorSel.innerHTML = '<option value="">색상 없음 (모델에 색상을 먼저 등록하세요)</option>';
-      return;
+    const m = modelsCache.find(x=>x.id===modelId);
+    if(!m || !m.colors || m.colors.length===0){
+      colorSel.innerHTML = '<option value="">색상 없음</option>'; return;
     }
     m.colors.forEach(c=>{
       const opt = document.createElement("option");
-      opt.value = c.sku;
-      opt.dataset.color = c.color;
+      opt.value = c.sku; opt.dataset.color = c.color;
       opt.textContent = c.color + " (" + c.sku + ")";
       colorSel.appendChild(opt);
     });
-    // 모델의 출고가를 매입단가 기본값으로 채워줌 (수정 가능)
     const priceInput = document.getElementById("item-price-input");
     if(!priceInput.value && m.priceExVat){ priceInput.value = m.priceExVat; }
   };
-
   window.toggleEntryType = function(){
     const type = document.getElementById("item-entry-type").value;
-    document.getElementById("item-qty-field").style.display = (type === "qty") ? "block" : "none";
-    document.getElementById("item-imei-field").style.display = (type === "imei") ? "block" : "none";
+    document.getElementById("item-qty-field").style.display = (type==="qty") ? "block" : "none";
+    document.getElementById("item-imei-field").style.display = (type==="imei") ? "block" : "none";
   };
 
-  // ---------- 개별/수량 재고 입고 ----------
+  // ---------- 보기 설정 ----------
+  window.toggleViewPanel = function(){
+    const p = document.getElementById("view-panel");
+    p.style.display = (p.style.display==="none") ? "block" : "none";
+  };
+  function syncViewCheckboxes(){
+    document.querySelectorAll(".view-opt").forEach(cb=>{
+      cb.checked = currentViewSettings.includes(cb.value);
+    });
+  }
+  window.saveViewSettings = async function(){
+    const checked = Array.from(document.querySelectorAll(".view-opt:checked")).map(cb=>cb.value);
+    if(checked.length===0){ alert("최소 1개는 선택해주세요."); return; }
+    currentViewSettings = checked;
+    const user = auth.currentUser;
+    if(user){ await setDoc(doc(db,"users",user.uid), { viewSettings: checked }, { merge:true }); }
+    loadInventoryList();
+    alert("보기 설정이 저장되었습니다.");
+  };
+  function buildModelLabel(it){
+    const parts = [];
+    if(currentViewSettings.includes("baseModel")) parts.push(it.baseModel);
+    if(currentViewSettings.includes("capacity")) parts.push(it.capacity);
+    if(currentViewSettings.includes("combined")) parts.push(it.baseModel + " " + it.capacity);
+    if(currentViewSettings.includes("systemModel")) parts.push(it.systemModel);
+    if(currentViewSettings.includes("sku")) parts.push(it.sku);
+    if(currentViewSettings.includes("petName") && it.petName) parts.push(it.petName);
+    if(parts.length===0) parts.push(it.modelGroup);
+    return parts.join(" / ");
+  }
+
+  // ---------- 재고 입고 ----------
   window.addInventoryItem = async function(){
     const modelId = document.getElementById("item-model-select").value;
     const colorSel = document.getElementById("item-color-select");
     const sku = colorSel.value;
     const color = colorSel.selectedOptions[0] ? colorSel.selectedOptions[0].dataset.color : "";
     const carrier = document.getElementById("item-carrier-select").value;
-    const source = document.getElementById("item-source-input").value.trim();
+    const source = document.getElementById("item-source-select").value;
+    const dest = document.getElementById("item-dest-select").value;
     const entryType = document.getElementById("item-entry-type").value;
     const price = document.getElementById("item-price-input").value;
-    const inDate = document.getElementById("item-date-input").value || new Date().toISOString().slice(0,10);
     const status = document.getElementById("item-status-select").value;
+    const inDate = document.getElementById("item-indate-input").value || new Date().toISOString().slice(0,10);
+    const outDate = document.getElementById("item-outdate-input").value || "";
+    const settleDate = document.getElementById("item-settledate-input").value || "";
 
-    const m = modelsCache.find(x=>x.id === modelId);
+    const m = modelsCache.find(x=>x.id===modelId);
     if(!m || !sku){ alert("모델과 색상을 선택해주세요."); return; }
+    if(!source){ alert("입고처를 선택해주세요."); return; }
 
     const base = {
-      modelGroup:m.modelGroup, baseModel:m.baseModel, capacity:m.capacity,
-      systemModel:m.systemModel, color, sku, carrier, source,
-      price: price ? Number(price) : null,
-      inDate, status, createdAt: serverTimestamp()
+      modelGroup:m.modelGroup, baseModel:m.baseModel, capacity:m.capacity, systemModel:m.systemModel,
+      petName: m.petName || "", color, sku, carrier, source, destination:dest,
+      price: price?Number(price):null, status, inDate, outDate, settleDate, createdAt: serverTimestamp()
     };
 
-    if(entryType === "qty"){
+    if(entryType==="qty"){
       const qty = Number(document.getElementById("item-qty-input").value) || 1;
-      await addDoc(collection(db, "inventoryItems"), { ...base, entryType:"qty", quantity:qty, imei:"" });
-      logAction("재고 입고(수량)", m.modelGroup + " " + color + " / " + carrier + " / " + qty + "대");
+      await addDoc(collection(db,"inventoryItems"), { ...base, entryType:"qty", quantity:qty, imei:"" });
+      logAction("재고 입고(수량)", m.modelGroup+" "+color+" / "+carrier+" / "+qty+"대");
     }else{
       const imei = document.getElementById("item-imei-input").value.trim();
       if(!imei){ alert("IMEI를 입력해주세요."); return; }
-      await addDoc(collection(db, "inventoryItems"), { ...base, entryType:"imei", quantity:1, imei });
-      logAction("재고 입고(IMEI)", m.modelGroup + " " + color + " / " + carrier + " / IMEI " + imei);
+      await addDoc(collection(db,"inventoryItems"), { ...base, entryType:"imei", quantity:1, imei });
+      logAction("재고 입고(IMEI)", m.modelGroup+" "+color+" / "+carrier+" / IMEI "+imei);
       document.getElementById("item-imei-input").value = "";
     }
     loadInventoryList();
@@ -801,69 +741,101 @@
   async function loadInventoryList(){
     const listEl = document.getElementById("inventory-list");
     listEl.innerHTML = "";
-    const snap = await getDocs(query(collection(db, "inventoryItems"), orderBy("createdAt","desc")));
-    if(snap.empty){
-      listEl.innerHTML = '<div class="list-empty">등록된 재고가 없습니다.</div>';
-      return;
-    }
+    const snap = await getDocs(query(collection(db,"inventoryItems"), orderBy("createdAt","desc")));
+    if(snap.empty){ listEl.innerHTML = '<div class="list-empty">등록된 재고가 없습니다.</div>'; return; }
     snap.forEach(d=>{
       const it = d.data();
       const row = document.createElement("div");
       row.className = "list-row";
-      const qtyLabel = it.entryType === "imei" ? ("IMEI " + it.imei) : (it.quantity + "대");
-      row.innerHTML = '<span style="font-size:12.5px;"><b>' + it.modelGroup + '</b> ' + (it.color||"") + ' · ' + it.carrier + ' · ' +
-        (it.source||"-") + ' · ' + qtyLabel + ' · ' +
-        (it.price ? Number(it.price).toLocaleString()+'원' : "-") + ' · ' + it.inDate + ' · <b>' + it.status + '</b></span>';
+      const qtyLabel = it.entryType==="imei" ? ("IMEI "+it.imei) : (it.quantity+"대");
+      let extra = "";
+      if(it.outDate) extra += " · 출고일 "+it.outDate;
+      if(it.settleDate) extra += " · 결산일 "+it.settleDate;
+      if(it.destination) extra += " · 출고처 "+it.destination;
+      row.innerHTML = '<span style="font-size:12.5px;"><b>'+buildModelLabel(it)+'</b> · '+it.carrier+' · '+
+        (it.source||"-")+' · '+qtyLabel+' · '+(it.price?Number(it.price).toLocaleString()+'원':"-")+
+        ' · 입고일 '+it.inDate+extra+' · <b>'+it.status+'</b></span>';
       const delBtn = document.createElement("button");
-      delBtn.className = "btn small danger";
-      delBtn.textContent = "삭제";
+      delBtn.className = "btn small danger"; delBtn.textContent = "삭제";
       delBtn.onclick = async ()=>{
         if(confirm("이 재고 기록을 삭제하시겠습니까?")){
-          await deleteDoc(doc(db, "inventoryItems", d.id));
-          logAction("재고 삭제", it.modelGroup + " " + (it.color||"") + " / " + qtyLabel);
+          await deleteDoc(doc(db,"inventoryItems",d.id));
+          logAction("재고 삭제", it.modelGroup+" "+(it.color||"")+" / "+qtyLabel);
           loadInventoryList();
         }
       };
-      row.appendChild(delBtn);
-      listEl.appendChild(row);
+      row.appendChild(delBtn); listEl.appendChild(row);
     });
   }
 
+  // ---------- 이력 ----------
+  async function loadLogs(){
+    const listEl = document.getElementById("log-list");
+    listEl.innerHTML = '<div class="list-empty">불러오는 중...</div>';
+    try{
+      const snap = await getDocs(query(collection(db,"activityLogs"), orderBy("createdAt","desc"), limit(100)));
+      if(snap.empty){ listEl.innerHTML = '<div class="list-empty">아직 기록된 활동이 없습니다.</div>'; return; }
+      listEl.innerHTML = "";
+      document.getElementById("log-select-all").checked = false;
+      snap.forEach(d=>{
+        const l = d.data();
+        const t = l.createdAt && l.createdAt.toDate ? l.createdAt.toDate().toLocaleString("ko-KR") : "-";
+        const row = document.createElement("div");
+        row.className = "list-row"; row.style.display="flex"; row.style.alignItems="flex-start"; row.style.gap="10px";
+        row.innerHTML =
+          '<input type="checkbox" class="log-check" data-id="'+d.id+'" style="margin-top:3px;">' +
+          '<div style="flex:1;"><div style="font-size:12px;color:var(--gray);margin-bottom:2px;">'+t+' · '+(l.actorName||"-")+'('+(l.actorUsername||"-")+')</div>' +
+          '<div style="font-size:13.5px;"><b>'+(l.action||"")+'</b> '+(l.detail||"")+'</div></div>';
+        listEl.appendChild(row);
+      });
+    }catch(err){ listEl.innerHTML = '<div class="list-empty">이력을 불러오지 못했습니다: '+err.message+'</div>'; }
+  }
+  window.toggleAllLogs = function(masterCb){
+    document.querySelectorAll(".log-check").forEach(cb=> cb.checked = masterCb.checked);
+  };
+  window.deleteSelectedLogs = async function(){
+    const checked = Array.from(document.querySelectorAll(".log-check:checked"));
+    if(checked.length===0){ alert("삭제할 이력을 먼저 선택해주세요."); return; }
+    if(!confirm(checked.length+"건의 이력을 완전히 삭제하시겠습니까?")) return;
+    for(const cb of checked){ await deleteDoc(doc(db,"activityLogs",cb.dataset.id)); }
+    await logAction("이력 삭제", checked.length+"건 삭제");
+    loadLogs();
+  };
+
   // ---------- 화면 전환 ----------
   window.showSignup = function(){
-    document.getElementById("login-form").style.display = "none";
-    document.getElementById("signup-form").style.display = "block";
+    document.getElementById("login-form").style.display="none";
+    document.getElementById("signup-form").style.display="block";
     loadTeamsIntoSelect();
   };
   window.showLogin = function(){
-    document.getElementById("signup-form").style.display = "none";
-    document.getElementById("login-form").style.display = "block";
+    document.getElementById("signup-form").style.display="none";
+    document.getElementById("login-form").style.display="block";
   };
-
   window.switchTab = function(tabId){
     document.querySelectorAll(".tab-panel").forEach(el=>el.classList.remove("active"));
     document.querySelectorAll(".tab-btn").forEach(el=>el.classList.remove("active"));
     document.getElementById(tabId).classList.add("active");
-    document.querySelector('.tab-btn[data-tab="'+tabId+'"]').classList.add("active");
-    if(tabId === "tab-team") loadTeamList();
-    if(tabId === "tab-logs") loadLogs();
-    if(tabId === "tab-inventory") loadInventoryTabData();
-  };
+    const btn = document.querySelector('.tab-btn[data-tab="'+tabId+'"]');
+    if(btn) btn.classList.add("active");
 
-  async function loadInventoryTabData(){
-    await loadModelList();
-    await loadModelsIntoItemSelect();
-    await loadInventoryList();
-  }
+    if(tabId==="tab-team") loadTeamList();
+    if(tabId==="tab-logs") loadLogs();
+    if(tabId==="tab-inv-admin"){ loadModelAdminList(); loadSourceList(); loadDestList(); }
+    if(tabId==="tab-inv-work"){
+      loadModelsIntoItemSelect(); loadSourcesIntoSelect(); loadDestIntoSelect();
+      syncViewCheckboxes(); loadInventoryList();
+      if(!document.getElementById("item-indate-input").value){
+        document.getElementById("item-indate-input").value = new Date().toISOString().slice(0,10);
+      }
+    }
+  };
 
   function showMsg(elId, text, type){
     const el = document.getElementById(elId);
-    el.textContent = text;
-    el.className = "msg show" + (type === "info" ? " info" : "");
+    el.textContent = text; el.className = "msg show" + (type==="info" ? " info" : "");
   }
-  function clearMsg(elId){
-    document.getElementById(elId).className = "msg";
-  }
+  function clearMsg(elId){ document.getElementById(elId).className = "msg"; }
 
   // ---------- 회원가입 ----------
   window.handleSignup = async function(){
@@ -875,147 +847,126 @@
     const team = document.getElementById("signup-team").value;
     const pw = document.getElementById("signup-password").value;
     const pw2 = document.getElementById("signup-password2").value;
-
-    if(!name || !username || !birth || !phone || !team || !pw || !pw2){
-      showMsg("signup-msg", "모든 항목을 입력해주세요."); return;
-    }
-    if(pw.length < 6){
-      showMsg("signup-msg", "비밀번호는 6자리 이상이어야 합니다."); return;
-    }
-    if(pw !== pw2){
-      showMsg("signup-msg", "비밀번호가 일치하지 않습니다."); return;
-    }
-
+    if(!name||!username||!birth||!phone||!team||!pw||!pw2){ showMsg("signup-msg","모든 항목을 입력해주세요."); return; }
+    if(pw.length<6){ showMsg("signup-msg","비밀번호는 6자리 이상이어야 합니다."); return; }
+    if(pw!==pw2){ showMsg("signup-msg","비밀번호가 일치하지 않습니다."); return; }
     try{
       const cred = await createUserWithEmailAndPassword(auth, toEmail(username), pw);
-      await setDoc(doc(db, "users", cred.user.uid), {
-        name, username, birth, phone, team,
-        status: "pending",
-        permissions: {
-          dashboard:false, input:false, excelExport:false,
-          userApproval:false, permissionManage:false, teamManage:false,
-          inventorySettings:false, settlementSettings:false,
-          siteSettings:false, dataReset:false
-        },
+      await setDoc(doc(db,"users",cred.user.uid), {
+        name, username, birth, phone, team, status:"pending",
+        permissions:{ dashboard:false, input:false, excelExport:false, userApproval:false, permissionManage:false,
+          teamManage:false, inventorySettings:false, settlementSettings:false, siteSettings:false, dataReset:false },
+        viewSettings: DEFAULT_VIEW_SETTINGS,
         createdAt: serverTimestamp()
       });
-      showMsg("signup-msg", "가입 요청이 완료되었습니다. 관리자 승인 후 로그인해주세요.", "info");
+      showMsg("signup-msg","가입 요청이 완료되었습니다. 관리자 승인 후 로그인해주세요.","info");
       setTimeout(()=>{ showLogin(); }, 1500);
     }catch(err){
-      if(err.code === "auth/email-already-in-use"){
-        showMsg("signup-msg", "이미 사용 중인 아이디입니다.");
-      }else if(err.code === "auth/weak-password"){
-        showMsg("signup-msg", "비밀번호가 너무 단순합니다. 6자리 이상 입력해주세요.");
-      }else{
-        showMsg("signup-msg", "가입 중 오류가 발생했습니다: " + err.message);
-      }
+      if(err.code==="auth/email-already-in-use") showMsg("signup-msg","이미 사용 중인 아이디입니다.");
+      else if(err.code==="auth/weak-password") showMsg("signup-msg","비밀번호가 너무 단순합니다.");
+      else showMsg("signup-msg","가입 중 오류: "+err.message);
     }
   };
 
-  // ---------- 로그인 / 로그아웃 ----------
   window.handleLogin = async function(){
     clearMsg("login-msg");
     const username = document.getElementById("login-username").value.trim();
     const pw = document.getElementById("login-password").value;
-    if(!username || !pw){
-      showMsg("login-msg", "아이디와 비밀번호를 입력해주세요."); return;
-    }
-    try{
-      await signInWithEmailAndPassword(auth, toEmail(username), pw);
-    }catch(err){
-      showMsg("login-msg", "아이디 또는 비밀번호가 올바르지 않습니다.");
-    }
+    if(!username||!pw){ showMsg("login-msg","아이디와 비밀번호를 입력해주세요."); return; }
+    try{ await signInWithEmailAndPassword(auth, toEmail(username), pw); }
+    catch(err){ showMsg("login-msg","아이디 또는 비밀번호가 올바르지 않습니다."); }
   };
-  window.handleLogout = async function(){
-    await signOut(auth);
-  };
+  window.handleLogout = async function(){ await signOut(auth); };
 
-  // ---------- 로그인 상태 감지 ----------
   onAuthStateChanged(auth, async (user)=>{
     const authScreen = document.getElementById("auth-screen");
     const appScreen = document.getElementById("app-screen");
+    if(!user){ authScreen.classList.add("active"); appScreen.classList.remove("active"); return; }
+    authScreen.classList.remove("active"); appScreen.classList.add("active");
 
-    if(!user){
-      authScreen.classList.add("active");
-      appScreen.classList.remove("active");
-      return;
-    }
-
-    authScreen.classList.remove("active");
-    appScreen.classList.add("active");
-
-    const snap = await getDoc(doc(db, "users", user.uid));
+    const snap = await getDoc(doc(db,"users",user.uid));
     const pendingView = document.getElementById("pending-view");
     const mainView = document.getElementById("main-view");
     const pendingBox = document.getElementById("pending-box");
 
     if(!snap.exists()){
       document.getElementById("topbar-username").textContent = "알 수 없음";
-      pendingView.style.display = "block";
-      mainView.style.display = "none";
+      pendingView.style.display="block"; mainView.style.display="none";
       document.getElementById("pending-title").textContent = "사용자 정보를 찾을 수 없습니다";
       document.getElementById("pending-desc").textContent = "관리자에게 문의해주세요.";
       return;
     }
 
     const data = snap.data();
-    document.getElementById("topbar-username").textContent = data.name + " (" + data.username + ")";
+    document.getElementById("topbar-username").textContent = data.name+" ("+data.username+")";
 
-    if(data.status === "approved"){
-      pendingView.style.display = "none";
-      mainView.style.display = "block";
+    if(data.status==="approved"){
+      pendingView.style.display="none"; mainView.style.display="block";
       document.getElementById("welcome-name").textContent = data.name;
-      currentUser = { name: data.name, username: data.username };
+      currentUser = { name:data.name, username:data.username };
+      currentViewSettings = data.viewSettings && data.viewSettings.length ? data.viewSettings : DEFAULT_VIEW_SETTINGS.slice();
 
       const perms = data.permissions || {};
-
-      // 권한 태그 표시
       const permListEl = document.getElementById("perm-list");
       permListEl.innerHTML = "";
-      const granted = Object.keys(perms).filter(k => perms[k]);
-      if(granted.length === 0){
-        permListEl.innerHTML = '<span style="font-size:12.5px;color:var(--gray);">부여된 권한이 없습니다. 관리자에게 요청해주세요.</span>';
+      const granted = Object.keys(perms).filter(k=>perms[k]);
+      if(granted.length===0){
+        permListEl.innerHTML = '<span style="font-size:12.5px;color:var(--gray);">부여된 권한이 없습니다.</span>';
       }else{
         granted.forEach(k=>{
           const tag = document.createElement("span");
-          tag.className = "perm-tag";
-          tag.textContent = PERMISSION_LABELS[k] || k;
+          tag.className = "perm-tag"; tag.textContent = PERMISSION_LABELS[k]||k;
           permListEl.appendChild(tag);
         });
       }
 
-      // 탭 표시 여부 (permissionManage 보유 시 전체 자동 표시)
-      document.getElementById("tabbtn-site").style.display = hasPerm(perms,"siteSettings") ? "block" : "none";
-      document.getElementById("tabbtn-team").style.display = hasPerm(perms,"teamManage") ? "block" : "none";
-      document.getElementById("tabbtn-users").style.display = hasPerm(perms,"userApproval") ? "block" : "none";
-      document.getElementById("tabbtn-inventory").style.display = hasPerm(perms,"inventorySettings") ? "block" : "none";
-      document.getElementById("tabbtn-settlement").style.display = hasPerm(perms,"settlementSettings") ? "block" : "none";
-      document.getElementById("tabbtn-logs").style.display = (perms.permissionManage === true) ? "block" : "none";
+      const showSite = hasPerm(perms,"siteSettings");
+      const showTeam = hasPerm(perms,"teamManage");
+      const showInvAdmin = hasPerm(perms,"inventorySettings");
+      const showUsers = hasPerm(perms,"userApproval");
+      const showSettlement = hasPerm(perms,"settlementSettings");
+      const showLogs = (perms.permissionManage === true);
+      const showDashboard = hasPerm(perms,"dashboard");
+      const showInvWork = hasPerm(perms,"input");
 
-      // 사이트 설정 탭 입력창 현재값 채우기
-      if(hasPerm(perms,"siteSettings")){
+      document.getElementById("tabbtn-site").style.display = showSite ? "block":"none";
+      document.getElementById("tabbtn-team").style.display = showTeam ? "block":"none";
+      document.getElementById("tabbtn-inv-admin").style.display = showInvAdmin ? "block":"none";
+      document.getElementById("tabbtn-users").style.display = showUsers ? "block":"none";
+      document.getElementById("tabbtn-settlement").style.display = showSettlement ? "block":"none";
+      document.getElementById("tabbtn-logs").style.display = showLogs ? "block":"none";
+      document.getElementById("tabbtn-dashboard").style.display = showDashboard ? "block":"none";
+      document.getElementById("tabbtn-inv-work").style.display = showInvWork ? "block":"none";
+
+      document.getElementById("admin-group").style.display =
+        (showSite||showTeam||showInvAdmin||showUsers||showSettlement||showLogs) ? "block":"none";
+      document.getElementById("work-group").style.display =
+        (showDashboard||showInvWork) ? "block":"none";
+
+      if(showSite){
         document.getElementById("site-name-input").value = currentSettings.siteName || DEFAULT_SITE_NAME;
         document.getElementById("pending-title-input").value = currentSettings.pendingTitle || DEFAULT_PENDING_TITLE;
         document.getElementById("pending-desc-input").value = currentSettings.pendingDesc || DEFAULT_PENDING_DESC;
         document.getElementById("pending-icon-input").value = currentSettings.pendingIconUrl || "";
       }
 
-      switchTab("tab-dashboard");
+      if(showDashboard) switchTab("tab-dashboard");
+      else if(showInvWork) switchTab("tab-inv-work");
+      else if(showInvAdmin) switchTab("tab-inv-admin");
+      else if(showSite) switchTab("tab-site");
+      else if(showTeam) switchTab("tab-team");
 
-    }else if(data.status === "banned"){
-      pendingView.style.display = "block";
-      mainView.style.display = "none";
+    }else if(data.status==="banned"){
+      pendingView.style.display="block"; mainView.style.display="none";
       pendingBox.classList.add("banned");
       document.getElementById("pending-title").textContent = "사용이 제한된 계정입니다";
       document.getElementById("pending-desc").textContent = "관리자에 의해 접근이 제한되었습니다.\n문의사항은 관리자에게 연락해주세요.";
     }else{
-      pendingView.style.display = "block";
-      mainView.style.display = "none";
+      pendingView.style.display="block"; mainView.style.display="none";
       pendingBox.classList.remove("banned");
       applyPendingScreen(currentSettings);
     }
   });
 </script>
-
 </body>
 </html>
