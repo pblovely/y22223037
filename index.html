@@ -1,10 +1,325 @@
 <!DOCTYPE html>
 <html lang="ko">
 <head>
-  <meta charset="UTF-8">
-  <title>맞춤 대시보드</title>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>맞춤제안 운영 대시보드</title>
+<style>
+  :root{
+    --navy:#1f2d3d;
+    --navy-dark:#111a24;
+    --accent:#2f6fed;
+    --border:#2c3e50;
+    --bg:#f2f4f7;
+    --danger:#c0392b;
+    --gray:#5b6b7c;
+  }
+  *{ box-sizing:border-box; border-radius:0 !important; }
+  body{
+    margin:0;
+    font-family: "Pretendard","Malgun Gothic",sans-serif;
+    background:var(--bg);
+    color:#1a1a1a;
+  }
+  .screen{ display:none; min-height:100vh; }
+  .screen.active{ display:flex; }
+  #auth-screen{ align-items:center; justify-content:center; }
+  .auth-box{ width:360px; background:#ffffff; border:2px solid var(--navy); padding:32px; }
+  .auth-box h1{ font-size:20px; margin:0 0 4px 0; color:var(--navy); letter-spacing:-0.5px; }
+  .auth-box .sub{ font-size:13px; color:var(--gray); margin-bottom:24px; }
+  .field{ margin-bottom:14px; }
+  .field label{ display:block; font-size:12px; font-weight:600; color:var(--navy); margin-bottom:4px; }
+  .field input{ width:100%; padding:10px 12px; border:1px solid #c7cdd4; font-size:14px; background:#fff; }
+  .field input:focus{ outline:none; border-color:var(--accent); }
+  .btn{ width:100%; padding:11px; background:var(--navy); color:#fff; border:none; font-size:14px; font-weight:700; cursor:pointer; letter-spacing:0.3px; }
+  .btn:hover{ background:var(--navy-dark); }
+  .btn.secondary{ background:#fff; color:var(--navy); border:1px solid var(--navy); margin-top:8px; }
+  .switch-link{ margin-top:16px; text-align:center; font-size:12.5px; color:var(--gray); }
+  .switch-link a{ color:var(--accent); cursor:pointer; font-weight:600; text-decoration:none; }
+  .msg{ font-size:12.5px; padding:8px 10px; margin-bottom:14px; border-left:3px solid var(--danger); background:#fdecea; color:var(--danger); display:none; }
+  .msg.show{ display:block; }
+  .msg.info{ border-left-color:var(--accent); background:#eaf1fd; color:var(--accent); }
+  #app-screen{ display:none; flex-direction:column; width:100%; }
+  #app-screen.active{ display:flex; }
+  .topbar{ background:var(--navy); color:#fff; padding:14px 24px; display:flex; justify-content:space-between; align-items:center; border-bottom:2px solid var(--navy-dark); }
+  .topbar .title{ font-weight:700; font-size:15px; letter-spacing:0.3px; }
+  .topbar .user-info{ display:flex; align-items:center; gap:14px; font-size:13px; }
+  .topbar button{ background:transparent; border:1px solid #fff; color:#fff; padding:6px 12px; font-size:12.5px; cursor:pointer; }
+  .topbar button:hover{ background:rgba(255,255,255,0.12); }
+  .pending-box{ margin:60px auto; width:420px; background:#fff; border:2px solid var(--navy); padding:32px; text-align:center; }
+  .pending-box .icon{ font-size:32px; margin-bottom:12px; }
+  .pending-box h2{ font-size:17px; color:var(--navy); margin:0 0 8px 0; }
+  .pending-box p{ font-size:13px; color:var(--gray); line-height:1.6; }
+  .pending-box.banned{ border-color:var(--danger); }
+  .pending-box.banned h2{ color:var(--danger); }
+  .main-content{ padding:28px; }
+  .card{ background:#fff; border:1px solid #d7dce2; padding:20px; margin-bottom:16px; }
+  .card h3{ margin:0 0 6px 0; font-size:14px; color:var(--navy); }
+  .perm-tag{ display:inline-block; font-size:11px; padding:3px 8px; margin:3px 4px 0 0; background:#eaf1fd; color:var(--accent); border:1px solid var(--accent); }
+</style>
 </head>
 <body>
-  <h1>안녕하세요! 배포 테스트 성공입니다 🎉</h1>
+
+<div id="auth-screen" class="screen active">
+  <div class="auth-box">
+
+    <div id="login-form">
+      <h1>맞춤제안 운영 대시보드</h1>
+      <div class="sub">아이디와 비밀번호를 입력하세요</div>
+      <div id="login-msg" class="msg"></div>
+      <div class="field">
+        <label>아이디</label>
+        <input type="text" id="login-username" placeholder="아이디 입력">
+      </div>
+      <div class="field">
+        <label>비밀번호</label>
+        <input type="password" id="login-password" placeholder="비밀번호 입력">
+      </div>
+      <button class="btn" onclick="handleLogin()">로그인</button>
+      <div class="switch-link">
+        계정이 없으신가요? <a onclick="showSignup()">회원가입 요청</a>
+      </div>
+    </div>
+
+    <div id="signup-form" style="display:none;">
+      <h1>회원가입 요청</h1>
+      <div class="sub">가입 후 관리자 승인이 필요합니다</div>
+      <div id="signup-msg" class="msg"></div>
+      <div class="field">
+        <label>이름</label>
+        <input type="text" id="signup-name" placeholder="실명 입력">
+      </div>
+      <div class="field">
+        <label>아이디</label>
+        <input type="text" id="signup-username" placeholder="영문/숫자 아이디">
+      </div>
+      <div class="field">
+        <label>비밀번호</label>
+        <input type="password" id="signup-password" placeholder="6자리 이상">
+      </div>
+      <div class="field">
+        <label>비밀번호 확인</label>
+        <input type="password" id="signup-password2" placeholder="비밀번호 재입력">
+      </div>
+      <button class="btn" onclick="handleSignup()">가입 요청</button>
+      <button class="btn secondary" onclick="showLogin()">취소하고 로그인으로</button>
+    </div>
+
+  </div>
+</div>
+
+<div id="app-screen" class="screen">
+  <div class="topbar">
+    <div class="title">맞춤제안 운영 대시보드</div>
+    <div class="user-info">
+      <span id="topbar-username">-</span>
+      <button onclick="handleLogout()">로그아웃</button>
+    </div>
+  </div>
+
+  <div id="pending-view" style="display:none;">
+    <div class="pending-box" id="pending-box">
+      <div class="icon">⏳</div>
+      <h2 id="pending-title">승인 대기 중입니다</h2>
+      <p id="pending-desc">관리자가 계정을 승인하면 대시보드를 사용하실 수 있습니다.<br>승인 전까지는 화면 접근이 제한됩니다.</p>
+    </div>
+  </div>
+
+  <div id="main-view" class="main-content" style="display:none;">
+    <div class="card">
+      <h3>환영합니다, <span id="welcome-name"></span>님</h3>
+      <p style="font-size:13px;color:var(--gray);margin:0;">현재 부여된 권한:</p>
+      <div id="perm-list" style="margin-top:8px;"></div>
+    </div>
+    <div class="card">
+      <h3>다음 단계 안내</h3>
+      <p style="font-size:13px;color:var(--gray);margin:0;">
+        실적입력 · 대시보드 · 재고설정 · 정산설정 등 실제 기능 화면은 이어서 하나씩 추가될 예정입니다.
+      </p>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.2/firebase-app.js";
+  import {
+    getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword,
+    signOut, onAuthStateChanged
+  } from "https://www.gstatic.com/firebasejs/10.13.2/firebase-auth.js";
+  import {
+    getFirestore, doc, setDoc, getDoc, serverTimestamp
+  } from "https://www.gstatic.com/firebasejs/10.13.2/firebase-firestore.js";
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyDFMJhsoSnM1ap_r9dyJRE8FjCybrr4kco",
+    authDomain: "y22223037-28352.firebaseapp.com",
+    projectId: "y22223037-28352",
+    storageBucket: "y22223037-28352.firebasestorage.app",
+    messagingSenderId: "876067100683",
+    appId: "1:876067100683:web:596a668cc3d1e02dd20f0e"
+  };
+
+  const app = initializeApp(firebaseConfig);
+  const auth = getAuth(app);
+  const db = getFirestore(app);
+
+  const EMAIL_DOMAIN = "@upsell.local";
+  function toEmail(username){ return username.trim().toLowerCase() + EMAIL_DOMAIN; }
+
+  const PERMISSION_LABELS = {
+    dashboard: "대시보드 조회",
+    input: "작업페이지 입력",
+    excelExport: "엑셀 다운로드",
+    userApproval: "사용자 승인·추방",
+    permissionManage: "권한 설정 관리",
+    inventorySettings: "재고설정 관리",
+    settlementSettings: "정산설정 관리",
+    dataReset: "데이터 초기화"
+  };
+
+  function showMsg(elId, text, type){
+    const el = document.getElementById(elId);
+    el.textContent = text;
+    el.className = "msg show" + (type === "info" ? " info" : "");
+  }
+  function clearMsg(elId){
+    const el = document.getElementById(elId);
+    el.className = "msg";
+  }
+
+  window.showSignup = function(){
+    document.getElementById("login-form").style.display = "none";
+    document.getElementById("signup-form").style.display = "block";
+  };
+  window.showLogin = function(){
+    document.getElementById("signup-form").style.display = "none";
+    document.getElementById("login-form").style.display = "block";
+  };
+
+  window.handleSignup = async function(){
+    clearMsg("signup-msg");
+    const name = document.getElementById("signup-name").value.trim();
+    const username = document.getElementById("signup-username").value.trim();
+    const pw = document.getElementById("signup-password").value;
+    const pw2 = document.getElementById("signup-password2").value;
+
+    if(!name || !username || !pw || !pw2){
+      showMsg("signup-msg", "모든 항목을 입력해주세요."); return;
+    }
+    if(pw.length < 6){
+      showMsg("signup-msg", "비밀번호는 6자리 이상이어야 합니다."); return;
+    }
+    if(pw !== pw2){
+      showMsg("signup-msg", "비밀번호가 일치하지 않습니다."); return;
+    }
+
+    try{
+      const cred = await createUserWithEmailAndPassword(auth, toEmail(username), pw);
+      await setDoc(doc(db, "users", cred.user.uid), {
+        name, username,
+        status: "pending",
+        permissions: {
+          dashboard:false, input:false, excelExport:false,
+          userApproval:false, permissionManage:false,
+          inventorySettings:false, settlementSettings:false, dataReset:false
+        },
+        createdAt: serverTimestamp()
+      });
+      showMsg("signup-msg", "가입 요청이 완료되었습니다. 관리자 승인 후 로그인해주세요.", "info");
+      setTimeout(()=>{ showLogin(); }, 1500);
+    }catch(err){
+      if(err.code === "auth/email-already-in-use"){
+        showMsg("signup-msg", "이미 사용 중인 아이디입니다.");
+      }else if(err.code === "auth/weak-password"){
+        showMsg("signup-msg", "비밀번호가 너무 단순합니다. 6자리 이상 입력해주세요.");
+      }else{
+        showMsg("signup-msg", "가입 중 오류가 발생했습니다: " + err.message);
+      }
+    }
+  };
+
+  window.handleLogin = async function(){
+    clearMsg("login-msg");
+    const username = document.getElementById("login-username").value.trim();
+    const pw = document.getElementById("login-password").value;
+    if(!username || !pw){
+      showMsg("login-msg", "아이디와 비밀번호를 입력해주세요."); return;
+    }
+    try{
+      await signInWithEmailAndPassword(auth, toEmail(username), pw);
+    }catch(err){
+      showMsg("login-msg", "아이디 또는 비밀번호가 올바르지 않습니다.");
+    }
+  };
+
+  window.handleLogout = async function(){
+    await signOut(auth);
+  };
+
+  onAuthStateChanged(auth, async (user)=>{
+    const authScreen = document.getElementById("auth-screen");
+    const appScreen = document.getElementById("app-screen");
+
+    if(!user){
+      authScreen.classList.add("active");
+      appScreen.classList.remove("active");
+      return;
+    }
+
+    authScreen.classList.remove("active");
+    appScreen.classList.add("active");
+
+    const snap = await getDoc(doc(db, "users", user.uid));
+    const pendingView = document.getElementById("pending-view");
+    const mainView = document.getElementById("main-view");
+    const pendingBox = document.getElementById("pending-box");
+
+    if(!snap.exists()){
+      document.getElementById("topbar-username").textContent = "알 수 없음";
+      pendingView.style.display = "block";
+      mainView.style.display = "none";
+      document.getElementById("pending-title").textContent = "사용자 정보를 찾을 수 없습니다";
+      document.getElementById("pending-desc").innerHTML = "관리자에게 문의해주세요.";
+      return;
+    }
+
+    const data = snap.data();
+    document.getElementById("topbar-username").textContent = data.name + " (" + data.username + ")";
+
+    if(data.status === "approved"){
+      pendingView.style.display = "none";
+      mainView.style.display = "block";
+      document.getElementById("welcome-name").textContent = data.name;
+
+      const permListEl = document.getElementById("perm-list");
+      permListEl.innerHTML = "";
+      const perms = data.permissions || {};
+      const granted = Object.keys(perms).filter(k => perms[k]);
+      if(granted.length === 0){
+        permListEl.innerHTML = '<span style="font-size:12.5px;color:var(--gray);">부여된 권한이 없습니다. 관리자에게 요청해주세요.</span>';
+      }else{
+        granted.forEach(k=>{
+          const tag = document.createElement("span");
+          tag.className = "perm-tag";
+          tag.textContent = PERMISSION_LABELS[k] || k;
+          permListEl.appendChild(tag);
+        });
+      }
+    }else if(data.status === "banned"){
+      pendingView.style.display = "block";
+      mainView.style.display = "none";
+      pendingBox.classList.add("banned");
+      document.getElementById("pending-title").textContent = "사용이 제한된 계정입니다";
+      document.getElementById("pending-desc").innerHTML = "관리자에 의해 접근이 제한되었습니다.<br>문의사항은 관리자에게 연락해주세요.";
+    }else{
+      pendingView.style.display = "block";
+      mainView.style.display = "none";
+      pendingBox.classList.remove("banned");
+      document.getElementById("pending-title").textContent = "승인 대기 중입니다";
+      document.getElementById("pending-desc").innerHTML = "관리자가 계정을 승인하면 대시보드를 사용하실 수 있습니다.<br>승인 전까지는 화면 접근이 제한됩니다.";
+    }
+  });
+</script>
+
 </body>
 </html>
