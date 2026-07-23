@@ -200,26 +200,15 @@
 
     <!-- ===== 관리자: 재고 기초설정 ===== -->
     <div id="tab-inv-admin" class="tab-panel">
-      <div class="card">
-        <h3>샘플 데이터 일괄 등록</h3>
-        <p class="desc">삼성 폴립/폴드/울트라 시리즈(256GB·512GB, 색상 포함) 데이터를 한 번에 등록해서 화면을 미리 확인해볼 수 있습니다. 이미 같은 모델군이 있으면 건너뜁니다.</p>
-        <button class="btn small" onclick="seedSampleModels()">샘플 데이터 등록</button>
-        <div id="seed-msg" style="font-size:12px;color:var(--navy);margin-top:8px;display:none;"></div>
-      </div>
-
       <div class="card" style="max-width:1400px;">
-        <h3>모델 등록 (기본정보)</h3>
-        <p class="desc">모델군·기본모델명·용량·전산모델명·출고가·펫네임 중 아는 것만 채워서 등록해도 됩니다. 나중에 "모델 수정"으로 채우면 됩니다. 출고가는 VAT포함 금액만 입력하면 VAT별도는 자동 계산됩니다.</p>
-        <div class="inline-form" style="flex-wrap:nowrap;overflow-x:auto;">
-          <input type="text" id="model-group-input" placeholder="모델군 (예: 폴립256)" style="min-width:110px;">
-          <input type="text" id="model-base-input" placeholder="기본모델명 (예: SM-F776N)" style="min-width:130px;">
-          <input type="text" id="model-capacity-input" placeholder="용량 (선택)" style="min-width:90px;">
-          <input type="text" id="model-system-input" placeholder="전산모델명 (예: SM-F776N256)" style="min-width:140px;">
-          <input type="number" id="model-price-inc-input" placeholder="출고가(VAT포함)" style="min-width:120px;">
-          <input type="text" id="model-pet-input" placeholder="펫네임" style="min-width:120px;">
-          <input type="text" id="model-nick-input" placeholder="닉네임(자유)" style="min-width:100px;">
-          <button class="btn small" style="flex-shrink:0;" onclick="addModel()">모델 등록</button>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+          <h3 style="margin:0;">모델 등록</h3>
+          <span>
+            <button class="btn small secondary" style="width:auto;margin-right:8px;" onclick="openModelExcelModal()">파일 업로드</button>
+            <button class="btn small" style="width:auto;" onclick="openModelSingleModal()">+ 건별 등록</button>
+          </span>
         </div>
+        <p class="desc">등록된 모델을 한눈에 볼 수 있습니다. SKU가 없는 색상은 빨간색으로 표시되니 클릭해서 채워주세요.</p>
         <div id="model-list"></div>
       </div>
 
@@ -280,6 +269,52 @@
           <button class="btn small" onclick="addStatusOption()">추가</button>
         </div>
         <div id="status-option-list"></div>
+      </div>
+    </div>
+
+    <!-- 모델 개별 등록 팝업 -->
+    <div id="model-single-modal-overlay" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.55);z-index:1000;align-items:center;justify-content:center;">
+      <div style="background:#fff;border:2px solid var(--navy);max-width:640px;width:94%;max-height:90vh;overflow-y:auto;padding:26px;position:relative;">
+        <button onclick="closeModelSingleModal()" style="position:absolute;top:14px;right:14px;background:none;border:1px solid var(--navy);width:28px;height:28px;cursor:pointer;font-size:14px;">✕</button>
+        <h3 style="margin-top:0;">모델 건별 등록</h3>
+        <p class="desc">아는 항목만 채워도 등록됩니다. 색상은 나중에 SKU를 매칭해도 됩니다.</p>
+        <div class="field-row">
+          <div class="field" style="flex:1;min-width:150px;"><label>펫네임</label><input type="text" id="ms-pet-input" placeholder="예: 갤럭시Z 폴드7"></div>
+          <div class="field" style="flex:1;min-width:150px;"><label>전산모델명</label><input type="text" id="ms-system-input" placeholder="예: SM-F976N256"></div>
+        </div>
+        <div class="field-row">
+          <div class="field" style="flex:1;min-width:150px;"><label>모델명</label><input type="text" id="ms-base-input" placeholder="예: SM-F976N"></div>
+          <div class="field" style="flex:1;min-width:110px;"><label>용량</label><input type="text" id="ms-capacity-input" placeholder="예: 256GB"></div>
+        </div>
+        <div class="field-row">
+          <div class="field" style="flex:1;min-width:150px;"><label>삼성모델명 (색상1 SKU)</label><input type="text" id="ms-sku1-input" placeholder="예: SM-F976NZKPKOD"></div>
+          <div class="field" style="flex:1;min-width:120px;"><label>출고가 (VAT포함)</label><input type="number" id="ms-price-input"></div>
+          <div class="field" style="flex:1;min-width:110px;"><label>닉네임</label><input type="text" id="ms-nick-input"></div>
+        </div>
+        <p class="desc" style="margin-top:6px;">색상 (색상명만 입력, SKU는 등록 후 색상별로 채우면 됩니다)</p>
+        <div class="field-row">
+          <div class="field" style="flex:1;min-width:100px;"><input type="text" id="ms-color1-input" placeholder="색상1"></div>
+          <div class="field" style="flex:1;min-width:100px;"><input type="text" id="ms-color2-input" placeholder="색상2"></div>
+          <div class="field" style="flex:1;min-width:100px;"><input type="text" id="ms-color3-input" placeholder="색상3"></div>
+          <div class="field" style="flex:1;min-width:100px;"><input type="text" id="ms-color4-input" placeholder="색상4"></div>
+          <div class="field" style="flex:1;min-width:100px;"><input type="text" id="ms-color5-input" placeholder="색상5"></div>
+        </div>
+        <button class="btn small" onclick="submitModelSingle()">모델 등록</button>
+      </div>
+    </div>
+
+    <!-- 모델 엑셀 업로드 팝업 -->
+    <div id="model-excel-modal-overlay" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.55);z-index:1000;align-items:center;justify-content:center;">
+      <div style="background:#fff;border:2px solid var(--navy);max-width:640px;width:94%;max-height:90vh;overflow-y:auto;padding:26px;position:relative;">
+        <button onclick="closeModelExcelModal()" style="position:absolute;top:14px;right:14px;background:none;border:1px solid var(--navy);width:28px;height:28px;cursor:pointer;font-size:14px;">✕</button>
+        <h3 style="margin-top:0;">모델 엑셀 업로드</h3>
+        <p class="desc">양식대로 채워서 올리면 모델과 색상이 한 번에 등록됩니다. 이미 있는 모델(전산모델명 또는 모델명+용량 기준)이면 색상만 추가로 누적됩니다.</p>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px;">
+          <button class="btn small secondary" style="width:auto;" onclick="downloadModelExcelTemplate()">템플릿 다운로드</button>
+          <input type="file" id="model-excel-file-input" accept=".xlsx,.xls" style="font-size:13px;">
+          <button class="btn small" style="width:auto;" onclick="handleModelExcelUpload()">업로드 및 등록</button>
+        </div>
+        <div id="model-excel-result"></div>
       </div>
     </div>
 
@@ -885,18 +920,24 @@
     await fetchModelsCache();
     const listEl = document.getElementById("model-list");
     listEl.innerHTML = "";
-    if(modelsCache.length === 0){ listEl.innerHTML = '<div class="list-empty">등록된 모델이 없습니다.</div>'; return; }
+    if(modelsCache.length === 0){ listEl.innerHTML = '<div class="list-empty">등록된 모델이 없습니다. 위에서 등록해주세요.</div>'; return; }
     modelsCache.forEach(m=>{
       const colors = m.colors || [];
+      const missingSkuCount = colors.filter(c=>!c.sku).length;
       const wrap = document.createElement("div");
       wrap.style.border = "1px solid var(--line)"; wrap.style.borderTop = "none"; wrap.style.padding = "10px 12px";
       const priceEx = m.priceExVat ? Number(m.priceExVat).toLocaleString()+'원' : "-";
       const priceInc = m.priceIncVat ? Number(m.priceIncVat).toLocaleString()+'원' : "-";
       wrap.innerHTML =
-        '<div style="display:flex;justify-content:space-between;align-items:center;">' +
-        '<span style="font-size:13.5px;"><b>'+m.modelGroup+'</b> · '+m.baseModel+' · '+m.capacity+
-        ' · 전산모델명 '+m.systemModel+' · 출고가(별도) '+priceEx+' / (포함) '+priceInc+
-        (m.petName ? ' · 펫네임 '+m.petName : '') + (m.nickname ? ' · 닉네임 '+m.nickname : '') + '</span>' +
+        '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;">' +
+        '<span style="font-size:13.5px;">' +
+        (m.petName ? '<b>'+m.petName+'</b> · ' : (m.modelGroup?'<b>'+m.modelGroup+'</b> · ':'')) +
+        (m.systemModel ? '전산모델명 '+m.systemModel+' · ' : '') +
+        (m.baseModel ? m.baseModel+' ' : '') + (m.capacity||'') +
+        ' · 출고가(포함) '+priceInc+' / (별도, 자동) '+priceEx +
+        (m.nickname ? ' · 닉네임 '+m.nickname : '') +
+        (missingSkuCount>0 ? ' <span style="color:var(--danger);font-weight:700;">· SKU 미입력 '+missingSkuCount+'개</span>' : '') +
+        '</span>' +
         '<span><button class="btn small secondary" data-edit-model="'+m.id+'" style="margin-right:6px;">모델 수정</button>' +
         '<button class="btn small danger" data-del-model="'+m.id+'">모델 삭제</button></span></div>';
 
@@ -909,38 +950,43 @@
           const line = document.createElement("span");
           line.style.display = "inline-flex"; line.style.alignItems = "center"; line.style.gap = "4px";
           line.style.margin = "3px 6px 0 0";
+          const hasSku = !!c.sku;
           const tag = document.createElement("span");
-          tag.className = "perm-tag"; tag.style.margin = "0";
-          tag.textContent = c.color + " (" + c.sku + ")";
-          const editIcon = document.createElement("button");
-          editIcon.textContent = "수정"; editIcon.className = "btn small secondary";
-          editIcon.style.padding = "2px 8px"; editIcon.style.fontSize = "10.5px"; editIcon.style.width = "auto";
-          editIcon.onclick = async ()=>{
+          tag.className = "perm-tag"; tag.style.margin = "0"; tag.style.cursor = "pointer";
+          if(!hasSku){
+            tag.style.background = "#fdecea"; tag.style.color = "var(--danger)"; tag.style.borderColor = "var(--danger)";
+            tag.textContent = c.color + " (SKU 미입력, 클릭해서 입력)";
+          }else{
+            tag.textContent = c.color + " (" + c.sku + ")";
+          }
+          const doColorEdit = async ()=>{
             const newColor = prompt("색상명", c.color); if(newColor===null) return;
-            const newSku = prompt("삼성모델명(SKU)", c.sku); if(newSku===null) return;
+            const newSku = prompt("삼성모델명(SKU)", c.sku||""); if(newSku===null) return;
             const nc = newColor.trim(), ns = newSku.trim();
-            if(!nc || !ns){ alert("색상명과 SKU는 비울 수 없습니다."); return; }
+            if(!nc){ alert("색상명은 비울 수 없습니다."); return; }
             if(nc===c.color && ns===c.sku) return;
             await updateDoc(doc(db, "inventoryModels", m.id), { colors: arrayRemove(c) });
             await updateDoc(doc(db, "inventoryModels", m.id), { colors: arrayUnion({ color:nc, sku:ns }) });
-            const snap = await getDocs(query(collection(db,"inventoryItems"), where("sku","==",c.sku)));
-            for(const dd of snap.docs){
-              await updateDoc(doc(db,"inventoryItems", dd.id), { color:nc, sku:ns });
+            if(c.sku){
+              const snap = await getDocs(query(collection(db,"inventoryItems"), where("sku","==",c.sku)));
+              for(const dd of snap.docs){ await updateDoc(doc(db,"inventoryItems", dd.id), { color:nc, sku:ns }); }
             }
             logAction("색상 수정", m.modelGroup+" / "+c.color+" → "+nc);
             loadModelAdminList();
           };
+          tag.onclick = doColorEdit;
           const delIcon = document.createElement("button");
           delIcon.textContent = "삭제"; delIcon.className = "btn small danger";
           delIcon.style.padding = "2px 8px"; delIcon.style.fontSize = "10.5px"; delIcon.style.width = "auto";
-          delIcon.onclick = async ()=>{
+          delIcon.onclick = async (ev)=>{
+            ev.stopPropagation();
             if(confirm(c.color + " 색상을 삭제하시겠습니까? (기존 재고 기록은 유지됩니다)")){
               await updateDoc(doc(db, "inventoryModels", m.id), { colors: arrayRemove(c) });
               logAction("색상 삭제", m.modelGroup + " / " + c.color);
               loadModelAdminList();
             }
           };
-          line.appendChild(tag); line.appendChild(editIcon); line.appendChild(delIcon);
+          line.appendChild(tag); line.appendChild(delIcon);
           colorArea.appendChild(line);
         });
       }
@@ -948,8 +994,8 @@
       addColorRow.style.display = "flex"; addColorRow.style.gap = "6px"; addColorRow.style.marginTop = "8px";
       addColorRow.innerHTML =
         '<input type="text" placeholder="색상명" style="flex:1;padding:7px 8px;border:1px solid #c7c7c7;font-size:12.5px;" class="new-color-name">' +
-        '<input type="text" placeholder="삼성모델명 SKU" style="flex:1;padding:7px 8px;border:1px solid #c7c7c7;font-size:12.5px;" class="new-color-sku">' +
-        '<button class="btn small" data-add-color="'+m.id+'">색상 추가</button>';
+        '<input type="text" placeholder="삼성모델명 SKU (선택, 나중에 채워도 됨)" style="flex:1;padding:7px 8px;border:1px solid #c7c7c7;font-size:12.5px;" class="new-color-sku">' +
+        '<button class="btn small" data-add-color="'+m.id+'" style="width:auto;">색상 추가</button>';
 
       wrap.appendChild(colorArea); wrap.appendChild(addColorRow); listEl.appendChild(wrap);
 
@@ -1008,68 +1054,147 @@
     });
   }
 
-  window.seedSampleModels = async function(){
-    const sampleData = [
-      { modelGroup:"플립256", baseModel:"SM-F776N", capacity:"256GB", systemModel:"SM-F776N256",
-        priceExVat:1530000, priceIncVat:1683000, petName:"갤럭시Z 플립7 256GB",
-        colors:[ {color:"핑크",sku:"SM-F776NLIAKOD"}, {color:"그라파이트",sku:"SM-F776NZKAKOD"}, {color:"크림",sku:"SM-F776NZWAKOD"} ] },
-      { modelGroup:"플립512", baseModel:"SM-F776N", capacity:"512GB", systemModel:"SM-F776N512",
-        priceExVat:1760000, priceIncVat:1936000, petName:"갤럭시Z 플립7 512GB",
-        colors:[ {color:"핑크",sku:"SM-F776NLIEKOD"}, {color:"그라파이트",sku:"SM-F776NZKEKOD"}, {color:"크림",sku:"SM-F776NZWEKOD"} ] },
-      { modelGroup:"폴드256", baseModel:"SM-F971N", capacity:"256GB", systemModel:"SM-F971N256",
-        priceExVat:2071000, priceIncVat:2278100, petName:"갤럭시Z 폴드7 256GB",
-        colors:[ {color:"라벤더",sku:"SM-F971NLVPKOD"}, {color:"그라파이트",sku:"SM-F971NZKPKOD"}, {color:"크림",sku:"SM-F971NZWPKOD"} ] },
-      { modelGroup:"폴드512", baseModel:"SM-F971N", capacity:"512GB", systemModel:"SM-F971N512",
-        priceExVat:2301000, priceIncVat:2531100, petName:"갤럭시Z 폴드7 512GB",
-        colors:[ {color:"라벤더",sku:"SM-F971NLVIKOD"}, {color:"그라파이트",sku:"SM-F971NZKIKOD"}, {color:"크림",sku:"SM-F971NZWIKOD"} ] },
-      { modelGroup:"울트라256", baseModel:"SM-F976N", capacity:"256GB", systemModel:"SM-F976N256",
-        priceExVat:2343000, priceIncVat:2577300, petName:"갤럭시Z 폴드7 울트라 256GB",
-        colors:[ {color:"그라파이트",sku:"SM-F976NZKPKOD"}, {color:"바이올렛쉐도우",sku:"SM-F976NZVPKOD"}, {color:"크림",sku:"SM-F976NZWPKOD"} ] },
-      { modelGroup:"울트라512", baseModel:"SM-F976N", capacity:"512GB", systemModel:"SM-F976N512",
-        priceExVat:2573000, priceIncVat:2830300, petName:"갤럭시Z 폴드7 울트라 512GB",
-        colors:[ {color:"그라파이트",sku:"SM-F976NZKIKOD"}, {color:"바이올렛쉐도우",sku:"SM-F976NZVIKOD"}, {color:"크림",sku:"SM-F976NZWIKOD"} ] }
-    ];
+  // ---------- 모델 등록 팝업 (개별) ----------
+  window.openModelSingleModal = function(){
+    document.getElementById("model-single-modal-overlay").style.display = "flex";
+  };
+  window.closeModelSingleModal = function(){
+    document.getElementById("model-single-modal-overlay").style.display = "none";
+  };
+
+  // 모델을 찾거나(전산모델명 우선, 없으면 모델명+용량) 새로 만들고, 색상들을 누적 병합
+  async function upsertModel(fields, colorNames){
+    let existing = null;
+    if(fields.systemModel){
+      existing = modelsCache.find(m => m.systemModel && m.systemModel === fields.systemModel);
+    }
+    if(!existing && fields.baseModel && fields.capacity){
+      existing = modelsCache.find(m => m.baseModel === fields.baseModel && m.capacity === fields.capacity);
+    }
+
+    const newColorObjs = [];
+    (colorNames||[]).forEach((cname, idx)=>{
+      if(!cname) return;
+      const sku = (idx===0 && fields.sku1) ? fields.sku1 : "";
+      newColorObjs.push({ color: cname, sku });
+    });
+
+    if(existing){
+      const existingColorNames = (existing.colors||[]).map(c=>c.color);
+      const toAdd = newColorObjs.filter(c => !existingColorNames.includes(c.color));
+      const patch = {};
+      // 비어있던 필드만 채워줌 (기존 값은 덮어쓰지 않음 - 안전하게 누적)
+      ["baseModel","capacity","systemModel","petName","nickname"].forEach(k=>{
+        if(!existing[k] && fields[k]) patch[k] = fields[k];
+      });
+      if(!existing.priceIncVat && fields.priceIncVat){ patch.priceIncVat = fields.priceIncVat; patch.priceExVat = fields.priceExVat; }
+      if(toAdd.length>0){
+        for(const c of toAdd){ await updateDoc(doc(db,"inventoryModels", existing.id), { colors: arrayUnion(c) }); }
+      }
+      if(Object.keys(patch).length>0){ await updateDoc(doc(db,"inventoryModels", existing.id), patch); }
+      logAction("모델 누적 업데이트", (fields.modelGroup||existing.modelGroup) + " (색상 "+toAdd.length+"개 추가)");
+      return { created:false, colorsAdded:toAdd.length };
+    }else{
+      await addDoc(collection(db, "inventoryModels"), {
+        modelGroup: fields.modelGroup || fields.baseModel || fields.systemModel || fields.petName,
+        baseModel: fields.baseModel||"", capacity: fields.capacity||"", systemModel: fields.systemModel||"",
+        priceExVat: fields.priceExVat||null, priceIncVat: fields.priceIncVat||null,
+        petName: fields.petName||"", nickname: fields.nickname||"", colors: newColorObjs
+      });
+      logAction("모델 등록", (fields.modelGroup || fields.baseModel || fields.systemModel || fields.petName));
+      return { created:true, colorsAdded:newColorObjs.length };
+    }
+  }
+
+  window.submitModelSingle = async function(){
+    const petName = document.getElementById("ms-pet-input").value.trim();
+    const systemModel = document.getElementById("ms-system-input").value.trim();
+    const baseModel = document.getElementById("ms-base-input").value.trim();
+    const capacity = document.getElementById("ms-capacity-input").value.trim();
+    const sku1 = document.getElementById("ms-sku1-input").value.trim();
+    const priceInput = document.getElementById("ms-price-input").value;
+    const nickname = document.getElementById("ms-nick-input").value.trim();
+    const colorNames = [1,2,3,4,5].map(i=>document.getElementById("ms-color"+i+"-input").value.trim());
+
+    if(!petName && !systemModel && !baseModel){
+      alert("펫네임, 전산모델명, 모델명 중 최소 하나는 입력해주세요.");
+      return;
+    }
+    const priceIncVat = priceInput?Number(priceInput):null;
+    const priceExVat = priceIncVat ? Math.round(priceIncVat/1.1) : null;
 
     await fetchModelsCache();
-    const existingGroups = modelsCache.map(m=>m.modelGroup);
-    let addedCount = 0;
-    for(const s of sampleData){
-      if(existingGroups.includes(s.modelGroup)) continue;
-      await addDoc(collection(db,"inventoryModels"), { ...s, nickname:"" });
-      addedCount++;
-    }
-    logAction("샘플 데이터 일괄 등록", addedCount + "개 모델군 추가");
-    const msg = document.getElementById("seed-msg");
-    msg.style.display = "block";
-    msg.textContent = addedCount > 0 ? (addedCount + "개 모델군이 등록되었습니다.") : "이미 전부 등록되어 있어 추가된 항목이 없습니다.";
+    await upsertModel({ petName, systemModel, baseModel, capacity, sku1, priceIncVat, priceExVat, nickname, modelGroup: petName||baseModel||systemModel }, colorNames);
+
+    ["ms-pet-input","ms-system-input","ms-base-input","ms-capacity-input","ms-sku1-input","ms-price-input","ms-nick-input","ms-color1-input","ms-color2-input","ms-color3-input","ms-color4-input","ms-color5-input"]
+      .forEach(id=> document.getElementById(id).value = "");
+    closeModelSingleModal();
     loadModelAdminList();
   };
 
-  window.addModel = async function(){
-    const modelGroup = document.getElementById("model-group-input").value.trim();
-    const baseModel = document.getElementById("model-base-input").value.trim();
-    const capacity = document.getElementById("model-capacity-input").value.trim();
-    const systemModel = document.getElementById("model-system-input").value.trim();
-    const priceInc = document.getElementById("model-price-inc-input").value;
-    const petName = document.getElementById("model-pet-input").value.trim();
-    const nickname = document.getElementById("model-nick-input").value.trim();
+  // ---------- 모델 엑셀 업로드 팝업 ----------
+  const MODEL_TEMPLATE_HEADERS = ["펫네임","전산모델명","모델명","용량","삼성모델명","출고가","닉네임","색상1","색상2","색상3","색상4","색상5"];
 
-    if(!modelGroup && !baseModel && !systemModel){
-      alert("모델군, 기본모델명, 전산모델명 중 최소 하나는 입력해주세요. (나머지는 나중에 수정 가능)");
-      return;
+  window.openModelExcelModal = function(){
+    document.getElementById("model-excel-modal-overlay").style.display = "flex";
+  };
+  window.closeModelExcelModal = function(){
+    document.getElementById("model-excel-modal-overlay").style.display = "none";
+  };
+  window.downloadModelExcelTemplate = function(){
+    const sample = [MODEL_TEMPLATE_HEADERS,
+      ["갤럭시Z 폴드7 울트라 256GB","SM-F976N256","SM-F976N","256GB","SM-F976NZKPKOD","2577300","","그라파이트","바이올렛쉐도우","크림","",""]
+    ];
+    const ws = XLSX.utils.aoa_to_sheet(sample);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "모델업로드");
+    XLSX.writeFile(wb, "모델업로드_템플릿.xlsx");
+  };
+
+  window.handleModelExcelUpload = async function(){
+    const fileInput = document.getElementById("model-excel-file-input");
+    const resultEl = document.getElementById("model-excel-result");
+    if(!fileInput.files || fileInput.files.length===0){ alert("엑셀 파일을 먼저 선택해주세요."); return; }
+    resultEl.innerHTML = '<div class="list-empty">처리 중...</div>';
+
+    const file = fileInput.files[0];
+    const buf = await file.arrayBuffer();
+    const wb = XLSX.read(buf, { type:"array" });
+    const ws = wb.Sheets[wb.SheetNames[0]];
+    const rows = XLSX.utils.sheet_to_json(ws, { defval:"" });
+    if(rows.length===0){ resultEl.innerHTML = '<div class="list-empty">읽을 데이터가 없습니다.</div>'; return; }
+
+    await fetchModelsCache();
+    let createdCount = 0, updatedCount = 0, colorCount = 0, skipped = 0;
+
+    for(const row of rows){
+      const petName = String(row["펫네임"]||"").trim();
+      const systemModel = String(row["전산모델명"]||"").trim();
+      const baseModel = String(row["모델명"]||"").trim();
+      const capacity = String(row["용량"]||"").trim();
+      const sku1 = String(row["삼성모델명"]||"").trim();
+      const priceRaw = row["출고가"];
+      const nickname = String(row["닉네임"]||"").trim();
+      const colorNames = [1,2,3,4,5].map(i=> String(row["색상"+i]||"").trim());
+
+      if(!petName && !systemModel && !baseModel){ skipped++; continue; }
+
+      const priceIncVat = priceRaw ? Number(priceRaw) : null;
+      const priceExVat = priceIncVat ? Math.round(priceIncVat/1.1) : null;
+
+      const result = await upsertModel(
+        { petName, systemModel, baseModel, capacity, sku1, priceIncVat, priceExVat, nickname, modelGroup: petName||baseModel||systemModel },
+        colorNames
+      );
+      if(result.created) createdCount++; else updatedCount++;
+      colorCount += result.colorsAdded;
+      await fetchModelsCache(); // 다음 행 매칭을 위해 캐시 갱신
     }
-    const priceIncVat = priceInc ? Number(priceInc) : null;
-    const priceExVat = priceIncVat ? Math.round(priceIncVat / 1.1) : null;
 
-    await addDoc(collection(db, "inventoryModels"), {
-      modelGroup: modelGroup || baseModel || systemModel,
-      baseModel, capacity, systemModel,
-      priceExVat, priceIncVat,
-      petName, nickname, colors: []
-    });
-    logAction("모델 등록", (modelGroup || baseModel || systemModel) + " " + capacity);
-    ["model-group-input","model-base-input","model-capacity-input","model-system-input","model-price-inc-input","model-pet-input","model-nick-input"]
-      .forEach(id=> document.getElementById(id).value = "");
+    resultEl.innerHTML = '<div style="font-size:13px;">신규 모델 '+createdCount+'개 · 기존 모델에 누적 '+updatedCount+'건 · 추가된 색상 '+colorCount+'개'+
+      (skipped>0 ? ' · 정보 부족으로 건너뜀 '+skipped+'건' : '') + '</div>';
+    logAction("모델 엑셀 업로드", "신규 "+createdCount+" / 누적 "+updatedCount+" / 색상 "+colorCount);
+    document.getElementById("model-excel-file-input").value = "";
     loadModelAdminList();
   };
 
