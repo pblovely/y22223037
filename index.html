@@ -790,6 +790,7 @@
           <div class="stack-row"><label>주문일</label><input type="text" id="order-date-input" placeholder="예: 20260724" maxlength="8" inputmode="numeric"></div>
           <div class="stack-row"><label>도착예정일 (선택)</label><input type="text" id="order-expected-date-input" placeholder="예: 20260731" maxlength="8" inputmode="numeric"></div>
           <div class="stack-row"><label>입고처</label><select id="order-source-select"><option value="">선택</option></select></div>
+          <div class="stack-row"><label>통신사</label><select id="order-carrier-select"></select></div>
         </div>
 
         <p class="desc" style="margin-top:14px;margin-bottom:4px;font-weight:700;color:var(--navy);">주문 품목</p>
@@ -798,9 +799,13 @@
             <thead>
               <tr style="background:#fafafa;">
                 <th style="padding:6px;border:1px solid var(--line);">모델</th>
-                <th style="padding:6px;border:1px solid var(--line);">통신사</th>
                 <th style="padding:6px;border:1px solid var(--line);">수량</th>
                 <th style="padding:6px;border:1px solid var(--line);">입고가(대당)</th>
+                <th style="padding:6px;border:1px solid var(--line);">선할인</th>
+                <th style="padding:6px;border:1px solid var(--line);">선할인%</th>
+                <th style="padding:6px;border:1px solid var(--line);">타할인</th>
+                <th style="padding:6px;border:1px solid var(--line);">타할인%</th>
+                <th style="padding:6px;border:1px solid var(--line);">입고할인</th>
                 <th style="padding:6px;border:1px solid var(--line);">판매처</th>
                 <th style="padding:6px;border:1px solid var(--line);">판매가(대당)</th>
                 <th style="padding:6px;border:1px solid var(--line);">소계(입고)</th>
@@ -904,14 +909,15 @@
           <div class="stack-row"><label>IMEI (선택)</label><input type="text" id="item-imei-input"></div>
           <div class="stack-row"><label>출고가</label><input type="number" id="item-listprice-input"></div>
           <div class="stack-row"><label>입고가</label><input type="number" id="item-purchaseprice-input" oninput="onPurchasePriceInput()"></div>
-          <div class="stack-row"><label>선할인금액 (원)</label><input type="number" id="item-purchasediscountamt-input" placeholder="예: 20000" oninput="onPurchaseDiscountAmtInput()"></div>
-          <div class="stack-row"><label>선할인율 (%)</label><input type="number" step="0.01" id="item-purchasediscount-input" placeholder="예: 0.20" oninput="onPurchaseDiscountInput()"></div>
+          <div class="stack-row"><label>선할인</label><input type="number" id="item-purchasediscountamt-input" placeholder="예: 20000" oninput="onPurchaseDiscountAmtInput()"></div>
+          <div class="stack-row"><label>선할인%</label><input type="number" step="0.01" id="item-purchasediscount-input" placeholder="예: 0.20" oninput="onPurchaseDiscountInput()"></div>
+          <div class="stack-row"><label>타할인</label><input type="number" id="item-otherdiscountamt-input" placeholder="여신 등 추가 할인" oninput="onOtherDiscountAmtInput()"></div>
+          <div class="stack-row"><label>타할인%</label><input type="number" step="0.01" id="item-otherdiscountpct-input" oninput="onOtherDiscountPctInput()"></div>
+          <div class="stack-row"><label>입고할인</label><input type="text" id="item-totaldiscount-display" disabled style="background:#f2f2f2;"></div>
           <div class="stack-row"><label>판매처 (선택)</label><select id="item-dest-select"><option value="">해당없음</option></select></div>
           <div class="stack-row"><label>판매가 (선택)</label><input type="number" id="item-saleprice-input" oninput="onSalePriceInput()"></div>
-          <div class="stack-row"><label>판매할인금액 (원, 선택)</label><input type="number" id="item-salediscountamt-input" placeholder="예: 10000" oninput="onSaleDiscountAmtInput()"></div>
-          <div class="stack-row"><label>판매할인율 (%, 선택)</label><input type="number" step="0.01" id="item-salediscount-input" placeholder="예: 0.20" oninput="onSaleDiscountInput()"></div>
-          <div class="stack-row"><label>타할인 (원, 제조사유통폰 매입시)</label><input type="number" id="item-otherdiscountamt-input" placeholder="여신 등으로 추가 반영되는 할인" oninput="onOtherDiscountAmtInput()"></div>
-          <div class="stack-row"><label>선할인/타할인=입고할인 (합계)</label><input type="text" id="item-totaldiscount-display" disabled style="background:#f2f2f2;"></div>
+          <div class="stack-row"><label>판매할인</label><input type="number" id="item-salediscountamt-input" placeholder="예: 10000" oninput="onSaleDiscountAmtInput()"></div>
+          <div class="stack-row"><label>판매할인%</label><input type="number" step="0.01" id="item-salediscount-input" placeholder="예: 0.20" oninput="onSaleDiscountInput()"></div>
           <div class="stack-row"><label>공시지원금 (선택)</label><input type="number" id="item-subsidyamount-input" placeholder="본사에서 유치수수료로 주는 금액"></div>
           <div class="stack-row"><label>공시지원금 상태</label>
             <select id="item-subsidystatus-select" onchange="onSubsidyStatusChange()">
@@ -1025,14 +1031,15 @@
     { key:"imei", label:"IMEI", get:it=>it.imei||"-" },
     { key:"listPrice", label:"출고가", get:it=>it.listPrice?Number(it.listPrice).toLocaleString()+"원":"-", getRaw:it=>it.listPrice!=null?Number(it.listPrice):"" },
     { key:"purchasePrice", label:"입고가", get:it=>it.purchasePrice?Number(it.purchasePrice).toLocaleString()+"원":"-", getRaw:it=>it.purchasePrice!=null?Number(it.purchasePrice):"" },
-    { key:"purchaseDiscountAmt", label:"선할인금액", get:it=> (it.purchaseDiscountAmt!=null)?Number(it.purchaseDiscountAmt).toLocaleString()+"원":"-", getRaw:it=>it.purchaseDiscountAmt!=null?Number(it.purchaseDiscountAmt):"" },
-    { key:"purchaseDiscount", label:"선할인율(%)", get:it=> (it.purchaseDiscount!=null)?Number(it.purchaseDiscount).toFixed(2)+"%":"-", getRaw:it=>it.purchaseDiscount!=null?Number(it.purchaseDiscount):"" },
+    { key:"purchaseDiscountAmt", label:"선할인", get:it=> (it.purchaseDiscountAmt!=null)?Number(it.purchaseDiscountAmt).toLocaleString()+"원":"-", getRaw:it=>it.purchaseDiscountAmt!=null?Number(it.purchaseDiscountAmt):"" },
+    { key:"purchaseDiscount", label:"선할인%", get:it=> (it.purchaseDiscount!=null)?Number(it.purchaseDiscount).toFixed(2)+"%":"-", getRaw:it=>it.purchaseDiscount!=null?Number(it.purchaseDiscount):"" },
     { key:"otherDiscountAmt", label:"타할인", get:it=> (it.otherDiscountAmt!=null)?Number(it.otherDiscountAmt).toLocaleString()+"원":"-", getRaw:it=>it.otherDiscountAmt!=null?Number(it.otherDiscountAmt):"" },
-    { key:"totalPurchaseDiscount", label:"입고할인 합계", get:it=> ((Number(it.purchaseDiscountAmt)||0)+(Number(it.otherDiscountAmt)||0)).toLocaleString()+"원", getRaw:it=> (Number(it.purchaseDiscountAmt)||0)+(Number(it.otherDiscountAmt)||0) },
+    { key:"otherDiscountPct", label:"타할인%", get:it=> (it.otherDiscountPct!=null)?Number(it.otherDiscountPct).toFixed(2)+"%":"-", getRaw:it=>it.otherDiscountPct!=null?Number(it.otherDiscountPct):"" },
+    { key:"totalPurchaseDiscount", label:"입고할인", get:it=> ((Number(it.purchaseDiscountAmt)||0)+(Number(it.otherDiscountAmt)||0)).toLocaleString()+"원", getRaw:it=> (Number(it.purchaseDiscountAmt)||0)+(Number(it.otherDiscountAmt)||0) },
     { key:"destination", label:"판매처", get:it=>it.destination||"-" },
     { key:"salePrice", label:"판매가", get:it=>it.salePrice?Number(it.salePrice).toLocaleString()+"원":"-", getRaw:it=>it.salePrice!=null?Number(it.salePrice):"" },
-    { key:"saleDiscountAmt", label:"판매할인금액", get:it=> (it.saleDiscountAmt!=null)?Number(it.saleDiscountAmt).toLocaleString()+"원":"-", getRaw:it=>it.saleDiscountAmt!=null?Number(it.saleDiscountAmt):"" },
-    { key:"saleDiscount", label:"판매할인율(%)", get:it=> (it.saleDiscount!=null)?Number(it.saleDiscount).toFixed(2)+"%":"-", getRaw:it=>it.saleDiscount!=null?Number(it.saleDiscount):"" },
+    { key:"saleDiscountAmt", label:"판매할인", get:it=> (it.saleDiscountAmt!=null)?Number(it.saleDiscountAmt).toLocaleString()+"원":"-", getRaw:it=>it.saleDiscountAmt!=null?Number(it.saleDiscountAmt):"" },
+    { key:"saleDiscount", label:"판매할인%", get:it=> (it.saleDiscount!=null)?Number(it.saleDiscount).toFixed(2)+"%":"-", getRaw:it=>it.saleDiscount!=null?Number(it.saleDiscount):"" },
     { key:"subsidyAmount", label:"공시지원금", get:it=> (it.subsidyAmount!=null)?Number(it.subsidyAmount).toLocaleString()+"원":"-", getRaw:it=>it.subsidyAmount!=null?Number(it.subsidyAmount):"" },
     { key:"subsidyStatus", label:"공시지원금 상태", get:it=>it.subsidyStatus||"-" },
     { key:"clawbackAmount", label:"환수액", get:it=> (it.clawbackAmount!=null)?Number(it.clawbackAmount).toLocaleString()+"원":"-", getRaw:it=>it.clawbackAmount!=null?Number(it.clawbackAmount):"" },
@@ -2330,9 +2337,22 @@
     const otherAmt = Number(document.getElementById("item-otherdiscountamt-input").value) || 0;
     if(listPrice){
       document.getElementById("item-purchaseprice-input").value = listPrice - preAmt - otherAmt;
+      document.getElementById("item-otherdiscountpct-input").value = ((otherAmt/listPrice)*100).toFixed(2);
     }
     updateTotalDiscountDisplay();
     updateProfitDisplay();
+  };
+  window.onOtherDiscountPctInput = function(){
+    const listPrice = Number(document.getElementById("item-listprice-input").value) || 0;
+    const pct = document.getElementById("item-otherdiscountpct-input").value;
+    if(listPrice && pct !== ""){
+      const otherAmt = Math.round(listPrice * Number(pct)/100);
+      document.getElementById("item-otherdiscountamt-input").value = otherAmt;
+      const preAmt = Number(document.getElementById("item-purchasediscountamt-input").value) || 0;
+      document.getElementById("item-purchaseprice-input").value = listPrice - preAmt - otherAmt;
+      updateTotalDiscountDisplay();
+      updateProfitDisplay();
+    }
   };
   window.onSaleDiscountAmtInput = function(){
     const listPrice = Number(document.getElementById("item-listprice-input").value) || 0;
@@ -2407,7 +2427,7 @@
       "item-purchasediscount-input","item-purchasediscountamt-input","item-saleprice-input","item-salediscount-input","item-salediscountamt-input",
       "item-orderdate-input","item-indate-input","item-expectedsaledate-input","item-outdate-input",
       "item-subsidyamount-input","item-clawbackamount-input","item-subsidymonth-input",
-      "item-otherdiscountamt-input"].forEach(id=>{ document.getElementById(id).value = ""; });
+      "item-otherdiscountamt-input","item-otherdiscountpct-input"].forEach(id=>{ document.getElementById(id).value = ""; });
     document.getElementById("item-profit-display").value = "";
     document.getElementById("item-totaldiscount-display").value = "";
     document.getElementById("item-qty-input").value = "1";
@@ -2506,6 +2526,7 @@
     document.getElementById("item-clawbackamount-input").value = it.clawbackAmount || "";
     document.getElementById("item-subsidymonth-input").value = it.subsidyAccrualMonth || "";
     document.getElementById("item-otherdiscountamt-input").value = it.otherDiscountAmt || "";
+    document.getElementById("item-otherdiscountpct-input").value = it.otherDiscountPct || "";
     updateTotalDiscountDisplay();
     document.getElementById("item-clawback-row").style.display = (it.subsidyStatus==="환수") ? "flex" : "none";
     currentOrderLinkId = it.orderId || null;
@@ -2598,6 +2619,7 @@
     const clawbackAmount = document.getElementById("item-clawbackamount-input").value;
     const subsidyAccrualMonth = document.getElementById("item-subsidymonth-input").value.trim();
     const otherDiscountAmt = document.getElementById("item-otherdiscountamt-input").value;
+    const otherDiscountPct = document.getElementById("item-otherdiscountpct-input").value;
 
     const m = modelsCache.find(x=>x.id===modelId);
     if(!m || colorIdx===""){ alert("모델과 색상을 선택해주세요."); return; }
@@ -2621,6 +2643,7 @@
       purchaseDiscount: purchaseDiscount?Number(Number(purchaseDiscount).toFixed(2)):null,
       purchaseDiscountAmt: purchaseDiscountAmt?Number(purchaseDiscountAmt):null,
       otherDiscountAmt: otherDiscountAmt?Number(otherDiscountAmt):null,
+      otherDiscountPct: otherDiscountPct?Number(otherDiscountPct):null,
       salePrice: salePrice?Number(salePrice):null,
       saleDiscount: saleDiscount?Number(Number(saleDiscount).toFixed(2)):null,
       saleDiscountAmt: saleDiscountAmt?Number(saleDiscountAmt):null,
@@ -2702,6 +2725,10 @@
     sel.innerHTML = '<option value="">선택</option>';
     const names = await fetchNamesList("inboundSources");
     names.forEach(n=>{ const opt=document.createElement("option"); opt.value=n; opt.textContent=n; sel.appendChild(opt); });
+    const carrierSel = document.getElementById("order-carrier-select");
+    carrierSel.innerHTML = "";
+    const carrierNames = await fetchNamesList("carriers");
+    carrierNames.forEach(n=>{ const opt=document.createElement("option"); opt.value=n; opt.textContent=n; carrierSel.appendChild(opt); });
   }
 
   window.openOrderModal = async function(){
@@ -2721,14 +2748,24 @@
 
   window.addOrderLine = async function(){
     const lineId = "ol" + (orderLineSeq++);
-    const carrierNames = await fetchNamesList("carriers");
     const destNames = await fetchNamesList("outboundDestinations");
 
     const tr = document.createElement("tr");
     tr.dataset.lineId = lineId;
 
-    const tdModel = document.createElement("td");
-    tdModel.style.padding = "4px"; tdModel.style.border = "1px solid var(--line)";
+    function smallInput(cls, type, width){
+      const inp = document.createElement("input");
+      inp.type = type; inp.className = cls; inp.style.width = width; inp.style.fontSize = "11.5px"; inp.style.padding = "4px"; inp.style.boxSizing = "border-box";
+      return inp;
+    }
+    function td(el){
+      const cell = document.createElement("td");
+      cell.style.padding = "4px"; cell.style.border = "1px solid var(--line)";
+      cell.appendChild(el);
+      tr.appendChild(cell);
+      return cell;
+    }
+
     const modelSel = document.createElement("select");
     modelSel.className = "ol-model"; modelSel.style.fontSize = "11.5px"; modelSel.style.padding = "4px"; modelSel.style.width = "150px";
     modelSel.innerHTML = '<option value="">모델 선택</option>';
@@ -2739,54 +2776,53 @@
       modelSel.appendChild(opt);
     });
     modelSel.onchange = ()=> onOrderLineModelChange(tr);
-    tdModel.appendChild(modelSel); tr.appendChild(tdModel);
+    td(modelSel);
 
-    const tdCarrier = document.createElement("td");
-    tdCarrier.style.padding = "4px"; tdCarrier.style.border = "1px solid var(--line)";
-    const carrierSel = document.createElement("select");
-    carrierSel.className = "ol-carrier"; carrierSel.style.fontSize = "11.5px"; carrierSel.style.padding = "4px"; carrierSel.style.width = "70px";
-    carrierNames.forEach(n=>{ const opt=document.createElement("option"); opt.value=n; opt.textContent=n; carrierSel.appendChild(opt); });
-    tdCarrier.appendChild(carrierSel); tr.appendChild(tdCarrier);
-
-    const tdQty = document.createElement("td");
-    tdQty.style.padding = "4px"; tdQty.style.border = "1px solid var(--line)";
-    const qtyInput = document.createElement("input");
-    qtyInput.type = "number"; qtyInput.className = "ol-qty"; qtyInput.value = "1"; qtyInput.style.width = "55px"; qtyInput.style.fontSize = "11.5px"; qtyInput.style.padding = "4px";
+    const qtyInput = smallInput("ol-qty","number","50px"); qtyInput.value = "1";
     qtyInput.oninput = ()=> updateOrderLineSubtotal(tr);
-    tdQty.appendChild(qtyInput); tr.appendChild(tdQty);
+    td(qtyInput);
 
-    const tdPurchase = document.createElement("td");
-    tdPurchase.style.padding = "4px"; tdPurchase.style.border = "1px solid var(--line)";
-    const purchaseInput = document.createElement("input");
-    purchaseInput.type = "number"; purchaseInput.className = "ol-purchaseprice"; purchaseInput.style.width = "90px"; purchaseInput.style.fontSize = "11.5px"; purchaseInput.style.padding = "4px";
-    purchaseInput.oninput = ()=> updateOrderLineSubtotal(tr);
-    tdPurchase.appendChild(purchaseInput); tr.appendChild(tdPurchase);
+    const purchaseInput = smallInput("ol-purchaseprice","number","85px");
+    purchaseInput.oninput = ()=> onOrderLinePurchasePriceInput(tr);
+    td(purchaseInput);
 
-    const tdDest = document.createElement("td");
-    tdDest.style.padding = "4px"; tdDest.style.border = "1px solid var(--line)";
+    const preAmtInput = smallInput("ol-prediscountamt","number","70px");
+    preAmtInput.oninput = ()=> onOrderLinePreAmtInput(tr);
+    td(preAmtInput);
+
+    const prePctInput = smallInput("ol-prediscountpct","number","60px");
+    prePctInput.oninput = ()=> onOrderLinePrePctInput(tr);
+    td(prePctInput);
+
+    const otherAmtInput = smallInput("ol-otherdiscountamt","number","70px");
+    otherAmtInput.oninput = ()=> onOrderLineOtherAmtInput(tr);
+    td(otherAmtInput);
+
+    const otherPctInput = smallInput("ol-otherdiscountpct","number","60px");
+    otherPctInput.oninput = ()=> onOrderLineOtherPctInput(tr);
+    td(otherPctInput);
+
+    const totalDiscountSpan = document.createElement("span");
+    totalDiscountSpan.className = "ol-totaldiscount"; totalDiscountSpan.textContent = "-";
+    td(totalDiscountSpan);
+
     const destSel = document.createElement("select");
     destSel.className = "ol-dest"; destSel.style.fontSize = "11.5px"; destSel.style.padding = "4px"; destSel.style.width = "90px";
     destSel.innerHTML = '<option value="">해당없음</option>';
     destNames.forEach(n=>{ const opt=document.createElement("option"); opt.value=n; opt.textContent=n; destSel.appendChild(opt); });
-    tdDest.appendChild(destSel); tr.appendChild(tdDest);
+    td(destSel);
 
-    const tdSale = document.createElement("td");
-    tdSale.style.padding = "4px"; tdSale.style.border = "1px solid var(--line)";
-    const saleInput = document.createElement("input");
-    saleInput.type = "number"; saleInput.className = "ol-saleprice"; saleInput.style.width = "90px"; saleInput.style.fontSize = "11.5px"; saleInput.style.padding = "4px";
-    tdSale.appendChild(saleInput); tr.appendChild(tdSale);
+    const saleInput = smallInput("ol-saleprice","number","85px");
+    td(saleInput);
 
-    const tdSubtotal = document.createElement("td");
-    tdSubtotal.style.padding = "4px 8px"; tdSubtotal.style.border = "1px solid var(--line)"; tdSubtotal.style.fontSize = "11.5px"; tdSubtotal.className = "ol-subtotal";
-    tdSubtotal.textContent = "-";
-    tr.appendChild(tdSubtotal);
+    const subtotalSpan = document.createElement("span");
+    subtotalSpan.className = "ol-subtotal"; subtotalSpan.textContent = "-";
+    td(subtotalSpan);
 
-    const tdDel = document.createElement("td");
-    tdDel.style.padding = "4px"; tdDel.style.border = "1px solid var(--line)"; tdDel.style.textAlign = "center";
     const delBtn = document.createElement("button");
     delBtn.className = "btn small danger"; delBtn.style.width = "auto"; delBtn.style.padding = "3px 8px"; delBtn.textContent = "삭제";
     delBtn.onclick = ()=>{ tr.remove(); recalcOrderDeposit(); };
-    tdDel.appendChild(delBtn); tr.appendChild(tdDel);
+    td(delBtn);
 
     document.getElementById("order-lines-body").appendChild(tr);
   };
@@ -2797,10 +2833,47 @@
     if(m && m.priceExVat){ tr.querySelector(".ol-purchaseprice").value = m.priceExVat; }
     updateOrderLineSubtotal(tr);
   }
+  function onOrderLinePurchasePriceInput(tr){
+    updateOrderLineSubtotal(tr);
+  }
+  function updateOrderLineTotalDiscount(tr){
+    const preAmt = Number(tr.querySelector(".ol-prediscountamt").value) || 0;
+    const otherAmt = Number(tr.querySelector(".ol-otherdiscountamt").value) || 0;
+    tr.querySelector(".ol-totaldiscount").textContent = (preAmt+otherAmt).toLocaleString()+"원";
+  }
+  function onOrderLinePreAmtInput(tr){
+    updateOrderLineTotalDiscount(tr);
+    updateOrderLineSubtotal(tr);
+  }
+  function onOrderLinePrePctInput(tr){
+    const price = Number(tr.querySelector(".ol-purchaseprice").value) || 0;
+    const pct = tr.querySelector(".ol-prediscountpct").value;
+    if(price && pct !== ""){
+      tr.querySelector(".ol-prediscountamt").value = Math.round(price * Number(pct)/100);
+    }
+    updateOrderLineTotalDiscount(tr);
+    updateOrderLineSubtotal(tr);
+  }
+  function onOrderLineOtherAmtInput(tr){
+    updateOrderLineTotalDiscount(tr);
+    updateOrderLineSubtotal(tr);
+  }
+  function onOrderLineOtherPctInput(tr){
+    const price = Number(tr.querySelector(".ol-purchaseprice").value) || 0;
+    const pct = tr.querySelector(".ol-otherdiscountpct").value;
+    if(price && pct !== ""){
+      tr.querySelector(".ol-otherdiscountamt").value = Math.round(price * Number(pct)/100);
+    }
+    updateOrderLineTotalDiscount(tr);
+    updateOrderLineSubtotal(tr);
+  }
   function updateOrderLineSubtotal(tr){
     const qty = Number(tr.querySelector(".ol-qty").value) || 0;
     const price = Number(tr.querySelector(".ol-purchaseprice").value) || 0;
-    tr.querySelector(".ol-subtotal").textContent = (qty*price).toLocaleString()+"원";
+    const preAmt = Number(tr.querySelector(".ol-prediscountamt").value) || 0;
+    const otherAmt = Number(tr.querySelector(".ol-otherdiscountamt").value) || 0;
+    const netPrice = price - preAmt - otherAmt;
+    tr.querySelector(".ol-subtotal").textContent = (qty*netPrice).toLocaleString()+"원";
     recalcOrderDeposit();
   }
   function recalcOrderDeposit(){
@@ -2808,7 +2881,9 @@
     document.querySelectorAll("#order-lines-body tr").forEach(tr=>{
       const qty = Number(tr.querySelector(".ol-qty").value) || 0;
       const price = Number(tr.querySelector(".ol-purchaseprice").value) || 0;
-      total += qty*price;
+      const preAmt = Number(tr.querySelector(".ol-prediscountamt").value) || 0;
+      const otherAmt = Number(tr.querySelector(".ol-otherdiscountamt").value) || 0;
+      total += qty*(price - preAmt - otherAmt);
     });
     document.getElementById("order-deposit-input").value = total;
   }
@@ -2816,6 +2891,7 @@
   window.submitOrder = async function(){
     const source = document.getElementById("order-source-select").value;
     if(!source){ alert("입고처를 선택해주세요."); return; }
+    const carrier = document.getElementById("order-carrier-select").value;
     const lineRows = Array.from(document.querySelectorAll("#order-lines-body tr"));
     if(lineRows.length===0){ alert("품목을 1개 이상 추가해주세요."); return; }
 
@@ -2826,9 +2902,12 @@
       if(!m){ alert("모델을 선택하지 않은 품목이 있습니다."); return; }
       lines.push({
         modelId, m,
-        carrier: tr.querySelector(".ol-carrier").value,
         quantity: Number(tr.querySelector(".ol-qty").value) || 1,
         purchasePrice: Number(tr.querySelector(".ol-purchaseprice").value) || null,
+        preDiscountAmt: tr.querySelector(".ol-prediscountamt").value ? Number(tr.querySelector(".ol-prediscountamt").value) : null,
+        preDiscountPct: tr.querySelector(".ol-prediscountpct").value ? Number(tr.querySelector(".ol-prediscountpct").value) : null,
+        otherDiscountAmt: tr.querySelector(".ol-otherdiscountamt").value ? Number(tr.querySelector(".ol-otherdiscountamt").value) : null,
+        otherDiscountPct: tr.querySelector(".ol-otherdiscountpct").value ? Number(tr.querySelector(".ol-otherdiscountpct").value) : null,
         destination: tr.querySelector(".ol-dest").value,
         salePrice: tr.querySelector(".ol-saleprice").value ? Number(tr.querySelector(".ol-saleprice").value) : null
       });
@@ -2839,7 +2918,7 @@
     const depositRequired = Number(document.getElementById("order-deposit-input").value) || 0;
 
     const batchRef = await addDoc(collection(db,"orderBatches"), {
-      source, orderDate, expectedArrivalDate,
+      source, carrier, orderDate, expectedArrivalDate,
       depositRequired, depositPaid:false, depositPaidDate:"",
       lineCount: lines.length,
       status: "주문중",
@@ -2854,8 +2933,11 @@
         modelId: l.modelId, modelGroup: l.m.modelGroup, baseModel: l.m.baseModel, capacity: l.m.capacity,
         systemModel: l.m.systemModel, petName: l.m.petName||"",
         quantity: l.quantity, fulfilledCount: 0, linkedItemIds: [],
-        source, carrier: l.carrier, destination: l.destination,
-        purchasePrice: l.purchasePrice, salePrice: l.salePrice,
+        source, carrier, destination: l.destination,
+        purchasePrice: l.purchasePrice,
+        preDiscountAmt: l.preDiscountAmt, preDiscountPct: l.preDiscountPct,
+        otherDiscountAmt: l.otherDiscountAmt, otherDiscountPct: l.otherDiscountPct,
+        salePrice: l.salePrice,
         orderDate, status: "주문중",
         createdAt: serverTimestamp()
       });
@@ -2864,7 +2946,7 @@
       if(l.destination && l.salePrice){
         await addDoc(collection(db,"saleRequests"), {
           destination: l.destination, modelId: l.modelId, modelGroup:l.m.modelGroup, baseModel:l.m.baseModel, capacity:l.m.capacity,
-          systemModel:l.m.systemModel, petName:l.m.petName||"", carrier: l.carrier,
+          systemModel:l.m.systemModel, petName:l.m.petName||"", carrier,
           quantity: l.quantity, fulfilledCount:0, matchedItemIds:[],
           salePrice: l.salePrice, depositRequired: l.salePrice*l.quantity, depositReceived:false, depositReceivedDate:"",
           requestDate: orderDate, status:"대기중",
@@ -2938,20 +3020,22 @@
 
   function openOrderBatchDetailModal(batchId, b){
     const lines = orderBatchLinesCache[batchId] || [];
-    document.getElementById("order-detail-title").textContent = (b.source||"-") + " · 주문일 " + (b.orderDate||"-") + " · 도착예정 " + (b.expectedArrivalDate||"-");
-    let html = '<div style="overflow-x:auto;"><table class="data-table" style="min-width:750px;"><thead><tr>' +
-      '<th>펫네임/모델명</th><th>용량</th><th>통신사</th><th>주문수량</th><th>도착</th><th>판매가</th><th>상태</th><th class="ta-right">관리</th>' +
+    document.getElementById("order-detail-title").textContent = (b.source||"-") + " · " + (b.carrier||"-") + " · 주문일 " + (b.orderDate||"-") + " · 도착예정 " + (b.expectedArrivalDate||"-");
+    let html = '<div style="overflow-x:auto;"><table class="data-table" style="min-width:850px;"><thead><tr>' +
+      '<th>펫네임/모델명</th><th>용량</th><th>주문수량</th><th>입고가</th><th>입고할인</th><th>도착</th><th>판매가</th><th>상태</th><th class="ta-right">관리</th>' +
       '</tr></thead><tbody id="order-detail-tbody"></tbody></table></div>';
     document.getElementById("order-detail-body").innerHTML = html;
     const tbody = document.getElementById("order-detail-tbody");
     lines.forEach(o=>{
       const remain = (o.quantity||0) - (o.fulfilledCount||0);
+      const totalDiscount = (Number(o.preDiscountAmt)||0) + (Number(o.otherDiscountAmt)||0);
       const tr = document.createElement("tr");
       tr.innerHTML =
         '<td>'+(o.petName||o.modelGroup)+'/'+(o.baseModel||o.systemModel||"-")+'</td>' +
         '<td>'+(o.capacity||"-")+'</td>' +
-        '<td>'+(o.carrier||"-")+'</td>' +
         '<td class="ta-right">'+o.quantity+'대</td>' +
+        '<td class="ta-right">'+(o.purchasePrice?Number(o.purchasePrice).toLocaleString()+'원':'-')+'</td>' +
+        '<td class="ta-right">'+(totalDiscount?totalDiscount.toLocaleString()+'원':'-')+'</td>' +
         '<td class="ta-right">'+o.fulfilledCount+'/'+o.quantity+'</td>' +
         '<td class="ta-right">'+(o.salePrice?Number(o.salePrice).toLocaleString()+'원':'-')+'</td>' +
         '<td>'+o.status+'</td>' +
@@ -3066,6 +3150,8 @@
         petName:freshModel.petName||"", manufacturerColor:c.manufacturerColor||"", systemColor:c.systemColor||"", sku:c.sku||"",
         carrier:o.carrier||"", source:o.source||"", manufacturer:"", location:"", destination:o.destination||"",
         listPrice:null, purchasePrice:o.purchasePrice||null, salePrice:o.salePrice||null,
+        purchaseDiscountAmt:o.preDiscountAmt||null, purchaseDiscount:o.preDiscountPct||null,
+        otherDiscountAmt:o.otherDiscountAmt||null, otherDiscountPct:o.otherDiscountPct||null,
         profit: (o.salePrice && o.purchasePrice) ? (Number(o.salePrice)-Number(o.purchasePrice)) : null,
         imei:"", status:"보유중", orderDate:o.orderDate||"", inDate, expectedSaleDate:"", outDate:"",
         entryType:"imei", quantity:1, serialNumber:e.serial,
@@ -3512,9 +3598,9 @@
     { key:"destination", label:"판매처", type:"select", collection:"outboundDestinations" },
     { key:"listPrice", label:"출고가", type:"number" },
     { key:"purchasePrice", label:"입고가", type:"number" },
-    { key:"purchaseDiscount", label:"선할인율(%)", type:"number" },
+    { key:"purchaseDiscount", label:"선할인%", type:"number" },
     { key:"salePrice", label:"판매가", type:"number" },
-    { key:"saleDiscount", label:"판매할인율(%)", type:"number" },
+    { key:"saleDiscount", label:"판매할인%", type:"number" },
     { key:"orderDate", label:"주문일", type:"text" },
     { key:"inDate", label:"입고일", type:"text" },
     { key:"expectedSaleDate", label:"판매예정일", type:"text" },
