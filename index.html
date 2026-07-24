@@ -530,12 +530,17 @@
         <p class="desc">모델·색상을 선택하면 출고가가 자동으로 채워집니다.</p>
 
         <div class="stack-form">
+          <div class="stack-row"><label>주문일</label><input type="text" id="item-orderdate-input" placeholder="예: 20260724" maxlength="8" inputmode="numeric"></div>
+          <div class="stack-row"><label>입고일</label><input type="text" id="item-indate-input" placeholder="예: 20260724" maxlength="8" inputmode="numeric"></div>
+          <div class="stack-row"><label>판매예정일 (선택)</label><input type="text" id="item-expectedsaledate-input" placeholder="예: 20260724" maxlength="8" inputmode="numeric"></div>
+          <div class="stack-row"><label>출고일 (선택)</label><input type="text" id="item-outdate-input" placeholder="예: 20260724" maxlength="8" inputmode="numeric"></div>
           <div class="stack-row"><label>입고처</label><select id="item-source-select"><option value="">선택</option></select></div>
           <div class="stack-row"><label>제조사</label><select id="item-manufacturer-select"><option value="">선택</option></select></div>
           <div class="stack-row"><label>통신사</label><select id="item-carrier-select"></select></div>
           <div class="stack-row"><label>위치</label><select id="item-location-select"><option value="">선택</option></select></div>
           <div class="stack-row"><label>모델 (모델명+기가수)</label><select id="item-model-select" onchange="onItemModelChange()"><option value="">모델을 선택하세요</option></select></div>
-          <div class="stack-row"><label>색상</label><select id="item-color-select"><option value="">모델을 먼저 선택하세요</option></select></div>
+          <div class="stack-row"><label>전산색상</label><select id="item-syscolor-select" onchange="onSysColorChange()"><option value="">모델을 먼저 선택하세요</option></select></div>
+          <div class="stack-row"><label>제조사색상</label><select id="item-manucolor-select" onchange="onManuColorChange()"><option value="">모델을 먼저 선택하세요</option></select></div>
           <div class="stack-row"><label>현재상태</label><select id="item-status-select"></select></div>
           <div class="stack-row"><label>입고 방식</label>
             <select id="item-entry-type" onchange="toggleEntryType()">
@@ -553,9 +558,6 @@
           <div class="stack-row"><label>판매가 (선택)</label><input type="number" id="item-saleprice-input" oninput="onSalePriceInput()"></div>
           <div class="stack-row"><label>판매할인율 (%, 선택)</label><input type="number" step="0.01" id="item-salediscount-input" placeholder="예: 0.20" oninput="onSaleDiscountInput()"></div>
           <div class="stack-row"><label>수익 (자동계산)</label><input type="text" id="item-profit-display" disabled style="background:#f2f2f2;"></div>
-          <div class="stack-row"><label>주문요청일</label><input type="text" id="item-orderdate-input" placeholder="예: 20260724" maxlength="8" inputmode="numeric"></div>
-          <div class="stack-row"><label>입고일</label><input type="text" id="item-indate-input" placeholder="예: 20260724" maxlength="8" inputmode="numeric"></div>
-          <div class="stack-row"><label>출고일 (선택)</label><input type="text" id="item-outdate-input" placeholder="예: 20260724" maxlength="8" inputmode="numeric"></div>
         </div>
         <button class="btn small" id="item-submit-btn" onclick="addInventoryItem()">재고 등록</button>
         <button class="btn small danger" id="item-cancelsale-btn" style="width:auto;margin-left:6px;display:none;" onclick="cancelSaleInEditModal()">판매 취소</button>
@@ -633,6 +635,10 @@
   let currentUser = { name:"알수없음", username:"unknown" };
   // ---------- 보기 설정 ----------
   const INV_COLUMNS = [
+    { key:"orderDate", label:"주문일", get:it=>it.orderDate||"-" },
+    { key:"inDate", label:"입고일", get:it=>it.inDate||"-" },
+    { key:"expectedSaleDate", label:"판매예정일", get:it=>it.expectedSaleDate||"-" },
+    { key:"outDate", label:"출고일", get:it=>it.outDate||"-" },
     { key:"source", label:"입고처", get:it=>it.source||"-" },
     { key:"manufacturer", label:"제조사", get:it=>it.manufacturer||"-" },
     { key:"carrier", label:"통신사", get:it=>it.carrier||"-" },
@@ -652,10 +658,7 @@
     { key:"destination", label:"판매처", get:it=>it.destination||"-" },
     { key:"salePrice", label:"판매가", get:it=>it.salePrice?Number(it.salePrice).toLocaleString()+"원":"-" },
     { key:"saleDiscount", label:"판매할인율(%)", get:it=> (it.saleDiscount!=null)?Number(it.saleDiscount).toFixed(2)+"%":"-" },
-    { key:"profit", label:"수익", get:it=> (it.profit!=null)?Number(it.profit).toLocaleString()+"원":"-" },
-    { key:"orderDate", label:"주문요청일", get:it=>it.orderDate||"-" },
-    { key:"inDate", label:"입고일", get:it=>it.inDate||"-" },
-    { key:"outDate", label:"출고일", get:it=>it.outDate||"-" }
+    { key:"profit", label:"수익", get:it=> (it.profit!=null)?Number(it.profit).toLocaleString()+"원":"-" }
   ];
   const DEFAULT_VIEW_SETTINGS = INV_COLUMNS.map(c=>c.key);
 
@@ -1510,28 +1513,40 @@
   }
   window.onItemModelChange = function(){
     const modelId = document.getElementById("item-model-select").value;
-    const colorSel = document.getElementById("item-color-select");
-    colorSel.innerHTML = "";
+    const sysSel = document.getElementById("item-syscolor-select");
+    const manuSel = document.getElementById("item-manucolor-select");
+    sysSel.innerHTML = ""; manuSel.innerHTML = "";
     const m = modelsCache.find(x=>x.id===modelId);
     if(!m || !m.colors || m.colors.length===0){
-      colorSel.innerHTML = '<option value="">색상 없음</option>'; return;
+      sysSel.innerHTML = '<option value="">색상 없음</option>';
+      manuSel.innerHTML = '<option value="">색상 없음</option>';
+      return;
     }
+    sysSel.innerHTML = '<option value="">선택</option>';
+    manuSel.innerHTML = '<option value="">선택</option>';
     m.colors.forEach((c, idx)=>{
-      const opt = document.createElement("option");
-      opt.value = String(idx);
-      opt.dataset.manuColor = c.manufacturerColor || "";
-      opt.dataset.sysColor = c.systemColor || "";
-      opt.dataset.sku = c.sku || "";
-      const label = (c.systemColor || c.manufacturerColor || "이름없음") +
-        (c.manufacturerColor && c.systemColor && c.manufacturerColor!==c.systemColor ? " (제조사색상: "+c.manufacturerColor+")" : "") +
-        " · " + (c.sku || "SKU 미입력");
-      opt.textContent = label;
-      colorSel.appendChild(opt);
+      const optSys = document.createElement("option");
+      optSys.value = String(idx);
+      optSys.textContent = (c.systemColor || "(전산색상 없음)") + " · " + (c.sku || "SKU 미입력");
+      sysSel.appendChild(optSys);
+
+      const optManu = document.createElement("option");
+      optManu.value = String(idx);
+      optManu.textContent = (c.manufacturerColor || "(제조사색상 없음)") + " · " + (c.sku || "SKU 미입력");
+      manuSel.appendChild(optManu);
     });
     const listPriceInput = document.getElementById("item-listprice-input");
     const purchasePriceInput = document.getElementById("item-purchaseprice-input");
     if(!listPriceInput.value && m.priceExVat){ listPriceInput.value = m.priceExVat; }
     if(!purchasePriceInput.value && m.priceExVat){ purchasePriceInput.value = m.priceExVat; }
+  };
+  window.onSysColorChange = function(){
+    const idx = document.getElementById("item-syscolor-select").value;
+    if(idx !== "") document.getElementById("item-manucolor-select").value = idx;
+  };
+  window.onManuColorChange = function(){
+    const idx = document.getElementById("item-manucolor-select").value;
+    if(idx !== "") document.getElementById("item-syscolor-select").value = idx;
   };
   window.toggleEntryType = function(){
     const type = document.getElementById("item-entry-type").value;
@@ -1606,7 +1621,7 @@
   function clearItemModalFields(){
     ["item-serial-input","item-imei-input","item-listprice-input","item-purchaseprice-input",
       "item-purchasediscount-input","item-saleprice-input","item-salediscount-input",
-      "item-orderdate-input","item-indate-input","item-outdate-input"].forEach(id=>{ document.getElementById(id).value = ""; });
+      "item-orderdate-input","item-indate-input","item-expectedsaledate-input","item-outdate-input"].forEach(id=>{ document.getElementById(id).value = ""; });
     document.getElementById("item-profit-display").value = "";
     document.getElementById("item-qty-input").value = "1";
     ["item-source-select","item-manufacturer-select","item-carrier-select","item-location-select",
@@ -1649,22 +1664,23 @@
     if(model){
       document.getElementById("item-model-select").value = model.id;
       onItemModelChange();
-      const colorSel = document.getElementById("item-color-select");
-      let matched = false;
+      const sysSel = document.getElementById("item-syscolor-select");
+      const manuSel = document.getElementById("item-manucolor-select");
+      let matchedIdx = -1;
       if(it.sku){
-        for(const opt of colorSel.options){
-          if(opt.dataset.sku === it.sku){ colorSel.value = opt.value; matched = true; break; }
-        }
+        const idx = (model.colors||[]).findIndex(c=>c.sku===it.sku);
+        if(idx>=0) matchedIdx = idx;
       }
-      if(!matched){
-        for(const opt of colorSel.options){
-          if((it.systemColor && opt.dataset.sysColor === it.systemColor) ||
-             (it.manufacturerColor && opt.dataset.manuColor === it.manufacturerColor)){
-            colorSel.value = opt.value; matched = true; break;
-          }
-        }
+      if(matchedIdx<0 && (it.systemColor || it.manufacturerColor)){
+        const idx = (model.colors||[]).findIndex(c=>
+          (it.systemColor && c.systemColor===it.systemColor) ||
+          (it.manufacturerColor && c.manufacturerColor===it.manufacturerColor));
+        if(idx>=0) matchedIdx = idx;
       }
-      if(!matched){
+      if(matchedIdx>=0){
+        sysSel.value = String(matchedIdx);
+        manuSel.value = String(matchedIdx);
+      }else{
         alert("이 재고의 색상이 모델 등록에서 정확히 일치하지 않아 색상 칸이 비어 있을 수 있습니다. 확인 후 다시 선택해주세요.");
       }
     }else{
@@ -1688,6 +1704,7 @@
     document.getElementById("item-salediscount-input").value = it.saleDiscount || "";
     document.getElementById("item-orderdate-input").value = it.orderDate || "";
     document.getElementById("item-indate-input").value = it.inDate || "";
+    document.getElementById("item-expectedsaledate-input").value = it.expectedSaleDate || "";
     document.getElementById("item-outdate-input").value = it.outDate || "";
     updateProfitDisplay();
 
@@ -1698,10 +1715,11 @@
   };
 
   window.cancelSaleInEditModal = function(){
-    if(!confirm("판매 내용을 지우시겠습니까? (판매처·판매가·판매할인율·출고일이 비워지고, 현재상태는 보유중으로 바뀝니다)")) return;
+    if(!confirm("판매 내용을 지우시겠습니까? (판매처·판매가·판매할인율·판매예정일·출고일이 비워지고, 현재상태는 보유중으로 바뀝니다)")) return;
     document.getElementById("item-dest-select").value = "";
     document.getElementById("item-saleprice-input").value = "";
     document.getElementById("item-salediscount-input").value = "";
+    document.getElementById("item-expectedsaledate-input").value = "";
     document.getElementById("item-outdate-input").value = "";
     document.getElementById("item-profit-display").value = "";
     const statusSel = document.getElementById("item-status-select");
@@ -1749,12 +1767,9 @@
   // ---------- 재고 입고 ----------
   window.addInventoryItem = async function(){
     const modelId = document.getElementById("item-model-select").value;
-    const colorSel = document.getElementById("item-color-select");
-    const colorIdx = colorSel.value;
-    const selOpt = colorSel.selectedOptions[0];
-    const manufacturerColor = selOpt ? selOpt.dataset.manuColor : "";
-    const systemColor = selOpt ? selOpt.dataset.sysColor : "";
-    const sku = selOpt ? selOpt.dataset.sku : "";
+    const colorIdx = document.getElementById("item-syscolor-select").value !== ""
+      ? document.getElementById("item-syscolor-select").value
+      : document.getElementById("item-manucolor-select").value;
     const carrier = document.getElementById("item-carrier-select").value;
     const source = document.getElementById("item-source-select").value;
     const manufacturer = document.getElementById("item-manufacturer-select").value;
@@ -1770,12 +1785,18 @@
     const imei = document.getElementById("item-imei-input").value.trim();
     const orderDate = document.getElementById("item-orderdate-input").value || "";
     const inDate = document.getElementById("item-indate-input").value || todayStr();
+    const expectedSaleDate = document.getElementById("item-expectedsaledate-input").value || "";
     const outDate = document.getElementById("item-outdate-input").value || "";
 
     const m = modelsCache.find(x=>x.id===modelId);
     if(!m || colorIdx===""){ alert("모델과 색상을 선택해주세요."); return; }
     if(!source){ alert("입고처를 선택해주세요."); return; }
     if(!status){ alert("현재상태를 선택해주세요."); return; }
+
+    const colorObj = m.colors[Number(colorIdx)];
+    const manufacturerColor = colorObj.manufacturerColor || "";
+    const systemColor = colorObj.systemColor || "";
+    const sku = colorObj.sku || "";
 
     const profit = (salePrice && purchasePrice) ? (Number(salePrice) - Number(purchasePrice)) : null;
     const colorLabel = systemColor || manufacturerColor || "";
@@ -1788,7 +1809,7 @@
       purchaseDiscount: purchaseDiscount?Number(Number(purchaseDiscount).toFixed(2)):null,
       salePrice: salePrice?Number(salePrice):null,
       saleDiscount: saleDiscount?Number(Number(saleDiscount).toFixed(2)):null,
-      profit, imei, status, orderDate, inDate, outDate
+      profit, imei, status, orderDate, inDate, expectedSaleDate, outDate
     };
 
     if(editingItemId){
@@ -1981,11 +2002,11 @@
 
   // ---------- 엑셀 일괄 업로드 ----------
   const CARRIER_ALIASES = { "LG":"LG","LG유플러스":"LG","U+":"LG","엘지":"LG","SK":"SK","SKT":"SK","SK텔레콤":"SK","KT":"KT" };
-  const TEMPLATE_HEADERS = ["입고처","주문요청","입고일","출고일","통신사","제조사","전산모델명","일련번호","색상","위치","현재상태","출고가","입고가","입고할인율","판매처","판매가","판매할인율","수익","모델명","기가수","삼성코드","IMEI"];
+  const TEMPLATE_HEADERS = ["입고처","주문요청","입고일","판매예정일","출고일","통신사","제조사","전산모델명","일련번호","색상","위치","현재상태","출고가","입고가","입고할인율","판매처","판매가","판매할인율","수익","모델명","기가수","삼성코드","IMEI"];
 
   window.downloadExcelTemplate = function(){
     const sample = [TEMPLATE_HEADERS,
-      ["포피플","20260723","20260724","","LG","삼성전자","SM-R905N","1131704","그라파이트","천안사무실","보유중","2000000","1996000","0.20","","","","","","","",""]
+      ["포피플","20260723","20260724","","","LG","삼성전자","SM-R905N","1131704","그라파이트","천안사무실","보유중","2000000","1996000","0.20","","","","","","","",""]
     ];
     const ws = XLSX.utils.aoa_to_sheet(sample);
     forceTextFormat(ws);
@@ -2041,6 +2062,7 @@
       const orderDate = excelDateToStr(row["주문요청"]);
       const inDate = excelDateToStr(row["입고일"]) || todayStr();
       const outDate = excelDateToStr(row["출고일"]);
+      const expectedSaleDate = excelDateToStr(row["판매예정일"]);
       const carrierRaw = String(row["통신사"]||"").trim();
       const manufacturer = String(row["제조사"]||"").trim();
       const systemModel = String(row["전산모델명"]||"").trim();
@@ -2137,7 +2159,7 @@
           listPrice:listPriceNum, purchasePrice:purchasePriceNum,
           purchaseDiscount: purchaseDiscountNum,
           salePrice:salePriceNum, saleDiscount: saleDiscountNum,
-          profit, imei, status, orderDate, inDate, outDate,
+          profit, imei, status, orderDate, inDate, expectedSaleDate, outDate,
           entryType:"imei", quantity:1, serialNumber,
           rowNum: excelRowNum
         });
