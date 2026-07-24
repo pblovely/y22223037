@@ -2827,7 +2827,7 @@
       regionEl.innerHTML = '<div class="list-empty">업로드된 마스터재고가 없습니다. "자료업로드" 탭에서 먼저 올려주세요.</div>';
     }else{
       const rows = await fetchMasterStockBatchRows(batchSnap.docs[0].id);
-      const CODE_KEYS = ["영업점코드","점코드","지점코드"];
+      const CODE_KEYS = ["출고점코드","영업점코드","점코드","지점코드"];
       const regionCounts = {};
       rows.forEach(r=>{
         let code = "";
@@ -2837,7 +2837,7 @@
         regionCounts[label] = (regionCounts[label]||0) + 1;
       });
       if(Object.keys(regionCounts).length===0){
-        regionEl.innerHTML = '<div class="list-empty">마스터재고 파일에서 영업점코드 칸을 찾지 못했습니다.</div>';
+        regionEl.innerHTML = '<div class="list-empty">마스터재고 파일에서 출고점코드 칸을 찾지 못했습니다.</div>';
       }else{
         const entries = Object.entries(regionCounts).sort((a,b)=>b[1]-a[1]);
         regionEl.innerHTML = entries.map(([k,v])=>
@@ -3212,6 +3212,36 @@
       sourceNames.push("미확인");
       autoCreated["입고처"] = (autoCreated["입고처"]||0) + 1;
     }
+
+    // 파일에 있는 색상이 매칭된 모델에 없으면 자동으로 색상 등록 (검수필요 표시)
+    async function autoCreateMissingColors(){
+      const toCreate = []; const seen = new Set();
+      rows.forEach(r=>{
+        const colorName = String(r["색상"]||"").trim();
+        const samsungCode = String(r["삼성코드"]||"").trim();
+        if(!colorName || samsungCode) return; // 삼성코드 매칭은 SKU 기준이라 색상 문제 없음
+        const sysModel = String(r["전산모델명"]||"").trim();
+        const baseM = String(r["모델명"]||"").trim();
+        const cap = String(r["기가수"]||"").trim();
+        let m = null;
+        if(sysModel) m = modelsCache.find(x=>x.systemModel===sysModel);
+        else if(baseM && cap) m = modelsCache.find(x=>x.baseModel===baseM && x.capacity===cap);
+        if(!m) return;
+        const exists = (m.colors||[]).some(c=>c.systemColor===colorName || c.manufacturerColor===colorName);
+        if(exists) return;
+        const key = m.id+"|"+colorName;
+        if(seen.has(key)) return;
+        seen.add(key);
+        toCreate.push({ modelId:m.id, colorName });
+      });
+      for(const item of toCreate){
+        await updateDoc(doc(db,"inventoryModels", item.modelId), { colors: arrayUnion({ manufacturerColor:item.colorName, systemColor:item.colorName, sku:"", needsReview:true }) });
+      }
+      if(toCreate.length>0) await fetchModelsCache();
+      return toCreate.length;
+    }
+    const colorsCreated = await autoCreateMissingColors();
+    if(colorsCreated>0) autoCreated["색상"] = colorsCreated;
 
     const autoCreatedTotal = Object.values(autoCreated).reduce((a,b)=>a+b,0);
     if(autoCreatedTotal>0){
