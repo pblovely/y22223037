@@ -506,6 +506,18 @@
           <button class="btn small secondary" style="width:auto;margin-top:4px;" onclick="addFilterCondition()">+ 조건 추가</button>
         </div>
 
+        <div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px;border:1px solid var(--line);padding:10px;margin-bottom:0;">
+          <label style="font-size:12.5px;display:flex;align-items:center;gap:5px;">
+            <input type="checkbox" id="bulk-select-all" onclick="toggleAllInventoryRows(this)"> 전체 선택
+          </label>
+          <span style="color:var(--line);">|</span>
+          <span style="font-size:12.5px;font-weight:600;">일괄 변경:</span>
+          <select id="bulk-edit-field" onchange="onBulkEditFieldChange()" style="padding:6px 8px;border:1px solid #c7c7c7;font-size:12.5px;"></select>
+          <span id="bulk-edit-value-wrap"><input type="text" id="bulk-edit-value" style="padding:6px 8px;border:1px solid #c7c7c7;font-size:12.5px;width:150px;"></span>
+          <button class="btn small" style="width:auto;" onclick="applyBulkEdit()">선택 항목에 적용</button>
+          <button class="btn small danger" style="width:auto;margin-left:auto;" onclick="deleteSelectedInventoryRows()">선택 삭제</button>
+        </div>
+
         <div style="overflow-x:auto;">
         <div id="inventory-list"></div>
         </div>
@@ -1885,6 +1897,102 @@
 
   const FILTER_FIELDS = INV_COLUMNS.concat([{ key:"status", label:"현재상태", get:it=>it.status||"" }]);
 
+  const BULK_EDIT_FIELDS = [
+    { key:"source", label:"입고처", type:"select", collection:"inboundSources" },
+    { key:"manufacturer", label:"제조사", type:"select", collection:"manufacturers" },
+    { key:"carrier", label:"통신사", type:"select", collection:"carriers" },
+    { key:"location", label:"위치", type:"select", collection:"locations" },
+    { key:"status", label:"현재상태", type:"select", collection:"statusOptions" },
+    { key:"destination", label:"판매처", type:"select", collection:"outboundDestinations" },
+    { key:"listPrice", label:"출고가", type:"number" },
+    { key:"purchasePrice", label:"입고가", type:"number" },
+    { key:"purchaseDiscount", label:"입고할인율(%)", type:"number" },
+    { key:"salePrice", label:"판매가", type:"number" },
+    { key:"saleDiscount", label:"판매할인율(%)", type:"number" },
+    { key:"orderDate", label:"주문일", type:"text" },
+    { key:"inDate", label:"입고일", type:"text" },
+    { key:"expectedSaleDate", label:"판매예정일", type:"text" },
+    { key:"outDate", label:"출고일", type:"text" }
+  ];
+
+  function populateBulkEditFieldSelect(){
+    const sel = document.getElementById("bulk-edit-field");
+    if(!sel || sel.options.length>0) return;
+    BULK_EDIT_FIELDS.forEach(f=>{
+      const opt = document.createElement("option");
+      opt.value = f.key; opt.textContent = f.label;
+      sel.appendChild(opt);
+    });
+    onBulkEditFieldChange();
+  }
+
+  window.onBulkEditFieldChange = async function(){
+    const key = document.getElementById("bulk-edit-field").value;
+    const fieldDef = BULK_EDIT_FIELDS.find(f=>f.key===key);
+    const wrap = document.getElementById("bulk-edit-value-wrap");
+    if(!fieldDef) return;
+    if(fieldDef.type === "select"){
+      const snap = await getDocs(query(collection(db, fieldDef.collection), orderBy("name")));
+      let html = '<select id="bulk-edit-value" style="padding:6px 8px;border:1px solid #c7c7c7;font-size:12.5px;">';
+      snap.forEach(d=>{ html += '<option value="'+d.data().name+'">'+d.data().name+'</option>'; });
+      html += '</select>';
+      wrap.innerHTML = html;
+    }else if(fieldDef.type === "number"){
+      wrap.innerHTML = '<input type="number" id="bulk-edit-value" style="padding:6px 8px;border:1px solid #c7c7c7;font-size:12.5px;width:150px;">';
+    }else{
+      wrap.innerHTML = '<input type="text" id="bulk-edit-value" placeholder="예: 20260724" style="padding:6px 8px;border:1px solid #c7c7c7;font-size:12.5px;width:150px;">';
+    }
+  };
+
+  function getSelectedInventoryIds(){
+    return Array.from(document.querySelectorAll(".row-select-cb:checked")).map(cb=>cb.dataset.id);
+  }
+
+  window.toggleAllInventoryRows = function(masterCb){
+    document.querySelectorAll(".row-select-cb").forEach(cb=> cb.checked = masterCb.checked);
+  };
+
+  window.applyBulkEdit = async function(){
+    const ids = getSelectedInventoryIds();
+    if(ids.length===0){ alert("적용할 재고를 먼저 선택해주세요."); return; }
+    const key = document.getElementById("bulk-edit-field").value;
+    const fieldDef = BULK_EDIT_FIELDS.find(f=>f.key===key);
+    const valEl = document.getElementById("bulk-edit-value");
+    let newVal = valEl.value;
+    if(newVal === ""){ alert("적용할 값을 입력해주세요."); return; }
+    if(!confirm(fieldDef.label+" 값을 선택한 "+ids.length+"건에 일괄 적용하시겠습니까?")) return;
+
+    const isNumberField = fieldDef.type === "number";
+    const parsedVal = isNumberField ? Number(newVal) : newVal;
+
+    for(const id of ids){
+      const it = lastRenderedItems.find(x=>x.id===id);
+      const patch = { [key]: parsedVal };
+      if(key === "purchasePrice" && it && it.salePrice){
+        patch.profit = Number(it.salePrice) - parsedVal;
+      }
+      if(key === "salePrice" && it && it.purchasePrice){
+        patch.profit = parsedVal - Number(it.purchasePrice);
+      }
+      await updateDoc(doc(db,"inventoryItems", id), patch);
+    }
+    logAction("재고 일괄 변경", fieldDef.label+" → "+newVal+" ("+ids.length+"건)");
+    document.getElementById("bulk-select-all").checked = false;
+    loadInventoryList();
+  };
+
+  window.deleteSelectedInventoryRows = async function(){
+    const ids = getSelectedInventoryIds();
+    if(ids.length===0){ alert("삭제할 재고를 먼저 선택해주세요."); return; }
+    if(!confirm(ids.length+"건을 완전히 삭제하시겠습니까? 삭제 후 복구할 수 없습니다.")) return;
+    for(const id of ids){
+      await deleteDoc(doc(db,"inventoryItems", id));
+    }
+    logAction("재고 일괄 삭제", ids.length+"건 삭제");
+    document.getElementById("bulk-select-all").checked = false;
+    loadInventoryList();
+  };
+
   window.addFilterCondition = function(){
     const container = document.getElementById("filter-conditions");
     const row = document.createElement("div");
@@ -2005,12 +2113,14 @@
     }
 
     const visibleCols = INV_COLUMNS.filter(c=>currentViewSettings.includes(c.key));
+    populateBulkEditFieldSelect();
 
     const table = document.createElement("table");
     table.className = "data-table";
     table.style.minWidth = "1200px";
     const thead = document.createElement("thead");
     const headRow = document.createElement("tr");
+    const thCheck = document.createElement("th"); thCheck.textContent = ""; headRow.appendChild(thCheck);
     visibleCols.forEach(c=>{
       const th = document.createElement("th");
       th.textContent = c.label;
@@ -2024,6 +2134,11 @@
     const tbody = document.createElement("tbody");
     items.forEach(it=>{
       const tr = document.createElement("tr");
+      const tdCheck = document.createElement("td");
+      const rowCb = document.createElement("input");
+      rowCb.type = "checkbox"; rowCb.className = "row-select-cb"; rowCb.dataset.id = it.id;
+      tdCheck.appendChild(rowCb);
+      tr.appendChild(tdCheck);
       visibleCols.forEach(c=>{
         const td = document.createElement("td");
         td.textContent = c.get(it);
