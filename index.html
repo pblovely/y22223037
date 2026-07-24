@@ -280,7 +280,10 @@
       <div class="card">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
           <h3 style="margin:0;">주문 관리 <span class="info-tip" title="일련번호를 받기 전에 모델·수량·판매조건부터 정해서 주문을 걸어두는 곳입니다. 입금 체크 후, 실물이 도착하면 도착 등록으로 재고가 되고 이 주문과 자동 연결됩니다.">ⓘ</span></h3>
-          <button class="btn small" style="width:auto;" onclick="openOrderModal()">+ 새 주문</button>
+          <span>
+            <button class="btn small secondary" style="width:auto;margin-right:6px;" onclick="openItemModal()">+ 즉시 주문 (바로 등록)</button>
+            <button class="btn small" style="width:auto;" onclick="openOrderModal()">+ 새 주문 (예약)</button>
+          </span>
         </div>
         <div style="margin-bottom:8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
           <button class="btn small secondary" style="width:auto;" onclick="createPaymentRequestFromSelected()">체크한 주문 묶어서 출금요청</button>
@@ -800,14 +803,17 @@
               <tr style="background:#fafafa;">
                 <th style="padding:6px;border:1px solid var(--line);">모델</th>
                 <th style="padding:6px;border:1px solid var(--line);">수량</th>
-                <th style="padding:6px;border:1px solid var(--line);">입고가(대당)</th>
+                <th style="padding:6px;border:1px solid var(--line);">출고가</th>
+                <th style="padding:6px;border:1px solid var(--line);">입고가(계산됨)</th>
                 <th style="padding:6px;border:1px solid var(--line);">선할인</th>
                 <th style="padding:6px;border:1px solid var(--line);">선할인%</th>
                 <th style="padding:6px;border:1px solid var(--line);">타할인</th>
                 <th style="padding:6px;border:1px solid var(--line);">타할인%</th>
                 <th style="padding:6px;border:1px solid var(--line);">입고할인</th>
                 <th style="padding:6px;border:1px solid var(--line);">판매처</th>
-                <th style="padding:6px;border:1px solid var(--line);">판매가(대당)</th>
+                <th style="padding:6px;border:1px solid var(--line);">판매가</th>
+                <th style="padding:6px;border:1px solid var(--line);">판매할인</th>
+                <th style="padding:6px;border:1px solid var(--line);">판매할인%</th>
                 <th style="padding:6px;border:1px solid var(--line);">소계(입고)</th>
                 <th style="padding:6px;border:1px solid var(--line);"></th>
               </tr>
@@ -832,7 +838,8 @@
         <h3 style="margin-top:0;margin-bottom:4px;">즉시 판매</h3>
         <p class="desc">이미 보유중인 재고를 지금 바로 판매 처리합니다. 일련번호를 입력하면 자동으로 찾아집니다.</p>
         <div class="stack-form">
-          <div class="stack-row"><label>일련번호</label><input type="text" id="instant-sale-serial-input" placeholder="보유중인 재고의 일련번호"></div>
+          <div class="stack-row"><label>일련번호</label><input type="text" id="instant-sale-serial-input" list="instant-sale-serial-datalist" placeholder="보유중인 재고의 일련번호"></div>
+          <datalist id="instant-sale-serial-datalist"></datalist>
           <div class="stack-row"><label>판매처</label><select id="instant-sale-dest-select"><option value="">선택</option></select></div>
           <div class="stack-row"><label>판매가</label><input type="number" id="instant-sale-price-input"></div>
           <div class="stack-row"><label>출고일</label><input type="text" id="instant-sale-outdate-input" placeholder="예: 20260724" maxlength="8" inputmode="numeric"></div>
@@ -2766,6 +2773,11 @@
       return cell;
     }
 
+    // 모델 칸: 검색 입력 + 선택 드롭다운을 세로로 함께 배치
+    const modelCellWrap = document.createElement("div");
+    modelCellWrap.style.display = "flex"; modelCellWrap.style.flexDirection = "column"; modelCellWrap.style.gap = "3px";
+    const modelSearch = document.createElement("input");
+    modelSearch.type = "text"; modelSearch.placeholder = "검색"; modelSearch.style.width = "150px"; modelSearch.style.fontSize = "11px"; modelSearch.style.padding = "3px"; modelSearch.style.boxSizing = "border-box";
     const modelSel = document.createElement("select");
     modelSel.className = "ol-model"; modelSel.style.fontSize = "11.5px"; modelSel.style.padding = "4px"; modelSel.style.width = "150px";
     modelSel.innerHTML = '<option value="">모델 선택</option>';
@@ -2775,15 +2787,27 @@
       opt.textContent = (m.baseModel||m.systemModel||m.petName||"모델") + (m.capacity?(" "+m.capacity):"");
       modelSel.appendChild(opt);
     });
+    modelSearch.oninput = ()=>{
+      const q = modelSearch.value.trim().toLowerCase();
+      Array.from(modelSel.options).forEach(opt=>{
+        if(!opt.value){ opt.style.display=""; return; }
+        opt.style.display = (!q || opt.textContent.toLowerCase().includes(q)) ? "" : "none";
+      });
+    };
     modelSel.onchange = ()=> onOrderLineModelChange(tr);
-    td(modelSel);
+    modelCellWrap.appendChild(modelSearch); modelCellWrap.appendChild(modelSel);
+    td(modelCellWrap);
 
     const qtyInput = smallInput("ol-qty","number","50px"); qtyInput.value = "1";
     qtyInput.oninput = ()=> updateOrderLineSubtotal(tr);
     td(qtyInput);
 
+    const listPriceInput = smallInput("ol-listprice","number","85px");
+    listPriceInput.disabled = true; listPriceInput.style.background = "#f2f2f2";
+    td(listPriceInput);
+
     const purchaseInput = smallInput("ol-purchaseprice","number","85px");
-    purchaseInput.oninput = ()=> onOrderLinePurchasePriceInput(tr);
+    purchaseInput.disabled = true; purchaseInput.style.background = "#f2f2f2";
     td(purchaseInput);
 
     const preAmtInput = smallInput("ol-prediscountamt","number","70px");
@@ -2813,7 +2837,16 @@
     td(destSel);
 
     const saleInput = smallInput("ol-saleprice","number","85px");
+    saleInput.oninput = ()=> onOrderLineSalePriceInput(tr);
     td(saleInput);
+
+    const saleDiscAmtInput = smallInput("ol-salediscountamt","number","70px");
+    saleDiscAmtInput.oninput = ()=> onOrderLineSaleDiscountAmtInput(tr);
+    td(saleDiscAmtInput);
+
+    const saleDiscPctInput = smallInput("ol-salediscountpct","number","60px");
+    saleDiscPctInput.oninput = ()=> onOrderLineSaleDiscountPctInput(tr);
+    td(saleDiscPctInput);
 
     const subtotalSpan = document.createElement("span");
     subtotalSpan.className = "ol-subtotal"; subtotalSpan.textContent = "-";
@@ -2827,13 +2860,19 @@
     document.getElementById("order-lines-body").appendChild(tr);
   };
 
+  function recalcOrderLinePurchasePrice(tr){
+    const listPrice = Number(tr.querySelector(".ol-listprice").value) || 0;
+    const preAmt = Number(tr.querySelector(".ol-prediscountamt").value) || 0;
+    const otherAmt = Number(tr.querySelector(".ol-otherdiscountamt").value) || 0;
+    tr.querySelector(".ol-purchaseprice").value = listPrice - preAmt - otherAmt;
+  }
   function onOrderLineModelChange(tr){
     const modelId = tr.querySelector(".ol-model").value;
     const m = modelsCache.find(x=>x.id===modelId);
-    if(m && m.priceExVat){ tr.querySelector(".ol-purchaseprice").value = m.priceExVat; }
-    updateOrderLineSubtotal(tr);
-  }
-  function onOrderLinePurchasePriceInput(tr){
+    if(m){
+      tr.querySelector(".ol-listprice").value = m.priceIncVat || "";
+      recalcOrderLinePurchasePrice(tr);
+    }
     updateOrderLineSubtotal(tr);
   }
   function updateOrderLineTotalDiscount(tr){
@@ -2842,37 +2881,64 @@
     tr.querySelector(".ol-totaldiscount").textContent = (preAmt+otherAmt).toLocaleString()+"원";
   }
   function onOrderLinePreAmtInput(tr){
+    recalcOrderLinePurchasePrice(tr);
     updateOrderLineTotalDiscount(tr);
     updateOrderLineSubtotal(tr);
   }
   function onOrderLinePrePctInput(tr){
-    const price = Number(tr.querySelector(".ol-purchaseprice").value) || 0;
+    const listPrice = Number(tr.querySelector(".ol-listprice").value) || 0;
     const pct = tr.querySelector(".ol-prediscountpct").value;
-    if(price && pct !== ""){
-      tr.querySelector(".ol-prediscountamt").value = Math.round(price * Number(pct)/100);
+    if(listPrice && pct !== ""){
+      tr.querySelector(".ol-prediscountamt").value = Math.round(listPrice * Number(pct)/100);
     }
+    recalcOrderLinePurchasePrice(tr);
     updateOrderLineTotalDiscount(tr);
     updateOrderLineSubtotal(tr);
   }
   function onOrderLineOtherAmtInput(tr){
+    recalcOrderLinePurchasePrice(tr);
     updateOrderLineTotalDiscount(tr);
     updateOrderLineSubtotal(tr);
   }
   function onOrderLineOtherPctInput(tr){
-    const price = Number(tr.querySelector(".ol-purchaseprice").value) || 0;
+    const listPrice = Number(tr.querySelector(".ol-listprice").value) || 0;
     const pct = tr.querySelector(".ol-otherdiscountpct").value;
-    if(price && pct !== ""){
-      tr.querySelector(".ol-otherdiscountamt").value = Math.round(price * Number(pct)/100);
+    if(listPrice && pct !== ""){
+      tr.querySelector(".ol-otherdiscountamt").value = Math.round(listPrice * Number(pct)/100);
     }
+    recalcOrderLinePurchasePrice(tr);
     updateOrderLineTotalDiscount(tr);
     updateOrderLineSubtotal(tr);
   }
+  function onOrderLineSalePriceInput(tr){
+    const listPrice = Number(tr.querySelector(".ol-listprice").value) || 0;
+    const salePrice = Number(tr.querySelector(".ol-saleprice").value) || 0;
+    if(listPrice && salePrice){
+      const amt = listPrice - salePrice;
+      tr.querySelector(".ol-salediscountamt").value = amt;
+      tr.querySelector(".ol-salediscountpct").value = ((amt/listPrice)*100).toFixed(2);
+    }
+  }
+  function onOrderLineSaleDiscountAmtInput(tr){
+    const listPrice = Number(tr.querySelector(".ol-listprice").value) || 0;
+    const amt = Number(tr.querySelector(".ol-salediscountamt").value) || 0;
+    if(listPrice){
+      tr.querySelector(".ol-saleprice").value = listPrice - amt;
+      tr.querySelector(".ol-salediscountpct").value = ((amt/listPrice)*100).toFixed(2);
+    }
+  }
+  function onOrderLineSaleDiscountPctInput(tr){
+    const listPrice = Number(tr.querySelector(".ol-listprice").value) || 0;
+    const pct = tr.querySelector(".ol-salediscountpct").value;
+    if(listPrice && pct !== ""){
+      const amt = Math.round(listPrice * Number(pct)/100);
+      tr.querySelector(".ol-salediscountamt").value = amt;
+      tr.querySelector(".ol-saleprice").value = listPrice - amt;
+    }
+  }
   function updateOrderLineSubtotal(tr){
     const qty = Number(tr.querySelector(".ol-qty").value) || 0;
-    const price = Number(tr.querySelector(".ol-purchaseprice").value) || 0;
-    const preAmt = Number(tr.querySelector(".ol-prediscountamt").value) || 0;
-    const otherAmt = Number(tr.querySelector(".ol-otherdiscountamt").value) || 0;
-    const netPrice = price - preAmt - otherAmt;
+    const netPrice = Number(tr.querySelector(".ol-purchaseprice").value) || 0;
     tr.querySelector(".ol-subtotal").textContent = (qty*netPrice).toLocaleString()+"원";
     recalcOrderDeposit();
   }
@@ -2880,10 +2946,8 @@
     let total = 0;
     document.querySelectorAll("#order-lines-body tr").forEach(tr=>{
       const qty = Number(tr.querySelector(".ol-qty").value) || 0;
-      const price = Number(tr.querySelector(".ol-purchaseprice").value) || 0;
-      const preAmt = Number(tr.querySelector(".ol-prediscountamt").value) || 0;
-      const otherAmt = Number(tr.querySelector(".ol-otherdiscountamt").value) || 0;
-      total += qty*(price - preAmt - otherAmt);
+      const netPrice = Number(tr.querySelector(".ol-purchaseprice").value) || 0;
+      total += qty*netPrice;
     });
     document.getElementById("order-deposit-input").value = total;
   }
@@ -2903,13 +2967,16 @@
       lines.push({
         modelId, m,
         quantity: Number(tr.querySelector(".ol-qty").value) || 1,
+        listPrice: Number(tr.querySelector(".ol-listprice").value) || null,
         purchasePrice: Number(tr.querySelector(".ol-purchaseprice").value) || null,
         preDiscountAmt: tr.querySelector(".ol-prediscountamt").value ? Number(tr.querySelector(".ol-prediscountamt").value) : null,
         preDiscountPct: tr.querySelector(".ol-prediscountpct").value ? Number(tr.querySelector(".ol-prediscountpct").value) : null,
         otherDiscountAmt: tr.querySelector(".ol-otherdiscountamt").value ? Number(tr.querySelector(".ol-otherdiscountamt").value) : null,
         otherDiscountPct: tr.querySelector(".ol-otherdiscountpct").value ? Number(tr.querySelector(".ol-otherdiscountpct").value) : null,
         destination: tr.querySelector(".ol-dest").value,
-        salePrice: tr.querySelector(".ol-saleprice").value ? Number(tr.querySelector(".ol-saleprice").value) : null
+        salePrice: tr.querySelector(".ol-saleprice").value ? Number(tr.querySelector(".ol-saleprice").value) : null,
+        saleDiscountAmt: tr.querySelector(".ol-salediscountamt").value ? Number(tr.querySelector(".ol-salediscountamt").value) : null,
+        saleDiscountPct: tr.querySelector(".ol-salediscountpct").value ? Number(tr.querySelector(".ol-salediscountpct").value) : null
       });
     }
 
@@ -2934,10 +3001,10 @@
         systemModel: l.m.systemModel, petName: l.m.petName||"",
         quantity: l.quantity, fulfilledCount: 0, linkedItemIds: [],
         source, carrier, destination: l.destination,
-        purchasePrice: l.purchasePrice,
+        listPrice: l.listPrice, purchasePrice: l.purchasePrice,
         preDiscountAmt: l.preDiscountAmt, preDiscountPct: l.preDiscountPct,
         otherDiscountAmt: l.otherDiscountAmt, otherDiscountPct: l.otherDiscountPct,
-        salePrice: l.salePrice,
+        salePrice: l.salePrice, saleDiscountAmt: l.saleDiscountAmt, saleDiscountPct: l.saleDiscountPct,
         orderDate, status: "주문중",
         createdAt: serverTimestamp()
       });
@@ -3149,9 +3216,10 @@
         modelGroup:freshModel.modelGroup, baseModel:freshModel.baseModel, capacity:freshModel.capacity, systemModel:freshModel.systemModel,
         petName:freshModel.petName||"", manufacturerColor:c.manufacturerColor||"", systemColor:c.systemColor||"", sku:c.sku||"",
         carrier:o.carrier||"", source:o.source||"", manufacturer:"", location:"", destination:o.destination||"",
-        listPrice:null, purchasePrice:o.purchasePrice||null, salePrice:o.salePrice||null,
+        listPrice:o.listPrice||null, purchasePrice:o.purchasePrice||null, salePrice:o.salePrice||null,
         purchaseDiscountAmt:o.preDiscountAmt||null, purchaseDiscount:o.preDiscountPct||null,
         otherDiscountAmt:o.otherDiscountAmt||null, otherDiscountPct:o.otherDiscountPct||null,
+        saleDiscountAmt:o.saleDiscountAmt||null, saleDiscount:o.saleDiscountPct||null,
         profit: (o.salePrice && o.purchasePrice) ? (Number(o.salePrice)-Number(o.purchasePrice)) : null,
         imei:"", status:"보유중", orderDate:o.orderDate||"", inDate, expectedSaleDate:"", outDate:"",
         entryType:"imei", quantity:1, serialNumber:e.serial,
@@ -3469,6 +3537,18 @@
     destSel.innerHTML = '<option value="">선택</option>';
     const destNames = await fetchNamesList("outboundDestinations");
     destNames.forEach(n=>{ const opt=document.createElement("option"); opt.value=n; opt.textContent=n; destSel.appendChild(opt); });
+
+    const heldSnap = await getDocs(query(collection(db,"inventoryItems"), where("status","!=","판매")));
+    const dl = document.getElementById("instant-sale-serial-datalist");
+    dl.innerHTML = "";
+    heldSnap.forEach(d=>{
+      const it = d.data();
+      if(!it.serialNumber) return;
+      const opt = document.createElement("option");
+      opt.value = it.serialNumber;
+      opt.label = (it.petName||it.modelGroup||"") + " / " + (it.systemColor||it.manufacturerColor||"");
+      dl.appendChild(opt);
+    });
 
     document.getElementById("instant-sale-serial-input").value = "";
     document.getElementById("instant-sale-price-input").value = "";
