@@ -673,6 +673,8 @@
           <button class="btn small secondary" style="width:auto;height:28px;box-sizing:border-box;padding:0 12px;" onclick="openBulkChangeModal()">변경</button>
           <button class="btn small secondary" id="inv-sort-toggle-btn" style="width:auto;height:28px;box-sizing:border-box;padding:0 12px;" onclick="toggleInventorySortField()">정렬: 판매일 ▾</button>
           <button class="btn small secondary" style="width:auto;height:28px;box-sizing:border-box;padding:0 12px;margin-left:auto;" onclick="downloadInventoryExcel()">엑셀다운</button>
+          <button class="btn small secondary" style="width:auto;height:28px;box-sizing:border-box;padding:0 12px;" onclick="downloadBulkEditExcel()">일괄수정용 다운로드</button>
+          <button class="btn small secondary" style="width:auto;height:28px;box-sizing:border-box;padding:0 12px;" onclick="openBulkEditUploadModal()">일괄수정 업로드</button>
           <select id="inv-page-size-select" onchange="onInvPageSizeChange()" style="padding:5px 6px;border:1px solid #c7c7c7;font-size:12px;height:28px;box-sizing:border-box;"></select>
         </div>
 
@@ -753,6 +755,18 @@
         <textarea id="paste-sale-textarea" rows="8" style="width:100%;box-sizing:border-box;padding:8px;border:1px solid #c7c7c7;font-size:12.5px;font-family:monospace;" placeholder="예:&#10;에이스 판매 7/24&#10;55762   396000&#10;79798   396000"></textarea>
         <button class="btn small" style="width:auto;margin-top:8px;" onclick="analyzePasteSale()">분석하기</button>
         <div id="paste-sale-analysis" style="margin-top:14px;"></div>
+      </div>
+    </div>
+
+    <!-- 재고 일괄수정 업로드 팝업 -->
+    <div id="bulk-edit-upload-modal-overlay" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.55);z-index:1000;align-items:center;justify-content:center;">
+      <div style="background:#fff;border:2px solid var(--navy);max-width:640px;width:96%;max-height:90vh;overflow-y:auto;padding:22px;position:relative;">
+        <button onclick="closeBulkEditUploadModal()" style="position:absolute;top:12px;right:12px;background:none;border:1px solid var(--navy);width:26px;height:26px;cursor:pointer;font-size:13px;">✕</button>
+        <h3 style="margin-top:0;margin-bottom:4px;">재고 일괄수정 업로드</h3>
+        <p class="desc">"일괄수정용 다운로드"로 받은 엑셀에서 첫 칸(일련번호)은 그대로 두고, 채우고 싶은 칸만 입력한 뒤 여기에 업로드하세요. <b>값이 채워진 칸만</b> 반영되고, 빈칸은 건드리지 않습니다.</p>
+        <input type="file" id="bulk-edit-file-input" accept=".xlsx,.xls" style="font-size:13px;">
+        <button class="btn small" style="width:auto;margin-left:8px;" onclick="analyzeBulkEditFile()">분석하기</button>
+        <div id="bulk-edit-analysis" style="margin-top:14px;"></div>
       </div>
     </div>
 
@@ -5122,6 +5136,143 @@
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "재고목록");
     XLSX.writeFile(wb, "재고목록_"+todayStr()+".xlsx");
+  };
+
+  // ---------- 재고 일괄수정 (다운로드 → 채워서 업로드) ----------
+  const BULK_EDIT_DOWNLOAD_FIELDS = [
+    { header:"입고처", key:"source", type:"text" },
+    { header:"제조사", key:"manufacturer", type:"text" },
+    { header:"통신사", key:"carrier", type:"text" },
+    { header:"위치", key:"location", type:"text" },
+    { header:"현재상태", key:"status", type:"text" },
+    { header:"판매처", key:"destination", type:"text" },
+    { header:"출고가", key:"listPrice", type:"number" },
+    { header:"입고가", key:"purchasePrice", type:"number" },
+    { header:"선할인", key:"purchaseDiscountAmt", type:"number" },
+    { header:"선할인%", key:"purchaseDiscount", type:"number" },
+    { header:"타할인", key:"otherDiscountAmt", type:"number" },
+    { header:"타할인%", key:"otherDiscountPct", type:"number" },
+    { header:"판매가", key:"salePrice", type:"number" },
+    { header:"판매할인", key:"saleDiscountAmt", type:"number" },
+    { header:"판매할인%", key:"saleDiscount", type:"number" },
+    { header:"공시지원금", key:"subsidyAmount", type:"number" },
+    { header:"공시지원금상태", key:"subsidyStatus", type:"text" },
+    { header:"환수액", key:"clawbackAmount", type:"number" },
+    { header:"공시지원금귀속월", key:"subsidyAccrualMonth", type:"text" },
+    { header:"주문일", key:"orderDate", type:"text" },
+    { header:"입고일", key:"inDate", type:"text" },
+    { header:"판매예정일", key:"expectedSaleDate", type:"text" },
+    { header:"출고일", key:"outDate", type:"text" },
+    { header:"IMEI", key:"imei", type:"text" }
+  ];
+
+  window.downloadBulkEditExcel = function(){
+    if(!lastRenderedItems || lastRenderedItems.length===0){ alert("다운로드할 재고가 없습니다. 재고 목록을 먼저 조회해주세요."); return; }
+    const headers = ["일련번호", ...BULK_EDIT_DOWNLOAD_FIELDS.map(f=>f.header)];
+    const numericColIndices = new Set();
+    BULK_EDIT_DOWNLOAD_FIELDS.forEach((f,idx)=>{ if(f.type==="number") numericColIndices.add(idx+1); }); // +1: 일련번호가 0번
+    const rows = lastRenderedItems.map(it=>{
+      const row = [it.serialNumber || ""];
+      BULK_EDIT_DOWNLOAD_FIELDS.forEach(f=> row.push(it[f.key]!=null ? it[f.key] : ""));
+      return row;
+    });
+    const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+    forceTextFormat(ws, numericColIndices);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "일괄수정");
+    XLSX.writeFile(wb, "재고_일괄수정용_"+todayStr()+".xlsx");
+  };
+
+  window.openBulkEditUploadModal = function(){
+    document.getElementById("bulk-edit-file-input").value = "";
+    document.getElementById("bulk-edit-analysis").innerHTML = "";
+    document.getElementById("bulk-edit-upload-modal-overlay").style.display = "flex";
+  };
+  window.closeBulkEditUploadModal = function(){
+    document.getElementById("bulk-edit-upload-modal-overlay").style.display = "none";
+  };
+
+  window.analyzeBulkEditFile = async function(){
+    const fileInput = document.getElementById("bulk-edit-file-input");
+    const analysisEl = document.getElementById("bulk-edit-analysis");
+    if(!fileInput.files || fileInput.files.length===0){ alert("엑셀 파일을 먼저 선택해주세요."); return; }
+    analysisEl.innerHTML = '<div class="list-empty">확인 중...</div>';
+
+    const file = fileInput.files[0];
+    const buf = await file.arrayBuffer();
+    const wb = XLSX.read(buf, { type:"array", cellDates:true });
+    const ws = wb.Sheets[wb.SheetNames[0]];
+    const rows = XLSX.utils.sheet_to_json(ws, { defval:"" });
+    if(rows.length===0){ analysisEl.innerHTML = '<div class="list-empty">읽을 데이터가 없습니다.</div>'; return; }
+
+    const serials = rows.map(r=>String(r["일련번호"]||"").trim()).filter(Boolean);
+    const foundMap = {};
+    for(let i=0;i<serials.length;i+=30){
+      const chunk = serials.slice(i,i+30);
+      const snap = await getDocs(query(collection(db,"inventoryItems"), where("serialNumber","in", chunk)));
+      snap.forEach(d=>{ foundMap[d.data().serialNumber] = d.id; });
+    }
+
+    const previewRows = [];
+    let matchedCount = 0, changedFieldsTotal = 0;
+    rows.forEach(r=>{
+      const serial = String(r["일련번호"]||"").trim();
+      if(!serial) return;
+      const itemId = foundMap[serial];
+      const changes = [];
+      BULK_EDIT_DOWNLOAD_FIELDS.forEach(f=>{
+        const raw = r[f.header];
+        if(raw!==undefined && raw!==null && String(raw).trim()!==""){
+          const value = f.type==="number" ? Number(raw) : String(raw).trim();
+          changes.push({ key:f.key, value, label:f.header, display:String(raw) });
+        }
+      });
+      if(itemId && changes.length>0){ matchedCount++; changedFieldsTotal += changes.length; }
+      previewRows.push({ serial, itemId, changes });
+    });
+
+    let html = '<div style="background:#fafafa;border:1px solid var(--line);padding:10px;margin-bottom:12px;font-size:12.5px;">' +
+      '매칭된 재고: <b>'+matchedCount+'건</b> · 반영될 칸 수: <b>'+changedFieldsTotal+'개</b></div>';
+    html += '<div style="overflow-x:auto;border:1px solid var(--line);max-height:280px;overflow-y:auto;"><table class="data-table"><thead><tr><th>일련번호</th><th>매칭</th><th>바뀌는 내용</th></tr></thead><tbody>';
+    previewRows.forEach(r=>{
+      html += '<tr'+(!r.itemId?' style="color:var(--danger);"':'')+'>' +
+        '<td>'+r.serial+'</td>' +
+        '<td>'+(r.itemId?'✓':'재고 없음')+'</td>' +
+        '<td>'+(r.changes.length ? r.changes.map(c=>c.label+'='+c.display).join(', ') : '-')+'</td>' +
+        '</tr>';
+    });
+    html += '</tbody></table></div>';
+    html += '<button class="btn small" style="width:auto;margin-top:10px;" onclick="submitBulkEditUpload()">이 내용으로 일괄 반영</button>';
+    html += '<div id="bulk-edit-result" style="font-size:12.5px;margin-top:10px;"></div>';
+
+    analysisEl.innerHTML = html;
+    analysisEl.dataset.rows = JSON.stringify(
+      previewRows.filter(r=>r.itemId && r.changes.length>0).map(r=>({ itemId:r.itemId, changes:r.changes }))
+    );
+  };
+
+  window.submitBulkEditUpload = async function(){
+    const data = JSON.parse(document.getElementById("bulk-edit-analysis").dataset.rows || "[]");
+    const resultEl = document.getElementById("bulk-edit-result");
+    if(data.length===0){ resultEl.innerHTML = '반영할 내용이 없습니다.'; return; }
+    if(!confirm(data.length+"건의 재고에 채워주신 값을 반영하시겠습니까?")) return;
+
+    let updated = 0;
+    for(let i=0;i<data.length;i+=450){
+      const chunk = data.slice(i, i+450);
+      const batch = writeBatch(db);
+      chunk.forEach(r=>{
+        const patch = {};
+        r.changes.forEach(c=>{ patch[c.key] = c.value; });
+        batch.update(doc(db,"inventoryItems", r.itemId), patch);
+      });
+      await batch.commit();
+      updated += chunk.length;
+      resultEl.textContent = "반영 중... ("+updated+"/"+data.length+")";
+    }
+    logAction("재고 일괄수정 업로드", updated+"건");
+    resultEl.innerHTML = '<b>'+updated+'건 반영 완료</b>';
+    loadInventoryList();
   };
 
   // ---------- 엑셀 일괄 업로드 ----------
