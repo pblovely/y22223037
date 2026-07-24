@@ -178,6 +178,7 @@
           <button class="tab-btn" data-label-key="inv-admin" id="tabbtn-inv-admin" onclick="openInvAdminSection()" style="display:none;"><span class="tab-label-text">재고 기초설정</span></button>
           <button class="tab-btn" data-tab="tab-users" data-label-key="tab-users" id="tabbtn-users" onclick="switchTab('tab-users')" style="display:none;"><span class="tab-label-text">사용자 관리</span> <span id="user-admin-badge" style="display:none;background:var(--danger);color:#fff;font-size:10px;padding:1px 6px;margin-left:4px;">0</span></button>
           <button class="tab-btn" data-tab="tab-settlement" data-label-key="tab-settlement" id="tabbtn-settlement" onclick="switchTab('tab-settlement')" style="display:none;"><span class="tab-label-text">정산 관리</span></button>
+          <button class="tab-btn" data-tab="tab-b2b" data-label-key="tab-b2b" id="tabbtn-b2b" onclick="switchTab('tab-b2b')" style="display:none;"><span class="tab-label-text">삼성 B2B 여신</span></button>
           <button class="tab-btn" data-tab="tab-logs" data-label-key="tab-logs" id="tabbtn-logs" onclick="switchTab('tab-logs')" style="display:none;"><span class="tab-label-text">이력</span></button>
         </div>
       </div>
@@ -610,6 +611,52 @@
             <div id="settlement-sale-pending"></div>
           </div>
         </div>
+      </div>
+    </div>
+
+    <!-- ===== 관리자: 삼성 B2B 여신관리 ===== -->
+    <div id="tab-b2b" class="tab-panel">
+      <div class="card">
+        <h3>삼성 B2B 여신 관리 <span class="info-tip" title="포피플에서 삼성에 직접입금하거나 B2B대출로 입금하면 여신이 쌓입니다. 그 여신에서 단말기를 할인된 가격으로 주문해서 차감됩니다. B2B대출 관련 수수료·이자는 여신과 별개의 비용입니다.">ⓘ</span></h3>
+        <div id="b2b-stat-cards" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px;"></div>
+      </div>
+
+      <div class="card">
+        <h3>거래 입력</h3>
+        <div class="stack-form">
+          <div class="stack-row"><label>거래일자</label><input type="text" id="b2b-date-input" placeholder="예: 20260724" maxlength="8" inputmode="numeric"></div>
+          <div class="stack-row"><label>구분</label>
+            <select id="b2b-category-select">
+              <option value="deposit">입금 (직접, 여신충전)</option>
+              <option value="loan_deposit">입금 (B2B대출, 여신충전)</option>
+              <option value="order_use">주문사용 (여신차감)</option>
+              <option value="interest_received">이자지급 수령 (여신충전, 수익반영)</option>
+              <option value="b2b_fee_payment">B2B결제수수료 (대출실행시 1회, 비용)</option>
+              <option value="b2b_fee_mp">B2BMP수수료 (대출실행시 1회, 비용)</option>
+              <option value="b2b_interest">B2B이자 (매달, 비용)</option>
+              <option value="club_incentive">클럽장려금 (후정산, 별도집계)</option>
+              <option value="other">기타 (비용)</option>
+            </select>
+          </div>
+          <div class="stack-row"><label>금액</label><input type="number" id="b2b-amount-input"></div>
+          <div class="stack-row"><label>메모 (선택)</label><input type="text" id="b2b-memo-input"></div>
+        </div>
+        <button class="btn small" style="width:auto;" onclick="addB2BLedgerEntry()">거래 추가</button>
+      </div>
+
+      <div class="card">
+        <h3>후정산 참고 (클럽장려금 대조)</h3>
+        <p class="desc">삼성에서 나중에 확정해주는 후정산 공식 금액이 있으면 여기에 적어두고, 위에서 입력한 클럽장려금 누적과 맞는지 비교해보세요.</p>
+        <div class="stack-form" style="max-width:400px;">
+          <div class="stack-row"><label>후정산금액합계 (공식)</label><input type="number" id="b2b-post-settlement-input"></div>
+        </div>
+        <button class="btn small secondary" style="width:auto;" onclick="saveB2BPostSettlementRef()">저장</button>
+        <div id="b2b-post-settlement-check" style="font-size:12.5px;margin-top:10px;"></div>
+      </div>
+
+      <div class="card">
+        <h3>거래 내역</h3>
+        <div id="b2b-ledger-list"></div>
       </div>
     </div>
 
@@ -4254,6 +4301,117 @@
     await loadPaymentRequestList();
   }
 
+  // ---------- 삼성 B2B 여신 관리 ----------
+  const B2B_CATEGORY_LABELS = {
+    deposit:"입금 (직접)", loan_deposit:"입금 (B2B대출)", order_use:"주문사용",
+    interest_received:"이자지급 수령", b2b_fee_payment:"B2B결제수수료", b2b_fee_mp:"B2BMP수수료",
+    b2b_interest:"B2B이자", club_incentive:"클럽장려금", other:"기타"
+  };
+  window.addB2BLedgerEntry = async function(){
+    const dateVal = document.getElementById("b2b-date-input").value || todayStr();
+    const category = document.getElementById("b2b-category-select").value;
+    const amount = Number(document.getElementById("b2b-amount-input").value);
+    const memo = document.getElementById("b2b-memo-input").value.trim();
+    if(!amount){ alert("금액을 입력해주세요."); return; }
+
+    await addDoc(collection(db,"b2bLedger"), {
+      date: dateVal, category, amount, memo,
+      createdBy: currentUser.name, createdByUsername: currentUser.username, createdAt: serverTimestamp()
+    });
+    logAction("B2B 여신 거래 추가", B2B_CATEGORY_LABELS[category]+" "+amount.toLocaleString()+"원");
+    document.getElementById("b2b-amount-input").value = "";
+    document.getElementById("b2b-memo-input").value = "";
+    loadB2BTab();
+  };
+
+  window.deleteB2BLedgerEntry = async function(id){
+    if(!confirm("이 거래 내역을 삭제하시겠습니까?")) return;
+    await deleteDoc(doc(db,"b2bLedger", id));
+    logAction("B2B 여신 거래 삭제", id);
+    loadB2BTab();
+  };
+
+  window.saveB2BPostSettlementRef = async function(){
+    const val = Number(document.getElementById("b2b-post-settlement-input").value) || 0;
+    await setDoc(doc(db,"settings","b2b"), { postSettlementRef: val }, { merge:true });
+    logAction("B2B 후정산금액합계 저장", val.toLocaleString()+"원");
+    loadB2BTab();
+  };
+
+  async function loadB2BTab(){
+    const statEl = document.getElementById("b2b-stat-cards");
+    const listEl = document.getElementById("b2b-ledger-list");
+    if(!statEl) return;
+    statEl.innerHTML = '<div class="list-empty">불러오는 중...</div>';
+
+    const snap = await getDocs(query(collection(db,"b2bLedger"), orderBy("date","desc")));
+    const entries = []; snap.forEach(d=> entries.push({ id:d.id, ...d.data() }));
+
+    let depositTotal = 0, orderUseTotal = 0, loanCostTotal = 0, clubIncentiveTotal = 0, otherTotal = 0;
+    entries.forEach(e=>{
+      const amt = Number(e.amount)||0;
+      if(e.category==="deposit" || e.category==="loan_deposit" || e.category==="interest_received") depositTotal += amt;
+      else if(e.category==="order_use") orderUseTotal += amt;
+      else if(e.category==="b2b_fee_payment" || e.category==="b2b_fee_mp" || e.category==="b2b_interest") loanCostTotal += amt;
+      else if(e.category==="club_incentive") clubIncentiveTotal += amt;
+      else otherTotal += amt;
+    });
+    const remainingCredit = depositTotal + clubIncentiveTotal - orderUseTotal;
+
+    // 기존 매입-매출 차액(수익) 합계
+    const invSnap = await getDocs(collection(db,"inventoryItems"));
+    let baseProfitSum = 0;
+    invSnap.forEach(d=>{
+      const it = d.data();
+      if(it.profit!=null){
+        const qty = it.entryType==="imei" ? 1 : (Number(it.quantity)||0);
+        baseProfitSum += Number(it.profit)*qty;
+      }
+    });
+
+    const interestReceivedTotal = entries.filter(e=>e.category==="interest_received").reduce((s,e)=>s+(Number(e.amount)||0),0);
+    const finalProfit = baseProfitSum - loanCostTotal + interestReceivedTotal;
+
+    function statCard(label, value, color){
+      return '<div style="flex:1;min-width:170px;border:1px solid var(--line);background:#fff;padding:10px 14px;">' +
+        '<div style="font-size:11.5px;color:var(--gray);margin-bottom:4px;">'+label+'</div>' +
+        '<div style="font-size:19px;font-weight:800;color:'+(color||'var(--navy)')+';">'+value+'</div></div>';
+    }
+    let html = statCard("실시간 잔여여신 (입금+클럽장려금-주문사용)", remainingCredit.toLocaleString(), "#1565c0");
+    html += statCard("B2B대출비용 합계 (수수료+이자)", loanCostTotal.toLocaleString(), "var(--danger)");
+    html += statCard("이자지급 수령 합계", interestReceivedTotal.toLocaleString(), "#2e7d32");
+    html += statCard("클럽장려금 합계 (후정산, 참고용)", clubIncentiveTotal.toLocaleString(), "#6a1b9a");
+    html += statCard("기존 매입-매출 차액 (수익)", baseProfitSum.toLocaleString());
+    html += statCard("최종 실제수익 (수익-대출비용+이자수령)", finalProfit.toLocaleString(), "#2e7d32");
+    statEl.innerHTML = html;
+
+    // 후정산 참고 비교
+    const settleSnap = await getDoc(doc(db,"settings","b2b"));
+    const postSettlementRef = settleSnap.exists() ? (settleSnap.data().postSettlementRef || 0) : 0;
+    document.getElementById("b2b-post-settlement-input").value = postSettlementRef || "";
+    const diff = postSettlementRef - clubIncentiveTotal;
+    document.getElementById("b2b-post-settlement-check").innerHTML =
+      diff===0 && postSettlementRef>0
+        ? '<span style="color:#2e7d32;font-weight:700;">✓ 클럽장려금 누적과 정확히 일치합니다.</span>'
+        : (postSettlementRef>0
+          ? '<span style="color:var(--danger);font-weight:700;">차이 '+diff.toLocaleString()+'원 (공식금액 '+postSettlementRef.toLocaleString()+'원, 누적 '+clubIncentiveTotal.toLocaleString()+'원)</span>'
+          : '<span style="color:var(--gray);">공식 후정산금액을 아직 입력하지 않았습니다.</span>');
+
+    // 거래 내역 표
+    if(entries.length===0){
+      listEl.innerHTML = '<div class="list-empty">등록된 거래가 없습니다.</div>';
+    }else{
+      let tbl = '<div style="overflow-x:auto;"><table class="data-table"><thead><tr><th>거래일자</th><th>구분</th><th class="ta-right">금액</th><th>메모</th><th class="ta-right">관리</th></tr></thead><tbody>';
+      entries.forEach(e=>{
+        tbl += '<tr><td>'+e.date+'</td><td>'+(B2B_CATEGORY_LABELS[e.category]||e.category)+'</td>' +
+          '<td class="ta-right">'+Number(e.amount).toLocaleString()+'</td><td>'+(e.memo||'-')+'</td>' +
+          '<td class="ta-right"><button class="btn small danger" style="width:auto;padding:4px 10px;" onclick="deleteB2BLedgerEntry(\''+e.id+'\')">삭제</button></td></tr>';
+      });
+      tbl += '</tbody></table></div>';
+      listEl.innerHTML = tbl;
+    }
+  }
+
   window.clearDateFilter = function(){
     document.getElementById("filter-date-from").value = "";
     document.getElementById("filter-date-to").value = "";
@@ -4775,6 +4933,8 @@
     ).join("");
 
     let totalCount = 0;
+    let allTimeTotalCount = 0, allTimeSoldCount = 0;
+    let heldListPriceSum = 0, soldProfitSum = 0;
     const statusCounts = {};
     let inCount = 0, saleCount = 0;
     let purchaseSum = 0, saleSum = 0, profitSum = 0;
@@ -4785,6 +4945,12 @@
 
     allItems.forEach(it=>{
       const qty = it.entryType==="imei" ? 1 : (Number(it.quantity)||0);
+      allTimeTotalCount += qty;
+      if(it.status==="판매"){
+        allTimeSoldCount += qty;
+      }else{
+        if(it.listPrice) heldListPriceSum += Number(it.listPrice)*qty; // 보유재고 출고가 합계는 항상 전체기준
+      }
       const inScopeIn = inScope(it.inDate);
       // 전체 모드에서는 출고일이 비어있어도 상태가 "판매"면 매출로 인정 (날짜 누락된 예전 데이터 대응)
       const inScopeOut = dashboardScope==="all" ? (it.status==="판매") : inScope(it.outDate);
@@ -4800,7 +4966,7 @@
       if(inScopeOut){
         saleCount += qty;
         if(it.salePrice) saleSum += Number(it.salePrice)*qty;
-        if(it.profit!=null) profitSum += Number(it.profit)*qty;
+        if(it.profit!=null){ profitSum += Number(it.profit)*qty; soldProfitSum += Number(it.profit)*qty; }
       }
       // 공시지원금은 입고일/출고일이 아니라 "귀속월" 기준으로 집계
       const inSubsidyScope = dashboardScope==="all" || (normDate(it.subsidyAccrualMonth).slice(0,6) === thisMonth);
@@ -4877,16 +5043,17 @@
         statRow(keyPrefix+'-pending', pendingLabel, pendingValue, false) +
         '</div>';
     }
-    let statHtml = statCard("입고", inCount, null, "dash-in");
-    statHtml += statCard("전체 재고", totalCount, null, "dash-total-stock");
-    const soldStatusCount = statusCounts["판매"] || 0;
-    const heldStatusCount = totalCount - soldStatusCount;
-    statHtml += statCard("보유", heldStatusCount, null, "dash-held");
-    statHtml += statCard("판매", soldStatusCount, null, "dash-sold");
+    let statHtml = statCard("입고 (선택기간)", inCount, null, "dash-in");
+    statHtml += statCard("판매 (선택기간)", saleCount, null, "dash-out");
+    statHtml += statCard("전체입고", allTimeTotalCount, null, "dash-total-stock");
+    statHtml += statCard("전체판매", allTimeSoldCount, null, "dash-sold");
+    statHtml += statCard("전체보유", allTimeTotalCount - allTimeSoldCount, null, "dash-held");
+    statHtml += statCard("보유재고 출고가 합계", heldListPriceSum.toLocaleString(), null, "dash-held-listprice");
+    statHtml += statCard("판매재고 수익 합계 (판매월 기준)", soldProfitSum.toLocaleString(), null, "dash-sold-profit");
     statHtml += statCard("수익 (판매가-입고가만, 공시지원금 별도)", profitSum.toLocaleString(), null, "dash-profit");
-    statHtml += statCardTriple("공시지원금 (귀속월 기준)", "지급", subsidyReceivedSum.toLocaleString(), "환수", subsidyClawbackSum.toLocaleString(), null, "dash-subsidy");
     statHtml += statCardTriple("매입", "입고", purchaseSum.toLocaleString(), "미입고", pendingPurchaseAmount.toLocaleString(), null, "dash-purchase");
     statHtml += statCardTriple("매출", "출고", saleSum.toLocaleString(), "미출고", pendingSaleAmount.toLocaleString(), null, "dash-sale");
+    statHtml += statCardTriple("공시지원금 (귀속월 기준)", "지급", subsidyReceivedSum.toLocaleString(), "환수", subsidyClawbackSum.toLocaleString(), null, "dash-subsidy");
     statEl.innerHTML = statHtml;
     applyCustomTabLabels();
     applyDashFontSize();
@@ -6214,7 +6381,7 @@
     document.getElementById("signup-form").style.display="none";
     document.getElementById("login-form").style.display="block";
   };
-  const ADMIN_TAB_IDS = ["tab-site","tab-team","tab-users","tab-settlement","tab-logs"];
+  const ADMIN_TAB_IDS = ["tab-site","tab-team","tab-users","tab-settlement","tab-b2b","tab-logs"];
   const INV_ADMIN_TAB_IDS = ["tab-inv-model","tab-inv-color","tab-inv-manufacturer","tab-inv-location","tab-inv-status","tab-inv-source","tab-inv-dest","tab-inv-carrier"];
 
   window.toggleAdminMenu = function(){
@@ -6251,6 +6418,7 @@
     if(tabId==="tab-orders") loadOrderList();
     if(tabId==="tab-salereq") loadSaleRequestList();
     if(tabId==="tab-settlement") loadSettlementTab();
+    if(tabId==="tab-b2b") loadB2BTab();
     if(tabId==="tab-team") loadTeamList();
     if(tabId==="tab-users") loadUserAdminList();
     if(tabId==="tab-logs") loadLogs();
@@ -6380,6 +6548,7 @@
       document.getElementById("tabbtn-inv-admin").style.display = showInvAdmin ? "block":"none";
       document.getElementById("tabbtn-users").style.display = showUsers ? "block":"none";
       document.getElementById("tabbtn-settlement").style.display = showSettlement ? "block":"none";
+      document.getElementById("tabbtn-b2b").style.display = showSettlement ? "block":"none";
       document.getElementById("tabbtn-logs").style.display = showLogs ? "block":"none";
       document.getElementById("tabbtn-dashboard").style.display = showDashboard ? "block":"none";
       document.getElementById("tabbtn-inv-work").style.display = showInvWork ? "block":"none";
