@@ -3799,6 +3799,47 @@
 
   let saleReqBatchLinesCache = {}; // batchId -> lines[]
 
+  async function consolidateLegacySaleRequests(){
+    const linesSnap = await getDocs(collection(db,"saleRequests"));
+    const legacyDocs = [];
+    linesSnap.forEach(d=>{
+      const s = d.data();
+      if(!s.batchId && s.status!=="취소") legacyDocs.push({ id:d.id, s });
+    });
+    if(legacyDocs.length===0) return 0;
+
+    const groups = {};
+    legacyDocs.forEach(({id,s})=>{
+      const key = (s.destination||"미지정") + "|" + (s.requestDate||"");
+      if(!groups[key]) groups[key] = [];
+      groups[key].push({ id, s });
+    });
+
+    let merged = 0;
+    for(const key of Object.keys(groups)){
+      const group = groups[key];
+      const dest = group[0].s.destination || "미지정";
+      const requestDate = group[0].s.requestDate || todayStr();
+      const depositTotal = group.reduce((sum,g)=> sum + (Number(g.s.depositRequired) || (Number(g.s.salePrice)||0)*(Number(g.s.quantity)||0)), 0);
+      const allReceived = group.every(g=> g.s.depositReceived);
+      const batchRef = await addDoc(collection(db,"saleRequestBatches"), {
+        destination: dest, requestDate,
+        depositRequired: depositTotal, depositReceived: allReceived,
+        depositReceivedDate: allReceived ? (group[0].s.depositReceivedDate||"") : "",
+        lineCount: group.length, status: allReceived ? "입금완료" : "대기중",
+        createdBy: currentUser.name, createdByUsername: currentUser.username, createdAt: serverTimestamp()
+      });
+      for(const {id} of group){
+        await updateDoc(doc(db,"saleRequests", id), { batchId: batchRef.id });
+      }
+      merged += group.length;
+    }
+    if(merged>0){
+      logAction("기존 판매요청 개별건 정리", merged+"건 → "+Object.keys(groups).length+"개 묶음으로 합침");
+    }
+    return merged;
+  }
+
   async function loadSaleRequestList(){
     const listEl = document.getElementById("sale-request-list");
     if(!listEl) return;
@@ -3806,6 +3847,8 @@
 
     // 주문에서 판매조건이 잡힌 것들을 조용히 자동 반영 (버튼 없이)
     await backfillSaleRequestsFromOrders(true);
+    // 예전에 개별로 만들어진 건들도 판매처+요청일 기준으로 조용히 자동 정리
+    await consolidateLegacySaleRequests();
 
     const batchSnap = await getDocs(query(collection(db,"saleRequestBatches"), orderBy("createdAt","desc")));
     const linesSnap = await getDocs(collection(db,"saleRequests"));
@@ -4700,7 +4743,10 @@
 
     const normDate = v=> String(v||"").replace(/\D/g,"");
     const thisMonth = dashboardCustomMonth || todayStr().slice(0,6); // YYYYMM
-    const inScope = (dateStr)=> dashboardScope==="all" ? true : (normDate(dateStr).slice(0,6) === thisMonth);
+    const inScope = (dateStr)=> {
+      if(!normDate(dateStr)) return false; // 날짜 자체가 없으면 (아직 입고/출고 안됨) 해당 안 됨
+      return dashboardScope==="all" ? true : (normDate(dateStr).slice(0,6) === thisMonth);
+    };
 
     // 월 선택 드롭다운 채우기 (데이터에 있는 월들만)
     const monthPicker = document.getElementById("dash-month-picker");
@@ -4751,22 +4797,19 @@
 
       if(inScopeIn || inScopeOut){
         const c = it.carrier || "미지정";
-        if(!carrierAgg[c]) carrierAgg[c] = {count:0, purchaseAmount:0, saleAmount:0};
-        carrierAgg[c].count += qty;
-        if(it.purchasePrice) carrierAgg[c].purchaseAmount += Number(it.purchasePrice)*qty;
-        if(it.salePrice) carrierAgg[c].saleAmount += Number(it.salePrice)*qty;
+        if(!carrierAgg[c]) carrierAgg[c] = {purchaseCount:0, saleCount:0, purchaseAmount:0, saleAmount:0};
+        if(inScopeIn){ carrierAgg[c].purchaseCount += qty; if(it.purchasePrice) carrierAgg[c].purchaseAmount += Number(it.purchasePrice)*qty; }
+        if(inScopeOut){ carrierAgg[c].saleCount += qty; if(it.salePrice) carrierAgg[c].saleAmount += Number(it.salePrice)*qty; }
 
         const m = (it.petName||it.modelGroup||"미지정") + "/" + (it.baseModel||it.systemModel||"-");
-        if(!modelAgg[m]) modelAgg[m] = {count:0, purchaseAmount:0, saleAmount:0};
-        modelAgg[m].count += qty;
-        if(it.purchasePrice) modelAgg[m].purchaseAmount += Number(it.purchasePrice)*qty;
-        if(it.salePrice) modelAgg[m].saleAmount += Number(it.salePrice)*qty;
+        if(!modelAgg[m]) modelAgg[m] = {purchaseCount:0, saleCount:0, purchaseAmount:0, saleAmount:0};
+        if(inScopeIn){ modelAgg[m].purchaseCount += qty; if(it.purchasePrice) modelAgg[m].purchaseAmount += Number(it.purchasePrice)*qty; }
+        if(inScopeOut){ modelAgg[m].saleCount += qty; if(it.salePrice) modelAgg[m].saleAmount += Number(it.salePrice)*qty; }
 
         if(it.destination){
-          if(!destAgg[it.destination]) destAgg[it.destination] = {count:0, purchaseAmount:0, saleAmount:0};
-          destAgg[it.destination].count += qty;
-          if(it.purchasePrice) destAgg[it.destination].purchaseAmount += Number(it.purchasePrice)*qty;
-          if(it.salePrice) destAgg[it.destination].saleAmount += Number(it.salePrice)*qty;
+          if(!destAgg[it.destination]) destAgg[it.destination] = {purchaseCount:0, saleCount:0, purchaseAmount:0, saleAmount:0};
+          if(inScopeIn){ destAgg[it.destination].purchaseCount += qty; if(it.purchasePrice) destAgg[it.destination].purchaseAmount += Number(it.purchasePrice)*qty; }
+          if(inScopeOut){ destAgg[it.destination].saleCount += qty; if(it.salePrice) destAgg[it.destination].saleAmount += Number(it.salePrice)*qty; }
         }
       }
     });
@@ -4835,13 +4878,13 @@
     applyDashFontSize();
 
     function renderFullList(el, agg, nameLabel){
-      const entries = Object.entries(agg).sort((a,b)=>b[1].count-a[1].count);
+      const entries = Object.entries(agg).sort((a,b)=>(b[1].purchaseCount+b[1].saleCount)-(a[1].purchaseCount+a[1].saleCount));
       if(entries.length===0){ el.innerHTML = '<div class="list-empty">데이터가 없습니다.</div>'; return; }
-      let html = '<div style="overflow-x:auto;"><table class="data-table" style="width:auto;max-width:640px;table-layout:fixed;"><thead><tr>' +
-        '<th style="width:220px;">'+nameLabel+'</th><th class="ta-right" style="width:80px;">대수</th><th class="ta-right" style="width:150px;">매입액</th><th class="ta-right" style="width:150px;">매출액</th>' +
+      let html = '<div style="overflow-x:auto;"><table class="data-table" style="width:auto;max-width:760px;table-layout:fixed;"><thead><tr>' +
+        '<th style="width:220px;">'+nameLabel+'</th><th class="ta-right" style="width:80px;">매입대수</th><th class="ta-right" style="width:150px;">매입액</th><th class="ta-right" style="width:80px;">매출대수</th><th class="ta-right" style="width:150px;">매출액</th>' +
         '</tr></thead><tbody>';
       entries.forEach(([k,v])=>{
-        html += '<tr><td>'+k+'</td><td class="ta-right">'+v.count+'</td><td class="ta-right">'+v.purchaseAmount.toLocaleString()+'</td><td class="ta-right">'+v.saleAmount.toLocaleString()+'</td></tr>';
+        html += '<tr><td>'+k+'</td><td class="ta-right">'+v.purchaseCount+'</td><td class="ta-right">'+v.purchaseAmount.toLocaleString()+'</td><td class="ta-right">'+v.saleCount+'</td><td class="ta-right">'+v.saleAmount.toLocaleString()+'</td></tr>';
       });
       html += '</tbody></table></div>';
       el.innerHTML = html;
