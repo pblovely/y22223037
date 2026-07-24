@@ -209,15 +209,15 @@
         <div id="dash-stat-cards" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px;"></div>
         <div style="display:flex;gap:16px;flex-wrap:wrap;">
           <div style="flex:1;min-width:260px;">
-            <h3 style="font-size:13px;">통신사별 (대수 · 매출액)</h3>
+            <h3 style="font-size:13px;">통신사별</h3>
             <div id="dash-carrier-list"></div>
           </div>
           <div style="flex:1;min-width:260px;">
-            <h3 style="font-size:13px;">모델(펫네임)별 (대수 · 매입액)</h3>
+            <h3 style="font-size:13px;">모델(펫네임)별</h3>
             <div id="dash-model-list"></div>
           </div>
           <div style="flex:1;min-width:260px;">
-            <h3 style="font-size:13px;">판매처별 (대수 · 매출액)</h3>
+            <h3 style="font-size:13px;">판매처별</h3>
             <div id="dash-dest-list"></div>
           </div>
         </div>
@@ -3886,16 +3886,21 @@
     statHtml += statCard(scopeLabel+" 매출액", saleSum.toLocaleString()+"원", "#8a6d00");
     statEl.innerHTML = statHtml;
 
-    function renderFullList(el, agg){
+    function renderFullList(el, agg, nameLabel, amountLabel){
       const entries = Object.entries(agg).sort((a,b)=>b[1].count-a[1].count);
       if(entries.length===0){ el.innerHTML = '<div class="list-empty">데이터가 없습니다.</div>'; return; }
-      el.innerHTML = entries.map(([k,v])=>
-        '<div class="list-row compact"><span>'+k+'</span><span style="font-weight:700;">'+v.count+'대 · '+v.amount.toLocaleString()+'원</span></div>'
-      ).join("");
+      let html = '<div style="overflow-x:auto;"><table class="data-table"><thead><tr>' +
+        '<th>'+nameLabel+'</th><th class="ta-right">대수</th><th class="ta-right">'+amountLabel+'</th>' +
+        '</tr></thead><tbody>';
+      entries.forEach(([k,v])=>{
+        html += '<tr><td>'+k+'</td><td class="ta-right">'+v.count+'대</td><td class="ta-right">'+v.amount.toLocaleString()+'원</td></tr>';
+      });
+      html += '</tbody></table></div>';
+      el.innerHTML = html;
     }
-    renderFullList(carrierEl, carrierAgg);
-    renderFullList(modelEl, modelAgg);
-    renderFullList(destEl, destAgg);
+    renderFullList(carrierEl, carrierAgg, "통신사", "매출액");
+    renderFullList(modelEl, modelAgg, "모델(펫네임)", "매입액");
+    renderFullList(destEl, destAgg, "판매처", "매출액");
 
     const discountItems = allItems.filter(it => (it.purchaseDiscountAmt!=null || it.otherDiscountAmt!=null) && (dashboardScope==="all" || inScope(it.inDate)));
     let preDiscountSum = 0, otherDiscountSum = 0, discountCount = 0;
@@ -3927,9 +3932,12 @@
         regionEl.innerHTML = '<div class="list-empty">마스터재고 파일에서 출고점코드 칸을 찾지 못했습니다.</div>';
       }else{
         const entries = Object.entries(regionCounts).sort((a,b)=>b[1]-a[1]);
-        regionEl.innerHTML = entries.map(([k,v])=>
-          '<div class="list-row compact"><span>'+k+'</span><span style="font-weight:700;">'+v+'대</span></div>'
-        ).join("");
+        let html = '<div style="overflow-x:auto;"><table class="data-table"><thead><tr><th>지역</th><th class="ta-right">대수</th></tr></thead><tbody>';
+        entries.forEach(([k,v])=>{
+          html += '<tr><td>'+k+'</td><td class="ta-right">'+v+'대</td></tr>';
+        });
+        html += '</tbody></table></div>';
+        regionEl.innerHTML = html;
       }
     }
   }
