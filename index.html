@@ -237,6 +237,28 @@
         </div>
       </div>
 
+      <div class="card" style="max-width:1400px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+          <h3 style="margin:0;">색상 등록</h3>
+          <button class="btn small" style="width:auto;" onclick="openColorStandaloneAddModal()">+ 색상 등록</button>
+        </div>
+        <p class="desc">모든 모델의 색상을 한눈에 볼 수 있습니다. SKU가 없는 색상은 빨간색입니다. 수정은 해당 모델의 색상 관리 팝업에서 합니다.</p>
+        <div style="overflow-x:auto;">
+        <table style="width:100%;border-collapse:collapse;font-size:12.5px;min-width:700px;">
+          <thead>
+            <tr style="background:#fafafa;border-bottom:2px solid var(--navy);">
+              <th style="padding:8px 10px;text-align:left;">모델</th>
+              <th style="padding:8px 10px;text-align:left;">제조사색상</th>
+              <th style="padding:8px 10px;text-align:left;">전산색상</th>
+              <th style="padding:8px 10px;text-align:left;">삼성모델명(SKU)</th>
+              <th style="padding:8px 10px;text-align:right;">관리</th>
+            </tr>
+          </thead>
+          <tbody id="color-table-body"></tbody>
+        </table>
+        </div>
+      </div>
+
       <div class="card">
         <h3>입고처 종류</h3>
         <p class="desc">단말기를 사오는 곳(매입처) 목록입니다. 재고 등록 시 여기서 선택합니다.</p>
@@ -361,6 +383,21 @@
         </div>
         <button class="btn small" id="cm-submit-btn" style="width:auto;" onclick="submitColorAdd()">색상 추가</button>
         <button class="btn small secondary" id="cm-cancel-btn" style="width:auto;display:none;margin-left:6px;" onclick="cancelColorEdit()">취소</button>
+      </div>
+    </div>
+
+    <!-- 색상 단독 등록 팝업 -->
+    <div id="color-standalone-modal-overlay" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.55);z-index:1000;align-items:center;justify-content:center;">
+      <div style="background:#fff;border:2px solid var(--navy);max-width:600px;width:94%;max-height:90vh;overflow-y:auto;padding:22px;position:relative;">
+        <button onclick="closeColorStandaloneAddModal()" style="position:absolute;top:12px;right:12px;background:none;border:1px solid var(--navy);width:26px;height:26px;cursor:pointer;font-size:13px;">✕</button>
+        <h3 style="margin-top:0;margin-bottom:4px;">색상 등록</h3>
+        <div class="stack-form">
+          <div class="stack-row"><label>모델</label><select id="csa-model-select"><option value="">모델을 선택하세요</option></select></div>
+          <div class="stack-row"><label>제조사색상</label><input type="text" id="csa-manu-input" placeholder="예: 그라파이트"></div>
+          <div class="stack-row"><label>전산색상</label><input type="text" id="csa-sys-input" placeholder="예: 그레이"></div>
+          <div class="stack-row"><label>삼성모델명(SKU)</label><input type="text" id="csa-sku-input" placeholder="선택, 나중에 채워도 됨"></div>
+        </div>
+        <button class="btn small" onclick="submitColorStandaloneAdd()">등록</button>
       </div>
     </div>
 
@@ -981,6 +1018,7 @@
           await deleteDoc(doc(db, "inventoryModels", m.id));
           logAction("모델 삭제", m.modelGroup);
           loadModelAdminList();
+          loadColorAdminList();
         }
       };
     });
@@ -1039,6 +1077,7 @@
     logAction("모델 수정", m.modelGroup + " → " + newFields.modelGroup);
     closeModelEditModal();
     await loadModelAdminList();
+    loadColorAdminList();
     loadModelsIntoItemSelect();
   };
 
@@ -1057,7 +1096,87 @@
     document.getElementById("color-modal-overlay").style.display = "none";
     currentColorModelId = null;
     loadModelAdminList();
+    loadColorAdminList();
   };
+
+  // ---------- 색상 전체 목록 (모델 등록 리스트처럼) ----------
+  function loadColorAdminList(){
+    const bodyEl = document.getElementById("color-table-body");
+    if(!bodyEl) return;
+    bodyEl.innerHTML = "";
+    let rows = [];
+    modelsCache.forEach(m=>{
+      (m.colors||[]).forEach((c, idx)=>{ rows.push({ m, c, idx }); });
+    });
+    if(rows.length===0){
+      bodyEl.innerHTML = '<tr><td colspan="5" class="list-empty">등록된 색상이 없습니다.</td></tr>';
+      return;
+    }
+    rows.forEach(({m,c,idx})=>{
+      const hasSku = !!c.sku;
+      const tr = document.createElement("tr");
+      tr.style.borderTop = "1px solid var(--line)";
+      if(!hasSku){ tr.style.color = "var(--danger)"; tr.style.fontWeight = "600"; }
+      tr.innerHTML =
+        '<td style="padding:6px 8px;">'+(m.petName||m.modelGroup||m.systemModel||"-")+'</td>' +
+        '<td style="padding:6px 8px;">'+(c.manufacturerColor||"-")+'</td>' +
+        '<td style="padding:6px 8px;">'+(c.systemColor||"-")+'</td>' +
+        '<td style="padding:6px 8px;">'+(c.sku||"(미입력)")+'</td>' +
+        '<td style="padding:6px 8px;text-align:right;white-space:nowrap;">' +
+          '<button class="btn small secondary" style="width:auto;padding:4px 9px;margin-right:4px;" data-color-row-edit="'+m.id+'">수정</button>' +
+          '<button class="btn small danger" style="width:auto;padding:4px 9px;" data-color-row-del="'+m.id+'" data-idx="'+idx+'">삭제</button>' +
+        '</td>';
+      bodyEl.appendChild(tr);
+      tr.querySelector('[data-color-row-edit]').onclick = ()=> openColorModal(m.id);
+      tr.querySelector('[data-color-row-del]').onclick = ()=> deleteColorStandalone(m.id, idx);
+    });
+  }
+
+  async function deleteColorStandalone(modelId, idx){
+    const m = modelsCache.find(x=>x.id===modelId);
+    if(!m) return;
+    const c = m.colors[idx];
+    if(!confirm((c.systemColor||c.manufacturerColor) + " 색상을 삭제하시겠습니까? (기존 재고 기록은 유지됩니다)")) return;
+    await updateDoc(doc(db,"inventoryModels", modelId), { colors: arrayRemove(c) });
+    logAction("색상 삭제", (m.petName||m.modelGroup) + " / " + (c.systemColor||c.manufacturerColor));
+    await fetchModelsCache();
+    loadColorAdminList();
+    loadModelAdminList();
+  }
+
+  window.openColorStandaloneAddModal = function(){
+    const sel = document.getElementById("csa-model-select");
+    sel.innerHTML = '<option value="">모델을 선택하세요</option>';
+    modelsCache.forEach(m=>{
+      const opt = document.createElement("option");
+      opt.value = m.id;
+      opt.textContent = m.petName || m.modelGroup || m.systemModel || m.id;
+      sel.appendChild(opt);
+    });
+    document.getElementById("csa-manu-input").value = "";
+    document.getElementById("csa-sys-input").value = "";
+    document.getElementById("csa-sku-input").value = "";
+    document.getElementById("color-standalone-modal-overlay").style.display = "flex";
+  };
+  window.closeColorStandaloneAddModal = function(){
+    document.getElementById("color-standalone-modal-overlay").style.display = "none";
+  };
+  window.submitColorStandaloneAdd = async function(){
+    const modelId = document.getElementById("csa-model-select").value;
+    if(!modelId){ alert("모델을 선택해주세요."); return; }
+    const m = modelsCache.find(x=>x.id===modelId);
+    const manufacturerColor = document.getElementById("csa-manu-input").value.trim();
+    const systemColor = document.getElementById("csa-sys-input").value.trim();
+    const sku = document.getElementById("csa-sku-input").value.trim();
+    if(!manufacturerColor && !systemColor){ alert("제조사색상 또는 전산색상 중 하나는 입력해주세요."); return; }
+    await updateDoc(doc(db,"inventoryModels", modelId), { colors: arrayUnion({ manufacturerColor, systemColor, sku }) });
+    logAction("색상 추가", (m.petName||m.modelGroup) + " / " + (systemColor||manufacturerColor));
+    closeColorStandaloneAddModal();
+    await fetchModelsCache();
+    loadColorAdminList();
+    loadModelAdminList();
+  };
+
   let editingColorIndex = null;
 
   function renderColorModalList(){
@@ -1220,6 +1339,7 @@
       .forEach(id=> document.getElementById(id).value = "");
     closeModelSingleModal();
     loadModelAdminList();
+    loadColorAdminList();
   };
 
   // ---------- 모델 엑셀 업로드 팝업 ----------
@@ -1282,6 +1402,7 @@
     logAction("모델 엑셀 업로드", "신규 "+createdCount+" / 누적 "+updatedCount);
     document.getElementById("model-excel-file-input").value = "";
     loadModelAdminList();
+    loadColorAdminList();
   };
 
   async function loadModelsIntoItemSelect(){
@@ -1814,7 +1935,8 @@
     if(tabId==="tab-users") loadUserAdminList();
     if(tabId==="tab-logs") loadLogs();
     if(tabId==="tab-inv-admin"){
-      loadModelAdminList(); loadSourceList(); loadDestList(); loadCarrierList();
+      loadModelAdminList().then(()=> loadColorAdminList());
+      loadSourceList(); loadDestList(); loadCarrierList();
       loadManufacturerList(); loadLocationList(); loadStatusOptionList();
     }
     if(tabId==="tab-inv-work"){
