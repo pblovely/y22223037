@@ -218,6 +218,10 @@
           </div>
         </div>
       </div>
+      <div class="card">
+        <h3>제조사유통폰 현황 <span style="font-weight:400;color:var(--gray);font-size:12px;">(마스터재고 최신 파일 기준)</span></h3>
+        <div id="dash-master-region-list"></div>
+      </div>
     </div>
 
     <!-- ===== 작업: 자료업로드 ===== -->
@@ -2629,10 +2633,23 @@
     return rows;
   }
 
+  async function fetchMasterStockBatchInfo(batchId){
+    const snap = await getDoc(doc(db,"masterStockBatches", batchId));
+    return snap.exists() ? snap.data() : null;
+  }
+
+  let currentMasterStockColumnOrder = [];
+
   async function viewMasterStockBatch(batchId, fileName){
     currentMasterStockBatchId = batchId;
-    const rows = await fetchMasterStockBatchRows(batchId);
+    const [rows, batchInfo] = await Promise.all([
+      fetchMasterStockBatchRows(batchId),
+      fetchMasterStockBatchInfo(batchId)
+    ]);
     masterStockRowsCache = rows;
+    currentMasterStockColumnOrder = (batchInfo && batchInfo.columnOrder && batchInfo.columnOrder.length>0)
+      ? batchInfo.columnOrder
+      : (rows.length>0 ? Object.keys(rows[0]).filter(k=>k!=="batchId") : []);
     document.getElementById("master-stock-view-title").textContent = fileName || "";
     document.getElementById("master-stock-search").value = "";
     renderMasterStockTable(rows);
@@ -2650,7 +2667,7 @@
   function renderMasterStockTable(rows){
     const el = document.getElementById("master-stock-table-area");
     if(!rows || rows.length===0){ el.innerHTML = '<div class="list-empty">표시할 내용이 없습니다.</div>'; return; }
-    const cols = Object.keys(rows[0]).filter(k=>k!=="batchId");
+    const cols = currentMasterStockColumnOrder.length>0 ? currentMasterStockColumnOrder : Object.keys(rows[0]).filter(k=>k!=="batchId");
     let html = '<div style="overflow-x:auto;"><table class="data-table" style="min-width:800px;"><thead><tr>';
     cols.forEach(c=> html += '<th>'+c+'</th>');
     html += '</tr></thead><tbody>';
@@ -2665,9 +2682,14 @@
   }
 
   window.downloadMasterStockBatch = async function(batchId, fileName){
-    const rows = await fetchMasterStockBatchRows(batchId);
+    const [rows, batchInfo] = await Promise.all([
+      fetchMasterStockBatchRows(batchId),
+      fetchMasterStockBatchInfo(batchId)
+    ]);
     if(rows.length===0){ alert("데이터가 없습니다."); return; }
-    const cols = Object.keys(rows[0]).filter(k=>k!=="batchId");
+    const cols = (batchInfo && batchInfo.columnOrder && batchInfo.columnOrder.length>0)
+      ? batchInfo.columnOrder
+      : Object.keys(rows[0]).filter(k=>k!=="batchId");
     const aoa = [cols, ...rows.map(r=>cols.map(c=>r[c]!==undefined?r[c]:""))];
     const ws = XLSX.utils.aoa_to_sheet(aoa);
     forceTextFormat(ws);
@@ -2703,9 +2725,10 @@
     const ws = wb.Sheets[wb.SheetNames[0]];
     const rows = XLSX.utils.sheet_to_json(ws, { defval:"" });
     if(rows.length===0){ msgEl.style.color="var(--danger)"; msgEl.textContent = "읽을 데이터가 없습니다."; return; }
+    const headerRow = (XLSX.utils.sheet_to_json(ws, { header:1, defval:"" })[0]||[]).map(h=>String(h||"").trim()).filter(h=>h);
 
     const batchRef = await addDoc(collection(db,"masterStockBatches"), {
-      fileName: file.name, rowCount: rows.length,
+      fileName: file.name, rowCount: rows.length, columnOrder: headerRow,
       uploadedBy: currentUser.name, uploadedByUsername: currentUser.username,
       uploadedAt: serverTimestamp()
     });
@@ -2719,11 +2742,17 @@
     loadDataUploadTab();
   };
 
+  const POPEOPLE_REGION_CODES = {
+    "309840":"충남", "311827":"대전", "316533":"충북",
+    "316775":"전북", "331545":"평택", "339013":"제주"
+  };
+
   async function loadDashboard(){
     const statEl = document.getElementById("dash-stat-cards");
     const carrierEl = document.getElementById("dash-carrier-list");
     const modelEl = document.getElementById("dash-model-list");
     const destEl = document.getElementById("dash-dest-list");
+    const regionEl = document.getElementById("dash-master-region-list");
     statEl.innerHTML = '<div class="list-empty">불러오는 중...</div>';
 
     const snap = await getDocs(collection(db,"inventoryItems"));
@@ -2791,6 +2820,31 @@
     renderRankList(carrierEl, carrierCounts, "대");
     renderRankList(modelEl, modelCounts, "대");
     renderRankList(destEl, destCounts, "대");
+
+    // 제조사유통폰 현황 (마스터재고 최신 파일의 영업점코드 기준)
+    const batchSnap = await getDocs(query(collection(db,"masterStockBatches"), orderBy("uploadedAt","desc"), limit(1)));
+    if(batchSnap.empty){
+      regionEl.innerHTML = '<div class="list-empty">업로드된 마스터재고가 없습니다. "자료업로드" 탭에서 먼저 올려주세요.</div>';
+    }else{
+      const rows = await fetchMasterStockBatchRows(batchSnap.docs[0].id);
+      const CODE_KEYS = ["영업점코드","점코드","지점코드"];
+      const regionCounts = {};
+      rows.forEach(r=>{
+        let code = "";
+        for(const k of CODE_KEYS){ if(r[k]){ code = String(r[k]).trim(); break; } }
+        if(!code) return;
+        const label = POPEOPLE_REGION_CODES[code] ? POPEOPLE_REGION_CODES[code]+" ("+code+")" : "미확인 ("+code+")";
+        regionCounts[label] = (regionCounts[label]||0) + 1;
+      });
+      if(Object.keys(regionCounts).length===0){
+        regionEl.innerHTML = '<div class="list-empty">마스터재고 파일에서 영업점코드 칸을 찾지 못했습니다.</div>';
+      }else{
+        const entries = Object.entries(regionCounts).sort((a,b)=>b[1]-a[1]);
+        regionEl.innerHTML = entries.map(([k,v])=>
+          '<div class="list-row compact"><span>'+k+'</span><span style="font-weight:700;">'+v+'대</span></div>'
+        ).join("");
+      }
+    }
   }
 
   async function getLatestMasterStockSerialSet(){
@@ -3018,9 +3072,13 @@
     const headerRow = aoa[0].map(h=>String(h||"").trim());
     const dataRows = aoa.slice(1);
 
-    const missing = TEMPLATE_HEADERS.filter(h=>!headerRow.includes(h));
-    if(missing.length===0){
-      // 양식이 정확히 일치 — 바로 처리
+    // 전체 23개 컬럼이 다 있을 필요는 없음 — 모델을 구분할 수 있는 핵심 항목만 있으면 바로 처리
+    const CORE_REQUIRED = ["입고처","통신사","위치","현재상태","일련번호"];
+    const hasModelIdCol = headerRow.includes("전산모델명") || headerRow.includes("삼성코드") ||
+      (headerRow.includes("모델명") && headerRow.includes("기가수"));
+    const missingCore = CORE_REQUIRED.filter(h=>!headerRow.includes(h));
+    if(missingCore.length===0 && hasModelIdCol){
+      // 양식이 핵심 항목을 다 갖췄음 — 바로 처리 (나머지 선택항목은 없어도 빈칸으로 처리됨)
       const rows = XLSX.utils.sheet_to_json(ws, { defval:"" });
       await processExcelRows(rows);
       return;
@@ -3092,6 +3150,10 @@
     if(dup){
       if(!confirm('"'+dup+'" 항목이 두 개 이상의 열에 지정되어 있습니다. 마지막 지정만 사용됩니다. 계속하시겠습니까?')) return;
     }
+    const hasModelId = usedFields["전산모델명"] || usedFields["삼성코드"] || (usedFields["모델명"] && usedFields["기가수"]);
+    if(!hasModelId){
+      if(!confirm('모델을 구분할 수 있는 항목(전산모델명 / 삼성코드 / 모델명+기가수)이 하나도 지정되지 않았습니다. 이대로면 모든 행이 "모델 정보 부족" 오류가 납니다.\n\n계속 진행하시겠습니까? (취소하고 위에서 다시 지정하는 것을 권장합니다)')) return;
+    }
     const rows = excelMappingSheet.dataRows.map(dataRow=>{
       const obj = {};
       Object.keys(colToField).forEach(idxStr=>{
@@ -3142,6 +3204,15 @@
     autoCreated["제조사"] = await autoCreateMissing("제조사", "manufacturers", manufacturerNames);
     autoCreated["위치"] = await autoCreateMissing("위치", "locations", locationNames);
     autoCreated["현재상태"] = await autoCreateMissing("현재상태", "statusOptions", statusNames);
+
+    // 입고처가 빈 칸인 행이 있으면 "미확인"으로 대체 — 등록을 막지 않고 나중에 검수하도록 함
+    const hasBlankSource = rows.some(r=> !String(r["입고처"]||"").trim());
+    if(hasBlankSource && !sourceNames.includes("미확인")){
+      await addDoc(collection(db, "inboundSources"), { name:"미확인", needsReview:true });
+      sourceNames.push("미확인");
+      autoCreated["입고처"] = (autoCreated["입고처"]||0) + 1;
+    }
+
     const autoCreatedTotal = Object.values(autoCreated).reduce((a,b)=>a+b,0);
     if(autoCreatedTotal>0){
       logAction("엑셀 업로드 중 마스터목록 자동등록",
@@ -3163,7 +3234,7 @@
       const excelRowNum = idx + 2;
       const errs = [];
 
-      const source = String(row["입고처"]||"").trim();
+      let source = String(row["입고처"]||"").trim();
       const orderDate = excelDateToStr(row["주문요청"]);
       const inDate = excelDateToStr(row["입고일"]) || todayStr();
       const outDate = excelDateToStr(row["출고일"]);
@@ -3186,7 +3257,7 @@
       const samsungCode = String(row["삼성코드"]||"").trim();
       const imei = String(row["IMEI"]||"").trim();
 
-      if(!source) errs.push("입고처 비어있음");
+      if(!source){ source = "미확인"; }
       if(!carrierRaw) errs.push("통신사 비어있음");
       if(!location) errs.push("위치 비어있음");
       if(!status) errs.push("현재상태 비어있음");
