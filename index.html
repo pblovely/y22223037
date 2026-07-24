@@ -197,22 +197,32 @@
     <!-- ===== 작업: 대시보드 ===== -->
     <div id="tab-dashboard" class="tab-panel">
       <div class="card">
-        <h3>대시보드</h3>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+          <h3 style="margin:0;">대시보드</h3>
+          <span>
+            <button class="btn small" id="dash-scope-month-btn" style="width:auto;" onclick="setDashboardScope('month')">당월</button>
+            <button class="btn small secondary" id="dash-scope-all-btn" style="width:auto;" onclick="setDashboardScope('all')">전체</button>
+          </span>
+        </div>
         <div id="dash-stat-cards" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px;"></div>
         <div style="display:flex;gap:16px;flex-wrap:wrap;">
           <div style="flex:1;min-width:260px;">
-            <h3 style="font-size:13px;">통신사별 재고</h3>
+            <h3 style="font-size:13px;">통신사별 (대수 · 매출액)</h3>
             <div id="dash-carrier-list"></div>
           </div>
           <div style="flex:1;min-width:260px;">
-            <h3 style="font-size:13px;">모델(펫네임)별 보유 TOP5</h3>
+            <h3 style="font-size:13px;">모델(펫네임)별 (대수 · 매입액)</h3>
             <div id="dash-model-list"></div>
           </div>
           <div style="flex:1;min-width:260px;">
-            <h3 style="font-size:13px;">판매처별 판매 TOP5</h3>
+            <h3 style="font-size:13px;">판매처별 (대수 · 매출액)</h3>
             <div id="dash-dest-list"></div>
           </div>
         </div>
+      </div>
+      <div class="card">
+        <h3>제조사유통폰 할인 현황 <span style="font-weight:400;color:var(--gray);font-size:12px;">(선할인%: 실제 이체 기준 / 후할인·장려금: 여신으로 반영)</span></h3>
+        <div id="dash-manufacturer-discount-cards" style="display:flex;gap:10px;flex-wrap:wrap;"></div>
       </div>
       <div class="card">
         <h3>제조사유통폰 현황 <span style="font-weight:400;color:var(--gray);font-size:12px;">(마스터재고 최신 파일 기준)</span></h3>
@@ -834,6 +844,8 @@
             </select>
           </div>
           <div class="stack-row" id="item-clawback-row" style="display:none;"><label>환수액</label><input type="number" id="item-clawbackamount-input" oninput="updateProfitDisplay()"></div>
+          <div class="stack-row"><label>선할인율 (%, 제조사유통폰 매입시)</label><input type="number" step="0.01" id="item-prediscountpct-input" placeholder="이체 기준 할인율"></div>
+          <div class="stack-row"><label>후할인·장려금 (원, 여신 반영분)</label><input type="number" id="item-postdiscountamt-input" placeholder="삼성전자 등 여신으로 반영되는 장려금"></div>
           <div class="stack-row"><label>수익 (자동계산, 공시지원금 반영)</label><input type="text" id="item-profit-display" disabled style="background:#f2f2f2;"></div>
         </div>
         <button class="btn small" id="item-submit-btn" onclick="addInventoryItem()">재고 등록</button>
@@ -941,6 +953,8 @@
     { key:"subsidyAmount", label:"공시지원금", get:it=> (it.subsidyAmount!=null)?Number(it.subsidyAmount).toLocaleString()+"원":"-" },
     { key:"subsidyStatus", label:"공시지원금 상태", get:it=>it.subsidyStatus||"-" },
     { key:"clawbackAmount", label:"환수액", get:it=> (it.clawbackAmount!=null)?Number(it.clawbackAmount).toLocaleString()+"원":"-" },
+    { key:"preDiscountPct", label:"선할인율(%)", get:it=> (it.preDiscountPct!=null)?Number(it.preDiscountPct).toFixed(2)+"%":"-" },
+    { key:"postDiscountAmt", label:"후할인·장려금", get:it=> (it.postDiscountAmt!=null)?Number(it.postDiscountAmt).toLocaleString()+"원":"-" },
     { key:"profit", label:"수익", get:it=> (it.profit!=null)?Number(it.profit).toLocaleString()+"원":"-" }
   ];
   const DEFAULT_VIEW_SETTINGS = INV_COLUMNS.map(c=>c.key);
@@ -2296,7 +2310,8 @@
     ["item-serial-input","item-imei-input","item-listprice-input","item-purchaseprice-input",
       "item-purchasediscount-input","item-purchasediscountamt-input","item-saleprice-input","item-salediscount-input","item-salediscountamt-input",
       "item-orderdate-input","item-indate-input","item-expectedsaledate-input","item-outdate-input",
-      "item-subsidyamount-input","item-clawbackamount-input"].forEach(id=>{ document.getElementById(id).value = ""; });
+      "item-subsidyamount-input","item-clawbackamount-input",
+      "item-prediscountpct-input","item-postdiscountamt-input"].forEach(id=>{ document.getElementById(id).value = ""; });
     document.getElementById("item-profit-display").value = "";
     document.getElementById("item-qty-input").value = "1";
     document.getElementById("item-subsidystatus-select").value = "";
@@ -2390,6 +2405,8 @@
     document.getElementById("item-subsidyamount-input").value = it.subsidyAmount || "";
     document.getElementById("item-subsidystatus-select").value = it.subsidyStatus || "";
     document.getElementById("item-clawbackamount-input").value = it.clawbackAmount || "";
+    document.getElementById("item-prediscountpct-input").value = it.preDiscountPct || "";
+    document.getElementById("item-postdiscountamt-input").value = it.postDiscountAmt || "";
     document.getElementById("item-clawback-row").style.display = (it.subsidyStatus==="환수") ? "flex" : "none";
     currentOrderLinkId = it.orderId || null;
     updateProfitDisplay();
@@ -2479,6 +2496,8 @@
     const subsidyAmount = document.getElementById("item-subsidyamount-input").value;
     const subsidyStatus = document.getElementById("item-subsidystatus-select").value;
     const clawbackAmount = document.getElementById("item-clawbackamount-input").value;
+    const preDiscountPct = document.getElementById("item-prediscountpct-input").value;
+    const postDiscountAmt = document.getElementById("item-postdiscountamt-input").value;
 
     const m = modelsCache.find(x=>x.id===modelId);
     if(!m || colorIdx===""){ alert("모델과 색상을 선택해주세요."); return; }
@@ -2510,6 +2529,8 @@
       subsidyAmount: subsidyAmount?Number(subsidyAmount):null,
       subsidyStatus: subsidyStatus||null,
       clawbackAmount: clawbackAmount?Number(clawbackAmount):null,
+      preDiscountPct: preDiscountPct?Number(preDiscountPct):null,
+      postDiscountAmt: postDiscountAmt?Number(postDiscountAmt):null,
       orderId: currentOrderLinkId||null,
       profit, imei, status, orderDate, inDate, expectedSaleDate, outDate
     };
@@ -3530,81 +3551,115 @@
     "316775":"전북", "331545":"평택", "339013":"제주"
   };
 
+  let dashboardScope = "month"; // "month" | "all"
+  window.setDashboardScope = function(scope){
+    dashboardScope = scope;
+    document.getElementById("dash-scope-month-btn").className = "btn small" + (scope==="month" ? "" : " secondary");
+    document.getElementById("dash-scope-all-btn").className = "btn small" + (scope==="all" ? "" : " secondary");
+    loadDashboard();
+  };
+
   async function loadDashboard(){
     const statEl = document.getElementById("dash-stat-cards");
     const carrierEl = document.getElementById("dash-carrier-list");
     const modelEl = document.getElementById("dash-model-list");
     const destEl = document.getElementById("dash-dest-list");
     const regionEl = document.getElementById("dash-master-region-list");
+    const discountEl = document.getElementById("dash-manufacturer-discount-cards");
     statEl.innerHTML = '<div class="list-empty">불러오는 중...</div>';
 
     const snap = await getDocs(collection(db,"inventoryItems"));
-    const items = []; snap.forEach(d=> items.push(d.data()));
+    const allItems = []; snap.forEach(d=> allItems.push(d.data()));
 
     const thisMonth = todayStr().slice(0,6); // YYYYMM
     const normDate = v=> String(v||"").replace(/\D/g,"");
+    const inScope = (dateStr)=> dashboardScope==="all" ? true : (normDate(dateStr).slice(0,6) === thisMonth);
 
     let totalCount = 0;
     const statusCounts = {};
-    let monthInCount = 0, monthSaleCount = 0;
-    let monthPurchaseSum = 0, monthSaleSum = 0, monthProfitSum = 0;
-    const carrierCounts = {};
-    const modelCounts = {};
-    const destCounts = {};
+    let inCount = 0, saleCount = 0;
+    let purchaseSum = 0, saleSum = 0, profitSum = 0;
+    const carrierAgg = {}; // { name: {count, amount} }
+    const modelAgg = {};
+    const destAgg = {};
 
-    items.forEach(it=>{
+    allItems.forEach(it=>{
       const qty = it.entryType==="imei" ? 1 : (Number(it.quantity)||0);
-      totalCount += qty;
-      const s = it.status || "미지정";
-      statusCounts[s] = (statusCounts[s]||0) + qty;
-
-      if(normDate(it.inDate).slice(0,6) === thisMonth){
-        monthInCount += qty;
-        if(it.purchasePrice) monthPurchaseSum += Number(it.purchasePrice)*qty;
+      const inScopeIn = inScope(it.inDate);
+      const inScopeOut = inScope(it.outDate);
+      if(dashboardScope==="all" || inScopeIn || inScopeOut){
+        totalCount += qty;
+        const s = it.status || "미지정";
+        statusCounts[s] = (statusCounts[s]||0) + qty;
       }
-      if(normDate(it.outDate).slice(0,6) === thisMonth){
-        monthSaleCount += qty;
-        if(it.salePrice) monthSaleSum += Number(it.salePrice)*qty;
-        if(it.profit!=null) monthProfitSum += Number(it.profit)*qty;
+      if(inScopeIn){
+        inCount += qty;
+        if(it.purchasePrice) purchaseSum += Number(it.purchasePrice)*qty;
+      }
+      if(inScopeOut){
+        saleCount += qty;
+        if(it.salePrice) saleSum += Number(it.salePrice)*qty;
+        if(it.profit!=null) profitSum += Number(it.profit)*qty;
       }
 
-      const c = it.carrier || "미지정";
-      carrierCounts[c] = (carrierCounts[c]||0) + qty;
+      if(inScopeIn || inScopeOut){
+        const c = it.carrier || "미지정";
+        if(!carrierAgg[c]) carrierAgg[c] = {count:0, amount:0};
+        carrierAgg[c].count += qty;
+        if(it.salePrice) carrierAgg[c].amount += Number(it.salePrice)*qty;
 
-      const m = it.petName || it.modelGroup || it.systemModel || "미지정";
-      modelCounts[m] = (modelCounts[m]||0) + qty;
+        const m = it.petName || it.modelGroup || it.systemModel || "미지정";
+        if(!modelAgg[m]) modelAgg[m] = {count:0, amount:0};
+        modelAgg[m].count += qty;
+        if(it.purchasePrice) modelAgg[m].amount += Number(it.purchasePrice)*qty;
 
-      if(it.destination){ destCounts[it.destination] = (destCounts[it.destination]||0) + qty; }
+        if(it.destination){
+          if(!destAgg[it.destination]) destAgg[it.destination] = {count:0, amount:0};
+          destAgg[it.destination].count += qty;
+          if(it.salePrice) destAgg[it.destination].amount += Number(it.salePrice)*qty;
+        }
+      }
     });
 
-    function statCard(label, value, color){
-      return '<div style="flex:1;min-width:130px;border:1px solid var(--line);background:#fff;padding:10px 14px;">' +
+    function statCard(label, value, color, big){
+      return '<div style="flex:1;min-width:'+(big?'180px':'130px')+';border:1px solid var(--line);background:#fff;padding:10px 14px;">' +
         '<div style="font-size:11.5px;color:var(--gray);margin-bottom:4px;">'+label+'</div>' +
-        '<div style="font-size:20px;font-weight:800;color:'+(color||'var(--navy)')+';">'+value+'</div></div>';
+        '<div style="font-size:'+(big?'26px':'20px')+';font-weight:800;color:'+(color||'var(--navy)')+';">'+value+'</div></div>';
     }
-    let statHtml = statCard("전체 재고", totalCount+"대");
+    const scopeLabel = dashboardScope==="all" ? "전체" : "당월";
+    let statHtml = statCard(scopeLabel+" 수익 (공시지원금 반영)", profitSum.toLocaleString()+"원", "#2e7d32", true);
+    statHtml += statCard("전체 재고", totalCount+"대");
     Object.keys(statusCounts).sort().forEach(s=>{
       statHtml += statCard(s, statusCounts[s]+"대");
     });
-    statHtml += statCard("이번달 입고", monthInCount+"대", "#1565c0");
-    statHtml += statCard("이번달 판매", monthSaleCount+"대", "#8a6d00");
-    statHtml += statCard("이번달 매입액", monthPurchaseSum.toLocaleString()+"원", "#1565c0");
-    statHtml += statCard("이번달 매출액", monthSaleSum.toLocaleString()+"원", "#8a6d00");
-    statHtml += statCard("이번달 수익", monthProfitSum.toLocaleString()+"원", "#2e7d32");
+    statHtml += statCard(scopeLabel+" 입고", inCount+"대", "#1565c0");
+    statHtml += statCard(scopeLabel+" 판매", saleCount+"대", "#8a6d00");
+    statHtml += statCard(scopeLabel+" 매입액", purchaseSum.toLocaleString()+"원", "#1565c0");
+    statHtml += statCard(scopeLabel+" 매출액", saleSum.toLocaleString()+"원", "#8a6d00");
     statEl.innerHTML = statHtml;
 
-    function renderRankList(el, counts, unit){
-      const entries = Object.entries(counts).sort((a,b)=>b[1]-a[1]).slice(0,5);
+    function renderFullList(el, agg){
+      const entries = Object.entries(agg).sort((a,b)=>b[1].count-a[1].count);
       if(entries.length===0){ el.innerHTML = '<div class="list-empty">데이터가 없습니다.</div>'; return; }
-      el.innerHTML = entries.map(([k,v],i)=>
-        '<div class="list-row compact"><span>'+(i+1)+'. '+k+'</span><span style="font-weight:700;">'+v+unit+'</span></div>'
+      el.innerHTML = entries.map(([k,v])=>
+        '<div class="list-row compact"><span>'+k+'</span><span style="font-weight:700;">'+v.count+'대 · '+v.amount.toLocaleString()+'원</span></div>'
       ).join("");
     }
-    renderRankList(carrierEl, carrierCounts, "대");
-    renderRankList(modelEl, modelCounts, "대");
-    renderRankList(destEl, destCounts, "대");
+    renderFullList(carrierEl, carrierAgg);
+    renderFullList(modelEl, modelAgg);
+    renderFullList(destEl, destAgg);
 
-    // 제조사유통폰 현황 (마스터재고 최신 파일의 영업점코드 기준)
+    const discountItems = allItems.filter(it => (it.preDiscountPct!=null || it.postDiscountAmt!=null) && (dashboardScope==="all" || inScope(it.inDate)));
+    let preDiscountSumPct = 0, preDiscountCount = 0, postDiscountSum = 0, postDiscountCount = 0;
+    discountItems.forEach(it=>{
+      if(it.preDiscountPct!=null){ preDiscountSumPct += Number(it.preDiscountPct); preDiscountCount++; }
+      if(it.postDiscountAmt!=null){ postDiscountSum += Number(it.postDiscountAmt); postDiscountCount++; }
+    });
+    const avgPreDiscount = preDiscountCount>0 ? (preDiscountSumPct/preDiscountCount) : 0;
+    discountEl.innerHTML =
+      statCard(scopeLabel+" 선할인 평균율 (이체 기준)", avgPreDiscount.toFixed(2)+"% ("+preDiscountCount+"건)", "#1565c0") +
+      statCard(scopeLabel+" 후할인·장려금 합계 (여신 반영)", postDiscountSum.toLocaleString()+"원 ("+postDiscountCount+"건)", "#8a6d00");
+
     const batchSnap = await getDocs(query(collection(db,"masterStockBatches"), orderBy("uploadedAt","desc"), limit(1)));
     if(batchSnap.empty){
       regionEl.innerHTML = '<div class="list-empty">업로드된 마스터재고가 없습니다. "자료업로드" 탭에서 먼저 올려주세요.</div>';
