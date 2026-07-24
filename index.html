@@ -207,7 +207,7 @@
             <select id="dash-month-picker" onchange="setDashboardCustomMonth(this.value)" style="padding:5px 6px;border:1px solid #c7c7c7;font-size:12.5px;height:28px;"><option value="">월 선택</option></select>
           </span>
         </div>
-        <div id="dash-stat-cards" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px;"></div>
+        <div id="dash-stat-cards" style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-start;margin-bottom:16px;"></div>
         <div>
           <h3 style="font-size:13px;">통신사별</h3>
           <div id="dash-carrier-list"></div>
@@ -4781,7 +4781,7 @@
     function statCard(label, value, color, labelKey){
       const vKey = labelKey ? labelKey+"-value" : "";
       const cardKey = labelKey ? labelKey+"-card" : "";
-      return '<div class="dash-stat-card"'+(cardKey?' data-label-key="'+cardKey+'"':'')+' style="flex:1;min-width:150px;border:1px solid var(--line);background:#fff;padding:10px 14px;">' +
+      return '<div class="dash-stat-card"'+(cardKey?' data-label-key="'+cardKey+'"':'')+' style="flex:1;min-width:150px;border:1px solid var(--line);background:#fff;padding:9px 14px;">' +
         '<div class="dash-stat-label"'+(labelKey?' data-label-key="'+labelKey+'"':'')+' style="font-size:calc(11.5px * var(--dash-scale,1));color:var(--gray);margin-bottom:4px;"><span class="tab-label-text">'+label+'</span></div>' +
         '<div class="dash-stat-value"'+(vKey?' data-label-key="'+vKey+'"':'')+' style="font-size:calc(19px * var(--dash-scale,1));font-weight:800;color:var(--navy);"><span class="tab-label-text">'+value+'</span></div></div>';
     }
@@ -4800,15 +4800,15 @@
         statRow(keyPrefix+'-pending', pendingLabel, pendingValue, false) +
         '</div>';
     }
-    let statHtml = statCard("수익 (판매가-입고가만, 공시지원금 별도)", profitSum.toLocaleString(), null, "dash-profit");
-    statHtml += statCardTriple("공시지원금 (귀속월 기준)", "지급", subsidyReceivedSum.toLocaleString(), "환수", subsidyClawbackSum.toLocaleString(), null, "dash-subsidy");
+    let statHtml = statCard("입고 건수 (기간 내 입고일 기준)", inCount, null, "dash-in");
+    statHtml += statCard("판매 건수 (기간 내 출고일 기준)", saleCount, null, "dash-out");
     statHtml += statCard("전체 재고", totalCount, null, "dash-total-stock");
     const soldStatusCount = statusCounts["판매"] || 0;
     const heldStatusCount = totalCount - soldStatusCount;
     statHtml += statCard("보유", heldStatusCount, null, "dash-held");
     statHtml += statCard("판매", soldStatusCount, null, "dash-sold");
-    statHtml += statCard("입고 건수 (기간 내 입고일 기준)", inCount, null, "dash-in");
-    statHtml += statCard("판매 건수 (기간 내 출고일 기준)", saleCount, null, "dash-out");
+    statHtml += statCard("수익 (판매가-입고가만, 공시지원금 별도)", profitSum.toLocaleString(), null, "dash-profit");
+    statHtml += statCardTriple("공시지원금 (귀속월 기준)", "지급", subsidyReceivedSum.toLocaleString(), "환수", subsidyClawbackSum.toLocaleString(), null, "dash-subsidy");
     statHtml += statCardTriple("매입", "입고", purchaseSum.toLocaleString(), "미입고", pendingPurchaseAmount.toLocaleString(), null, "dash-purchase");
     statHtml += statCardTriple("매출", "출고", saleSum.toLocaleString(), "미출고", pendingSaleAmount.toLocaleString(), null, "dash-sale");
     statEl.innerHTML = statHtml;
