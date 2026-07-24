@@ -164,6 +164,7 @@
       <div class="sidebar" id="app-sidebar">
         <div id="work-group">
           <div class="sidebar-section-label">작업 메뉴</div>
+          <button class="tab-btn" data-tab="tab-notices" data-label-key="tab-notices" id="tabbtn-notices" onclick="switchTab('tab-notices')" style="display:none;"><span class="tab-label-text">공지사항</span> <span id="notice-unread-dot" style="display:none;width:8px;height:8px;border-radius:50%;background:var(--danger);margin-left:2px;"></span></button>
           <button class="tab-btn" data-tab="tab-dashboard" data-label-key="tab-dashboard" id="tabbtn-dashboard" onclick="switchTab('tab-dashboard')" style="display:none;"><span class="tab-label-text">대시보드</span></button>
           <button class="tab-btn" data-tab="tab-inv-work" data-label-key="tab-inv-work" id="tabbtn-inv-work" onclick="switchTab('tab-inv-work')" style="display:none;"><span class="tab-label-text">재고 등록</span></button>
           <button class="tab-btn" data-tab="tab-orders" data-label-key="tab-orders" id="tabbtn-orders" onclick="switchTab('tab-orders')" style="display:none;"><span class="tab-label-text">주문 관리</span></button>
@@ -172,7 +173,6 @@
         </div>
         <button id="admin-toggle-btn" data-label-key="admin-toggle" onclick="toggleAdminMenu()" style="display:none;"><span class="tab-label-text">⚙ 관리자</span></button>
         <div id="admin-group" style="display:none;">
-          <button class="tab-btn" data-tab="tab-notices" data-label-key="tab-notices" id="tabbtn-notices" onclick="switchTab('tab-notices')" style="display:none;"><span class="tab-label-text">공지사항</span></button>
           <button class="tab-btn" data-tab="tab-site" data-label-key="tab-site" id="tabbtn-site" onclick="switchTab('tab-site')" style="display:none;"><span class="tab-label-text">사이트 설정</span></button>
           <button class="tab-btn" data-tab="tab-team" data-label-key="tab-team" id="tabbtn-team" onclick="switchTab('tab-team')" style="display:none;"><span class="tab-label-text">팀 관리</span></button>
           <button class="tab-btn" data-label-key="inv-admin" id="tabbtn-inv-admin" onclick="openInvAdminSection()" style="display:none;"><span class="tab-label-text">재고 기초설정</span></button>
@@ -205,6 +205,11 @@
             <button class="btn small" id="dash-scope-month-btn" style="width:auto;" onclick="setDashboardScope('month')">당월</button>
             <button class="btn small secondary" id="dash-scope-all-btn" style="width:auto;" onclick="setDashboardScope('all')">전체</button>
             <select id="dash-month-picker" onchange="setDashboardCustomMonth(this.value)" style="padding:5px 6px;border:1px solid #c7c7c7;font-size:12.5px;height:28px;"><option value="">월 선택</option></select>
+            <span style="color:var(--line);margin:0 4px;">|</span>
+            <span style="font-size:11.5px;color:var(--gray);">글씨크기</span>
+            <button class="btn small secondary" style="width:auto;padding:5px 8px;" onclick="setDashFontSize('small')">작게</button>
+            <button class="btn small secondary" style="width:auto;padding:5px 8px;" onclick="setDashFontSize('medium')">보통</button>
+            <button class="btn small secondary" style="width:auto;padding:5px 8px;" onclick="setDashFontSize('large')">크게</button>
           </span>
         </div>
         <div id="dash-stat-cards" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px;"></div>
@@ -1139,11 +1144,27 @@
         applySiteName(currentSettings.siteName);
         applyPendingScreen(currentSettings);
         customTabLabels = currentSettings.tabLabels || {};
+        dashFontSize = currentSettings.dashFontSize || "medium";
         applyCustomTabLabels();
+        applyDashFontSize();
       }
     }catch(err){}
   }
   loadSiteSettings();
+
+  // ---------- 대시보드 카드 글씨 크기 ----------
+  let dashFontSize = "medium";
+  const DASH_FONT_SCALES = { small:0.8, medium:1, large:1.3 };
+  function applyDashFontSize(){
+    const el = document.getElementById("dash-stat-cards");
+    if(!el) return;
+    el.style.setProperty("--dash-scale", DASH_FONT_SCALES[dashFontSize] || 1);
+  }
+  window.setDashFontSize = function(size){
+    dashFontSize = size;
+    applyDashFontSize();
+    setDoc(doc(db,"settings","general"), { dashFontSize: size }, { merge:true }).catch(()=>{});
+  };
 
   // ---------- 탭 이름 우클릭으로 수정 ----------
   let customTabLabels = {};
@@ -1807,6 +1828,27 @@
       };
     });
   }
+
+  async function checkUnreadNotices(){
+    try{
+      const latestSnap = await getDocs(query(collection(db,"notices"), orderBy("createdAt","desc"), limit(1)));
+      if(latestSnap.empty){ document.getElementById("notice-unread-dot").style.display = "none"; return; }
+      const latestAt = latestSnap.docs[0].data().createdAt;
+      const latestMs = latestAt && latestAt.toMillis ? latestAt.toMillis() : 0;
+
+      const readSnap = await getDoc(doc(db,"noticeReads", currentUser.username));
+      const lastReadMs = readSnap.exists() && readSnap.data().lastReadAt && readSnap.data().lastReadAt.toMillis ? readSnap.data().lastReadAt.toMillis() : 0;
+
+      document.getElementById("notice-unread-dot").style.display = (latestMs > lastReadMs) ? "inline-block" : "none";
+    }catch(err){}
+  }
+  window.markNoticesRead = async function(){
+    document.getElementById("notice-unread-dot").style.display = "none";
+    if(!currentUser.username || currentUser.username==="unknown") return;
+    try{
+      await setDoc(doc(db,"noticeReads", currentUser.username), { lastReadAt: serverTimestamp() }, { merge:true });
+    }catch(err){}
+  };
 
   async function checkLoginNotices(){
     try{
@@ -4587,16 +4629,21 @@
       }
     });
 
-    function statCard(label, value, color){
-      return '<div style="flex:1;min-width:150px;border:1px solid var(--line);background:#fff;padding:10px 14px;">' +
-        '<div style="font-size:11.5px;color:var(--gray);margin-bottom:4px;">'+label+'</div>' +
-        '<div style="font-size:19px;font-weight:800;color:'+(color||'var(--navy)')+';">'+value+'</div></div>';
+    function statCard(label, value, color, labelKey){
+      return '<div class="dash-stat-card" style="flex:1;min-width:150px;border:1px solid var(--line);background:#fff;padding:10px 14px;">' +
+        '<div class="dash-stat-label"'+(labelKey?' data-label-key="'+labelKey+'"':'')+' style="font-size:calc(11.5px * var(--dash-scale,1));color:var(--gray);margin-bottom:4px;"><span class="tab-label-text">'+label+'</span></div>' +
+        '<div class="dash-stat-value" style="font-size:calc(19px * var(--dash-scale,1));font-weight:800;color:'+(color||'var(--navy)')+';">'+value+'</div></div>';
     }
-    function statCardWithSub(label, value, subLabel, subValue, color){
-      return '<div style="flex:1;min-width:150px;border:1px solid var(--line);background:#fff;padding:10px 14px;">' +
-        '<div style="font-size:11.5px;color:var(--gray);margin-bottom:4px;">'+label+'</div>' +
-        '<div style="font-size:19px;font-weight:800;color:'+(color||'var(--navy)')+';">'+value+'</div>' +
-        '<div style="font-size:11px;color:var(--gray);margin-top:6px;">'+subLabel+' <span style="font-weight:700;color:'+(color||'var(--navy)')+';">'+subValue+'</span></div></div>';
+    function statCardTriple(mainLabel, arrivedLabel, arrivedValue, pendingLabel, pendingValue, color, keyPrefix){
+      const total = (Number(String(arrivedValue).replace(/,/g,""))||0) + (Number(String(pendingValue).replace(/,/g,""))||0);
+      return '<div class="dash-stat-card" style="flex:1;min-width:170px;border:1px solid var(--line);background:#fff;padding:10px 14px;">' +
+        '<div class="dash-stat-label" data-label-key="'+keyPrefix+'-title" style="font-size:calc(11.5px * var(--dash-scale,1));color:var(--gray);margin-bottom:4px;"><span class="tab-label-text">'+mainLabel+'</span></div>' +
+        '<div class="dash-stat-label" data-label-key="'+keyPrefix+'-arrived" style="font-size:calc(11px * var(--dash-scale,1));color:var(--gray);"><span class="tab-label-text">'+arrivedLabel+'</span></div>' +
+        '<div class="dash-stat-value" style="font-size:calc(17px * var(--dash-scale,1));font-weight:800;color:'+(color||'var(--navy)')+';margin-bottom:4px;">'+arrivedValue+'</div>' +
+        '<div class="dash-stat-label" data-label-key="'+keyPrefix+'-pending" style="font-size:calc(11px * var(--dash-scale,1));color:var(--gray);"><span class="tab-label-text">'+pendingLabel+'</span></div>' +
+        '<div class="dash-stat-value" style="font-size:calc(14px * var(--dash-scale,1));font-weight:700;color:'+(color||'var(--navy)')+';margin-bottom:4px;">'+pendingValue+'</div>' +
+        '<div class="dash-stat-label" data-label-key="'+keyPrefix+'-total" style="font-size:calc(11px * var(--dash-scale,1));color:var(--gray);"><span class="tab-label-text">총금액</span></div>' +
+        '<div class="dash-stat-value" style="font-size:calc(15px * var(--dash-scale,1));font-weight:800;color:'+(color||'var(--navy)')+';">'+total.toLocaleString()+'</div></div>';
     }
     const scopeLabel = dashboardScope==="all" ? "전체" : (dashboardCustomMonth ? (dashboardCustomMonth.slice(0,4)+"년 "+dashboardCustomMonth.slice(4,6)+"월") : "당월");
     let statHtml = statCard(scopeLabel+" 수익 (판매가-입고가만, 공시지원금 별도)", profitSum.toLocaleString(), "#2e7d32");
@@ -4607,9 +4654,11 @@
     });
     statHtml += statCard(scopeLabel+" 입고", inCount+"대", "#1565c0");
     statHtml += statCard(scopeLabel+" 판매", saleCount+"대", "#8a6d00");
-    statHtml += statCardWithSub(scopeLabel+" 매입액", purchaseSum.toLocaleString(), "미입고금액", pendingPurchaseAmount.toLocaleString(), "#1565c0");
-    statHtml += statCardWithSub(scopeLabel+" 매출액", saleSum.toLocaleString(), "미출고금액", pendingSaleAmount.toLocaleString(), "#8a6d00");
+    statHtml += statCardTriple(scopeLabel+" 매입", "입고금액", purchaseSum.toLocaleString(), "미입고금액", pendingPurchaseAmount.toLocaleString(), "#1565c0", "dash-purchase");
+    statHtml += statCardTriple(scopeLabel+" 매출", "출고금액", saleSum.toLocaleString(), "미출고금액", pendingSaleAmount.toLocaleString(), "#8a6d00", "dash-sale");
     statEl.innerHTML = statHtml;
+    applyCustomTabLabels();
+    applyDashFontSize();
 
     function renderFullList(el, agg, nameLabel){
       const entries = Object.entries(agg).sort((a,b)=>b[1].count-a[1].count);
@@ -5828,7 +5877,7 @@
       document.getElementById("inv-admin-submenu").style.display = "none";
     }
 
-    if(tabId==="tab-notices") loadNoticeList();
+    if(tabId==="tab-notices"){ loadNoticeList(); markNoticesRead(); }
     if(tabId==="tab-dashboard") loadDashboard();
     if(tabId==="tab-data-upload") loadDataUploadTab();
     if(tabId==="tab-orders") loadOrderList();
@@ -5930,6 +5979,7 @@
       currentUser = { name:data.name, username:data.username, uid:user.uid };
       currentViewSettings = data.viewSettings && data.viewSettings.length ? data.viewSettings : DEFAULT_VIEW_SETTINGS.slice();
       checkLoginNotices();
+      checkUnreadNotices();
 
       const perms = data.permissions || {};
       const permListEl = document.getElementById("perm-list");
@@ -5956,7 +6006,7 @@
       if(showUsers) updateUserAdminBadge();
 
       document.getElementById("tabbtn-site").style.display = showSite ? "block":"none";
-      document.getElementById("tabbtn-notices").style.display = showSite ? "block":"none";
+      document.getElementById("tabbtn-notices").style.display = (showDashboard||showInvWork) ? "block":"none";
       document.getElementById("tabbtn-team").style.display = showTeam ? "block":"none";
       document.getElementById("tabbtn-inv-admin").style.display = showInvAdmin ? "block":"none";
       document.getElementById("tabbtn-users").style.display = showUsers ? "block":"none";
