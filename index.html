@@ -548,10 +548,10 @@
           <div class="stack-row"><label>IMEI (선택)</label><input type="text" id="item-imei-input"></div>
           <div class="stack-row"><label>출고가</label><input type="number" id="item-listprice-input"></div>
           <div class="stack-row"><label>입고가</label><input type="number" id="item-purchaseprice-input" oninput="updateProfitDisplay()"></div>
-          <div class="stack-row"><label>입고할인율</label><input type="number" step="0.001" id="item-purchasediscount-input" placeholder="예: 0.002"></div>
+          <div class="stack-row"><label>입고할인율 (%)</label><input type="number" step="0.01" id="item-purchasediscount-input" placeholder="예: 0.20" oninput="onPurchaseDiscountInput()"></div>
           <div class="stack-row"><label>판매처 (선택)</label><select id="item-dest-select"><option value="">해당없음</option></select></div>
           <div class="stack-row"><label>판매가 (선택)</label><input type="number" id="item-saleprice-input" oninput="updateProfitDisplay()"></div>
-          <div class="stack-row"><label>판매할인율 (선택)</label><input type="number" step="0.001" id="item-salediscount-input"></div>
+          <div class="stack-row"><label>판매할인율 (%, 선택)</label><input type="number" step="0.01" id="item-salediscount-input" placeholder="예: 0.20" oninput="onSaleDiscountInput()"></div>
           <div class="stack-row"><label>수익 (자동계산)</label><input type="text" id="item-profit-display" disabled style="background:#f2f2f2;"></div>
           <div class="stack-row"><label>주문요청일</label><input type="date" id="item-orderdate-input"></div>
           <div class="stack-row"><label>입고일</label><input type="date" id="item-indate-input"></div>
@@ -631,10 +631,10 @@
     { key:"imei", label:"IMEI", get:it=>it.imei||"-" },
     { key:"listPrice", label:"출고가", get:it=>it.listPrice?Number(it.listPrice).toLocaleString()+"원":"-" },
     { key:"purchasePrice", label:"입고가", get:it=>it.purchasePrice?Number(it.purchasePrice).toLocaleString()+"원":"-" },
-    { key:"purchaseDiscount", label:"입고할인율", get:it=> (it.purchaseDiscount!=null)?it.purchaseDiscount:"-" },
+    { key:"purchaseDiscount", label:"입고할인율(%)", get:it=> (it.purchaseDiscount!=null)?Number(it.purchaseDiscount).toFixed(2)+"%":"-" },
     { key:"destination", label:"판매처", get:it=>it.destination||"-" },
     { key:"salePrice", label:"판매가", get:it=>it.salePrice?Number(it.salePrice).toLocaleString()+"원":"-" },
-    { key:"saleDiscount", label:"판매할인율", get:it=> (it.saleDiscount!=null)?it.saleDiscount:"-" },
+    { key:"saleDiscount", label:"판매할인율(%)", get:it=> (it.saleDiscount!=null)?Number(it.saleDiscount).toFixed(2)+"%":"-" },
     { key:"profit", label:"수익", get:it=> (it.profit!=null)?Number(it.profit).toLocaleString()+"원":"-" },
     { key:"orderDate", label:"주문요청일", get:it=>it.orderDate||"-" },
     { key:"inDate", label:"입고일", get:it=>it.inDate||"-" },
@@ -1527,6 +1527,24 @@
     if(sale && purchase){ disp.value = (sale - purchase).toLocaleString() + "원"; }
     else{ disp.value = ""; }
   };
+  window.onPurchaseDiscountInput = function(){
+    const listPrice = Number(document.getElementById("item-listprice-input").value) || 0;
+    const discountPct = document.getElementById("item-purchasediscount-input").value;
+    if(listPrice && discountPct !== ""){
+      const price = Math.round(listPrice * (1 - Number(discountPct)/100));
+      document.getElementById("item-purchaseprice-input").value = price;
+      updateProfitDisplay();
+    }
+  };
+  window.onSaleDiscountInput = function(){
+    const listPrice = Number(document.getElementById("item-listprice-input").value) || 0;
+    const discountPct = document.getElementById("item-salediscount-input").value;
+    if(listPrice && discountPct !== ""){
+      const price = Math.round(listPrice * (1 - Number(discountPct)/100));
+      document.getElementById("item-saleprice-input").value = price;
+      updateProfitDisplay();
+    }
+  };
 
   // ---------- 재고 엑셀 업로드 팝업 ----------
   window.openExcelUploadModal = function(){
@@ -1689,9 +1707,9 @@
       petName: m.petName || "", manufacturerColor, systemColor, sku, carrier, source, manufacturer, location, destination:dest,
       listPrice: listPrice?Number(listPrice):null,
       purchasePrice: purchasePrice?Number(purchasePrice):null,
-      purchaseDiscount: purchaseDiscount?Number(purchaseDiscount):null,
+      purchaseDiscount: purchaseDiscount?Number(Number(purchaseDiscount).toFixed(2)):null,
       salePrice: salePrice?Number(salePrice):null,
-      saleDiscount: saleDiscount?Number(saleDiscount):null,
+      saleDiscount: saleDiscount?Number(Number(saleDiscount).toFixed(2)):null,
       profit, imei, status, orderDate, inDate, outDate
     };
 
@@ -2025,8 +2043,8 @@
           petName: model.petName||"", manufacturerColor:colorObj.manufacturerColor||"", systemColor:colorObj.systemColor||"", sku:colorObj.sku||"",
           carrier, source, manufacturer, location, destination:dest,
           listPrice:listPriceNum, purchasePrice:purchasePriceNum,
-          purchaseDiscount: purchaseDiscount?Number(purchaseDiscount):null,
-          salePrice:salePriceNum, saleDiscount: saleDiscount?Number(saleDiscount):null,
+          purchaseDiscount: purchaseDiscount?Number(Number(purchaseDiscount).toFixed(2)):null,
+          salePrice:salePriceNum, saleDiscount: saleDiscount?Number(Number(saleDiscount).toFixed(2)):null,
           profit, imei, status, orderDate, inDate, outDate,
           entryType:"imei", quantity:1, serialNumber,
           rowNum: excelRowNum
