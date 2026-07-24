@@ -642,20 +642,24 @@
           <button class="btn small" style="width:auto;margin-top:6px;" onclick="saveViewSettings()">이 설정 저장 (내 계정에 유지)</button>
         </div>
 
-        <div style="display:flex;flex-wrap:nowrap;overflow-x:auto;align-items:stretch;border:1px solid var(--line);background:#fff;margin-bottom:6px;height:36px;box-sizing:border-box;">
+        <div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px;border:1px solid var(--line);padding:8px 10px;margin-bottom:6px;">
           <input type="hidden" id="filter-date-type" value="inDate">
-          <label style="display:flex;align-items:center;gap:5px;padding:0 10px;font-size:12.5px;border-right:1px solid var(--line);white-space:nowrap;flex-shrink:0;box-sizing:border-box;">
+          <label style="display:flex;align-items:center;gap:5px;font-size:12.5px;white-space:nowrap;">
             <input type="checkbox" id="filter-date-all" onclick="onFilterDateAllToggle()"> 전체
           </label>
-          <input type="text" id="filter-date-from" placeholder="시작일 예:20260701" maxlength="8" inputmode="numeric" style="flex-shrink:0;width:110px;height:36px;border:none;border-right:1px solid var(--line);padding:0 8px;font-size:12.5px;box-sizing:border-box;">
-          <input type="text" id="filter-date-to" placeholder="종료일 예:20260731" maxlength="8" inputmode="numeric" style="flex-shrink:0;width:110px;height:36px;border:none;border-right:1px solid var(--line);padding:0 8px;font-size:12.5px;box-sizing:border-box;">
-          <select id="primary-cond-field" style="flex-shrink:0;width:110px;height:36px;border:none;border-right:1px solid var(--line);padding:0 6px;font-size:12.5px;box-sizing:border-box;"></select>
-          <select id="primary-cond-match" style="flex-shrink:0;width:70px;height:36px;border:none;border-right:1px solid var(--line);padding:0 6px;font-size:12.5px;box-sizing:border-box;">
+          <label style="display:flex;align-items:center;gap:5px;font-size:12.5px;white-space:nowrap;">시작일
+            <input type="text" id="filter-date-from" placeholder="20260701" maxlength="8" inputmode="numeric" style="width:100px;height:28px;border:1px solid #c7c7c7;padding:0 8px;font-size:12.5px;box-sizing:border-box;">
+          </label>
+          <label style="display:flex;align-items:center;gap:5px;font-size:12.5px;white-space:nowrap;">종료일
+            <input type="text" id="filter-date-to" placeholder="20260731" maxlength="8" inputmode="numeric" style="width:100px;height:28px;border:1px solid #c7c7c7;padding:0 8px;font-size:12.5px;box-sizing:border-box;">
+          </label>
+          <select id="primary-cond-field" style="height:28px;border:1px solid #c7c7c7;padding:0 6px;font-size:12.5px;box-sizing:border-box;"></select>
+          <select id="primary-cond-match" style="height:28px;border:1px solid #c7c7c7;padding:0 6px;font-size:12.5px;box-sizing:border-box;">
             <option value="포함">포함</option><option value="일치">일치</option>
           </select>
-          <input type="text" id="primary-cond-value" placeholder="검색어" style="flex-shrink:0;width:130px;height:36px;border:none;border-right:1px solid var(--line);padding:0 8px;font-size:12.5px;box-sizing:border-box;">
-          <button class="btn small secondary" style="width:auto;flex-shrink:0;height:36px;box-sizing:border-box;padding:0 12px;border-right:1px solid var(--line);" onclick="openAddConditionModal()">+ 조건 추가</button>
-          <button class="btn small" style="width:auto;flex-shrink:0;height:36px;box-sizing:border-box;padding:0 16px;margin-left:auto;" onclick="loadInventoryList()">조회</button>
+          <input type="text" id="primary-cond-value" placeholder="검색어" style="width:130px;height:28px;border:1px solid #c7c7c7;padding:0 8px;font-size:12.5px;box-sizing:border-box;">
+          <button class="btn small secondary" style="width:auto;height:28px;box-sizing:border-box;padding:0 12px;" onclick="openAddConditionModal()">+ 조건 추가</button>
+          <button class="btn small" style="width:auto;height:28px;box-sizing:border-box;padding:0 16px;margin-left:auto;" onclick="loadInventoryList()">조회</button>
         </div>
         <div id="active-conditions-chips" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px;"></div>
 
@@ -1144,6 +1148,8 @@
         applySiteName(currentSettings.siteName);
         applyPendingScreen(currentSettings);
         customTabLabels = currentSettings.tabLabels || {};
+        customTabColors = currentSettings.tabColors || {};
+        customTabFontSizes = currentSettings.tabFontSizes || {};
         dashFontSize = currentSettings.dashFontSize || "medium";
         applyCustomTabLabels();
         applyDashFontSize();
@@ -1166,69 +1172,119 @@
     setDoc(doc(db,"settings","general"), { dashFontSize: size }, { merge:true }).catch(()=>{});
   };
 
-  // ---------- 버튼·제목 우클릭으로 이름 수정 (전체 적용) ----------
+  // ---------- 버튼·제목·대시보드 카드 우클릭으로 이름/색상/글씨크기 수정 (전체 적용) ----------
   let customTabLabels = {};
+  let customTabColors = {};
+  let customTabFontSizes = {};
+
+  function getElKey(el){
+    if(el.dataset.labelKey) return el.dataset.labelKey;
+    if(!el.dataset.origText){
+      if(el.children.length>0) return null; // 배지·아이콘 있는 요소는 건드리지 않음
+      const t = el.textContent.trim();
+      if(!t) return null;
+      el.dataset.origText = t;
+    }
+    return "btn:" + el.dataset.origText;
+  }
+
   function applyCustomTabLabels(){
-    // 1) 미리 키가 지정된 것들 (사이드바 메뉴, 대시보드 카드 라벨)
-    document.querySelectorAll("[data-label-key]").forEach(btn=>{
-      const key = btn.dataset.labelKey;
-      const labelSpan = btn.querySelector(".tab-label-text");
-      if(!labelSpan) return;
-      if(customTabLabels[key]){
-        labelSpan.textContent = customTabLabels[key];
-      }
+    document.querySelectorAll("[data-label-key]").forEach(el=>{
+      const key = el.dataset.labelKey;
+      const span = el.querySelector(".tab-label-text");
+      if(span && customTabLabels[key]) span.textContent = customTabLabels[key];
+      if(customTabColors[key]) el.style.setProperty("color", customTabColors[key], "important");
+      if(customTabFontSizes[key]) el.style.setProperty("font-size", customTabFontSizes[key]+"px", "important");
     });
-    // 2) 나머지 일반 버튼/제목들: 처음 보이는 텍스트를 그대로 키로 사용
     document.querySelectorAll("button:not([data-label-key]), h3:not([data-label-key])").forEach(el=>{
       if(!el.dataset.origText){
-        // 배지·아이콘 같은 자식 요소가 있으면 건드리지 않음 (안전하게 건너뜀)
         if(el.children.length>0) return;
         const t = el.textContent.trim();
         if(!t) return;
         el.dataset.origText = t;
       }
       const key = "btn:" + el.dataset.origText;
-      if(customTabLabels[key]){
-        el.textContent = customTabLabels[key];
-      }
+      if(customTabLabels[key]) el.textContent = customTabLabels[key];
+      if(customTabColors[key]) el.style.setProperty("color", customTabColors[key], "important");
+      if(customTabFontSizes[key]) el.style.setProperty("font-size", customTabFontSizes[key]+"px", "important");
     });
   }
+
+  function saveCustomization(kind, key, value, actionLabel){
+    if(kind==="label") customTabLabels[key] = value;
+    if(kind==="color") customTabColors[key] = value;
+    if(kind==="fontSize") customTabFontSizes[key] = value;
+    applyCustomTabLabels();
+    setDoc(doc(db,"settings","general"), {
+      tabLabels: customTabLabels, tabColors: customTabColors, tabFontSizes: customTabFontSizes
+    }, { merge:true })
+      .then(()=> logAction(actionLabel, key+" → "+value))
+      .catch(()=> alert("저장에 실패했습니다. 다시 시도해주세요."));
+  }
+
+  function closeCustomizeMenu(){
+    const m = document.getElementById("customize-context-menu");
+    if(m) m.remove();
+  }
+  document.addEventListener("click", closeCustomizeMenu);
+
+  function showCustomizeMenu(x, y, el, key){
+    closeCustomizeMenu();
+    const menu = document.createElement("div");
+    menu.id = "customize-context-menu";
+    menu.style.cssText = "position:fixed;top:"+y+"px;left:"+x+"px;background:#fff;border:1px solid var(--navy);box-shadow:0 2px 10px rgba(0,0,0,0.2);z-index:5000;min-width:150px;font-size:13px;";
+    const items = [
+      ["이름 변경", ()=>{
+        const span = el.querySelector(".tab-label-text");
+        const current = span ? span.textContent : el.textContent;
+        const newName = prompt("이름을 입력하세요 (같은 항목은 어디서든 같이 바뀝니다):", current);
+        if(newName===null) return;
+        const trimmed = newName.trim();
+        if(!trimmed) return;
+        saveCustomization("label", key, trimmed, "이름 변경");
+      }],
+      ["색상 변경", ()=>{
+        const colorInput = document.createElement("input");
+        colorInput.type = "color";
+        colorInput.value = customTabColors[key] || "#1a2b4a";
+        colorInput.style.position = "fixed"; colorInput.style.left = "-100px";
+        document.body.appendChild(colorInput);
+        colorInput.addEventListener("change", ()=>{
+          saveCustomization("color", key, colorInput.value, "색상 변경");
+          colorInput.remove();
+        });
+        colorInput.click();
+      }],
+      ["글씨 크기 변경", ()=>{
+        const current = customTabFontSizes[key] || 14;
+        const newSize = prompt("글씨 크기(px)를 입력하세요 (예: 14):", current);
+        if(newSize===null) return;
+        const num = Number(newSize);
+        if(!num || num<8 || num>60){ alert("8~60 사이의 숫자를 입력해주세요."); return; }
+        saveCustomization("fontSize", key, num, "글씨 크기 변경");
+      }]
+    ];
+    items.forEach(([label, fn])=>{
+      const btn = document.createElement("div");
+      btn.textContent = label;
+      btn.style.cssText = "padding:10px 14px;cursor:pointer;border-bottom:1px solid var(--line);";
+      btn.onmouseenter = ()=> btn.style.background = "#f2f2f2";
+      btn.onmouseleave = ()=> btn.style.background = "#fff";
+      btn.onclick = (ev)=>{ ev.stopPropagation(); closeCustomizeMenu(); fn(); };
+      menu.appendChild(btn);
+    });
+    document.body.appendChild(menu);
+  }
+
   document.addEventListener("contextmenu", function(e){
     const keyedEl = e.target.closest("[data-label-key]");
-    if(keyedEl){
-      e.preventDefault();
-      const key = keyedEl.dataset.labelKey;
-      const labelSpan = keyedEl.querySelector(".tab-label-text");
-      const current = labelSpan ? labelSpan.textContent : keyedEl.textContent;
-      const newName = prompt("이 메뉴의 이름을 입력하세요 (같은 메뉴는 어디서든 이 이름으로 바뀝니다):", current);
-      if(newName===null) return;
-      const trimmed = newName.trim();
-      if(!trimmed) return;
-      customTabLabels[key] = trimmed;
-      applyCustomTabLabels();
-      setDoc(doc(db,"settings","general"), { tabLabels: customTabLabels }, { merge:true })
-        .then(()=> logAction("메뉴 이름 변경", key+" → "+trimmed))
-        .catch(()=> alert("저장에 실패했습니다. 다시 시도해주세요."));
-      return;
-    }
-    const genericEl = e.target.closest("button, h3");
-    if(!genericEl) return;
-    if(genericEl.children.length>0) return; // 배지·아이콘 있는 요소는 안전하게 건너뜀
-    const origText = genericEl.dataset.origText || genericEl.textContent.trim();
-    if(!origText) return;
+    const genericEl = keyedEl ? null : e.target.closest("button, h3");
+    const targetEl = keyedEl || genericEl;
+    if(!targetEl) return;
+    const key = getElKey(targetEl);
+    if(!key) return;
     e.preventDefault();
-    genericEl.dataset.origText = origText;
-    const key = "btn:" + origText;
-    const current = customTabLabels[key] || origText;
-    const newName = prompt("이 버튼(제목)의 이름을 입력하세요 (같은 이름을 쓰는 곳은 전부 같이 바뀝니다):", current);
-    if(newName===null) return;
-    const trimmed = newName.trim();
-    if(!trimmed) return;
-    customTabLabels[key] = trimmed;
-    applyCustomTabLabels();
-    setDoc(doc(db,"settings","general"), { tabLabels: customTabLabels }, { merge:true })
-      .then(()=> logAction("버튼 이름 변경", key+" → "+trimmed))
-      .catch(()=> alert("저장에 실패했습니다. 다시 시도해주세요."));
+    showCustomizeMenu(e.clientX, e.clientY, targetEl, key);
   });
 
   window.saveSiteName = async function(){
@@ -4705,32 +4761,33 @@
     });
 
     function statCard(label, value, color, labelKey){
+      const vKey = labelKey ? labelKey+"-value" : "";
       return '<div class="dash-stat-card" style="flex:1;min-width:150px;border:1px solid var(--line);background:#fff;padding:10px 14px;">' +
         '<div class="dash-stat-label"'+(labelKey?' data-label-key="'+labelKey+'"':'')+' style="font-size:calc(11.5px * var(--dash-scale,1));color:var(--gray);margin-bottom:4px;"><span class="tab-label-text">'+label+'</span></div>' +
-        '<div class="dash-stat-value" style="font-size:calc(19px * var(--dash-scale,1));font-weight:800;color:'+(color||'var(--navy)')+';">'+value+'</div></div>';
+        '<div class="dash-stat-value"'+(vKey?' data-label-key="'+vKey+'"':'')+' style="font-size:calc(19px * var(--dash-scale,1));font-weight:800;color:var(--navy);"><span class="tab-label-text">'+value+'</span></div></div>';
     }
     function statCardTriple(mainLabel, arrivedLabel, arrivedValue, pendingLabel, pendingValue, color, keyPrefix){
       const total = (Number(String(arrivedValue).replace(/,/g,""))||0) + (Number(String(pendingValue).replace(/,/g,""))||0);
       return '<div class="dash-stat-card" style="flex:1;min-width:170px;border:1px solid var(--line);background:#fff;padding:10px 14px;">' +
         '<div class="dash-stat-label" data-label-key="'+keyPrefix+'-title" style="font-size:calc(11.5px * var(--dash-scale,1));color:var(--gray);margin-bottom:4px;"><span class="tab-label-text">'+mainLabel+'</span></div>' +
         '<div class="dash-stat-label" data-label-key="'+keyPrefix+'-arrived" style="font-size:calc(11px * var(--dash-scale,1));color:var(--gray);"><span class="tab-label-text">'+arrivedLabel+'</span></div>' +
-        '<div class="dash-stat-value" style="font-size:calc(17px * var(--dash-scale,1));font-weight:800;color:'+(color||'var(--navy)')+';margin-bottom:4px;">'+arrivedValue+'</div>' +
+        '<div class="dash-stat-value" data-label-key="'+keyPrefix+'-arrived-value" style="font-size:calc(15px * var(--dash-scale,1));font-weight:800;color:var(--navy);margin-bottom:4px;"><span class="tab-label-text">'+arrivedValue+'</span></div>' +
         '<div class="dash-stat-label" data-label-key="'+keyPrefix+'-pending" style="font-size:calc(11px * var(--dash-scale,1));color:var(--gray);"><span class="tab-label-text">'+pendingLabel+'</span></div>' +
-        '<div class="dash-stat-value" style="font-size:calc(14px * var(--dash-scale,1));font-weight:700;color:'+(color||'var(--navy)')+';margin-bottom:4px;">'+pendingValue+'</div>' +
+        '<div class="dash-stat-value" data-label-key="'+keyPrefix+'-pending-value" style="font-size:calc(15px * var(--dash-scale,1));font-weight:800;color:var(--navy);margin-bottom:4px;"><span class="tab-label-text">'+pendingValue+'</span></div>' +
         '<div class="dash-stat-label" data-label-key="'+keyPrefix+'-total" style="font-size:calc(11px * var(--dash-scale,1));color:var(--gray);"><span class="tab-label-text">총금액</span></div>' +
-        '<div class="dash-stat-value" style="font-size:calc(15px * var(--dash-scale,1));font-weight:800;color:'+(color||'var(--navy)')+';">'+total.toLocaleString()+'</div></div>';
+        '<div class="dash-stat-value" data-label-key="'+keyPrefix+'-total-value" style="font-size:calc(15px * var(--dash-scale,1));font-weight:800;color:var(--navy);"><span class="tab-label-text">'+total.toLocaleString()+'</span></div></div>';
     }
     const scopeLabel = dashboardScope==="all" ? "전체" : (dashboardCustomMonth ? (dashboardCustomMonth.slice(0,4)+"년 "+dashboardCustomMonth.slice(4,6)+"월") : "당월");
-    let statHtml = statCard(scopeLabel+" 수익 (판매가-입고가만, 공시지원금 별도)", profitSum.toLocaleString(), "#2e7d32");
-    statHtml += statCard(scopeLabel+" 공시지원금 순액 (귀속월 기준, 지급-환수)", (subsidyReceivedSum-subsidyClawbackSum).toLocaleString()+" ("+subsidyCount+"건)", "#6a1b9a");
-    statHtml += statCard("전체 재고", totalCount+"대");
+    let statHtml = statCard(scopeLabel+" 수익 (판매가-입고가만, 공시지원금 별도)", profitSum.toLocaleString(), null, "dash-profit");
+    statHtml += statCard(scopeLabel+" 공시지원금 순액 (귀속월 기준, 지급-환수)", (subsidyReceivedSum-subsidyClawbackSum).toLocaleString()+" ("+subsidyCount+"건)", null, "dash-subsidy");
+    statHtml += statCard("전체 재고", totalCount+"대", null, "dash-total-stock");
     Object.keys(statusCounts).sort().forEach(s=>{
-      statHtml += statCard(s, statusCounts[s]+"대");
+      statHtml += statCard(s, statusCounts[s]+"대", null, "dash-status-"+s);
     });
-    statHtml += statCard(scopeLabel+" 입고", inCount+"대", "#1565c0");
-    statHtml += statCard(scopeLabel+" 판매", saleCount+"대", "#8a6d00");
-    statHtml += statCardTriple(scopeLabel+" 매입", "입고금액", purchaseSum.toLocaleString(), "미입고금액", pendingPurchaseAmount.toLocaleString(), "#1565c0", "dash-purchase");
-    statHtml += statCardTriple(scopeLabel+" 매출", "출고금액", saleSum.toLocaleString(), "미출고금액", pendingSaleAmount.toLocaleString(), "#8a6d00", "dash-sale");
+    statHtml += statCard(scopeLabel+" 입고", inCount+"대", null, "dash-in");
+    statHtml += statCard(scopeLabel+" 판매", saleCount+"대", null, "dash-out");
+    statHtml += statCardTriple(scopeLabel+" 매입", "입고금액", purchaseSum.toLocaleString(), "미입고금액", pendingPurchaseAmount.toLocaleString(), null, "dash-purchase");
+    statHtml += statCardTriple(scopeLabel+" 매출", "출고금액", saleSum.toLocaleString(), "미출고금액", pendingSaleAmount.toLocaleString(), null, "dash-sale");
     statEl.innerHTML = statHtml;
     applyCustomTabLabels();
     applyDashFontSize();
