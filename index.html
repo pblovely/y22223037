@@ -556,6 +556,7 @@
           </div>
           <div class="stack-row" id="item-qty-field"><label>수량</label><input type="number" id="item-qty-input" value="1"></div>
           <div class="stack-row" id="item-serial-field" style="display:none;"><label>일련번호</label><input type="text" id="item-serial-input"></div>
+          <div id="item-serial-count-msg" style="display:none;font-size:12px;color:var(--navy);background:#eef4ff;padding:6px 8px;margin-bottom:8px;"></div>
           <div class="stack-row"><label>IMEI (선택)</label><input type="text" id="item-imei-input"></div>
           <div class="stack-row"><label>출고가</label><input type="number" id="item-listprice-input"></div>
           <div class="stack-row"><label>입고가</label><input type="number" id="item-purchaseprice-input" oninput="onPurchasePriceInput()"></div>
@@ -656,7 +657,8 @@
     { key:"manufacturerColor", label:"제조사색상", get:it=>it.manufacturerColor||"-" },
     { key:"systemColor", label:"전산색상", get:it=>it.systemColor||"-" },
     { key:"sku", label:"삼성모델명(SKU)", get:it=>it.sku||"-" },
-    { key:"serialOrQty", label:"일련번호/수량", get:it=> it.entryType==="imei" ? it.serialNumber : (it.quantity+"대") },
+    { key:"serialNumber", label:"일련번호", get:it=> it.entryType==="imei" ? (it.serialNumber||"-") : "-" },
+    { key:"quantity", label:"수량", get:it=> it.entryType==="imei" ? "1" : (it.quantity+"") },
     { key:"imei", label:"IMEI", get:it=>it.imei||"-" },
     { key:"listPrice", label:"출고가", get:it=>it.listPrice?Number(it.listPrice).toLocaleString()+"원":"-" },
     { key:"purchasePrice", label:"입고가", get:it=>it.purchasePrice?Number(it.purchasePrice).toLocaleString()+"원":"-" },
@@ -1613,8 +1615,11 @@
 
   // ---------- 재고 등록 팝업 ----------
   let editingItemId = null;
+  let serialAddCount = 0;
   window.openItemModal = function(){
     editingItemId = null;
+    serialAddCount = 0;
+    document.getElementById("item-serial-count-msg").style.display = "none";
     document.getElementById("item-modal-title").textContent = "재고 입고 등록";
     document.getElementById("item-submit-btn").textContent = "재고 등록";
     document.getElementById("item-cancelsale-btn").style.display = "none";
@@ -1840,6 +1845,8 @@
       const qty = Number(document.getElementById("item-qty-input").value) || 1;
       await addDoc(collection(db,"inventoryItems"), { ...base, entryType:"qty", quantity:qty, serialNumber:"" });
       logAction("재고 입고(수량)", m.modelGroup+" "+colorLabel+" / "+carrier+" / "+qty+"대");
+      closeItemModal();
+      loadInventoryList();
     }else{
       const serialNumber = document.getElementById("item-serial-input").value.trim();
       if(!serialNumber){ alert("일련번호를 입력해주세요."); return; }
@@ -1850,7 +1857,19 @@
       }
       await addDoc(collection(db,"inventoryItems"), { ...base, entryType:"imei", quantity:1, serialNumber });
       logAction("재고 입고(일련번호)", m.modelGroup+" "+colorLabel+" / "+carrier+" / 일련번호 "+serialNumber);
-      document.getElementById("item-serial-input").value = "";
+      loadInventoryList();
+
+      if(!editingItemId){
+        // 연속 입력: 모달을 닫지 않고 일련번호만 비워서 바로 다음 대를 입력할 수 있게 함
+        serialAddCount++;
+        document.getElementById("item-serial-input").value = "";
+        document.getElementById("item-imei-input").value = "";
+        const msg = document.getElementById("item-serial-count-msg");
+        msg.style.display = "block";
+        msg.textContent = "지금까지 "+serialAddCount+"건 등록했습니다. 이어서 다음 일련번호를 입력하세요.";
+        document.getElementById("item-serial-input").focus();
+        return;
+      }
     }
     closeItemModal();
     loadInventoryList();
@@ -1869,27 +1888,39 @@
   window.addFilterCondition = function(){
     const container = document.getElementById("filter-conditions");
     const row = document.createElement("div");
-    row.className = "field-row";
-    row.style.marginBottom = "6px";
+    row.style.display = "flex";
+    row.style.border = "1px solid var(--line)";
+    row.style.marginTop = "-1px";
+    row.style.background = "#fff";
+
     const fieldSel = document.createElement("select");
     fieldSel.className = "filter-field-select";
-    fieldSel.style.flex = "1"; fieldSel.style.minWidth = "140px";
+    fieldSel.style.flex = "1.3"; fieldSel.style.minWidth = "130px"; fieldSel.style.border = "none"; fieldSel.style.borderRight = "1px solid var(--line)"; fieldSel.style.padding = "7px 8px"; fieldSel.style.fontSize = "12.5px";
     FILTER_FIELDS.forEach(f=>{
       const opt = document.createElement("option");
       opt.value = f.key; opt.textContent = f.label;
       fieldSel.appendChild(opt);
     });
+
+    const matchSel = document.createElement("select");
+    matchSel.className = "filter-match-select";
+    matchSel.style.flex = "0.7"; matchSel.style.minWidth = "80px"; matchSel.style.border = "none"; matchSel.style.borderRight = "1px solid var(--line)"; matchSel.style.padding = "7px 8px"; matchSel.style.fontSize = "12.5px";
+    ["포함","일치"].forEach(t=>{
+      const opt = document.createElement("option");
+      opt.value = t; opt.textContent = t;
+      matchSel.appendChild(opt);
+    });
+
     const valInput = document.createElement("input");
     valInput.type = "text"; valInput.className = "filter-value-input";
-    valInput.placeholder = "검색어 (포함 일치)";
-    valInput.style.flex = "1"; valInput.style.minWidth = "140px"; valInput.style.padding = "9px 10px"; valInput.style.border = "1px solid #c7c7c7"; valInput.style.fontSize = "13px";
+    valInput.placeholder = "검색어";
+    valInput.style.flex = "1.5"; valInput.style.minWidth = "140px"; valInput.style.border = "none"; valInput.style.padding = "7px 8px"; valInput.style.fontSize = "12.5px";
+
     const delBtn = document.createElement("button");
-    delBtn.className = "btn small danger"; delBtn.style.width = "auto"; delBtn.textContent = "삭제";
+    delBtn.className = "btn small danger"; delBtn.style.width = "auto"; delBtn.style.flexShrink = "0"; delBtn.textContent = "삭제";
     delBtn.onclick = ()=> row.remove();
 
-    const fieldWrap = document.createElement("div"); fieldWrap.className = "field"; fieldWrap.style.flex="1"; fieldWrap.appendChild(fieldSel);
-    const valWrap = document.createElement("div"); valWrap.className = "field"; valWrap.style.flex="1"; valWrap.appendChild(valInput);
-    row.appendChild(fieldWrap); row.appendChild(valWrap); row.appendChild(delBtn);
+    row.appendChild(fieldSel); row.appendChild(matchSel); row.appendChild(valInput); row.appendChild(delBtn);
     container.appendChild(row);
   };
 
@@ -1930,15 +1961,20 @@
       );
     }
 
-    // 다중 조건 (전부 AND, 포함 일치)
+    // 다중 조건 (전부 AND)
     const conditionRows = document.querySelectorAll("#filter-conditions > div");
     conditionRows.forEach(row=>{
       const fieldKey = row.querySelector(".filter-field-select").value;
+      const matchType = row.querySelector(".filter-match-select").value;
       const val = row.querySelector(".filter-value-input").value.trim().toLowerCase();
       if(!val) return;
       const fieldDef = FILTER_FIELDS.find(f=>f.key===fieldKey);
       if(!fieldDef) return;
-      items = items.filter(it => String(fieldDef.get(it)||"").toLowerCase().includes(val));
+      if(matchType === "일치"){
+        items = items.filter(it => String(fieldDef.get(it)||"").toLowerCase() === val);
+      }else{
+        items = items.filter(it => String(fieldDef.get(it)||"").toLowerCase().includes(val));
+      }
     });
 
     lastRenderedItems = items;
@@ -1948,9 +1984,9 @@
     const total = items.length;
 
     function statCard(label, value, color){
-      return '<div style="flex:1;min-width:110px;border:1px solid var(--line);background:#fff;padding:12px 14px;">' +
-        '<div style="font-size:11.5px;color:var(--gray);margin-bottom:4px;">'+label+'</div>' +
-        '<div style="font-size:22px;font-weight:800;color:'+(color||'var(--navy)')+';">'+value+'</div></div>';
+      return '<div style="flex:1;min-width:110px;border:1px solid var(--line);background:#fff;padding:6px 12px;display:flex;align-items:baseline;gap:8px;">' +
+        '<span style="font-size:11.5px;color:var(--gray);">'+label+'</span>' +
+        '<span style="font-size:18px;font-weight:800;color:'+(color||'var(--navy)')+';">'+value+'</span></div>';
     }
     let statHtml = statCard("전체", total+"대");
     const statColors = ["#2e7d32","#8a6d00","#1565c0","#6a1b9a","#37474f"];
