@@ -536,14 +536,14 @@
 
         <div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px;border:1px solid var(--line);padding:10px;margin-bottom:0;">
           <label style="font-size:12.5px;display:flex;align-items:center;gap:5px;">
-            <input type="checkbox" id="bulk-select-all" onclick="toggleAllInventoryRows(this)"> 전체 선택
+            <input type="checkbox" id="bulk-select-all" onclick="toggleAllInventoryRows(this)"> 전체
           </label>
           <span style="color:var(--line);">|</span>
           <span style="font-size:12.5px;font-weight:600;">일괄 변경:</span>
           <select id="bulk-edit-field" onchange="onBulkEditFieldChange()" style="padding:6px 8px;border:1px solid #c7c7c7;font-size:12.5px;"></select>
           <span id="bulk-edit-value-wrap"><input type="text" id="bulk-edit-value" style="padding:6px 8px;border:1px solid #c7c7c7;font-size:12.5px;width:150px;"></span>
-          <button class="btn small" style="width:auto;" onclick="applyBulkEdit()">선택 항목에 적용</button>
-          <button class="btn small secondary" style="width:auto;margin-left:auto;" onclick="downloadInventoryExcel()">선택 엑셀 다운로드</button>
+          <button class="btn small" style="width:auto;" onclick="applyBulkEdit()">적용</button>
+          <button class="btn small secondary" style="width:auto;margin-left:auto;" onclick="downloadInventoryExcel()">엑셀다운</button>
           <button class="btn small danger" style="width:auto;" onclick="deleteSelectedInventoryRows()">선택 삭제</button>
         </div>
 
@@ -823,18 +823,20 @@
     bar.style.display = "flex"; bar.style.alignItems = "center"; bar.style.gap = "6px";
     bar.style.margin = "8px 0"; bar.style.flexWrap = "wrap"; bar.style.fontSize = "12px";
 
+    const sizeSel = document.createElement("select");
+    sizeSel.style.padding = "5px 6px"; sizeSel.style.border = "1px solid #c7c7c7"; sizeSel.style.fontSize = "12px"; sizeSel.style.height = "28px";
     [10,30,100].forEach(n=>{
-      const btn = document.createElement("button");
-      btn.textContent = n+"줄";
-      btn.className = "btn small" + (st.size===n ? "" : " secondary");
-      btn.style.width = "auto"; btn.style.padding = "4px 10px";
-      btn.onclick = ()=>{ st.size=n; st.page=1; onChange(); };
-      bar.appendChild(btn);
+      const opt = document.createElement("option");
+      opt.value = n; opt.textContent = n+"줄씩 보기";
+      if(st.size===n) opt.selected = true;
+      sizeSel.appendChild(opt);
     });
+    sizeSel.onchange = ()=>{ st.size = Number(sizeSel.value); st.page=1; onChange(); };
+    bar.appendChild(sizeSel);
 
     const prevBtn = document.createElement("button");
     prevBtn.textContent = "이전"; prevBtn.className = "btn small secondary";
-    prevBtn.style.width = "auto"; prevBtn.style.padding = "4px 10px";
+    prevBtn.style.width = "auto"; prevBtn.style.padding = "5px 10px"; prevBtn.style.height = "28px"; prevBtn.style.boxSizing = "border-box";
     prevBtn.disabled = st.page<=1;
     prevBtn.onclick = ()=>{ st.page--; onChange(); };
 
@@ -844,7 +846,7 @@
 
     const nextBtn = document.createElement("button");
     nextBtn.textContent = "다음"; nextBtn.className = "btn small secondary";
-    nextBtn.style.width = "auto"; nextBtn.style.padding = "4px 10px";
+    nextBtn.style.width = "auto"; nextBtn.style.padding = "5px 10px"; nextBtn.style.height = "28px"; nextBtn.style.boxSizing = "border-box";
     nextBtn.disabled = st.page>=totalPages;
     nextBtn.onclick = ()=>{ st.page++; onChange(); };
 
@@ -2550,11 +2552,9 @@
   }
 
   window.downloadInventoryExcel = function(){
-    const selectedIds = getSelectedInventoryIds();
-    if(selectedIds.length===0){ alert("다운로드할 재고를 먼저 체크해주세요."); return; }
-    const selectedItems = lastRenderedItems.filter(it => selectedIds.includes(it.id));
+    if(!lastRenderedItems || lastRenderedItems.length===0){ alert("다운로드할 재고가 없습니다."); return; }
     const headers = INV_COLUMNS.map(c=>c.label).concat(["현재상태"]);
-    const rows = selectedItems.map(it=>{
+    const rows = lastRenderedItems.map(it=>{
       const row = INV_COLUMNS.map(c=>c.get(it));
       row.push(it.status||"-");
       return row;
