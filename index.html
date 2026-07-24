@@ -4752,12 +4752,13 @@
       }
     });
 
-    // 예약(주문/판매요청) 중 아직 실물이 오가지 않은 것 — 금액으로 집계
+    // 예약(주문/판매요청) 중 아직 실물이 오가지 않은 것 — 금액으로 집계 (당월/전체 스코프 반영)
     const ordersSnap = await getDocs(collection(db,"orders"));
     let pendingPurchaseAmount = 0, pendingPurchaseCount = 0;
     ordersSnap.forEach(d=>{
       const o = d.data();
       if(o.status==="취소") return;
+      if(!inScope(o.orderDate)) return;
       const remain = (o.quantity||0) - (o.fulfilledCount||0);
       if(remain>0 && o.purchasePrice){
         pendingPurchaseAmount += remain * Number(o.purchasePrice);
@@ -4769,6 +4770,7 @@
     saleReqSnap.forEach(d=>{
       const s = d.data();
       if(s.status==="취소") return;
+      if(!inScope(s.requestDate)) return;
       const remain = (s.quantity||0) - (s.fulfilledCount||0);
       if(remain>0 && s.salePrice){
         pendingSaleAmount += remain * Number(s.salePrice);
@@ -4801,11 +4803,12 @@
     let statHtml = statCard("수익 (판매가-입고가만, 공시지원금 별도)", profitSum.toLocaleString(), null, "dash-profit");
     statHtml += statCardTriple("공시지원금 (귀속월 기준)", "지급", subsidyReceivedSum.toLocaleString(), "환수", subsidyClawbackSum.toLocaleString(), null, "dash-subsidy");
     statHtml += statCard("전체 재고", totalCount, null, "dash-total-stock");
-    Object.keys(statusCounts).sort().forEach(s=>{
-      statHtml += statCard(s, statusCounts[s], null, "dash-status-"+s);
-    });
-    statHtml += statCard("입고", inCount, null, "dash-in");
-    statHtml += statCard("판매", saleCount, null, "dash-out");
+    const soldStatusCount = statusCounts["판매"] || 0;
+    const heldStatusCount = totalCount - soldStatusCount;
+    statHtml += statCard("보유", heldStatusCount, null, "dash-held");
+    statHtml += statCard("판매", soldStatusCount, null, "dash-sold");
+    statHtml += statCard("입고 건수 (기간 내 입고일 기준)", inCount, null, "dash-in");
+    statHtml += statCard("판매 건수 (기간 내 출고일 기준)", saleCount, null, "dash-out");
     statHtml += statCardTriple("매입", "입고", purchaseSum.toLocaleString(), "미입고", pendingPurchaseAmount.toLocaleString(), null, "dash-purchase");
     statHtml += statCardTriple("매출", "출고", saleSum.toLocaleString(), "미출고", pendingSaleAmount.toLocaleString(), null, "dash-sale");
     statEl.innerHTML = statHtml;
