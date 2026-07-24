@@ -631,6 +631,7 @@
             <input type="checkbox" id="bulk-select-all" onclick="toggleAllInventoryRows(this)"> 전체
           </label>
           <button class="btn small secondary" style="width:auto;height:28px;box-sizing:border-box;padding:0 12px;" onclick="openBulkChangeModal()">변경</button>
+          <button class="btn small secondary" id="inv-sort-toggle-btn" style="width:auto;height:28px;box-sizing:border-box;padding:0 12px;" onclick="toggleInventorySortField()">정렬: 판매일 ▾</button>
           <button class="btn small secondary" style="width:auto;height:28px;box-sizing:border-box;padding:0 12px;margin-left:auto;" onclick="downloadInventoryExcel()">엑셀다운</button>
           <select id="inv-page-size-select" onchange="onInvPageSizeChange()" style="padding:5px 6px;border:1px solid #c7c7c7;font-size:12px;height:28px;box-sizing:border-box;"></select>
         </div>
@@ -844,9 +845,11 @@
             </select>
           </div>
           <div class="stack-row" id="item-clawback-row" style="display:none;"><label>환수액</label><input type="number" id="item-clawbackamount-input" oninput="updateProfitDisplay()"></div>
-          <div class="stack-row"><label>선할인율 (%, 제조사유통폰 매입시)</label><input type="number" step="0.01" id="item-prediscountpct-input" placeholder="이체 기준 할인율"></div>
-          <div class="stack-row"><label>후할인·장려금 (원, 여신 반영분)</label><input type="number" id="item-postdiscountamt-input" placeholder="삼성전자 등 여신으로 반영되는 장려금"></div>
-          <div class="stack-row"><label>수익 (자동계산, 공시지원금 반영)</label><input type="text" id="item-profit-display" disabled style="background:#f2f2f2;"></div>
+          <div class="stack-row"><label>선할인율 (%, 제조사유통폰 매입시)</label><input type="number" step="0.01" id="item-prediscountpct-input" placeholder="이체 기준 할인율" oninput="onPreDiscountPctInput()"></div>
+          <div class="stack-row"><label>선할인 금액 (원)</label><input type="number" id="item-prediscountamt-input" oninput="onPreDiscountAmtInput()"></div>
+          <div class="stack-row"><label>후할인·장려금율 (%)</label><input type="number" step="0.01" id="item-postdiscountpct-input" oninput="onPostDiscountPctInput()"></div>
+          <div class="stack-row"><label>후할인·장려금 (원, 여신 반영분)</label><input type="number" id="item-postdiscountamt-input" placeholder="삼성전자 등 여신으로 반영되는 장려금" oninput="onPostDiscountAmtInput()"></div>
+          <div class="stack-row"><label>수익 (자동계산, 공시지원금 별도)</label><input type="text" id="item-profit-display" disabled style="background:#f2f2f2;"></div>
         </div>
         <button class="btn small" id="item-submit-btn" onclick="addInventoryItem()">재고 등록</button>
         <button class="btn small danger" id="item-cancelsale-btn" style="width:auto;margin-left:6px;display:none;" onclick="cancelSaleInEditModal()">판매 취소</button>
@@ -890,11 +893,15 @@
     const d = new Date();
     return d.getFullYear() + String(d.getMonth()+1).padStart(2,"0") + String(d.getDate()).padStart(2,"0");
   }
-  function forceTextFormat(ws){
+  function forceTextFormat(ws, skipColIndices){
+    const skip = skipColIndices || new Set();
     Object.keys(ws).forEach(cellRef=>{
       if(cellRef[0] === "!") return;
       const cell = ws[cellRef];
       if(cell && cell.v !== undefined && cell.v !== null){
+        const colLetters = cellRef.match(/^[A-Z]+/)[0];
+        const colIdx = XLSX.utils.decode_col(colLetters);
+        if(skip.has(colIdx)) return; // 숫자로 유지 (수식 가능하도록)
         cell.t = "s";
         cell.v = String(cell.v);
         cell.z = "@";
@@ -942,20 +949,22 @@
     { key:"serialNumber", label:"일련번호", get:it=> it.entryType==="imei" ? (it.serialNumber||"-") : "-" },
     { key:"quantity", label:"수량", get:it=> it.entryType==="imei" ? "1" : (it.quantity+"") },
     { key:"imei", label:"IMEI", get:it=>it.imei||"-" },
-    { key:"listPrice", label:"출고가", get:it=>it.listPrice?Number(it.listPrice).toLocaleString()+"원":"-" },
-    { key:"purchasePrice", label:"입고가", get:it=>it.purchasePrice?Number(it.purchasePrice).toLocaleString()+"원":"-" },
-    { key:"purchaseDiscountAmt", label:"입고할인금액", get:it=> (it.purchaseDiscountAmt!=null)?Number(it.purchaseDiscountAmt).toLocaleString()+"원":"-" },
-    { key:"purchaseDiscount", label:"입고할인율(%)", get:it=> (it.purchaseDiscount!=null)?Number(it.purchaseDiscount).toFixed(2)+"%":"-" },
+    { key:"listPrice", label:"출고가", get:it=>it.listPrice?Number(it.listPrice).toLocaleString()+"원":"-", getRaw:it=>it.listPrice!=null?Number(it.listPrice):"" },
+    { key:"purchasePrice", label:"입고가", get:it=>it.purchasePrice?Number(it.purchasePrice).toLocaleString()+"원":"-", getRaw:it=>it.purchasePrice!=null?Number(it.purchasePrice):"" },
+    { key:"purchaseDiscountAmt", label:"입고할인금액", get:it=> (it.purchaseDiscountAmt!=null)?Number(it.purchaseDiscountAmt).toLocaleString()+"원":"-", getRaw:it=>it.purchaseDiscountAmt!=null?Number(it.purchaseDiscountAmt):"" },
+    { key:"purchaseDiscount", label:"입고할인율(%)", get:it=> (it.purchaseDiscount!=null)?Number(it.purchaseDiscount).toFixed(2)+"%":"-", getRaw:it=>it.purchaseDiscount!=null?Number(it.purchaseDiscount):"" },
     { key:"destination", label:"판매처", get:it=>it.destination||"-" },
-    { key:"salePrice", label:"판매가", get:it=>it.salePrice?Number(it.salePrice).toLocaleString()+"원":"-" },
-    { key:"saleDiscountAmt", label:"판매할인금액", get:it=> (it.saleDiscountAmt!=null)?Number(it.saleDiscountAmt).toLocaleString()+"원":"-" },
-    { key:"saleDiscount", label:"판매할인율(%)", get:it=> (it.saleDiscount!=null)?Number(it.saleDiscount).toFixed(2)+"%":"-" },
-    { key:"subsidyAmount", label:"공시지원금", get:it=> (it.subsidyAmount!=null)?Number(it.subsidyAmount).toLocaleString()+"원":"-" },
+    { key:"salePrice", label:"판매가", get:it=>it.salePrice?Number(it.salePrice).toLocaleString()+"원":"-", getRaw:it=>it.salePrice!=null?Number(it.salePrice):"" },
+    { key:"saleDiscountAmt", label:"판매할인금액", get:it=> (it.saleDiscountAmt!=null)?Number(it.saleDiscountAmt).toLocaleString()+"원":"-", getRaw:it=>it.saleDiscountAmt!=null?Number(it.saleDiscountAmt):"" },
+    { key:"saleDiscount", label:"판매할인율(%)", get:it=> (it.saleDiscount!=null)?Number(it.saleDiscount).toFixed(2)+"%":"-", getRaw:it=>it.saleDiscount!=null?Number(it.saleDiscount):"" },
+    { key:"subsidyAmount", label:"공시지원금", get:it=> (it.subsidyAmount!=null)?Number(it.subsidyAmount).toLocaleString()+"원":"-", getRaw:it=>it.subsidyAmount!=null?Number(it.subsidyAmount):"" },
     { key:"subsidyStatus", label:"공시지원금 상태", get:it=>it.subsidyStatus||"-" },
-    { key:"clawbackAmount", label:"환수액", get:it=> (it.clawbackAmount!=null)?Number(it.clawbackAmount).toLocaleString()+"원":"-" },
-    { key:"preDiscountPct", label:"선할인율(%)", get:it=> (it.preDiscountPct!=null)?Number(it.preDiscountPct).toFixed(2)+"%":"-" },
-    { key:"postDiscountAmt", label:"후할인·장려금", get:it=> (it.postDiscountAmt!=null)?Number(it.postDiscountAmt).toLocaleString()+"원":"-" },
-    { key:"profit", label:"수익", get:it=> (it.profit!=null)?Number(it.profit).toLocaleString()+"원":"-" }
+    { key:"clawbackAmount", label:"환수액", get:it=> (it.clawbackAmount!=null)?Number(it.clawbackAmount).toLocaleString()+"원":"-", getRaw:it=>it.clawbackAmount!=null?Number(it.clawbackAmount):"" },
+    { key:"preDiscountPct", label:"선할인율(%)", get:it=> (it.preDiscountPct!=null)?Number(it.preDiscountPct).toFixed(2)+"%":"-", getRaw:it=>it.preDiscountPct!=null?Number(it.preDiscountPct):"" },
+    { key:"preDiscountAmt", label:"선할인금액", get:it=> (it.preDiscountAmt!=null)?Number(it.preDiscountAmt).toLocaleString()+"원":"-", getRaw:it=>it.preDiscountAmt!=null?Number(it.preDiscountAmt):"" },
+    { key:"postDiscountPct", label:"후할인율(%)", get:it=> (it.postDiscountPct!=null)?Number(it.postDiscountPct).toFixed(2)+"%":"-", getRaw:it=>it.postDiscountPct!=null?Number(it.postDiscountPct):"" },
+    { key:"postDiscountAmt", label:"후할인·장려금", get:it=> (it.postDiscountAmt!=null)?Number(it.postDiscountAmt).toLocaleString()+"원":"-", getRaw:it=>it.postDiscountAmt!=null?Number(it.postDiscountAmt):"" },
+    { key:"profit", label:"수익", get:it=> (it.profit!=null)?Number(it.profit).toLocaleString()+"원":"-", getRaw:it=>it.profit!=null?Number(it.profit):"" }
   ];
   const DEFAULT_VIEW_SETTINGS = INV_COLUMNS.map(c=>c.key);
 
@@ -2191,15 +2200,9 @@
   window.updateProfitDisplay = function(){
     const sale = Number(document.getElementById("item-saleprice-input").value) || 0;
     const purchase = Number(document.getElementById("item-purchaseprice-input").value) || 0;
-    const subsidyStatus = document.getElementById("item-subsidystatus-select").value;
-    const subsidyAmount = Number(document.getElementById("item-subsidyamount-input").value) || 0;
-    const clawbackAmount = Number(document.getElementById("item-clawbackamount-input").value) || 0;
     const disp = document.getElementById("item-profit-display");
     if(sale && purchase){
-      let profit = sale - purchase;
-      if(subsidyStatus === "지급완료") profit += subsidyAmount;
-      if(subsidyStatus === "환수") profit -= clawbackAmount;
-      disp.value = profit.toLocaleString() + "원";
+      disp.value = (sale - purchase).toLocaleString();
     }else{
       disp.value = "";
     }
@@ -2207,7 +2210,6 @@
   window.onSubsidyStatusChange = function(){
     const status = document.getElementById("item-subsidystatus-select").value;
     document.getElementById("item-clawback-row").style.display = (status==="환수") ? "flex" : "none";
-    updateProfitDisplay();
   };
   window.onPurchaseDiscountInput = function(){
     const listPrice = Number(document.getElementById("item-listprice-input").value) || 0;
@@ -2249,6 +2251,34 @@
       document.getElementById("item-saleprice-input").value = price;
       document.getElementById("item-salediscount-input").value = ((Number(amt)/listPrice)*100).toFixed(2);
       updateProfitDisplay();
+    }
+  };
+  window.onPreDiscountPctInput = function(){
+    const listPrice = Number(document.getElementById("item-listprice-input").value) || 0;
+    const pct = document.getElementById("item-prediscountpct-input").value;
+    if(listPrice && pct !== ""){
+      document.getElementById("item-prediscountamt-input").value = Math.round(listPrice * Number(pct)/100);
+    }
+  };
+  window.onPreDiscountAmtInput = function(){
+    const listPrice = Number(document.getElementById("item-listprice-input").value) || 0;
+    const amt = document.getElementById("item-prediscountamt-input").value;
+    if(listPrice && amt !== ""){
+      document.getElementById("item-prediscountpct-input").value = ((Number(amt)/listPrice)*100).toFixed(2);
+    }
+  };
+  window.onPostDiscountPctInput = function(){
+    const listPrice = Number(document.getElementById("item-listprice-input").value) || 0;
+    const pct = document.getElementById("item-postdiscountpct-input").value;
+    if(listPrice && pct !== ""){
+      document.getElementById("item-postdiscountamt-input").value = Math.round(listPrice * Number(pct)/100);
+    }
+  };
+  window.onPostDiscountAmtInput = function(){
+    const listPrice = Number(document.getElementById("item-listprice-input").value) || 0;
+    const amt = document.getElementById("item-postdiscountamt-input").value;
+    if(listPrice && amt !== ""){
+      document.getElementById("item-postdiscountpct-input").value = ((Number(amt)/listPrice)*100).toFixed(2);
     }
   };
   window.onPurchasePriceInput = function(){
@@ -2311,7 +2341,8 @@
       "item-purchasediscount-input","item-purchasediscountamt-input","item-saleprice-input","item-salediscount-input","item-salediscountamt-input",
       "item-orderdate-input","item-indate-input","item-expectedsaledate-input","item-outdate-input",
       "item-subsidyamount-input","item-clawbackamount-input",
-      "item-prediscountpct-input","item-postdiscountamt-input"].forEach(id=>{ document.getElementById(id).value = ""; });
+      "item-prediscountpct-input","item-prediscountamt-input",
+      "item-postdiscountpct-input","item-postdiscountamt-input"].forEach(id=>{ document.getElementById(id).value = ""; });
     document.getElementById("item-profit-display").value = "";
     document.getElementById("item-qty-input").value = "1";
     document.getElementById("item-subsidystatus-select").value = "";
@@ -2406,6 +2437,8 @@
     document.getElementById("item-subsidystatus-select").value = it.subsidyStatus || "";
     document.getElementById("item-clawbackamount-input").value = it.clawbackAmount || "";
     document.getElementById("item-prediscountpct-input").value = it.preDiscountPct || "";
+    document.getElementById("item-prediscountamt-input").value = it.preDiscountAmt || "";
+    document.getElementById("item-postdiscountpct-input").value = it.postDiscountPct || "";
     document.getElementById("item-postdiscountamt-input").value = it.postDiscountAmt || "";
     document.getElementById("item-clawback-row").style.display = (it.subsidyStatus==="환수") ? "flex" : "none";
     currentOrderLinkId = it.orderId || null;
@@ -2497,6 +2530,8 @@
     const subsidyStatus = document.getElementById("item-subsidystatus-select").value;
     const clawbackAmount = document.getElementById("item-clawbackamount-input").value;
     const preDiscountPct = document.getElementById("item-prediscountpct-input").value;
+    const preDiscountAmt = document.getElementById("item-prediscountamt-input").value;
+    const postDiscountPct = document.getElementById("item-postdiscountpct-input").value;
     const postDiscountAmt = document.getElementById("item-postdiscountamt-input").value;
 
     const m = modelsCache.find(x=>x.id===modelId);
@@ -2509,11 +2544,8 @@
     const systemColor = colorObj.systemColor || "";
     const sku = colorObj.sku || "";
 
-    let profit = (salePrice && purchasePrice) ? (Number(salePrice) - Number(purchasePrice)) : null;
-    if(profit!==null){
-      if(subsidyStatus==="지급완료" && subsidyAmount) profit += Number(subsidyAmount);
-      if(subsidyStatus==="환수" && clawbackAmount) profit -= Number(clawbackAmount);
-    }
+    // 수익은 판매가-입고가만 (공시지원금은 별도 반영, 수익에 합산하지 않음)
+    const profit = (salePrice && purchasePrice) ? (Number(salePrice) - Number(purchasePrice)) : null;
     const colorLabel = systemColor || manufacturerColor || "";
 
     const base = {
@@ -2530,6 +2562,8 @@
       subsidyStatus: subsidyStatus||null,
       clawbackAmount: clawbackAmount?Number(clawbackAmount):null,
       preDiscountPct: preDiscountPct?Number(preDiscountPct):null,
+      preDiscountAmt: preDiscountAmt?Number(preDiscountAmt):null,
+      postDiscountPct: postDiscountPct?Number(postDiscountPct):null,
       postDiscountAmt: postDiscountAmt?Number(postDiscountAmt):null,
       orderId: currentOrderLinkId||null,
       profit, imei, status, orderDate, inDate, expectedSaleDate, outDate
@@ -3385,6 +3419,13 @@
   }
 
   let lastRenderedItems = [];
+  let inventorySortField = "outDate"; // "outDate"(판매일) | "orderDate"(주문일)
+  window.toggleInventorySortField = function(){
+    inventorySortField = inventorySortField==="outDate" ? "orderDate" : "outDate";
+    document.getElementById("inv-sort-toggle-btn").textContent =
+      "정렬: " + (inventorySortField==="outDate" ? "판매일" : "주문일") + " ▾";
+    loadInventoryList();
+  };
 
   // ---------- 대시보드 ----------
   // ---------- 자료업로드: 마스터재고 ----------
@@ -3579,6 +3620,7 @@
     const statusCounts = {};
     let inCount = 0, saleCount = 0;
     let purchaseSum = 0, saleSum = 0, profitSum = 0;
+    let subsidyReceivedSum = 0, subsidyClawbackSum = 0, subsidyCount = 0;
     const carrierAgg = {}; // { name: {count, amount} }
     const modelAgg = {};
     const destAgg = {};
@@ -3600,6 +3642,11 @@
         saleCount += qty;
         if(it.salePrice) saleSum += Number(it.salePrice)*qty;
         if(it.profit!=null) profitSum += Number(it.profit)*qty;
+      }
+      if((dashboardScope==="all" || inScopeIn || inScopeOut) && it.subsidyStatus){
+        subsidyCount += qty;
+        if(it.subsidyStatus==="지급완료" && it.subsidyAmount) subsidyReceivedSum += Number(it.subsidyAmount)*qty;
+        if(it.subsidyStatus==="환수" && it.clawbackAmount) subsidyClawbackSum += Number(it.clawbackAmount)*qty;
       }
 
       if(inScopeIn || inScopeOut){
@@ -3627,7 +3674,8 @@
         '<div style="font-size:'+(big?'26px':'20px')+';font-weight:800;color:'+(color||'var(--navy)')+';">'+value+'</div></div>';
     }
     const scopeLabel = dashboardScope==="all" ? "전체" : "당월";
-    let statHtml = statCard(scopeLabel+" 수익 (공시지원금 반영)", profitSum.toLocaleString()+"원", "#2e7d32", true);
+    let statHtml = statCard(scopeLabel+" 수익 (판매가-입고가만, 공시지원금 별도)", profitSum.toLocaleString()+"원", "#2e7d32", true);
+    statHtml += statCard(scopeLabel+" 공시지원금 순액 (지급-환수, 별도)", (subsidyReceivedSum-subsidyClawbackSum).toLocaleString()+"원 ("+subsidyCount+"건)", "#6a1b9a", true);
     statHtml += statCard("전체 재고", totalCount+"대");
     Object.keys(statusCounts).sort().forEach(s=>{
       statHtml += statCard(s, statusCounts[s]+"대");
@@ -3754,6 +3802,10 @@
       }
     });
 
+    // 정렬: 기본 판매일(출고일) 내림차순, 버튼으로 주문일로 전환 가능
+    const sortField = inventorySortField==="orderDate" ? "orderDate" : "outDate";
+    items.sort((a,b)=> normDate(b[sortField]).localeCompare(normDate(a[sortField])));
+
     lastRenderedItems = items;
     const masterStockSerials = await getLatestMasterStockSerialSet();
 
@@ -3858,13 +3910,15 @@
   window.downloadInventoryExcel = function(){
     if(!lastRenderedItems || lastRenderedItems.length===0){ alert("다운로드할 재고가 없습니다."); return; }
     const headers = INV_COLUMNS.map(c=>c.label).concat(["현재상태"]);
+    const numericColIndices = new Set();
+    INV_COLUMNS.forEach((c,idx)=>{ if(c.getRaw) numericColIndices.add(idx); });
     const rows = lastRenderedItems.map(it=>{
-      const row = INV_COLUMNS.map(c=>c.get(it));
+      const row = INV_COLUMNS.map(c=> c.getRaw ? c.getRaw(it) : c.get(it));
       row.push(it.status||"-");
       return row;
     });
     const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
-    forceTextFormat(ws);
+    forceTextFormat(ws, numericColIndices);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "재고목록");
     XLSX.writeFile(wb, "재고목록_"+todayStr()+".xlsx");
