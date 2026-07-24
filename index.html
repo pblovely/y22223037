@@ -279,9 +279,12 @@
       <div class="card">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
           <h3 style="margin:0;">주문 관리 <span class="info-tip" title="일련번호를 받기 전에 모델·수량·판매조건부터 정해서 주문을 걸어두는 곳입니다. 입금 체크 후, 실물이 도착하면 도착 등록으로 재고가 되고 이 주문과 자동 연결됩니다.">ⓘ</span></h3>
-          <span>
-            <button class="btn small secondary" style="width:auto;margin-right:6px;" onclick="openItemModal()">+ 즉시 주문 (바로 등록)</button>
-            <button class="btn small" style="width:auto;" onclick="openOrderModal()">+ 새 주문 (예약)</button>
+          <span style="position:relative;">
+            <button class="btn small" style="width:auto;" onclick="toggleOrderAddMenu(event)">+ 주문 ▾</button>
+            <div id="order-add-menu" style="display:none;position:absolute;top:36px;right:0;background:#fff;border:1px solid var(--navy);box-shadow:0 2px 10px rgba(0,0,0,0.15);z-index:100;min-width:180px;">
+              <div style="padding:10px 14px;cursor:pointer;border-bottom:1px solid var(--line);font-size:13px;" onclick="closeOrderAddMenu();openItemModal();">즉시 주문 (바로 등록)</div>
+              <div style="padding:10px 14px;cursor:pointer;font-size:13px;" onclick="closeOrderAddMenu();openOrderModal();">새 주문 (예약)</div>
+            </div>
           </span>
         </div>
         <div style="margin-bottom:8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
@@ -1226,6 +1229,22 @@
       .then(()=> logAction(actionLabel, key+" → "+value))
       .catch(()=> alert("저장에 실패했습니다. 다시 시도해주세요."));
   }
+
+  window.toggleOrderAddMenu = function(e){
+    e.stopPropagation();
+    const menu = document.getElementById("order-add-menu");
+    menu.style.display = (menu.style.display==="none") ? "block" : "none";
+  };
+  window.closeOrderAddMenu = function(){
+    document.getElementById("order-add-menu").style.display = "none";
+  };
+  document.addEventListener("click", function(e){
+    const menu = document.getElementById("order-add-menu");
+    if(!menu) return;
+    if(!e.target.closest("#order-add-menu")){
+      menu.style.display = "none";
+    }
+  });
 
   function closeCustomizeMenu(){
     const m = document.getElementById("customize-context-menu");
