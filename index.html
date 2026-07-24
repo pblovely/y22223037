@@ -2625,42 +2625,77 @@
       return;
     }
 
-    // 양식이 다름 — 컬럼 매칭 UI 표시
+    // 양식이 다름 — 엑셀 미리보기 + 열별 드롭다운 매칭 UI 표시
     excelMappingSheet = { headerRow, dataRows };
-    renderExcelMappingUI(headerRow);
+    renderExcelColumnMappingUI(headerRow, dataRows);
   };
 
-  function renderExcelMappingUI(headerRow){
+  function renderExcelColumnMappingUI(headerRow, dataRows){
     const resultEl = document.getElementById("excel-result");
-    let html = '<div style="font-size:13px;font-weight:700;margin-bottom:6px;color:var(--navy);">양식이 템플릿과 달라요 — 어느 칸이 어떤 항목인지 지정해주세요</div>';
-    html += '<p class="desc" style="margin-top:0;">해당하는 칸이 없으면 "사용 안함"으로 두면 빈칸으로 처리됩니다.</p>';
-    html += '<div class="stack-form" id="excel-map-form">';
-    TEMPLATE_HEADERS.forEach(field=>{
-      let bestIdx = headerRow.findIndex(h=>h===field);
-      if(bestIdx<0) bestIdx = headerRow.findIndex(h=>h.replace(/\s/g,"")===field.replace(/\s/g,""));
-      html += '<div class="stack-row"><label>'+field+'</label><select class="excel-map-select" data-field="'+field+'">';
-      html += '<option value="-1">(사용 안함)</option>';
-      headerRow.forEach((h, idx)=>{
-        html += '<option value="'+idx+'"'+(idx===bestIdx?' selected':'')+'>'+(h||"(제목없음 "+(idx+1)+"열)")+'</option>';
+    let html = '<div style="font-size:13px;font-weight:700;margin-bottom:6px;color:var(--navy);">양식이 템플릿과 달라요 — 파일 그대로 보여드릴게요. 각 열 위 드롭다운에서 어떤 항목인지 골라주세요</div>';
+    html += '<p class="desc" style="margin-top:0;">해당 없는 열은 "(사용 안함)"으로 두면 무시됩니다.</p>';
+    html += '<div style="overflow-x:auto;max-height:420px;overflow-y:auto;border:1px solid var(--line);margin-bottom:10px;">';
+    html += '<table style="border-collapse:collapse;font-size:12px;white-space:nowrap;">';
+
+    // 드롭다운 행
+    html += '<thead><tr style="background:#fafafa;">';
+    headerRow.forEach((h, idx)=>{
+      let bestField = TEMPLATE_HEADERS.find(f=>f===h);
+      if(!bestField) bestField = TEMPLATE_HEADERS.find(f=>f.replace(/\s/g,"")===String(h).replace(/\s/g,""));
+      html += '<th style="padding:4px;border:1px solid var(--line);">';
+      html += '<select class="excel-col-map" data-col-idx="'+idx+'" style="font-size:11.5px;padding:3px;border:1px solid #c7c7c7;width:120px;">';
+      html += '<option value="">(사용 안함)</option>';
+      TEMPLATE_HEADERS.forEach(f=>{
+        html += '<option value="'+f+'"'+(f===bestField?' selected':'')+'>'+f+'</option>';
       });
-      html += '</select></div>';
+      html += '</select></th>';
     });
-    html += '</div>';
+    html += '</tr>';
+    // 원본 헤더 표시 행
+    html += '<tr style="background:#fff;">';
+    headerRow.forEach(h=>{
+      html += '<th style="padding:4px 6px;border:1px solid var(--line);font-weight:400;color:var(--gray);font-size:11.5px;">원본: '+(h||"(제목없음)")+'</th>';
+    });
+    html += '</tr></thead>';
+
+    // 미리보기 데이터 (최대 8행)
+    html += '<tbody>';
+    dataRows.slice(0,8).forEach(row=>{
+      html += '<tr>';
+      headerRow.forEach((h, idx)=>{
+        html += '<td style="padding:4px 6px;border:1px solid var(--line);">'+(row[idx]!==undefined&&row[idx]!==""?String(row[idx]):'-')+'</td>';
+      });
+      html += '</tr>';
+    });
+    html += '</tbody></table></div>';
+    if(dataRows.length>8){
+      html += '<p class="desc" style="margin-top:0;">전체 '+dataRows.length+'행 중 8행만 미리 보여드려요. 매칭은 전체 행에 적용됩니다.</p>';
+    }
     html += '<button class="btn small" style="width:auto;" onclick="confirmExcelMapping()">이 매칭으로 업로드 진행</button>';
     resultEl.innerHTML = html;
   }
 
   window.confirmExcelMapping = async function(){
     if(!excelMappingSheet) return;
-    const mapping = {};
-    document.querySelectorAll(".excel-map-select").forEach(sel=>{
-      mapping[sel.dataset.field] = Number(sel.value);
+    const colToField = {}; // colIdx -> field
+    const usedFields = {};
+    let dup = null;
+    document.querySelectorAll(".excel-col-map").forEach(sel=>{
+      const field = sel.value;
+      if(!field) return;
+      const idx = Number(sel.dataset.colIdx);
+      colToField[idx] = field;
+      if(usedFields[field]) dup = field;
+      usedFields[field] = true;
     });
+    if(dup){
+      if(!confirm('"'+dup+'" 항목이 두 개 이상의 열에 지정되어 있습니다. 마지막 지정만 사용됩니다. 계속하시겠습니까?')) return;
+    }
     const rows = excelMappingSheet.dataRows.map(dataRow=>{
       const obj = {};
-      TEMPLATE_HEADERS.forEach(field=>{
-        const idx = mapping[field];
-        obj[field] = idx>=0 ? dataRow[idx] : "";
+      Object.keys(colToField).forEach(idxStr=>{
+        const idx = Number(idxStr);
+        obj[colToField[idx]] = dataRow[idx];
       });
       return obj;
     });
