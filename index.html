@@ -504,7 +504,6 @@
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
           <h3 style="margin:0;">재고 목록 <button class="btn small secondary" style="width:auto;padding:6px 12px;margin-left:8px;" onclick="toggleViewPanel()">보기 설정</button></h3>
           <span>
-            <button class="btn small secondary" style="width:auto;margin-right:8px;" onclick="downloadInventoryExcel()">엑셀 다운로드</button>
             <button class="btn small secondary" style="width:auto;margin-right:8px;" onclick="openExcelUploadModal()">파일 업로드</button>
             <button class="btn small" style="width:auto;" onclick="openItemModal()">+ 재고 등록</button>
           </span>
@@ -544,7 +543,8 @@
           <select id="bulk-edit-field" onchange="onBulkEditFieldChange()" style="padding:6px 8px;border:1px solid #c7c7c7;font-size:12.5px;"></select>
           <span id="bulk-edit-value-wrap"><input type="text" id="bulk-edit-value" style="padding:6px 8px;border:1px solid #c7c7c7;font-size:12.5px;width:150px;"></span>
           <button class="btn small" style="width:auto;" onclick="applyBulkEdit()">선택 항목에 적용</button>
-          <button class="btn small danger" style="width:auto;margin-left:auto;" onclick="deleteSelectedInventoryRows()">선택 삭제</button>
+          <button class="btn small secondary" style="width:auto;margin-left:auto;" onclick="downloadInventoryExcel()">선택 엑셀 다운로드</button>
+          <button class="btn small danger" style="width:auto;" onclick="deleteSelectedInventoryRows()">선택 삭제</button>
         </div>
 
         <div style="overflow-x:auto;">
@@ -2550,9 +2550,11 @@
   }
 
   window.downloadInventoryExcel = function(){
-    if(!lastRenderedItems || lastRenderedItems.length===0){ alert("다운로드할 재고가 없습니다."); return; }
+    const selectedIds = getSelectedInventoryIds();
+    if(selectedIds.length===0){ alert("다운로드할 재고를 먼저 체크해주세요."); return; }
+    const selectedItems = lastRenderedItems.filter(it => selectedIds.includes(it.id));
     const headers = INV_COLUMNS.map(c=>c.label).concat(["현재상태"]);
-    const rows = lastRenderedItems.map(it=>{
+    const rows = selectedItems.map(it=>{
       const row = INV_COLUMNS.map(c=>c.get(it));
       row.push(it.status||"-");
       return row;
