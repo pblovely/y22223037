@@ -238,6 +238,14 @@
         <h3>업로드 이력</h3>
         <div id="master-stock-batch-list"></div>
       </div>
+      <div class="card">
+        <h3>마스터재고 조회 — <span id="master-stock-view-title" style="font-weight:400;color:var(--gray);font-size:13px;"></span></h3>
+        <p class="desc">위 이력에서 "조회"를 누르면 그 파일 내용이 여기 뜹니다. 모든 칸을 대상으로 검색됩니다.</p>
+        <div style="display:flex;gap:8px;margin-bottom:12px;">
+          <input type="text" id="master-stock-search" placeholder="검색어 입력" oninput="filterMasterStockView()" style="flex:1;max-width:300px;padding:8px 10px;border:1px solid #c7c7c7;font-size:13px;">
+        </div>
+        <div id="master-stock-table-area"></div>
+      </div>
     </div>
 
     <!-- ===== 관리자: 사이트 설정 ===== -->
@@ -547,6 +555,7 @@
             <button class="btn small" style="width:auto;" onclick="openItemModal()">+ 재고 등록</button>
           </span>
         </div>
+        <p class="desc" style="margin-top:0;">번호 옆 <span style="color:var(--danger);">●</span> 표시는 최신 마스터재고 파일에서 해당 일련번호가 확인되지 않았다는 뜻입니다 — 이미 판매되었을 가능성이 있으니 확인해주세요.</p>
         <div class="check-panel" id="view-panel" style="display:none;">
           <div id="view-panel-checks"></div>
           <button class="btn small" style="width:auto;margin-top:6px;" onclick="saveViewSettings()">이 설정 저장 (내 계정에 유지)</button>
@@ -2571,6 +2580,9 @@
 
   // ---------- 대시보드 ----------
   // ---------- 자료업로드: 마스터재고 ----------
+  let masterStockRowsCache = []; // 현재 조회중인 배치의 원본 행
+  let currentMasterStockBatchId = null;
+
   async function loadDataUploadTab(){
     const batchSnap = await getDocs(query(collection(db,"masterStockBatches"), orderBy("uploadedAt","desc"), limit(30)));
     const listEl = document.getElementById("master-stock-batch-list");
@@ -2595,10 +2607,89 @@
       const row = document.createElement("div");
       row.className = "list-row compact";
       row.innerHTML = '<span style="color:var(--gray);width:32px;flex-shrink:0;font-size:12px;">'+(i+1)+'</span>' +
-        '<span style="flex:1;">'+(b.fileName||"-")+' · '+t+' · '+(b.uploadedBy||"-")+'('+(b.uploadedByUsername||"-")+') · '+(b.rowCount||0)+'행</span>';
+        '<span style="flex:1;">'+(b.fileName||"-")+' · '+t+' · '+(b.uploadedBy||"-")+'('+(b.uploadedByUsername||"-")+') · '+(b.rowCount||0)+'행</span>' +
+        '<button class="btn small secondary" style="width:auto;margin-right:4px;" data-view-batch="'+d.id+'">조회</button>' +
+        '<button class="btn small secondary" style="width:auto;margin-right:4px;" data-download-batch="'+d.id+'">다운로드</button>' +
+        '<button class="btn small danger" style="width:auto;" data-delete-batch="'+d.id+'">삭제</button>';
       listEl.appendChild(row);
+      row.querySelector('[data-view-batch]').onclick = ()=> viewMasterStockBatch(d.id, b.fileName);
+      row.querySelector('[data-download-batch]').onclick = ()=> downloadMasterStockBatch(d.id, b.fileName);
+      row.querySelector('[data-delete-batch]').onclick = ()=> deleteMasterStockBatch(d.id, b.fileName);
     });
+
+    // 첫 로드 시 최신 배치를 자동으로 조회 화면에 띄워줌
+    if(!currentMasterStockBatchId){
+      viewMasterStockBatch(docs[0].id, latest.fileName);
+    }
   }
+
+  async function fetchMasterStockBatchRows(batchId){
+    const snap = await getDocs(query(collection(db,"masterStockRows"), where("batchId","==",batchId)));
+    const rows = []; snap.forEach(d=> rows.push(d.data()));
+    return rows;
+  }
+
+  async function viewMasterStockBatch(batchId, fileName){
+    currentMasterStockBatchId = batchId;
+    const rows = await fetchMasterStockBatchRows(batchId);
+    masterStockRowsCache = rows;
+    document.getElementById("master-stock-view-title").textContent = fileName || "";
+    document.getElementById("master-stock-search").value = "";
+    renderMasterStockTable(rows);
+  }
+
+  window.filterMasterStockView = function(){
+    const term = document.getElementById("master-stock-search").value.trim().toLowerCase();
+    if(!term){ renderMasterStockTable(masterStockRowsCache); return; }
+    const filtered = masterStockRowsCache.filter(row=>
+      Object.values(row).some(v => String(v||"").toLowerCase().includes(term))
+    );
+    renderMasterStockTable(filtered);
+  };
+
+  function renderMasterStockTable(rows){
+    const el = document.getElementById("master-stock-table-area");
+    if(!rows || rows.length===0){ el.innerHTML = '<div class="list-empty">표시할 내용이 없습니다.</div>'; return; }
+    const cols = Object.keys(rows[0]).filter(k=>k!=="batchId");
+    let html = '<div style="overflow-x:auto;"><table class="data-table" style="min-width:800px;"><thead><tr>';
+    cols.forEach(c=> html += '<th>'+c+'</th>');
+    html += '</tr></thead><tbody>';
+    rows.slice(0,300).forEach(row=>{
+      html += '<tr>';
+      cols.forEach(c=> html += '<td>'+(row[c]!==undefined&&row[c]!==""?String(row[c]):'-')+'</td>');
+      html += '</tr>';
+    });
+    html += '</tbody></table></div>';
+    if(rows.length>300){ html += '<p class="desc">전체 '+rows.length+'행 중 300행만 표시됩니다. 검색으로 좁혀서 확인해주세요.</p>'; }
+    el.innerHTML = html;
+  }
+
+  window.downloadMasterStockBatch = async function(batchId, fileName){
+    const rows = await fetchMasterStockBatchRows(batchId);
+    if(rows.length===0){ alert("데이터가 없습니다."); return; }
+    const cols = Object.keys(rows[0]).filter(k=>k!=="batchId");
+    const aoa = [cols, ...rows.map(r=>cols.map(c=>r[c]!==undefined?r[c]:""))];
+    const ws = XLSX.utils.aoa_to_sheet(aoa);
+    forceTextFormat(ws);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "마스터재고");
+    XLSX.writeFile(wb, (fileName||"마스터재고")+"_재다운로드.xlsx");
+  };
+
+  window.deleteMasterStockBatch = async function(batchId, fileName){
+    if(!confirm('"'+(fileName||batchId)+'" 업로드 건을 완전히 삭제하시겠습니까? (그 안의 모든 행이 삭제됩니다)')) return;
+    const rowSnap = await getDocs(query(collection(db,"masterStockRows"), where("batchId","==",batchId)));
+    for(const d of rowSnap.docs){ await deleteDoc(doc(db,"masterStockRows", d.id)); }
+    await deleteDoc(doc(db,"masterStockBatches", batchId));
+    logAction("마스터재고 삭제", fileName||batchId);
+    if(currentMasterStockBatchId === batchId){
+      currentMasterStockBatchId = null;
+      masterStockRowsCache = [];
+      document.getElementById("master-stock-table-area").innerHTML = "";
+      document.getElementById("master-stock-view-title").textContent = "";
+    }
+    loadDataUploadTab();
+  };
 
   window.uploadMasterStock = async function(){
     const fileInput = document.getElementById("master-stock-file-input");
@@ -2624,6 +2715,7 @@
     logAction("마스터재고 업로드", file.name + " ("+rows.length+"행)");
     msgEl.style.color = "var(--navy)"; msgEl.textContent = rows.length+"행이 그대로 업로드되었습니다.";
     fileInput.value = "";
+    currentMasterStockBatchId = null;
     loadDataUploadTab();
   };
 
@@ -2701,6 +2793,21 @@
     renderRankList(destEl, destCounts, "대");
   }
 
+  async function getLatestMasterStockSerialSet(){
+    const batchSnap = await getDocs(query(collection(db,"masterStockBatches"), orderBy("uploadedAt","desc"), limit(1)));
+    if(batchSnap.empty) return null;
+    const batchId = batchSnap.docs[0].id;
+    const rows = await fetchMasterStockBatchRows(batchId);
+    const SERIAL_KEYS = ["일련번호","시리얼번호","시리얼","IMEI","imei"];
+    const set = new Set();
+    rows.forEach(r=>{
+      for(const k of SERIAL_KEYS){
+        if(r[k]){ set.add(String(r[k]).trim()); break; }
+      }
+    });
+    return set;
+  }
+
   async function loadInventoryList(){
     const listEl = document.getElementById("inventory-list");
     listEl.innerHTML = "";
@@ -2756,6 +2863,7 @@
     });
 
     lastRenderedItems = items;
+    const masterStockSerials = await getLatestMasterStockSerialSet();
 
     // 상태 드롭다운용 옵션 캐시
     const statusSnap = await getDocs(query(collection(db,"statusOptions"), orderBy("name")));
@@ -2792,7 +2900,9 @@
       const rowNum = startIndex + i + 1;
       const tr = document.createElement("tr");
       const tdNum = document.createElement("td");
-      tdNum.textContent = rowNum; tdNum.style.color = "var(--gray)";
+      const possiblySold = masterStockSerials && it.entryType==="imei" && it.serialNumber && it.status!=="판매" && !masterStockSerials.has(String(it.serialNumber).trim());
+      tdNum.innerHTML = rowNum + (possiblySold ? ' <span title="마스터재고에서 확인되지 않음 — 판매되었을 가능성" style="color:var(--danger);">●</span>' : '');
+      tdNum.style.color = "var(--gray)";
       tr.appendChild(tdNum);
       const tdCheck = document.createElement("td");
       const rowCb = document.createElement("input");
