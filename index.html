@@ -4766,16 +4766,20 @@
         '<div class="dash-stat-label"'+(labelKey?' data-label-key="'+labelKey+'"':'')+' style="font-size:calc(11.5px * var(--dash-scale,1));color:var(--gray);margin-bottom:4px;"><span class="tab-label-text">'+label+'</span></div>' +
         '<div class="dash-stat-value"'+(vKey?' data-label-key="'+vKey+'"':'')+' style="font-size:calc(19px * var(--dash-scale,1));font-weight:800;color:var(--navy);"><span class="tab-label-text">'+value+'</span></div></div>';
     }
+    function statRow(labelKey, label, value, big){
+      return '<div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;padding:3px 0;">' +
+        '<div class="dash-stat-label" data-label-key="'+labelKey+'" style="font-size:calc('+(big?'11.5px':'11px')+' * var(--dash-scale,1));color:var(--gray);white-space:nowrap;"><span class="tab-label-text">'+label+'</span></div>' +
+        '<div class="dash-stat-value" data-label-key="'+labelKey+'-value" style="font-size:calc('+(big?'16px':'14px')+' * var(--dash-scale,1));font-weight:800;color:var(--navy);white-space:nowrap;"><span class="tab-label-text">'+value+'</span></div></div>';
+    }
     function statCardTriple(mainLabel, arrivedLabel, arrivedValue, pendingLabel, pendingValue, color, keyPrefix){
       const total = (Number(String(arrivedValue).replace(/,/g,""))||0) + (Number(String(pendingValue).replace(/,/g,""))||0);
-      return '<div class="dash-stat-card" style="flex:1;min-width:170px;border:1px solid var(--line);background:#fff;padding:10px 14px;">' +
-        '<div class="dash-stat-label" data-label-key="'+keyPrefix+'-title" style="font-size:calc(11.5px * var(--dash-scale,1));color:var(--gray);margin-bottom:4px;"><span class="tab-label-text">'+mainLabel+'</span></div>' +
-        '<div class="dash-stat-label" data-label-key="'+keyPrefix+'-arrived" style="font-size:calc(11px * var(--dash-scale,1));color:var(--gray);"><span class="tab-label-text">'+arrivedLabel+'</span></div>' +
-        '<div class="dash-stat-value" data-label-key="'+keyPrefix+'-arrived-value" style="font-size:calc(15px * var(--dash-scale,1));font-weight:800;color:var(--navy);margin-bottom:4px;"><span class="tab-label-text">'+arrivedValue+'</span></div>' +
-        '<div class="dash-stat-label" data-label-key="'+keyPrefix+'-pending" style="font-size:calc(11px * var(--dash-scale,1));color:var(--gray);"><span class="tab-label-text">'+pendingLabel+'</span></div>' +
-        '<div class="dash-stat-value" data-label-key="'+keyPrefix+'-pending-value" style="font-size:calc(15px * var(--dash-scale,1));font-weight:800;color:var(--navy);margin-bottom:4px;"><span class="tab-label-text">'+pendingValue+'</span></div>' +
-        '<div class="dash-stat-label" data-label-key="'+keyPrefix+'-total" style="font-size:calc(11px * var(--dash-scale,1));color:var(--gray);"><span class="tab-label-text">총금액</span></div>' +
-        '<div class="dash-stat-value" data-label-key="'+keyPrefix+'-total-value" style="font-size:calc(15px * var(--dash-scale,1));font-weight:800;color:var(--navy);"><span class="tab-label-text">'+total.toLocaleString()+'</span></div></div>';
+      return '<div class="dash-stat-card" style="flex:1;min-width:220px;border:1px solid var(--line);background:#fff;padding:10px 14px;">' +
+        '<div class="dash-stat-label" data-label-key="'+keyPrefix+'-title" style="font-size:calc(11.5px * var(--dash-scale,1));color:var(--gray);font-weight:700;margin-bottom:4px;"><span class="tab-label-text">'+mainLabel+'</span></div>' +
+        statRow(keyPrefix+'-arrived', arrivedLabel, arrivedValue, true) +
+        statRow(keyPrefix+'-pending', pendingLabel, pendingValue, false) +
+        '<div style="border-top:1px solid var(--line);margin-top:2px;"></div>' +
+        statRow(keyPrefix+'-total', '총금액', total.toLocaleString(), true) +
+        '</div>';
     }
     const scopeLabel = dashboardScope==="all" ? "전체" : (dashboardCustomMonth ? (dashboardCustomMonth.slice(0,4)+"년 "+dashboardCustomMonth.slice(4,6)+"월") : "당월");
     let statHtml = statCard(scopeLabel+" 수익 (판매가-입고가만, 공시지원금 별도)", profitSum.toLocaleString(), null, "dash-profit");
@@ -4786,8 +4790,8 @@
     });
     statHtml += statCard(scopeLabel+" 입고", inCount+"대", null, "dash-in");
     statHtml += statCard(scopeLabel+" 판매", saleCount+"대", null, "dash-out");
-    statHtml += statCardTriple(scopeLabel+" 매입", "입고금액", purchaseSum.toLocaleString(), "미입고금액", pendingPurchaseAmount.toLocaleString(), null, "dash-purchase");
-    statHtml += statCardTriple(scopeLabel+" 매출", "출고금액", saleSum.toLocaleString(), "미출고금액", pendingSaleAmount.toLocaleString(), null, "dash-sale");
+    statHtml += statCardTriple(scopeLabel+" 매입", "입고", purchaseSum.toLocaleString(), "미입고", pendingPurchaseAmount.toLocaleString(), null, "dash-purchase");
+    statHtml += statCardTriple(scopeLabel+" 매출", "출고", saleSum.toLocaleString(), "미출고", pendingSaleAmount.toLocaleString(), null, "dash-sale");
     statEl.innerHTML = statHtml;
     applyCustomTabLabels();
     applyDashFontSize();
