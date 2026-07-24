@@ -490,14 +490,20 @@
 
         <div id="stat-cards" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px;"></div>
 
-        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:end;margin-bottom:14px;background:#fafafa;border:1px solid var(--line);padding:10px;">
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:end;margin-bottom:10px;background:#fafafa;border:1px solid var(--line);padding:10px;">
           <div class="field" style="flex:1;min-width:160px;margin-bottom:0;"><label>검색 (모델명·IMEI)</label><input type="text" id="filter-search" placeholder="검색어 입력"></div>
-          <div class="field" style="flex:1;min-width:130px;margin-bottom:0;"><label>날짜 조회</label><input type="text" id="filter-date" placeholder="예: 20260724" maxlength="8" inputmode="numeric"></div>
           <div class="field" style="flex:1;min-width:130px;margin-bottom:0;"><label>기준</label>
-            <select id="filter-date-type"><option value="inDate">입고일</option><option value="outDate">출고일</option></select>
+            <select id="filter-date-type"><option value="inDate">입고일</option><option value="orderDate">주문일</option><option value="expectedSaleDate">판매예정일</option><option value="outDate">출고일</option></select>
           </div>
+          <div class="field" style="flex:1;min-width:120px;margin-bottom:0;"><label>시작일</label><input type="text" id="filter-date-from" placeholder="예: 20260701" maxlength="8" inputmode="numeric"></div>
+          <div class="field" style="flex:1;min-width:120px;margin-bottom:0;"><label>종료일</label><input type="text" id="filter-date-to" placeholder="예: 20260731" maxlength="8" inputmode="numeric"></div>
           <button class="btn small" style="margin-bottom:0;" onclick="loadInventoryList()">조회</button>
           <button class="btn small secondary" style="margin-bottom:0;" onclick="clearDateFilter()">초기화</button>
+        </div>
+
+        <div style="background:#fafafa;border:1px solid var(--line);border-top:none;padding:10px;margin-bottom:14px;">
+          <div id="filter-conditions"></div>
+          <button class="btn small secondary" style="width:auto;margin-top:4px;" onclick="addFilterCondition()">+ 조건 추가</button>
         </div>
 
         <div style="overflow-x:auto;">
@@ -1851,8 +1857,40 @@
   };
 
   window.clearDateFilter = function(){
-    document.getElementById("filter-date").value = "";
+    document.getElementById("filter-date-from").value = "";
+    document.getElementById("filter-date-to").value = "";
+    document.getElementById("filter-search").value = "";
+    document.getElementById("filter-conditions").innerHTML = "";
     loadInventoryList();
+  };
+
+  const FILTER_FIELDS = INV_COLUMNS.concat([{ key:"status", label:"현재상태", get:it=>it.status||"" }]);
+
+  window.addFilterCondition = function(){
+    const container = document.getElementById("filter-conditions");
+    const row = document.createElement("div");
+    row.className = "field-row";
+    row.style.marginBottom = "6px";
+    const fieldSel = document.createElement("select");
+    fieldSel.className = "filter-field-select";
+    fieldSel.style.flex = "1"; fieldSel.style.minWidth = "140px";
+    FILTER_FIELDS.forEach(f=>{
+      const opt = document.createElement("option");
+      opt.value = f.key; opt.textContent = f.label;
+      fieldSel.appendChild(opt);
+    });
+    const valInput = document.createElement("input");
+    valInput.type = "text"; valInput.className = "filter-value-input";
+    valInput.placeholder = "검색어 (포함 일치)";
+    valInput.style.flex = "1"; valInput.style.minWidth = "140px"; valInput.style.padding = "9px 10px"; valInput.style.border = "1px solid #c7c7c7"; valInput.style.fontSize = "13px";
+    const delBtn = document.createElement("button");
+    delBtn.className = "btn small danger"; delBtn.style.width = "auto"; delBtn.textContent = "삭제";
+    delBtn.onclick = ()=> row.remove();
+
+    const fieldWrap = document.createElement("div"); fieldWrap.className = "field"; fieldWrap.style.flex="1"; fieldWrap.appendChild(fieldSel);
+    const valWrap = document.createElement("div"); valWrap.className = "field"; valWrap.style.flex="1"; valWrap.appendChild(valInput);
+    row.appendChild(fieldWrap); row.appendChild(valWrap); row.appendChild(delBtn);
+    container.appendChild(row);
   };
 
   let lastRenderedItems = [];
@@ -1869,14 +1907,19 @@
       return;
     }
 
-    const filterDate = document.getElementById("filter-date").value.trim().replace(/-/g, "");
+    const filterDateFrom = document.getElementById("filter-date-from").value.trim().replace(/-/g, "");
+    const filterDateTo = document.getElementById("filter-date-to").value.trim().replace(/-/g, "");
     const filterType = document.getElementById("filter-date-type").value;
     const searchTerm = (document.getElementById("filter-search").value||"").trim().toLowerCase();
 
     let items = [];
     snap.forEach(d=> items.push({ id:d.id, ...d.data() }));
-    if(filterDate){
-      items = items.filter(it => (it[filterType]||"") === filterDate);
+
+    if(filterDateFrom){
+      items = items.filter(it => (it[filterType]||"") >= filterDateFrom);
+    }
+    if(filterDateTo){
+      items = items.filter(it => (it[filterType]||"") && (it[filterType]||"") <= filterDateTo);
     }
     if(searchTerm){
       items = items.filter(it =>
@@ -1886,6 +1929,18 @@
         (it.serialNumber||"").toLowerCase().includes(searchTerm)
       );
     }
+
+    // 다중 조건 (전부 AND, 포함 일치)
+    const conditionRows = document.querySelectorAll("#filter-conditions > div");
+    conditionRows.forEach(row=>{
+      const fieldKey = row.querySelector(".filter-field-select").value;
+      const val = row.querySelector(".filter-value-input").value.trim().toLowerCase();
+      if(!val) return;
+      const fieldDef = FILTER_FIELDS.find(f=>f.key===fieldKey);
+      if(!fieldDef) return;
+      items = items.filter(it => String(fieldDef.get(it)||"").toLowerCase().includes(val));
+    });
+
     lastRenderedItems = items;
 
     const counts = {};
