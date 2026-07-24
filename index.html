@@ -69,6 +69,12 @@
   .field-row{ display:flex; gap:0; flex-wrap:wrap; }
   .field-row .field{ margin-left:-1px; }
   .field-row .field:first-child{ margin-left:0; }
+  .stack-form{ border:1px solid var(--line); margin-bottom:14px; }
+  .stack-row{ display:flex; align-items:stretch; border-top:1px solid var(--line); }
+  .stack-form .stack-row:first-child{ border-top:none; }
+  .stack-row label{ width:190px; flex-shrink:0; padding:9px 10px; font-size:12.5px; font-weight:600; color:var(--navy); background:#fafafa; border-right:1px solid var(--line); display:flex; align-items:center; }
+  .stack-row input, .stack-row select{ flex:1; border:none; padding:9px 10px; font-size:13px; }
+  .stack-row input:focus, .stack-row select:focus{ outline:2px solid var(--accent); outline-offset:-2px; }
   .inline-form input{ flex:1; min-width:140px; padding:9px 10px; border:1px solid #c7c7c7; font-size:13px; }
   .list-row{ display:flex; justify-content:space-between; align-items:center; padding:10px 12px; border:1px solid var(--line); border-top:none; font-size:13.5px; }
   .list-row:first-of-type{ border-top:1px solid var(--line); }
@@ -209,7 +215,24 @@
           </span>
         </div>
         <p class="desc">등록된 모델을 한눈에 볼 수 있습니다. SKU가 없는 색상은 빨간색으로 표시되니 클릭해서 채워주세요.</p>
-        <div id="model-list"></div>
+        <div style="overflow-x:auto;">
+        <table style="width:100%;border-collapse:collapse;font-size:12.5px;min-width:900px;">
+          <thead>
+            <tr style="background:#fafafa;border-bottom:2px solid var(--navy);">
+              <th style="padding:8px 10px;text-align:left;">펫네임</th>
+              <th style="padding:8px 10px;text-align:left;">전산모델명</th>
+              <th style="padding:8px 10px;text-align:left;">모델명</th>
+              <th style="padding:8px 10px;text-align:left;">용량</th>
+              <th style="padding:8px 10px;text-align:left;">삼성모델명</th>
+              <th style="padding:8px 10px;text-align:left;">출고가</th>
+              <th style="padding:8px 10px;text-align:left;">닉네임</th>
+              <th style="padding:8px 10px;text-align:left;">색상</th>
+              <th style="padding:8px 10px;text-align:right;">관리</th>
+            </tr>
+          </thead>
+          <tbody id="model-table-body"></tbody>
+        </table>
+        </div>
       </div>
 
       <div class="card">
@@ -278,26 +301,19 @@
         <button onclick="closeModelSingleModal()" style="position:absolute;top:14px;right:14px;background:none;border:1px solid var(--navy);width:28px;height:28px;cursor:pointer;font-size:14px;">✕</button>
         <h3 style="margin-top:0;">모델 건별 등록</h3>
         <p class="desc">아는 항목만 채워도 등록됩니다. 색상은 나중에 SKU를 매칭해도 됩니다.</p>
-        <div class="field-row">
-          <div class="field" style="flex:1;min-width:150px;"><label>펫네임</label><input type="text" id="ms-pet-input" placeholder="예: 갤럭시Z 폴드7"></div>
-          <div class="field" style="flex:1;min-width:150px;"><label>전산모델명</label><input type="text" id="ms-system-input" placeholder="예: SM-F976N256"></div>
-        </div>
-        <div class="field-row">
-          <div class="field" style="flex:1;min-width:150px;"><label>모델명</label><input type="text" id="ms-base-input" placeholder="예: SM-F976N"></div>
-          <div class="field" style="flex:1;min-width:110px;"><label>용량</label><input type="text" id="ms-capacity-input" placeholder="예: 256GB"></div>
-        </div>
-        <div class="field-row">
-          <div class="field" style="flex:1;min-width:150px;"><label>삼성모델명 (색상1 SKU)</label><input type="text" id="ms-sku1-input" placeholder="예: SM-F976NZKPKOD"></div>
-          <div class="field" style="flex:1;min-width:120px;"><label>출고가 (VAT포함)</label><input type="number" id="ms-price-input"></div>
-          <div class="field" style="flex:1;min-width:110px;"><label>닉네임</label><input type="text" id="ms-nick-input"></div>
-        </div>
-        <p class="desc" style="margin-top:6px;">색상 (색상명만 입력, SKU는 등록 후 색상별로 채우면 됩니다)</p>
-        <div class="field-row">
-          <div class="field" style="flex:1;min-width:100px;"><input type="text" id="ms-color1-input" placeholder="색상1"></div>
-          <div class="field" style="flex:1;min-width:100px;"><input type="text" id="ms-color2-input" placeholder="색상2"></div>
-          <div class="field" style="flex:1;min-width:100px;"><input type="text" id="ms-color3-input" placeholder="색상3"></div>
-          <div class="field" style="flex:1;min-width:100px;"><input type="text" id="ms-color4-input" placeholder="색상4"></div>
-          <div class="field" style="flex:1;min-width:100px;"><input type="text" id="ms-color5-input" placeholder="색상5"></div>
+        <div class="stack-form">
+          <div class="stack-row"><label>펫네임</label><input type="text" id="ms-pet-input" placeholder="예: 갤럭시Z 폴드7"></div>
+          <div class="stack-row"><label>전산모델명</label><input type="text" id="ms-system-input" placeholder="예: SM-F976N256"></div>
+          <div class="stack-row"><label>모델명</label><input type="text" id="ms-base-input" placeholder="예: SM-F976N"></div>
+          <div class="stack-row"><label>용량</label><input type="text" id="ms-capacity-input" placeholder="예: 256GB"></div>
+          <div class="stack-row"><label>삼성모델명 (색상1 SKU)</label><input type="text" id="ms-sku1-input" placeholder="예: SM-F976NZKPKOD"></div>
+          <div class="stack-row"><label>출고가 (VAT포함)</label><input type="number" id="ms-price-input"></div>
+          <div class="stack-row"><label>닉네임</label><input type="text" id="ms-nick-input"></div>
+          <div class="stack-row"><label>색상1</label><input type="text" id="ms-color1-input"></div>
+          <div class="stack-row"><label>색상2</label><input type="text" id="ms-color2-input"></div>
+          <div class="stack-row"><label>색상3</label><input type="text" id="ms-color3-input"></div>
+          <div class="stack-row"><label>색상4</label><input type="text" id="ms-color4-input"></div>
+          <div class="stack-row"><label>색상5</label><input type="text" id="ms-color5-input"></div>
         </div>
         <button class="btn small" onclick="submitModelSingle()">모델 등록</button>
       </div>
@@ -918,31 +934,49 @@
 
   async function loadModelAdminList(){
     await fetchModelsCache();
-    const listEl = document.getElementById("model-list");
-    listEl.innerHTML = "";
-    if(modelsCache.length === 0){ listEl.innerHTML = '<div class="list-empty">등록된 모델이 없습니다. 위에서 등록해주세요.</div>'; return; }
-    modelsCache.forEach(m=>{
+    const bodyEl = document.getElementById("model-table-body");
+    if(modelsCache.length === 0){
+      bodyEl.innerHTML = '<tr><td colspan="9" class="list-empty">등록된 모델이 없습니다. 위에서 등록해주세요.</td></tr>';
+      return;
+    }
+    bodyEl.innerHTML = "";
+    modelsCache.forEach((m, idx)=>{
       const colors = m.colors || [];
       const missingSkuCount = colors.filter(c=>!c.sku).length;
-      const wrap = document.createElement("div");
-      wrap.style.border = "1px solid var(--line)"; wrap.style.borderTop = "none"; wrap.style.padding = "10px 12px";
-      const priceEx = m.priceExVat ? Number(m.priceExVat).toLocaleString()+'원' : "-";
+      const firstSku = colors.length>0 ? (colors[0].sku || "(미입력)") : "-";
       const priceInc = m.priceIncVat ? Number(m.priceIncVat).toLocaleString()+'원' : "-";
-      wrap.innerHTML =
-        '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;">' +
-        '<span style="font-size:13.5px;">' +
-        (m.petName ? '<b>'+m.petName+'</b> · ' : (m.modelGroup?'<b>'+m.modelGroup+'</b> · ':'')) +
-        (m.systemModel ? '전산모델명 '+m.systemModel+' · ' : '') +
-        (m.baseModel ? m.baseModel+' ' : '') + (m.capacity||'') +
-        ' · 출고가(포함) '+priceInc+' / (별도, 자동) '+priceEx +
-        (m.nickname ? ' · 닉네임 '+m.nickname : '') +
-        (missingSkuCount>0 ? ' <span style="color:var(--danger);font-weight:700;">· SKU 미입력 '+missingSkuCount+'개</span>' : '') +
-        '</span>' +
-        '<span><button class="btn small secondary" data-edit-model="'+m.id+'" style="margin-right:6px;">모델 수정</button>' +
-        '<button class="btn small danger" data-del-model="'+m.id+'">모델 삭제</button></span></div>';
+      const rowId = "model-row-"+idx;
+      const detailId = "model-detail-"+idx;
+
+      const tr = document.createElement("tr");
+      tr.id = rowId;
+      tr.style.borderTop = "1px solid var(--line)";
+      tr.innerHTML =
+        '<td style="padding:8px 10px;">'+(m.petName||"-")+'</td>' +
+        '<td style="padding:8px 10px;">'+(m.systemModel||"-")+'</td>' +
+        '<td style="padding:8px 10px;">'+(m.baseModel||"-")+'</td>' +
+        '<td style="padding:8px 10px;">'+(m.capacity||"-")+'</td>' +
+        '<td style="padding:8px 10px;'+(missingSkuCount>0&&colors.length===1?'color:var(--danger);':'')+'">'+firstSku+'</td>' +
+        '<td style="padding:8px 10px;">'+priceInc+'</td>' +
+        '<td style="padding:8px 10px;">'+(m.nickname||"-")+'</td>' +
+        '<td style="padding:8px 10px;white-space:nowrap;">' +
+          '<button class="btn small secondary" style="width:auto;padding:5px 10px;" data-toggle-color="'+idx+'">색상 ('+colors.length+')'+(missingSkuCount>0?' <span style="color:var(--danger);">!</span>':'')+'</button>' +
+        '</td>' +
+        '<td style="padding:8px 10px;white-space:nowrap;text-align:right;">' +
+          '<button class="btn small secondary" style="width:auto;padding:5px 10px;margin-right:4px;" data-edit-model="'+m.id+'">수정</button>' +
+          '<button class="btn small danger" style="width:auto;padding:5px 10px;" data-del-model="'+m.id+'">삭제</button>' +
+        '</td>';
+      bodyEl.appendChild(tr);
+
+      const detailTr = document.createElement("tr");
+      detailTr.id = detailId;
+      detailTr.style.display = "none";
+      detailTr.style.background = "#fafafa";
+      const detailTd = document.createElement("td");
+      detailTd.colSpan = 9;
+      detailTd.style.padding = "10px 14px";
 
       const colorArea = document.createElement("div");
-      colorArea.style.marginTop = "8px";
       if(colors.length === 0){
         colorArea.innerHTML = '<span style="font-size:12px;color:var(--gray);">등록된 색상이 없습니다.</span>';
       }else{
@@ -959,7 +993,7 @@
           }else{
             tag.textContent = c.color + " (" + c.sku + ")";
           }
-          const doColorEdit = async ()=>{
+          tag.onclick = async ()=>{
             const newColor = prompt("색상명", c.color); if(newColor===null) return;
             const newSku = prompt("삼성모델명(SKU)", c.sku||""); if(newSku===null) return;
             const nc = newColor.trim(), ns = newSku.trim();
@@ -974,7 +1008,6 @@
             logAction("색상 수정", m.modelGroup+" / "+c.color+" → "+nc);
             loadModelAdminList();
           };
-          tag.onclick = doColorEdit;
           const delIcon = document.createElement("button");
           delIcon.textContent = "삭제"; delIcon.className = "btn small danger";
           delIcon.style.padding = "2px 8px"; delIcon.style.fontSize = "10.5px"; delIcon.style.width = "auto";
@@ -995,18 +1028,24 @@
       addColorRow.innerHTML =
         '<input type="text" placeholder="색상명" style="flex:1;padding:7px 8px;border:1px solid #c7c7c7;font-size:12.5px;" class="new-color-name">' +
         '<input type="text" placeholder="삼성모델명 SKU (선택, 나중에 채워도 됨)" style="flex:1;padding:7px 8px;border:1px solid #c7c7c7;font-size:12.5px;" class="new-color-sku">' +
-        '<button class="btn small" data-add-color="'+m.id+'" style="width:auto;">색상 추가</button>';
+        '<button class="btn small" style="width:auto;" data-add-color="'+m.id+'">색상 추가</button>';
 
-      wrap.appendChild(colorArea); wrap.appendChild(addColorRow); listEl.appendChild(wrap);
+      detailTd.appendChild(colorArea); detailTd.appendChild(addColorRow);
+      detailTr.appendChild(detailTd);
+      bodyEl.appendChild(detailTr);
 
-      wrap.querySelector('[data-del-model]').onclick = async ()=>{
-        if(confirm(m.modelGroup + " 모델을 삭제하시겠습니까? (색상도 함께 삭제되며, 기존 재고 기록은 유지됩니다)")){
+      document.querySelector('#'+rowId+' [data-toggle-color]').onclick = ()=>{
+        const dEl = document.getElementById(detailId);
+        dEl.style.display = (dEl.style.display === "none") ? "table-row" : "none";
+      };
+      document.querySelector('#'+rowId+' [data-del-model]').onclick = async ()=>{
+        if(confirm((m.petName||m.modelGroup) + " 모델을 삭제하시겠습니까? (색상도 함께 삭제되며, 기존 재고 기록은 유지됩니다)")){
           await deleteDoc(doc(db, "inventoryModels", m.id));
           logAction("모델 삭제", m.modelGroup);
           loadModelAdminList();
         }
       };
-      wrap.querySelector('[data-edit-model]').onclick = async ()=>{
+      document.querySelector('#'+rowId+' [data-edit-model]').onclick = async ()=>{
         const modelGroup = prompt("모델군", m.modelGroup); if(modelGroup===null) return;
         const baseModel = prompt("기본모델명", m.baseModel); if(baseModel===null) return;
         const capacity = prompt("용량 (선택)", m.capacity); if(capacity===null) return;
@@ -1042,11 +1081,11 @@
         loadModelAdminList();
         loadModelsIntoItemSelect();
       };
-      wrap.querySelector('[data-add-color]').onclick = async ()=>{
-        const nameInput = wrap.querySelector(".new-color-name");
-        const skuInput = wrap.querySelector(".new-color-sku");
+      document.querySelector('#'+detailId+' [data-add-color]').onclick = async ()=>{
+        const nameInput = document.querySelector('#'+detailId+' .new-color-name');
+        const skuInput = document.querySelector('#'+detailId+' .new-color-sku');
         const color = nameInput.value.trim(); const sku = skuInput.value.trim();
-        if(!color || !sku){ alert("색상명과 삼성모델명을 모두 입력해주세요."); return; }
+        if(!color){ alert("색상명을 입력해주세요."); return; }
         await updateDoc(doc(db, "inventoryModels", m.id), { colors: arrayUnion({ color, sku }) });
         logAction("색상 추가", m.modelGroup + " / " + color);
         loadModelAdminList();
