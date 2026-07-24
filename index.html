@@ -206,10 +206,11 @@
             <button class="btn small secondary" id="dash-scope-all-btn" style="width:auto;" onclick="setDashboardScope('all')">전체</button>
             <select id="dash-month-picker" onchange="setDashboardCustomMonth(this.value)" style="padding:5px 6px;border:1px solid #c7c7c7;font-size:12.5px;height:28px;"><option value="">월 선택</option></select>
             <span style="color:var(--line);margin:0 4px;">|</span>
-            <span style="font-size:11.5px;color:var(--gray);">글씨크기</span>
             <button class="btn small secondary" style="width:auto;padding:5px 8px;" onclick="setDashFontSize('small')">작게</button>
             <button class="btn small secondary" style="width:auto;padding:5px 8px;" onclick="setDashFontSize('medium')">보통</button>
             <button class="btn small secondary" style="width:auto;padding:5px 8px;" onclick="setDashFontSize('large')">크게</button>
+            <span style="color:var(--line);margin:0 4px;">|</span>
+            <button class="btn small secondary" style="width:auto;padding:5px 8px;" onclick="resetHiddenDashItems()">숨긴 항목 복원</button>
           </span>
         </div>
         <div id="dash-stat-cards" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px;"></div>
@@ -1150,6 +1151,7 @@
         customTabLabels = currentSettings.tabLabels || {};
         customTabColors = currentSettings.tabColors || {};
         customTabFontSizes = currentSettings.tabFontSizes || {};
+        customHiddenKeys = currentSettings.hiddenKeys || {};
         dashFontSize = currentSettings.dashFontSize || "medium";
         applyCustomTabLabels();
         applyDashFontSize();
@@ -1176,6 +1178,7 @@
   let customTabLabels = {};
   let customTabColors = {};
   let customTabFontSizes = {};
+  let customHiddenKeys = {};
 
   function getElKey(el){
     if(el.dataset.labelKey) return el.dataset.labelKey;
@@ -1195,6 +1198,7 @@
       if(span && customTabLabels[key]) span.textContent = customTabLabels[key];
       if(customTabColors[key]) el.style.setProperty("color", customTabColors[key], "important");
       if(customTabFontSizes[key]) el.style.setProperty("font-size", customTabFontSizes[key]+"px", "important");
+      el.style.display = customHiddenKeys[key] ? "none" : "";
     });
     document.querySelectorAll("button:not([data-label-key]), h3:not([data-label-key])").forEach(el=>{
       if(!el.dataset.origText){
@@ -1207,6 +1211,7 @@
       if(customTabLabels[key]) el.textContent = customTabLabels[key];
       if(customTabColors[key]) el.style.setProperty("color", customTabColors[key], "important");
       if(customTabFontSizes[key]) el.style.setProperty("font-size", customTabFontSizes[key]+"px", "important");
+      if(customHiddenKeys[key]) el.style.display = "none";
     });
   }
 
@@ -1214,9 +1219,10 @@
     if(kind==="label") customTabLabels[key] = value;
     if(kind==="color") customTabColors[key] = value;
     if(kind==="fontSize") customTabFontSizes[key] = value;
+    if(kind==="hide") customHiddenKeys[key] = value;
     applyCustomTabLabels();
     setDoc(doc(db,"settings","general"), {
-      tabLabels: customTabLabels, tabColors: customTabColors, tabFontSizes: customTabFontSizes
+      tabLabels: customTabLabels, tabColors: customTabColors, tabFontSizes: customTabFontSizes, hiddenKeys: customHiddenKeys
     }, { merge:true })
       .then(()=> logAction(actionLabel, key+" → "+value))
       .catch(()=> alert("저장에 실패했습니다. 다시 시도해주세요."));
@@ -1262,12 +1268,16 @@
         const num = Number(newSize);
         if(!num || num<8 || num>60){ alert("8~60 사이의 숫자를 입력해주세요."); return; }
         saveCustomization("fontSize", key, num, "글씨 크기 변경");
+      }],
+      ["숨기기 (안 보이게)", ()=>{
+        if(!confirm("이 항목을 화면에서 숨기시겠습니까? 관리자 설정에서 언제든 다시 되돌릴 수 있습니다.")) return;
+        saveCustomization("hide", key, true, "항목 숨기기");
       }]
     ];
-    items.forEach(([label, fn])=>{
+    items.forEach(([label, fn], idx)=>{
       const btn = document.createElement("div");
       btn.textContent = label;
-      btn.style.cssText = "padding:10px 14px;cursor:pointer;border-bottom:1px solid var(--line);";
+      btn.style.cssText = "padding:10px 14px;cursor:pointer;"+(idx<items.length-1?"border-bottom:1px solid var(--line);":"");
       btn.onmouseenter = ()=> btn.style.background = "#f2f2f2";
       btn.onmouseleave = ()=> btn.style.background = "#fff";
       btn.onclick = (ev)=>{ ev.stopPropagation(); closeCustomizeMenu(); fn(); };
@@ -1286,6 +1296,13 @@
     e.preventDefault();
     showCustomizeMenu(e.clientX, e.clientY, targetEl, key);
   });
+
+  window.resetHiddenDashItems = function(){
+    customHiddenKeys = {};
+    applyCustomTabLabels();
+    setDoc(doc(db,"settings","general"), { hiddenKeys: {} }, { merge:true }).catch(()=>{});
+    alert("숨겼던 항목이 모두 다시 보이게 됩니다.");
+  };
 
   window.saveSiteName = async function(){
     const val = document.getElementById("site-name-input").value.trim();
@@ -4762,7 +4779,8 @@
 
     function statCard(label, value, color, labelKey){
       const vKey = labelKey ? labelKey+"-value" : "";
-      return '<div class="dash-stat-card" style="flex:1;min-width:150px;border:1px solid var(--line);background:#fff;padding:10px 14px;">' +
+      const cardKey = labelKey ? labelKey+"-card" : "";
+      return '<div class="dash-stat-card"'+(cardKey?' data-label-key="'+cardKey+'"':'')+' style="flex:1;min-width:150px;border:1px solid var(--line);background:#fff;padding:10px 14px;">' +
         '<div class="dash-stat-label"'+(labelKey?' data-label-key="'+labelKey+'"':'')+' style="font-size:calc(11.5px * var(--dash-scale,1));color:var(--gray);margin-bottom:4px;"><span class="tab-label-text">'+label+'</span></div>' +
         '<div class="dash-stat-value"'+(vKey?' data-label-key="'+vKey+'"':'')+' style="font-size:calc(19px * var(--dash-scale,1));font-weight:800;color:var(--navy);"><span class="tab-label-text">'+value+'</span></div></div>';
     }
@@ -4773,7 +4791,7 @@
     }
     function statCardTriple(mainLabel, arrivedLabel, arrivedValue, pendingLabel, pendingValue, color, keyPrefix){
       const total = (Number(String(arrivedValue).replace(/,/g,""))||0) + (Number(String(pendingValue).replace(/,/g,""))||0);
-      return '<div class="dash-stat-card" style="flex:1;min-width:220px;border:1px solid var(--line);background:#fff;padding:10px 14px;">' +
+      return '<div class="dash-stat-card" data-label-key="'+keyPrefix+'-card" style="flex:1;min-width:220px;border:1px solid var(--line);background:#fff;padding:10px 14px;">' +
         '<div class="dash-stat-label" data-label-key="'+keyPrefix+'-title" style="font-size:calc(11.5px * var(--dash-scale,1));color:var(--gray);font-weight:700;margin-bottom:4px;"><span class="tab-label-text">'+mainLabel+'</span></div>' +
         statRow(keyPrefix+'-arrived', arrivedLabel, arrivedValue, true) +
         statRow(keyPrefix+'-pending', pendingLabel, pendingValue, false) +
