@@ -515,37 +515,33 @@
 
         <div id="stat-cards" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px;"></div>
 
-        <div style="display:flex;flex-wrap:wrap;border:1px solid var(--line);background:#fff;margin-bottom:10px;">
-          <input type="text" id="filter-search" placeholder="검색 (모델명·IMEI)" style="flex:1.4;min-width:160px;border:none;border-right:1px solid var(--line);padding:9px 10px;font-size:12.5px;">
+        <div style="display:flex;flex-wrap:wrap;align-items:stretch;border:1px solid var(--line);background:#fff;margin-bottom:14px;">
+          <label style="display:flex;align-items:center;gap:5px;padding:9px 10px;font-size:12.5px;border-right:1px solid var(--line);white-space:nowrap;">
+            <input type="checkbox" id="filter-date-all" onclick="onFilterDateAllToggle()"> 전체
+          </label>
           <select id="filter-date-type" style="flex:1;min-width:110px;border:none;border-right:1px solid var(--line);padding:9px 10px;font-size:12.5px;">
             <option value="inDate">입고일 기준</option><option value="orderDate">주문일 기준</option><option value="expectedSaleDate">판매예정일 기준</option><option value="outDate">출고일 기준</option>
           </select>
           <input type="text" id="filter-date-from" placeholder="시작일 예:20260701" maxlength="8" inputmode="numeric" style="flex:1;min-width:120px;border:none;border-right:1px solid var(--line);padding:9px 10px;font-size:12.5px;">
           <input type="text" id="filter-date-to" placeholder="종료일 예:20260731" maxlength="8" inputmode="numeric" style="flex:1;min-width:120px;border:none;border-right:1px solid var(--line);padding:9px 10px;font-size:12.5px;">
-          <label style="display:flex;align-items:center;gap:5px;padding:9px 10px;font-size:12.5px;border-right:1px solid var(--line);white-space:nowrap;">
-            <input type="checkbox" id="filter-date-all" onclick="onFilterDateAllToggle()"> 전체 기간
-          </label>
           <button class="btn small" style="width:auto;flex-shrink:0;" onclick="loadInventoryList()">조회</button>
-          <button class="btn small secondary" style="width:auto;flex-shrink:0;" onclick="clearDateFilter()">초기화</button>
-        </div>
-
-        <div style="background:#fafafa;border:1px solid var(--line);border-top:none;padding:10px;margin-bottom:14px;">
-          <div id="filter-conditions"></div>
-          <button class="btn small secondary" style="width:auto;margin-top:4px;" onclick="addFilterCondition()">+ 조건 추가</button>
+          <button class="btn small secondary" style="width:auto;flex-shrink:0;border-right:1px solid var(--line);" onclick="clearDateFilter()">초기화</button>
+          <span id="filter-conditions" style="display:contents;"></span>
+          <button class="btn small secondary" style="width:auto;flex-shrink:0;" onclick="addFilterCondition()">+ 조건 추가</button>
         </div>
 
         <div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px;border:1px solid var(--line);padding:10px;margin-bottom:0;">
-          <label style="font-size:12.5px;display:flex;align-items:center;gap:5px;">
+          <label style="font-size:12.5px;display:flex;align-items:center;gap:5px;height:28px;">
             <input type="checkbox" id="bulk-select-all" onclick="toggleAllInventoryRows(this)"> 전체
           </label>
           <span style="color:var(--line);">|</span>
           <span style="font-size:12.5px;font-weight:600;">일괄 변경:</span>
-          <select id="bulk-edit-field" onchange="onBulkEditFieldChange()" style="padding:6px 8px;border:1px solid #c7c7c7;font-size:12.5px;"></select>
-          <span id="bulk-edit-value-wrap"><input type="text" id="bulk-edit-value" style="padding:6px 8px;border:1px solid #c7c7c7;font-size:12.5px;width:150px;"></span>
-          <button class="btn small" style="width:auto;" onclick="applyBulkEdit()">적용</button>
-          <button class="btn small secondary" style="width:auto;margin-left:auto;" onclick="downloadInventoryExcel()">엑셀다운</button>
-          <button class="btn small danger" style="width:auto;" onclick="deleteSelectedInventoryRows()">선택 삭제</button>
-          <select id="inv-page-size-select" onchange="onInvPageSizeChange()" style="padding:5px 6px;border:1px solid #c7c7c7;font-size:12px;height:28px;"></select>
+          <select id="bulk-edit-field" onchange="onBulkEditFieldChange()" style="padding:5px 8px;border:1px solid #c7c7c7;font-size:12.5px;height:28px;box-sizing:border-box;"></select>
+          <span id="bulk-edit-value-wrap"><input type="text" id="bulk-edit-value" style="padding:5px 8px;border:1px solid #c7c7c7;font-size:12.5px;width:150px;height:28px;box-sizing:border-box;"></span>
+          <button class="btn small" style="width:auto;height:28px;box-sizing:border-box;padding:0 12px;" onclick="applyBulkEdit()">적용</button>
+          <button class="btn small secondary" style="width:auto;height:28px;box-sizing:border-box;padding:0 12px;margin-left:auto;" onclick="downloadInventoryExcel()">엑셀다운</button>
+          <button class="btn small danger" style="width:auto;height:28px;box-sizing:border-box;padding:0 12px;" onclick="deleteSelectedInventoryRows()">선택 삭제</button>
+          <select id="inv-page-size-select" onchange="onInvPageSizeChange()" style="padding:5px 6px;border:1px solid #c7c7c7;font-size:12px;height:28px;box-sizing:border-box;"></select>
         </div>
 
         <div style="overflow-x:auto;">
@@ -819,7 +815,8 @@
   function renderPaginationBar(key, totalCount, onChange, includeSizeSelector){
     if(includeSizeSelector === undefined) includeSizeSelector = true;
     const st = getPageState(key);
-    const totalPages = Math.max(1, Math.ceil(totalCount/st.size));
+    const isAll = st.size === "all";
+    const totalPages = isAll ? 1 : Math.max(1, Math.ceil(totalCount/st.size));
     if(st.page > totalPages) st.page = totalPages;
     const bar = document.createElement("div");
     bar.style.display = "flex"; bar.style.alignItems = "center"; bar.style.gap = "6px";
@@ -828,13 +825,13 @@
     if(includeSizeSelector){
       const sizeSel = document.createElement("select");
       sizeSel.style.padding = "5px 6px"; sizeSel.style.border = "1px solid #c7c7c7"; sizeSel.style.fontSize = "12px"; sizeSel.style.height = "28px";
-      [10,30,100].forEach(n=>{
+      [10,30,100,"all"].forEach(n=>{
         const opt = document.createElement("option");
-        opt.value = n; opt.textContent = n+"줄씩 보기";
+        opt.value = n; opt.textContent = (n==="all" ? "전체" : n+"줄씩 보기");
         if(st.size===n) opt.selected = true;
         sizeSel.appendChild(opt);
       });
-      sizeSel.onchange = ()=>{ st.size = Number(sizeSel.value); st.page=1; onChange(); };
+      sizeSel.onchange = ()=>{ st.size = (sizeSel.value==="all" ? "all" : Number(sizeSel.value)); st.page=1; onChange(); };
       bar.appendChild(sizeSel);
     }
 
@@ -845,7 +842,7 @@
     prevBtn.onclick = ()=>{ st.page--; onChange(); };
 
     const info = document.createElement("span");
-    info.textContent = st.page+" / "+totalPages+" 페이지 (총 "+totalCount+"건)";
+    info.textContent = isAll ? ("전체 "+totalCount+"건") : (st.page+" / "+totalPages+" 페이지 (총 "+totalCount+"건)");
     info.style.padding = "0 4px";
 
     const nextBtn = document.createElement("button");
@@ -859,6 +856,7 @@
   }
   function paginateSlice(fullArray, key){
     const st = getPageState(key);
+    if(st.size === "all"){ return { pageItems: fullArray, startIndex: 0 }; }
     const start = (st.page-1)*st.size;
     return { pageItems: fullArray.slice(start, start+st.size), startIndex: start };
   }
@@ -2238,7 +2236,6 @@
     document.getElementById("filter-date-all").checked = false;
     document.getElementById("filter-date-from").disabled = false;
     document.getElementById("filter-date-to").disabled = false;
-    document.getElementById("filter-search").value = "";
     document.getElementById("filter-conditions").innerHTML = "";
     loadInventoryList();
   };
@@ -2290,14 +2287,14 @@
     if(!fieldDef) return;
     if(fieldDef.type === "select"){
       const snap = await getDocs(query(collection(db, fieldDef.collection), orderBy("name")));
-      let html = '<select id="bulk-edit-value" style="padding:6px 8px;border:1px solid #c7c7c7;font-size:12.5px;">';
+      let html = '<select id="bulk-edit-value" style="padding:5px 8px;border:1px solid #c7c7c7;font-size:12.5px;height:28px;box-sizing:border-box;">';
       snap.forEach(d=>{ html += '<option value="'+d.data().name+'">'+d.data().name+'</option>'; });
       html += '</select>';
       wrap.innerHTML = html;
     }else if(fieldDef.type === "number"){
-      wrap.innerHTML = '<input type="number" id="bulk-edit-value" style="padding:6px 8px;border:1px solid #c7c7c7;font-size:12.5px;width:150px;">';
+      wrap.innerHTML = '<input type="number" id="bulk-edit-value" style="padding:5px 8px;border:1px solid #c7c7c7;font-size:12.5px;width:150px;height:28px;box-sizing:border-box;">';
     }else{
-      wrap.innerHTML = '<input type="text" id="bulk-edit-value" placeholder="예: 20260724" style="padding:6px 8px;border:1px solid #c7c7c7;font-size:12.5px;width:150px;">';
+      wrap.innerHTML = '<input type="text" id="bulk-edit-value" placeholder="예: 20260724" style="padding:5px 8px;border:1px solid #c7c7c7;font-size:12.5px;width:150px;height:28px;box-sizing:border-box;">';
     }
   };
 
@@ -2314,9 +2311,9 @@
     if(!sel) return;
     const st = getPageState("inventory");
     if(sel.options.length===0){
-      [10,30,100].forEach(n=>{
+      [10,30,100,"all"].forEach(n=>{
         const opt = document.createElement("option");
-        opt.value = n; opt.textContent = n+"줄씩 보기";
+        opt.value = n; opt.textContent = (n==="all" ? "전체" : n+"줄씩 보기");
         sel.appendChild(opt);
       });
     }
@@ -2324,7 +2321,8 @@
   }
   window.onInvPageSizeChange = function(){
     const st = getPageState("inventory");
-    st.size = Number(document.getElementById("inv-page-size-select").value);
+    const v = document.getElementById("inv-page-size-select").value;
+    st.size = (v==="all" ? "all" : Number(v));
     st.page = 1;
     loadInventoryList();
   };
@@ -2373,14 +2371,11 @@
   window.addFilterCondition = function(){
     const container = document.getElementById("filter-conditions");
     const row = document.createElement("div");
-    row.style.display = "flex";
-    row.style.border = "1px solid var(--line)";
-    row.style.marginTop = "-1px";
-    row.style.background = "#fff";
+    row.style.display = "contents";
 
     const fieldSel = document.createElement("select");
     fieldSel.className = "filter-field-select";
-    fieldSel.style.flex = "1.3"; fieldSel.style.minWidth = "130px"; fieldSel.style.border = "none"; fieldSel.style.borderRight = "1px solid var(--line)"; fieldSel.style.padding = "7px 8px"; fieldSel.style.fontSize = "12.5px";
+    fieldSel.style.flex = "1"; fieldSel.style.minWidth = "120px"; fieldSel.style.border = "none"; fieldSel.style.borderRight = "1px solid var(--line)"; fieldSel.style.padding = "9px 8px"; fieldSel.style.fontSize = "12.5px";
     FILTER_FIELDS.forEach(f=>{
       const opt = document.createElement("option");
       opt.value = f.key; opt.textContent = f.label;
@@ -2389,7 +2384,7 @@
 
     const matchSel = document.createElement("select");
     matchSel.className = "filter-match-select";
-    matchSel.style.flex = "0.7"; matchSel.style.minWidth = "80px"; matchSel.style.border = "none"; matchSel.style.borderRight = "1px solid var(--line)"; matchSel.style.padding = "7px 8px"; matchSel.style.fontSize = "12.5px";
+    matchSel.style.flex = "0.6"; matchSel.style.minWidth = "70px"; matchSel.style.border = "none"; matchSel.style.borderRight = "1px solid var(--line)"; matchSel.style.padding = "9px 8px"; matchSel.style.fontSize = "12.5px";
     ["포함","일치"].forEach(t=>{
       const opt = document.createElement("option");
       opt.value = t; opt.textContent = t;
@@ -2399,10 +2394,10 @@
     const valInput = document.createElement("input");
     valInput.type = "text"; valInput.className = "filter-value-input";
     valInput.placeholder = "검색어";
-    valInput.style.flex = "1.5"; valInput.style.minWidth = "140px"; valInput.style.border = "none"; valInput.style.padding = "7px 8px"; valInput.style.fontSize = "12.5px";
+    valInput.style.flex = "1.2"; valInput.style.minWidth = "120px"; valInput.style.border = "none"; valInput.style.borderRight = "1px solid var(--line)"; valInput.style.padding = "9px 8px"; valInput.style.fontSize = "12.5px";
 
     const delBtn = document.createElement("button");
-    delBtn.className = "btn small danger"; delBtn.style.width = "auto"; delBtn.style.flexShrink = "0"; delBtn.textContent = "삭제";
+    delBtn.className = "btn small danger"; delBtn.style.width = "auto"; delBtn.style.flexShrink = "0"; delBtn.style.borderRight = "1px solid var(--line)"; delBtn.textContent = "삭제";
     delBtn.onclick = ()=> row.remove();
 
     row.appendChild(fieldSel); row.appendChild(matchSel); row.appendChild(valInput); row.appendChild(delBtn);
@@ -2426,7 +2421,6 @@
     const filterDateFrom = document.getElementById("filter-date-from").value.trim().replace(/-/g, "");
     const filterDateTo = document.getElementById("filter-date-to").value.trim().replace(/-/g, "");
     const filterType = document.getElementById("filter-date-type").value;
-    const searchTerm = (document.getElementById("filter-search").value||"").trim().toLowerCase();
 
     let items = [];
     snap.forEach(d=> items.push({ id:d.id, ...d.data() }));
@@ -2436,14 +2430,6 @@
     }
     if(filterDateTo){
       items = items.filter(it => (it[filterType]||"") && (it[filterType]||"") <= filterDateTo);
-    }
-    if(searchTerm){
-      items = items.filter(it =>
-        (it.modelGroup||"").toLowerCase().includes(searchTerm) ||
-        (it.baseModel||"").toLowerCase().includes(searchTerm) ||
-        (it.imei||"").toLowerCase().includes(searchTerm) ||
-        (it.serialNumber||"").toLowerCase().includes(searchTerm)
-      );
     }
 
     // 다중 조건 (전부 AND)
