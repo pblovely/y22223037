@@ -558,6 +558,7 @@
           <div class="stack-row"><label>출고일 (선택)</label><input type="date" id="item-outdate-input"></div>
         </div>
         <button class="btn small" id="item-submit-btn" onclick="addInventoryItem()">재고 등록</button>
+        <button class="btn small danger" id="item-cancelsale-btn" style="width:auto;margin-left:6px;display:none;" onclick="cancelSaleInEditModal()">판매 취소</button>
       </div>
     </div>
 
@@ -1560,6 +1561,7 @@
     editingItemId = null;
     document.getElementById("item-modal-title").textContent = "재고 입고 등록";
     document.getElementById("item-submit-btn").textContent = "재고 등록";
+    document.getElementById("item-cancelsale-btn").style.display = "none";
     clearItemModalFields();
     document.getElementById("item-modal-overlay").style.display = "flex";
     if(!document.getElementById("item-indate-input").value){
@@ -1599,14 +1601,39 @@
     await loadLocationsIntoSelect();
     await loadStatusesIntoSelect();
 
-    const model = modelsCache.find(m=>m.systemModel===it.systemModel && m.baseModel===it.baseModel && m.capacity===it.capacity);
+    let model = null;
+    if(it.sku){
+      model = modelsCache.find(m => (m.colors||[]).some(c=>c.sku===it.sku));
+    }
+    if(!model && it.systemModel){
+      model = modelsCache.find(m=>m.systemModel===it.systemModel);
+    }
+    if(!model && it.baseModel && it.capacity){
+      model = modelsCache.find(m=>m.baseModel===it.baseModel && m.capacity===it.capacity);
+    }
     if(model){
       document.getElementById("item-model-select").value = model.id;
       onItemModelChange();
       const colorSel = document.getElementById("item-color-select");
-      for(const opt of colorSel.options){
-        if(opt.dataset.sku === it.sku && opt.dataset.sysColor === it.systemColor){ colorSel.value = opt.value; break; }
+      let matched = false;
+      if(it.sku){
+        for(const opt of colorSel.options){
+          if(opt.dataset.sku === it.sku){ colorSel.value = opt.value; matched = true; break; }
+        }
       }
+      if(!matched){
+        for(const opt of colorSel.options){
+          if((it.systemColor && opt.dataset.sysColor === it.systemColor) ||
+             (it.manufacturerColor && opt.dataset.manuColor === it.manufacturerColor)){
+            colorSel.value = opt.value; matched = true; break;
+          }
+        }
+      }
+      if(!matched){
+        alert("이 재고의 색상이 모델 등록에서 정확히 일치하지 않아 색상 칸이 비어 있을 수 있습니다. 확인 후 다시 선택해주세요.");
+      }
+    }else{
+      alert("이 재고의 모델 정보가 현재 등록된 모델 목록과 일치하지 않습니다. 모델을 다시 선택해주세요. (나머지 값은 그대로 유지됩니다)");
     }
     document.getElementById("item-carrier-select").value = it.carrier || "";
     document.getElementById("item-source-select").value = it.source || "";
@@ -1631,7 +1658,23 @@
 
     document.getElementById("item-modal-title").textContent = "재고 수정";
     document.getElementById("item-submit-btn").textContent = "수정 저장";
+    document.getElementById("item-cancelsale-btn").style.display = "inline-block";
     document.getElementById("item-modal-overlay").style.display = "flex";
+  };
+
+  window.cancelSaleInEditModal = function(){
+    if(!confirm("판매 내용을 지우시겠습니까? (판매처·판매가·판매할인율·출고일이 비워지고, 현재상태는 보유중으로 바뀝니다)")) return;
+    document.getElementById("item-dest-select").value = "";
+    document.getElementById("item-saleprice-input").value = "";
+    document.getElementById("item-salediscount-input").value = "";
+    document.getElementById("item-outdate-input").value = "";
+    document.getElementById("item-profit-display").value = "";
+    const statusSel = document.getElementById("item-status-select");
+    let found = false;
+    for(const opt of statusSel.options){
+      if(opt.value === "보유중"){ statusSel.value = "보유중"; found = true; break; }
+    }
+    if(!found && statusSel.options.length>0) statusSel.selectedIndex = 0;
   };
 
 
