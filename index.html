@@ -2702,7 +2702,10 @@
     await processExcelRows(rows);
   };
 
+  let lastExcelRows = null;
+
   async function processExcelRows(rows){
+    lastExcelRows = rows;
     const resultEl = document.getElementById("excel-result");
     resultEl.innerHTML = '<div class="list-empty">검증 중...</div>';
     if(rows.length===0){ resultEl.innerHTML = '<div class="list-empty">읽을 데이터가 없습니다. 템플릿 형식을 확인해주세요.</div>'; return; }
@@ -2836,18 +2839,80 @@
       }
     });
 
-    renderExcelValidation(validRows, errorRows);
+    renderExcelValidation(validRows, errorRows, rows, { sourceNames, carrierNames, locationNames, statusNames });
   }
 
-  function renderExcelValidation(validRows, errorRows){
+  function renderExcelValidation(validRows, errorRows, rawRows, masterNames){
     const resultEl = document.getElementById("excel-result");
     let html = '<div style="font-size:13px;font-weight:700;margin-bottom:8px;">검증 결과 — 정상 '+validRows.length+'건 / 오류 '+errorRows.length+'건</div>';
+
+    // ---- 빠른 수정 패널: 미등록 모델 / 비어있는 필수값 일괄채우기 ----
+    let quickFixHtml = "";
+
+    // 1) 미등록 전산모델명 감지
+    const missingModelSet = new Set();
+    errorRows.forEach(e=>{
+      const m = e.reasons.match(/미등록 전산모델명\('(.+?)'\)/);
+      if(m) missingModelSet.add(m[1]);
+    });
+    if(missingModelSet.size>0){
+      quickFixHtml += '<div style="background:#fff8e1;border:1px solid #e0c46c;padding:10px;margin-bottom:8px;font-size:12.5px;">';
+      quickFixHtml += '<b>🆕 등록 안 된 모델 '+missingModelSet.size+'개</b> — 지금 바로 간단히 등록하면 해당 행들이 다시 검증됩니다.<br>';
+      Array.from(missingModelSet).forEach(sm=>{
+        quickFixHtml += '<button class="btn small secondary" style="width:auto;padding:4px 10px;margin:4px 6px 0 0;" data-quick-model="'+sm.replace(/"/g,'&quot;')+'">"'+sm+'" 모델 빠른 등록</button>';
+      });
+      quickFixHtml += '</div>';
+    }
+
+    // 2) 필수값(입고처/통신사/위치/현재상태)이 빈 칸인 행 일괄채우기
+    const REQUIRED_FIELD_MASTERS = [
+      { field:"입고처", names:masterNames.sourceNames },
+      { field:"통신사", names:masterNames.carrierNames },
+      { field:"위치", names:masterNames.locationNames },
+      { field:"현재상태", names:masterNames.statusNames }
+    ];
+    REQUIRED_FIELD_MASTERS.forEach(rf=>{
+      const blankCount = rawRows.filter(r=> !String(r[rf.field]||"").trim()).length;
+      if(blankCount>0){
+        quickFixHtml += '<div style="background:#eef4ff;border:1px solid #a8c5f0;padding:10px;margin-bottom:8px;font-size:12.5px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">';
+        quickFixHtml += '<span><b>"'+rf.field+'"</b>이(가) 비어있는 행 '+blankCount+'개</span>';
+        quickFixHtml += '<select class="quick-fill-select" data-field="'+rf.field+'" style="padding:5px 6px;border:1px solid #c7c7c7;font-size:12px;">';
+        rf.names.forEach(n=>{ quickFixHtml += '<option value="'+n+'">'+n+'</option>'; });
+        quickFixHtml += '</select>';
+        quickFixHtml += '<button class="btn small" style="width:auto;padding:4px 10px;" data-fill-btn="'+rf.field+'">이 값으로 일괄 채우기</button>';
+        quickFixHtml += '</div>';
+      }
+    });
+
+    if(quickFixHtml){
+      html += '<div style="margin-bottom:10px;">' + quickFixHtml + '</div>';
+    }
+
     if(errorRows.length>0){
       html += '<div class="list-empty" style="border-color:var(--danger);color:var(--danger);margin-bottom:10px;">';
       errorRows.forEach(e=>{ html += (e.rowNum)+'행: '+e.reasons+'<br>'; });
       html += '</div>';
+      html += '<p class="desc" style="margin-top:0;">위 오류 행들은 지금 등록하지 않아도 됩니다 — 아래 "정상 건 일괄 등록"을 누르면 오류 없는 건만 등록되고, 오류 행은 나중에 따로 처리하시면 됩니다.</p>';
     }
     resultEl.innerHTML = html;
+
+    // 빠른 모델 등록 버튼 연결
+    resultEl.querySelectorAll('[data-quick-model]').forEach(btn=>{
+      btn.onclick = ()=> quickCreateModelAndRetry(btn.dataset.quickModel, rawRows);
+    });
+    // 일괄 채우기 버튼 연결
+    resultEl.querySelectorAll('[data-fill-btn]').forEach(btn=>{
+      btn.onclick = ()=>{
+        const field = btn.dataset.fillBtn;
+        const sel = resultEl.querySelector('.quick-fill-select[data-field="'+field+'"]');
+        const val = sel.value;
+        if(!val) return;
+        lastExcelRows.forEach(r=>{ if(!String(r[field]||"").trim()) r[field] = val; });
+        logAction("엑셀 업로드 일괄채우기", field+" → "+val);
+        processExcelRows(lastExcelRows);
+      };
+    });
+
     if(validRows.length>0){
       const btn = document.createElement("button");
       btn.className = "btn small"; btn.style.width="auto";
@@ -2866,6 +2931,48 @@
       };
       resultEl.appendChild(btn);
     }
+  }
+
+  async function quickCreateModelAndRetry(missingSystemModel, rawRows){
+    const petName = prompt('펫네임 (모델을 부르는 이름)', missingSystemModel);
+    if(petName===null) return;
+    const baseModel = prompt('모델명 (예: SM-A245N)', missingSystemModel);
+    if(baseModel===null) return;
+    const capacity = prompt('용량 (선택, 예: 256GB)', '');
+    if(capacity===null) return;
+    const priceInput = prompt('출고가 (VAT포함, 선택)', '');
+    if(priceInput===null) return;
+    const priceIncVat = priceInput ? Number(priceInput) : null;
+    const priceExVat = priceIncVat ? Math.round(priceIncVat/1.1) : null;
+
+    await fetchModelsCache();
+    await upsertModel({
+      systemModel: missingSystemModel, baseModel: baseModel.trim(), capacity: capacity.trim(),
+      petName: petName.trim(), priceIncVat, priceExVat,
+      modelGroup: petName.trim() || baseModel.trim() || missingSystemModel
+    });
+    await fetchModelsCache();
+    const model = modelsCache.find(m=>m.systemModel===missingSystemModel);
+
+    if(model){
+      const colorsUsed = new Set();
+      rawRows.forEach(r=>{
+        if(String(r["전산모델명"]||"").trim()===missingSystemModel){
+          const c = String(r["색상"]||"").trim();
+          if(c) colorsUsed.add(c);
+        }
+      });
+      for(const c of colorsUsed){
+        const already = (model.colors||[]).some(x=>x.manufacturerColor===c || x.systemColor===c);
+        if(!already){
+          await updateDoc(doc(db,"inventoryModels", model.id), { colors: arrayUnion({ manufacturerColor:c, systemColor:c, sku:"" }) });
+        }
+      }
+      logAction("엑셀 업로드 중 모델 빠른등록", missingSystemModel + (colorsUsed.size>0 ? " (색상 "+colorsUsed.size+"개 포함)" : ""));
+    }
+    await fetchModelsCache();
+    alert(missingSystemModel+' 모델을 등록했습니다. 다시 검증할게요.');
+    await processExcelRows(lastExcelRows);
   }
 
   // ---------- 이력 ----------
