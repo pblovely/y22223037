@@ -352,15 +352,15 @@
     <div id="color-modal-overlay" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.55);z-index:1000;align-items:center;justify-content:center;">
       <div style="background:#fff;border:2px solid var(--navy);max-width:600px;width:94%;max-height:90vh;overflow-y:auto;padding:22px;position:relative;">
         <button onclick="closeColorModal()" style="position:absolute;top:12px;right:12px;background:none;border:1px solid var(--navy);width:26px;height:26px;cursor:pointer;font-size:13px;">✕</button>
-        <h3 style="margin-top:0;margin-bottom:4px;">색상 관리 — <span id="color-modal-model-name"></span></h3>
-        <p class="desc">제조사색상과 전산색상이 다를 수 있어 따로 관리합니다. SKU가 없는 색상은 빨간색입니다.</p>
+        <h3 style="margin-top:0;margin-bottom:8px;">색상 관리 — <span id="color-modal-model-name"></span></h3>
         <div id="color-modal-list" style="margin-bottom:14px;"></div>
         <div class="stack-form">
           <div class="stack-row"><label>제조사색상</label><input type="text" id="cm-manu-color-input" placeholder="예: 그라파이트"></div>
           <div class="stack-row"><label>전산색상</label><input type="text" id="cm-sys-color-input" placeholder="예: 그레이"></div>
           <div class="stack-row"><label>삼성모델명(SKU)</label><input type="text" id="cm-sku-input" placeholder="선택, 나중에 채워도 됨"></div>
         </div>
-        <button class="btn small" onclick="submitColorAdd()">색상 추가</button>
+        <button class="btn small" id="cm-submit-btn" style="width:auto;" onclick="submitColorAdd()">색상 추가</button>
+        <button class="btn small secondary" id="cm-cancel-btn" style="width:auto;display:none;margin-left:6px;" onclick="cancelColorEdit()">취소</button>
       </div>
     </div>
 
@@ -1049,6 +1049,7 @@
     if(!m) return;
     currentColorModelId = modelId;
     document.getElementById("color-modal-model-name").textContent = m.petName || m.modelGroup || m.systemModel || "-";
+    cancelColorEdit();
     renderColorModalList();
     document.getElementById("color-modal-overlay").style.display = "flex";
   };
@@ -1057,35 +1058,64 @@
     currentColorModelId = null;
     loadModelAdminList();
   };
+  let editingColorIndex = null;
+
   function renderColorModalList(){
     const m = modelsCache.find(x=>x.id===currentColorModelId);
     const listEl = document.getElementById("color-modal-list");
-    listEl.innerHTML = "";
     const colors = (m && m.colors) || [];
     if(colors.length===0){
       listEl.innerHTML = '<div class="list-empty">등록된 색상이 없습니다. 아래에서 추가해주세요.</div>';
       return;
     }
+    let html = '<table style="width:100%;border-collapse:collapse;font-size:12.5px;">' +
+      '<thead><tr style="background:#fafafa;border-bottom:1px solid var(--line);">' +
+      '<th style="padding:6px 8px;text-align:left;">제조사색상</th>' +
+      '<th style="padding:6px 8px;text-align:left;">전산색상</th>' +
+      '<th style="padding:6px 8px;text-align:left;">삼성모델명(SKU)</th>' +
+      '<th style="padding:6px 8px;text-align:right;">관리</th>' +
+      '</tr></thead><tbody>';
     colors.forEach((c, idx)=>{
-      const row = document.createElement("div");
-      row.className = "list-row";
       const hasSku = !!c.sku;
-      row.innerHTML =
-        '<span style="font-size:12.5px;'+(hasSku?'':'color:var(--danger);font-weight:600;')+'">' +
-        '제조사색상 '+(c.manufacturerColor||"-")+' · 전산색상 '+(c.systemColor||"-")+' · SKU '+(c.sku||"(미입력)") +
-        '</span>';
-      const btnWrap = document.createElement("span");
-      const editBtn = document.createElement("button");
-      editBtn.className = "btn small secondary"; editBtn.textContent = "수정"; editBtn.style.marginRight="6px";
-      editBtn.onclick = ()=> submitColorEdit(idx);
-      const delBtn = document.createElement("button");
-      delBtn.className = "btn small danger"; delBtn.textContent = "삭제";
-      delBtn.onclick = ()=> submitColorDelete(idx);
-      btnWrap.appendChild(editBtn); btnWrap.appendChild(delBtn);
-      row.appendChild(btnWrap);
-      listEl.appendChild(row);
+      html += '<tr style="border-bottom:1px solid var(--line);'+(hasSku?'':'color:var(--danger);font-weight:600;')+'">' +
+        '<td style="padding:6px 8px;">'+(c.manufacturerColor||"-")+'</td>' +
+        '<td style="padding:6px 8px;">'+(c.systemColor||"-")+'</td>' +
+        '<td style="padding:6px 8px;">'+(c.sku||"(미입력)")+'</td>' +
+        '<td style="padding:6px 8px;text-align:right;white-space:nowrap;">' +
+        '<button class="btn small secondary" style="width:auto;padding:4px 9px;margin-right:4px;" data-color-edit="'+idx+'">수정</button>' +
+        '<button class="btn small danger" style="width:auto;padding:4px 9px;" data-color-del="'+idx+'">삭제</button>' +
+        '</td></tr>';
+    });
+    html += '</tbody></table>';
+    listEl.innerHTML = html;
+    listEl.querySelectorAll('[data-color-edit]').forEach(btn=>{
+      btn.onclick = ()=> startColorEdit(Number(btn.dataset.colorEdit));
+    });
+    listEl.querySelectorAll('[data-color-del]').forEach(btn=>{
+      btn.onclick = ()=> submitColorDelete(Number(btn.dataset.colorDel));
     });
   }
+
+  function startColorEdit(idx){
+    const m = modelsCache.find(x=>x.id===currentColorModelId);
+    if(!m) return;
+    const c = m.colors[idx];
+    editingColorIndex = idx;
+    document.getElementById("cm-manu-color-input").value = c.manufacturerColor || "";
+    document.getElementById("cm-sys-color-input").value = c.systemColor || "";
+    document.getElementById("cm-sku-input").value = c.sku || "";
+    document.getElementById("cm-submit-btn").textContent = "수정 저장";
+    document.getElementById("cm-cancel-btn").style.display = "inline-block";
+  }
+  window.cancelColorEdit = function(){
+    editingColorIndex = null;
+    document.getElementById("cm-manu-color-input").value = "";
+    document.getElementById("cm-sys-color-input").value = "";
+    document.getElementById("cm-sku-input").value = "";
+    document.getElementById("cm-submit-btn").textContent = "색상 추가";
+    document.getElementById("cm-cancel-btn").style.display = "none";
+  };
+
   window.submitColorAdd = async function(){
     const m = modelsCache.find(x=>x.id===currentColorModelId);
     if(!m) return;
@@ -1093,34 +1123,29 @@
     const systemColor = document.getElementById("cm-sys-color-input").value.trim();
     const sku = document.getElementById("cm-sku-input").value.trim();
     if(!manufacturerColor && !systemColor){ alert("제조사색상 또는 전산색상 중 하나는 입력해주세요."); return; }
-    await updateDoc(doc(db,"inventoryModels", m.id), { colors: arrayUnion({ manufacturerColor, systemColor, sku }) });
-    logAction("색상 추가", (m.petName||m.modelGroup) + " / " + (systemColor||manufacturerColor));
-    document.getElementById("cm-manu-color-input").value = "";
-    document.getElementById("cm-sys-color-input").value = "";
-    document.getElementById("cm-sku-input").value = "";
+    const updated = { manufacturerColor, systemColor, sku };
+
+    if(editingColorIndex !== null){
+      const c = m.colors[editingColorIndex];
+      await updateDoc(doc(db,"inventoryModels", m.id), { colors: arrayRemove(c) });
+      await updateDoc(doc(db,"inventoryModels", m.id), { colors: arrayUnion(updated) });
+      if(c.sku){
+        const snap = await getDocs(query(collection(db,"inventoryItems"), where("sku","==",c.sku)));
+        for(const dd of snap.docs){
+          await updateDoc(doc(db,"inventoryItems", dd.id), { manufacturerColor, systemColor, sku });
+        }
+      }
+      logAction("색상 수정", (m.petName||m.modelGroup) + " / " + (c.systemColor||c.manufacturerColor) + " → " + (systemColor||manufacturerColor));
+    }else{
+      await updateDoc(doc(db,"inventoryModels", m.id), { colors: arrayUnion(updated) });
+      logAction("색상 추가", (m.petName||m.modelGroup) + " / " + (systemColor||manufacturerColor));
+    }
+
+    cancelColorEdit();
     await fetchModelsCache();
     renderColorModalList();
   };
-  async function submitColorEdit(idx){
-    const m = modelsCache.find(x=>x.id===currentColorModelId);
-    if(!m) return;
-    const c = m.colors[idx];
-    const newManu = prompt("제조사색상", c.manufacturerColor||""); if(newManu===null) return;
-    const newSys = prompt("전산색상", c.systemColor||""); if(newSys===null) return;
-    const newSku = prompt("삼성모델명(SKU)", c.sku||""); if(newSku===null) return;
-    const updated = { manufacturerColor:newManu.trim(), systemColor:newSys.trim(), sku:newSku.trim() };
-    await updateDoc(doc(db,"inventoryModels", m.id), { colors: arrayRemove(c) });
-    await updateDoc(doc(db,"inventoryModels", m.id), { colors: arrayUnion(updated) });
-    if(c.sku){
-      const snap = await getDocs(query(collection(db,"inventoryItems"), where("sku","==",c.sku)));
-      for(const dd of snap.docs){
-        await updateDoc(doc(db,"inventoryItems", dd.id), { manufacturerColor:updated.manufacturerColor, systemColor:updated.systemColor, sku:updated.sku });
-      }
-    }
-    logAction("색상 수정", (m.petName||m.modelGroup) + " / " + (c.systemColor||c.manufacturerColor) + " → " + (updated.systemColor||updated.manufacturerColor));
-    await fetchModelsCache();
-    renderColorModalList();
-  }
+
   async function submitColorDelete(idx){
     const m = modelsCache.find(x=>x.id===currentColorModelId);
     if(!m) return;
@@ -1128,6 +1153,7 @@
     if(!confirm((c.systemColor||c.manufacturerColor) + " 색상을 삭제하시겠습니까? (기존 재고 기록은 유지됩니다)")) return;
     await updateDoc(doc(db,"inventoryModels", m.id), { colors: arrayRemove(c) });
     logAction("색상 삭제", (m.petName||m.modelGroup) + " / " + (c.systemColor||c.manufacturerColor));
+    if(editingColorIndex === idx) cancelColorEdit();
     await fetchModelsCache();
     renderColorModalList();
   }
