@@ -523,7 +523,6 @@
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
           <h3 style="margin:0;">재고 목록 <button class="btn small secondary" style="width:auto;padding:6px 12px;margin-left:8px;" onclick="toggleViewPanel()">보기 설정</button></h3>
           <span>
-            <button class="btn small secondary" style="width:auto;margin-right:8px;" onclick="openExcelUploadModal()">파일 업로드</button>
             <button class="btn small" style="width:auto;" onclick="openItemModal()">+ 재고 등록</button>
           </span>
         </div>
@@ -532,34 +531,27 @@
           <button class="btn small" style="width:auto;margin-top:6px;" onclick="saveViewSettings()">이 설정 저장 (내 계정에 유지)</button>
         </div>
 
-        <div id="stat-cards" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px;"></div>
-
-        <div style="display:flex;flex-wrap:wrap;align-items:stretch;border:1px solid var(--line);background:#fff;margin-bottom:14px;">
-          <label style="display:flex;align-items:center;gap:5px;padding:9px 10px;font-size:12.5px;border-right:1px solid var(--line);white-space:nowrap;">
+        <div style="display:flex;flex-wrap:nowrap;overflow-x:auto;align-items:stretch;border:1px solid var(--line);background:#fff;margin-bottom:6px;">
+          <label style="display:flex;align-items:center;gap:5px;padding:9px 10px;font-size:12.5px;border-right:1px solid var(--line);white-space:nowrap;flex-shrink:0;">
             <input type="checkbox" id="filter-date-all" onclick="onFilterDateAllToggle()"> 전체
           </label>
-          <select id="filter-date-type" style="flex:1;min-width:110px;border:none;border-right:1px solid var(--line);padding:9px 10px;font-size:12.5px;">
+          <select id="filter-date-type" style="flex-shrink:0;width:110px;border:none;border-right:1px solid var(--line);padding:9px 6px;font-size:12.5px;">
             <option value="inDate">입고일 기준</option><option value="orderDate">주문일 기준</option><option value="expectedSaleDate">판매예정일 기준</option><option value="outDate">출고일 기준</option>
           </select>
-          <input type="text" id="filter-date-from" placeholder="시작일 예:20260701" maxlength="8" inputmode="numeric" style="flex:1;min-width:120px;border:none;border-right:1px solid var(--line);padding:9px 10px;font-size:12.5px;">
-          <input type="text" id="filter-date-to" placeholder="종료일 예:20260731" maxlength="8" inputmode="numeric" style="flex:1;min-width:120px;border:none;border-right:1px solid var(--line);padding:9px 10px;font-size:12.5px;">
+          <input type="text" id="filter-date-from" placeholder="시작일 예:20260701" maxlength="8" inputmode="numeric" style="flex-shrink:0;width:110px;border:none;border-right:1px solid var(--line);padding:9px 8px;font-size:12.5px;">
+          <input type="text" id="filter-date-to" placeholder="종료일 예:20260731" maxlength="8" inputmode="numeric" style="flex-shrink:0;width:110px;border:none;border-right:1px solid var(--line);padding:9px 8px;font-size:12.5px;">
           <button class="btn small" style="width:auto;flex-shrink:0;" onclick="loadInventoryList()">조회</button>
           <button class="btn small secondary" style="width:auto;flex-shrink:0;border-right:1px solid var(--line);" onclick="clearDateFilter()">초기화</button>
-          <span id="filter-conditions" style="display:contents;"></span>
-          <button class="btn small secondary" style="width:auto;flex-shrink:0;" onclick="addFilterCondition()">+ 조건 추가</button>
+          <button class="btn small secondary" style="width:auto;flex-shrink:0;" onclick="openAddConditionModal()">+ 조건 추가</button>
         </div>
+        <div id="active-conditions-chips" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px;"></div>
 
-        <div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px;border:1px solid var(--line);padding:10px;margin-bottom:0;">
+        <div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px;border:1px solid var(--line);padding:8px 10px;margin-bottom:0;">
           <label style="font-size:12.5px;display:flex;align-items:center;gap:5px;height:28px;">
             <input type="checkbox" id="bulk-select-all" onclick="toggleAllInventoryRows(this)"> 전체
           </label>
-          <span style="color:var(--line);">|</span>
-          <span style="font-size:12.5px;font-weight:600;">일괄 변경:</span>
-          <select id="bulk-edit-field" onchange="onBulkEditFieldChange()" style="padding:5px 8px;border:1px solid #c7c7c7;font-size:12.5px;height:28px;box-sizing:border-box;"></select>
-          <span id="bulk-edit-value-wrap"><input type="text" id="bulk-edit-value" style="padding:5px 8px;border:1px solid #c7c7c7;font-size:12.5px;width:150px;height:28px;box-sizing:border-box;"></span>
-          <button class="btn small" style="width:auto;height:28px;box-sizing:border-box;padding:0 12px;" onclick="applyBulkEdit()">적용</button>
+          <button class="btn small secondary" style="width:auto;height:28px;box-sizing:border-box;padding:0 12px;" onclick="openBulkChangeModal()">변경</button>
           <button class="btn small secondary" style="width:auto;height:28px;box-sizing:border-box;padding:0 12px;margin-left:auto;" onclick="downloadInventoryExcel()">엑셀다운</button>
-          <button class="btn small danger" style="width:auto;height:28px;box-sizing:border-box;padding:0 12px;" onclick="deleteSelectedInventoryRows()">선택 삭제</button>
           <select id="inv-page-size-select" onchange="onInvPageSizeChange()" style="padding:5px 6px;border:1px solid #c7c7c7;font-size:12px;height:28px;box-sizing:border-box;"></select>
         </div>
 
@@ -619,12 +611,44 @@
       </div>
     </div>
 
+    <!-- 조건 추가 팝업 -->
+    <div id="add-condition-modal-overlay" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.55);z-index:1000;align-items:center;justify-content:center;">
+      <div style="background:#fff;border:2px solid var(--navy);max-width:480px;width:94%;padding:22px;position:relative;">
+        <button onclick="closeAddConditionModal()" style="position:absolute;top:12px;right:12px;background:none;border:1px solid var(--navy);width:26px;height:26px;cursor:pointer;font-size:13px;">✕</button>
+        <h3 style="margin-top:0;margin-bottom:12px;">조건 추가</h3>
+        <div class="stack-form">
+          <div class="stack-row"><label>필드</label><select id="cond-field-select"></select></div>
+          <div class="stack-row"><label>방식</label><select id="cond-match-select"><option value="포함">포함</option><option value="일치">일치</option></select></div>
+          <div class="stack-row"><label>검색어</label><input type="text" id="cond-value-input"></div>
+        </div>
+        <button class="btn small" style="width:auto;" onclick="confirmAddCondition()">추가</button>
+      </div>
+    </div>
+
+    <!-- 변경(일괄 필드변경 + 선택삭제) 팝업 -->
+    <div id="bulk-change-modal-overlay" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.55);z-index:1000;align-items:center;justify-content:center;">
+      <div style="background:#fff;border:2px solid var(--navy);max-width:480px;width:94%;padding:22px;position:relative;">
+        <button onclick="closeBulkChangeModal()" style="position:absolute;top:12px;right:12px;background:none;border:1px solid var(--navy);width:26px;height:26px;cursor:pointer;font-size:13px;">✕</button>
+        <h3 style="margin-top:0;margin-bottom:4px;">선택 항목 변경</h3>
+        <p class="desc">체크된 재고에 적용됩니다.</p>
+        <div class="stack-form">
+          <div class="stack-row"><label>필드</label><select id="bulk-edit-field" onchange="onBulkEditFieldChange()"></select></div>
+          <div class="stack-row"><label>값</label><span id="bulk-edit-value-wrap"><input type="text" id="bulk-edit-value"></span></div>
+        </div>
+        <button class="btn small" style="width:auto;margin-bottom:16px;" onclick="applyBulkEdit()">이 값으로 변경</button>
+        <div style="border-top:1px solid var(--line);padding-top:14px;">
+          <button class="btn small danger" style="width:auto;" onclick="deleteSelectedInventoryRows()">선택 항목 삭제</button>
+        </div>
+      </div>
+    </div>
+
     <!-- 재고 1건 등록 팝업 -->
     <div id="item-modal-overlay" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.55);z-index:1000;align-items:center;justify-content:center;">
       <div style="background:#fff;border:2px solid var(--navy);max-width:600px;width:94%;max-height:90vh;overflow-y:auto;padding:22px;position:relative;">
         <button onclick="closeItemModal()" style="position:absolute;top:12px;right:12px;background:none;border:1px solid var(--navy);width:26px;height:26px;cursor:pointer;font-size:13px;">✕</button>
         <h3 id="item-modal-title" style="margin-top:0;margin-bottom:4px;">재고 입고 등록</h3>
         <p class="desc">모델·색상을 선택하면 출고가가 자동으로 채워집니다.</p>
+        <button class="btn small secondary" id="item-modal-excel-btn" style="width:auto;margin-bottom:12px;" onclick="closeItemModal();openExcelUploadModal();">파일로 여러 건 업로드</button>
 
         <div class="stack-form">
           <div class="stack-row"><label>주문일</label><input type="text" id="item-orderdate-input" placeholder="예: 20260724" maxlength="8" inputmode="numeric"></div>
@@ -2043,6 +2067,7 @@
     document.getElementById("item-modal-title").textContent = "재고 입고 등록";
     document.getElementById("item-submit-btn").textContent = "재고 등록";
     document.getElementById("item-cancelsale-btn").style.display = "none";
+    document.getElementById("item-modal-excel-btn").style.display = "inline-block";
     clearItemModalFields();
     document.getElementById("item-modal-overlay").style.display = "flex";
     if(!document.getElementById("item-indate-input").value){
@@ -2142,6 +2167,7 @@
     document.getElementById("item-modal-title").textContent = "재고 수정";
     document.getElementById("item-submit-btn").textContent = "수정 저장";
     document.getElementById("item-cancelsale-btn").style.display = "inline-block";
+    document.getElementById("item-modal-excel-btn").style.display = "none";
     document.getElementById("item-modal-overlay").style.display = "flex";
   };
 
@@ -2301,7 +2327,8 @@
     document.getElementById("filter-date-all").checked = false;
     document.getElementById("filter-date-from").disabled = false;
     document.getElementById("filter-date-to").disabled = false;
-    document.getElementById("filter-conditions").innerHTML = "";
+    activeConditions = [];
+    renderConditionChips();
     loadInventoryList();
   };
   window.onFilterDateAllToggle = function(){
@@ -2344,6 +2371,15 @@
     });
     onBulkEditFieldChange();
   }
+
+  window.openBulkChangeModal = function(){
+    if(getSelectedInventoryIds().length===0){ alert("먼저 변경할 재고를 체크해주세요."); return; }
+    populateBulkEditFieldSelect();
+    document.getElementById("bulk-change-modal-overlay").style.display = "flex";
+  };
+  window.closeBulkChangeModal = function(){
+    document.getElementById("bulk-change-modal-overlay").style.display = "none";
+  };
 
   window.onBulkEditFieldChange = async function(){
     const key = document.getElementById("bulk-edit-field").value;
@@ -2418,6 +2454,7 @@
     }
     logAction("재고 일괄 변경", fieldDef.label+" → "+newVal+" ("+ids.length+"건)");
     document.getElementById("bulk-select-all").checked = false;
+    closeBulkChangeModal();
     loadInventoryList();
   };
 
@@ -2430,44 +2467,51 @@
     }
     logAction("재고 일괄 삭제", ids.length+"건 삭제");
     document.getElementById("bulk-select-all").checked = false;
+    closeBulkChangeModal();
     loadInventoryList();
   };
 
-  window.addFilterCondition = function(){
-    const container = document.getElementById("filter-conditions");
-    const row = document.createElement("div");
-    row.style.display = "contents";
+  let activeConditions = []; // {field, matchType, value}
 
-    const fieldSel = document.createElement("select");
-    fieldSel.className = "filter-field-select";
-    fieldSel.style.flex = "1"; fieldSel.style.minWidth = "120px"; fieldSel.style.border = "none"; fieldSel.style.borderRight = "1px solid var(--line)"; fieldSel.style.padding = "9px 8px"; fieldSel.style.fontSize = "12.5px";
-    FILTER_FIELDS.forEach(f=>{
-      const opt = document.createElement("option");
-      opt.value = f.key; opt.textContent = f.label;
-      fieldSel.appendChild(opt);
-    });
-
-    const matchSel = document.createElement("select");
-    matchSel.className = "filter-match-select";
-    matchSel.style.flex = "0.6"; matchSel.style.minWidth = "70px"; matchSel.style.border = "none"; matchSel.style.borderRight = "1px solid var(--line)"; matchSel.style.padding = "9px 8px"; matchSel.style.fontSize = "12.5px";
-    ["포함","일치"].forEach(t=>{
-      const opt = document.createElement("option");
-      opt.value = t; opt.textContent = t;
-      matchSel.appendChild(opt);
-    });
-
-    const valInput = document.createElement("input");
-    valInput.type = "text"; valInput.className = "filter-value-input";
-    valInput.placeholder = "검색어";
-    valInput.style.flex = "1.2"; valInput.style.minWidth = "120px"; valInput.style.border = "none"; valInput.style.borderRight = "1px solid var(--line)"; valInput.style.padding = "9px 8px"; valInput.style.fontSize = "12.5px";
-
-    const delBtn = document.createElement("button");
-    delBtn.className = "btn small danger"; delBtn.style.width = "auto"; delBtn.style.flexShrink = "0"; delBtn.style.borderRight = "1px solid var(--line)"; delBtn.textContent = "삭제";
-    delBtn.onclick = ()=> row.remove();
-
-    row.appendChild(fieldSel); row.appendChild(matchSel); row.appendChild(valInput); row.appendChild(delBtn);
-    container.appendChild(row);
+  window.openAddConditionModal = function(){
+    const sel = document.getElementById("cond-field-select");
+    if(sel.options.length===0){
+      FILTER_FIELDS.forEach(f=>{
+        const opt = document.createElement("option");
+        opt.value = f.key; opt.textContent = f.label;
+        sel.appendChild(opt);
+      });
+    }
+    document.getElementById("cond-value-input").value = "";
+    document.getElementById("add-condition-modal-overlay").style.display = "flex";
   };
+  window.closeAddConditionModal = function(){
+    document.getElementById("add-condition-modal-overlay").style.display = "none";
+  };
+  window.confirmAddCondition = function(){
+    const field = document.getElementById("cond-field-select").value;
+    const matchType = document.getElementById("cond-match-select").value;
+    const value = document.getElementById("cond-value-input").value.trim();
+    if(!value){ alert("검색어를 입력해주세요."); return; }
+    activeConditions.push({ field, matchType, value });
+    closeAddConditionModal();
+    renderConditionChips();
+    loadInventoryList();
+  };
+  window.removeCondition = function(idx){
+    activeConditions.splice(idx,1);
+    renderConditionChips();
+    loadInventoryList();
+  };
+  function renderConditionChips(){
+    const el = document.getElementById("active-conditions-chips");
+    if(!el) return;
+    if(activeConditions.length===0){ el.innerHTML = ""; return; }
+    el.innerHTML = activeConditions.map((c,idx)=>{
+      const label = (FILTER_FIELDS.find(f=>f.key===c.field)||{}).label || c.field;
+      return '<span class="perm-tag" style="cursor:pointer;" onclick="removeCondition('+idx+')">'+label+'('+c.matchType+') "'+c.value+'" ✕</span>';
+    }).join("");
+  }
 
   let lastRenderedItems = [];
 
@@ -2574,15 +2618,12 @@
     }
 
     // 다중 조건 (전부 AND)
-    const conditionRows = document.querySelectorAll("#filter-conditions > div");
-    conditionRows.forEach(row=>{
-      const fieldKey = row.querySelector(".filter-field-select").value;
-      const matchType = row.querySelector(".filter-match-select").value;
-      const val = row.querySelector(".filter-value-input").value.trim().toLowerCase();
+    activeConditions.forEach(cond=>{
+      const val = cond.value.trim().toLowerCase();
       if(!val) return;
-      const fieldDef = FILTER_FIELDS.find(f=>f.key===fieldKey);
+      const fieldDef = FILTER_FIELDS.find(f=>f.key===cond.field);
       if(!fieldDef) return;
-      if(matchType === "일치"){
+      if(cond.matchType === "일치"){
         items = items.filter(it => String(fieldDef.get(it)||"").toLowerCase() === val);
       }else{
         items = items.filter(it => String(fieldDef.get(it)||"").toLowerCase().includes(val));
@@ -2862,9 +2903,13 @@
     const statusNames = await fetchNames("statusOptions");
 
     const existingSerialSnap = await getDocs(collection(db,"inventoryItems"));
-    const existingSerialSet = new Set();
-    existingSerialSnap.forEach(d=>{ const s = d.data().serialNumber; if(s) existingSerialSet.add(String(s)); });
+    const existingSerialMap = new Map(); // serialNumber -> {id, source}
+    existingSerialSnap.forEach(d=>{
+      const s = d.data().serialNumber;
+      if(s) existingSerialMap.set(String(s), { id:d.id, source:d.data().source||"" });
+    });
     const batchSerialSet = new Set();
+    const sourceBackfillList = [];
 
     const validRows = []; const errorRows = [];
 
@@ -2943,8 +2988,14 @@
         errs.push("모델 정보 부족 (전산모델명 또는 모델명+기가수 또는 삼성코드 중 하나는 필요)");
       }
 
-      if(serialNumber && (existingSerialSet.has(serialNumber) || batchSerialSet.has(serialNumber))){
-        errs.push("중복 일련번호('"+serialNumber+"')");
+      if(serialNumber && (existingSerialMap.has(serialNumber) || batchSerialSet.has(serialNumber))){
+        let reason = "중복 일련번호('"+serialNumber+"')";
+        const existing = existingSerialMap.get(serialNumber);
+        if(existing && source && !existing.source){
+          sourceBackfillList.push({ id: existing.id, serial: serialNumber, newSource: source });
+          reason += " — 입고처('"+source+"') 자동 반영됨";
+        }
+        errs.push(reason);
       }
 
       const purchasePriceNum = purchasePrice ? Number(purchasePrice) : (model ? model.priceExVat : null);
@@ -2980,16 +3031,27 @@
       }
     });
 
-    renderExcelValidation(validRows, errorRows, rows, { sourceNames, carrierNames, locationNames, statusNames });
+    let backfilledCount = 0;
+    if(sourceBackfillList.length>0){
+      for(const b of sourceBackfillList){
+        await updateDoc(doc(db,"inventoryItems", b.id), { source: b.newSource });
+        backfilledCount++;
+      }
+      logAction("엑셀 업로드 중 입고처 자동반영", backfilledCount+"건 (중복 일련번호의 빈 입고처를 채움)");
+    }
+
+    renderExcelValidation(validRows, errorRows, rows, { sourceNames, carrierNames, locationNames, statusNames }, backfilledCount);
   }
 
-  function renderExcelValidation(validRows, errorRows, rawRows, masterNames){
+  function renderExcelValidation(validRows, errorRows, rawRows, masterNames, backfilledCount){
     const resultEl = document.getElementById("excel-result");
     const dupCount = errorRows.filter(e=>e.reasons.includes("중복 일련번호")).length;
     let html = '<div style="font-size:13px;font-weight:700;margin-bottom:8px;">검증 결과 — 정상 '+validRows.length+'건 / 오류 '+errorRows.length+'건'+
       (dupCount>0 ? ' <span style="color:var(--danger);">(그중 중복 일련번호 '+dupCount+'건 — 자동 제외됩니다)</span>' : '') + '</div>';
     if(dupCount>0){
-      html += '<div style="background:#fdecea;border:1px solid var(--danger);color:var(--danger);padding:8px 10px;margin-bottom:10px;font-size:12.5px;">🔁 이미 등록되어 있거나 파일 안에서 중복된 일련번호 <b>'+dupCount+'건</b>은 자동으로 제외되고 등록되지 않습니다. 파일을 다시 고르실 필요 없이, 아래 "정상 건 일괄 등록"만 누르시면 됩니다.</div>';
+      html += '<div style="background:#fdecea;border:1px solid var(--danger);color:var(--danger);padding:8px 10px;margin-bottom:10px;font-size:12.5px;">🔁 이미 등록되어 있거나 파일 안에서 중복된 일련번호 <b>'+dupCount+'건</b>은 자동으로 제외되고 등록되지 않습니다. 파일을 다시 고르실 필요 없이, 아래 "정상 건 일괄 등록"만 누르시면 됩니다.'+
+        (backfilledCount>0 ? '<br>그중 <b>'+backfilledCount+'건</b>은 기존 재고에 입고처가 비어있었는데, 이 파일에 입고처가 적혀있어서 <b>자동으로 채워넣었습니다.</b>' : '') +
+        '</div>';
     }
 
     // ---- 빠른 수정 패널: 미등록 모델 / 비어있는 필수값 일괄채우기 ----
