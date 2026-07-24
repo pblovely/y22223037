@@ -628,6 +628,7 @@
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
           <h3 style="margin:0;">재고 목록 <button class="btn small secondary" style="width:auto;padding:6px 12px;margin-left:8px;" onclick="toggleViewPanel()">보기 설정</button></h3>
           <span>
+            <button class="btn small secondary" style="width:auto;margin-right:6px;" onclick="openPasteRegisterModal()">텍스트로 붙여넣기 등록</button>
             <button class="btn small" style="width:auto;" onclick="openItemModal()">+ 재고 등록</button>
           </span>
         </div>
@@ -717,6 +718,18 @@
           <button class="btn small" style="width:auto;" onclick="handleExcelUpload()">업로드 및 검증</button>
         </div>
         <div id="excel-result"></div>
+      </div>
+    </div>
+
+    <!-- 텍스트 붙여넣기 등록 팝업 -->
+    <div id="paste-register-modal-overlay" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.55);z-index:1000;align-items:center;justify-content:center;">
+      <div style="background:#fff;border:2px solid var(--navy);max-width:780px;width:96%;max-height:90vh;overflow-y:auto;padding:22px;position:relative;">
+        <button onclick="closePasteRegisterModal()" style="position:absolute;top:12px;right:12px;background:none;border:1px solid var(--navy);width:26px;height:26px;cursor:pointer;font-size:13px;">✕</button>
+        <h3 style="margin-top:0;margin-bottom:4px;">텍스트로 붙여넣기 등록</h3>
+        <p class="desc">메모장·문자 등에서 복사한 내용을 그대로 붙여넣으세요. "모델명  색상  일련번호" 형식의 줄은 자동으로 인식되고, 나머지 줄에서 입고처·판매처·날짜를 최대한 찾아드려요 — 아래에서 꼭 확인 후 등록해주세요.</p>
+        <textarea id="paste-register-textarea" rows="8" style="width:100%;box-sizing:border-box;padding:8px;border:1px solid #c7c7c7;font-size:12.5px;font-family:monospace;" placeholder="예:&#10;삼성전자스타 포피플구매건&#10;에이스 판매 7/24&#10;SM-F776N256   핑크   55762&#10;SM-F776N256   그라파이트   79798"></textarea>
+        <button class="btn small" style="width:auto;margin-top:8px;" onclick="analyzePasteText()">분석하기</button>
+        <div id="paste-register-analysis" style="margin-top:14px;"></div>
       </div>
     </div>
 
@@ -4618,6 +4631,170 @@
   }
 
   let excelMappingSheet = null; // 매칭 대기 중인 시트 캐시
+
+  // ---------- 텍스트 붙여넣기 등록 ----------
+  window.openPasteRegisterModal = function(){
+    document.getElementById("paste-register-textarea").value = "";
+    document.getElementById("paste-register-analysis").innerHTML = "";
+    document.getElementById("paste-register-modal-overlay").style.display = "flex";
+  };
+  window.closePasteRegisterModal = function(){
+    document.getElementById("paste-register-modal-overlay").style.display = "none";
+  };
+
+  function parsePasteText(text){
+    const lines = text.split(/\r?\n/).map(l=>l.trim()).filter(l=>l);
+    const dataRows = []; const contextLines = [];
+    lines.forEach(line=>{
+      const parts = line.split(/\t+| {2,}/).map(p=>p.trim()).filter(p=>p);
+      if(parts.length===3 && /^\d{4,}$/.test(parts[2])){
+        dataRows.push({ modelText: parts[0], colorText: parts[1], serial: parts[2] });
+      }else{
+        contextLines.push(line);
+      }
+    });
+    return { dataRows, contextLines };
+  }
+
+  window.analyzePasteText = async function(){
+    const text = document.getElementById("paste-register-textarea").value;
+    const { dataRows, contextLines } = parsePasteText(text);
+    const analysisEl = document.getElementById("paste-register-analysis");
+    if(dataRows.length===0){
+      analysisEl.innerHTML = '<div class="list-empty">"모델명 색상 일련번호" 형식의 줄을 찾지 못했습니다. 칸 사이를 탭이나 2칸 이상 띄어써주세요.</div>';
+      return;
+    }
+
+    await fetchModelsCache();
+    const sourceNames = await fetchNamesList("inboundSources");
+    const destNames = await fetchNamesList("outboundDestinations");
+    const carrierNames = await fetchNamesList("carriers");
+
+    const allContextText = contextLines.join(" ");
+    const matchedSource = sourceNames.find(n=> allContextText.includes(n)) || "";
+    const matchedDest = destNames.find(n=> allContextText.includes(n)) || "";
+    const matchedCarrier = carrierNames.find(n=> allContextText.includes(n)) || "";
+    const dateMatch = allContextText.match(/(\d{1,2})\s*\/\s*(\d{1,2})/);
+    let matchedDate = "";
+    if(dateMatch){
+      const year = todayStr().slice(0,4);
+      matchedDate = year + dateMatch[1].padStart(2,"0") + dateMatch[2].padStart(2,"0");
+    }
+
+    // 모델/색상 매칭 미리보기
+    const rowsWithMatch = dataRows.map(r=>{
+      const m = modelsCache.find(x=> x.systemModel===r.modelText || x.baseModel===r.modelText) ||
+                modelsCache.find(x=> (x.systemModel||"").includes(r.modelText) || (x.baseModel||"").includes(r.modelText));
+      const colorFound = m ? (m.colors||[]).find(c=>c.systemColor===r.colorText || c.manufacturerColor===r.colorText) : null;
+      return { ...r, model:m, colorFound };
+    });
+
+    let html = '<div style="background:#fafafa;border:1px solid var(--line);padding:10px;margin-bottom:12px;font-size:12.5px;">';
+    html += '<b>파악한 정보</b> — 아래 내용은 자동으로 찾은 것이니 꼭 확인·수정해주세요.<br>';
+    html += '인식된 데이터 줄: <b>'+dataRows.length+'개</b> · 나머지 줄: '+(contextLines.length>0 ? contextLines.map(l=>'"'+l+'"').join(", ") : "없음");
+    html += '</div>';
+
+    html += '<div class="stack-form">';
+    html += '<div class="stack-row"><label>입고처</label><select id="paste-source-select"></select></div>';
+    html += '<div class="stack-row"><label>통신사</label><select id="paste-carrier-select"></select></div>';
+    html += '<div class="stack-row"><label>판매처 (선택)</label><select id="paste-dest-select"><option value="">해당없음</option></select></div>';
+    html += '<div class="stack-row"><label>입고일</label><input type="text" id="paste-indate-input" maxlength="8" inputmode="numeric" value="'+todayStr()+'"></div>';
+    html += '<div class="stack-row"><label>출고일 (판매처 있으면)</label><input type="text" id="paste-outdate-input" maxlength="8" inputmode="numeric" value="'+matchedDate+'"></div>';
+    html += '<div class="stack-row"><label>현재상태</label><select id="paste-status-select"></select></div>';
+    html += '</div>';
+
+    html += '<p class="desc" style="margin-top:10px;margin-bottom:4px;font-weight:700;color:var(--navy);">인식된 품목 미리보기</p>';
+    html += '<div style="overflow-x:auto;border:1px solid var(--line);max-height:260px;overflow-y:auto;"><table class="data-table"><thead><tr><th>입력한 모델명</th><th>매칭된 모델</th><th>색상</th><th>일련번호</th><th>상태</th></tr></thead><tbody>';
+    rowsWithMatch.forEach(r=>{
+      const ok = r.model && r.colorFound;
+      html += '<tr'+(ok?'':' style="color:var(--danger);"')+'>' +
+        '<td>'+r.modelText+'</td>' +
+        '<td>'+(r.model ? (r.model.petName||r.model.baseModel) : '미매칭')+'</td>' +
+        '<td>'+r.colorText+(r.model && !r.colorFound ? ' (자동등록됨)' : '')+'</td>' +
+        '<td>'+r.serial+'</td>' +
+        '<td>'+(r.model ? (r.colorFound?'✓':'색상 새로 등록') : '모델을 찾을 수 없음')+'</td>' +
+        '</tr>';
+    });
+    html += '</tbody></table></div>';
+    html += '<button class="btn small" style="width:auto;margin-top:10px;" onclick="submitPasteRegister()">이 내용으로 일괄 등록</button>';
+    html += '<div id="paste-register-result" style="font-size:12.5px;margin-top:10px;"></div>';
+
+    analysisEl.innerHTML = html;
+    analysisEl.dataset.rows = JSON.stringify(dataRows);
+
+    const srcSel = document.getElementById("paste-source-select");
+    sourceNames.forEach(n=>{ const opt=document.createElement("option"); opt.value=n; opt.textContent=n; if(n===matchedSource) opt.selected=true; srcSel.appendChild(opt); });
+    const carSel = document.getElementById("paste-carrier-select");
+    carrierNames.forEach(n=>{ const opt=document.createElement("option"); opt.value=n; opt.textContent=n; if(n===matchedCarrier) opt.selected=true; carSel.appendChild(opt); });
+    const destSel = document.getElementById("paste-dest-select");
+    destNames.forEach(n=>{ const opt=document.createElement("option"); opt.value=n; opt.textContent=n; if(n===matchedDest) opt.selected=true; destSel.appendChild(opt); });
+    await ensureDefaultStatuses();
+    const statusNames = await fetchNamesList("statusOptions");
+    const statusSel = document.getElementById("paste-status-select");
+    statusNames.forEach(n=>{ const opt=document.createElement("option"); opt.value=n; opt.textContent=n; if(n==="보유중") opt.selected=true; statusSel.appendChild(opt); });
+  };
+
+  window.submitPasteRegister = async function(){
+    const dataRows = JSON.parse(document.getElementById("paste-register-analysis").dataset.rows||"[]");
+    const source = document.getElementById("paste-source-select").value;
+    const carrier = document.getElementById("paste-carrier-select").value;
+    const dest = document.getElementById("paste-dest-select").value;
+    const inDate = document.getElementById("paste-indate-input").value || todayStr();
+    const outDate = document.getElementById("paste-outdate-input").value || "";
+    const status = document.getElementById("paste-status-select").value;
+    const resultEl = document.getElementById("paste-register-result");
+    if(!source){ alert("입고처를 선택해주세요."); return; }
+
+    // 일련번호 중복 확인
+    const serials = dataRows.map(r=>r.serial);
+    for(let i=0;i<serials.length;i+=30){
+      const chunk = serials.slice(i,i+30);
+      const existingSnap = await getDocs(query(collection(db,"inventoryItems"), where("serialNumber","in", chunk)));
+      if(!existingSnap.empty){
+        const dupSerials = existingSnap.docs.map(d=>d.data().serialNumber);
+        if(!confirm("이미 등록된 일련번호가 있습니다: "+dupSerials.join(", ")+"\n이 건들은 제외하고 나머지만 등록할까요?")) return;
+      }
+    }
+    const existingAll = new Set();
+    for(let i=0;i<serials.length;i+=30){
+      const chunk = serials.slice(i,i+30);
+      const s = await getDocs(query(collection(db,"inventoryItems"), where("serialNumber","in", chunk)));
+      s.forEach(d=> existingAll.add(d.data().serialNumber));
+    }
+
+    let created = 0, skipped = 0;
+    const unmatched = [];
+    for(const r of dataRows){
+      if(existingAll.has(r.serial)){ skipped++; continue; }
+      let m = modelsCache.find(x=> x.systemModel===r.modelText || x.baseModel===r.modelText) ||
+               modelsCache.find(x=> (x.systemModel||"").includes(r.modelText) || (x.baseModel||"").includes(r.modelText));
+      if(!m){ unmatched.push(r.modelText+" / "+r.serial); continue; }
+      let colorObj = (m.colors||[]).find(c=>c.systemColor===r.colorText || c.manufacturerColor===r.colorText);
+      if(!colorObj){
+        await updateDoc(doc(db,"inventoryModels", m.id), { colors: arrayUnion({ manufacturerColor:r.colorText, systemColor:r.colorText, sku:"", needsReview:true }) });
+        await fetchModelsCache();
+        m = modelsCache.find(x=>x.id===m.id);
+        colorObj = (m.colors||[]).find(c=>c.systemColor===r.colorText || c.manufacturerColor===r.colorText);
+      }
+      await addDoc(collection(db,"inventoryItems"), {
+        modelGroup:m.modelGroup, baseModel:m.baseModel, capacity:m.capacity, systemModel:m.systemModel,
+        petName:m.petName||"", manufacturerColor:colorObj.manufacturerColor||"", systemColor:colorObj.systemColor||"", sku:colorObj.sku||"",
+        carrier, source, manufacturer:"", location:"", destination:dest||"",
+        listPrice:m.priceIncVat||null, purchasePrice:m.priceExVat||null, salePrice:null,
+        imei:"", status, orderDate:"", inDate, expectedSaleDate:"", outDate: dest?outDate:"",
+        entryType:"imei", quantity:1, serialNumber:r.serial,
+        createdAt: serverTimestamp()
+      });
+      created++;
+    }
+
+    logAction("텍스트 붙여넣기 일괄등록", created+"건 (중복제외 "+skipped+"건, 미매칭 "+unmatched.length+"건)");
+    let html = '<b>'+created+'건 등록 완료</b>';
+    if(skipped>0) html += ' · 중복 제외 '+skipped+'건';
+    if(unmatched.length>0) html += '<div style="color:var(--danger);margin-top:6px;">모델을 찾지 못해 등록 안 된 건:<br>'+unmatched.join("<br>")+'</div>';
+    resultEl.innerHTML = html;
+    loadInventoryList();
+  };
 
   window.handleExcelUpload = async function(){
     const fileInput = document.getElementById("excel-file-input");
