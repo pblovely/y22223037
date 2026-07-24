@@ -177,7 +177,7 @@
           <button class="tab-btn" data-tab="tab-notices" id="tabbtn-notices" onclick="switchTab('tab-notices')" style="display:none;">공지사항</button>
           <button class="tab-btn" data-tab="tab-team" id="tabbtn-team" onclick="switchTab('tab-team')" style="display:none;">팀 관리</button>
           <button class="tab-btn" id="tabbtn-inv-admin" onclick="openInvAdminSection()" style="display:none;">재고 기초설정</button>
-          <button class="tab-btn" data-tab="tab-users" id="tabbtn-users" onclick="switchTab('tab-users')" style="display:none;">사용자 관리</button>
+          <button class="tab-btn" data-tab="tab-users" id="tabbtn-users" onclick="switchTab('tab-users')" style="display:none;">사용자 관리 <span id="user-admin-badge" style="display:none;background:var(--danger);color:#fff;font-size:10px;padding:1px 6px;margin-left:4px;">0</span></button>
           <button class="tab-btn" data-tab="tab-settlement" id="tabbtn-settlement" onclick="switchTab('tab-settlement')" style="display:none;">정산 설정</button>
           <button class="tab-btn" data-tab="tab-logs" id="tabbtn-logs" onclick="switchTab('tab-logs')" style="display:none;">이력</button>
         </div>
@@ -512,15 +512,18 @@
 
         <div id="stat-cards" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px;"></div>
 
-        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:end;margin-bottom:10px;background:#fafafa;border:1px solid var(--line);padding:10px;">
-          <div class="field" style="flex:1;min-width:160px;margin-bottom:0;"><label>검색 (모델명·IMEI)</label><input type="text" id="filter-search" placeholder="검색어 입력"></div>
-          <div class="field" style="flex:1;min-width:130px;margin-bottom:0;"><label>기준</label>
-            <select id="filter-date-type"><option value="inDate">입고일</option><option value="orderDate">주문일</option><option value="expectedSaleDate">판매예정일</option><option value="outDate">출고일</option></select>
-          </div>
-          <div class="field" style="flex:1;min-width:120px;margin-bottom:0;"><label>시작일</label><input type="text" id="filter-date-from" placeholder="예: 20260701" maxlength="8" inputmode="numeric"></div>
-          <div class="field" style="flex:1;min-width:120px;margin-bottom:0;"><label>종료일</label><input type="text" id="filter-date-to" placeholder="예: 20260731" maxlength="8" inputmode="numeric"></div>
-          <button class="btn small" style="margin-bottom:0;" onclick="loadInventoryList()">조회</button>
-          <button class="btn small secondary" style="margin-bottom:0;" onclick="clearDateFilter()">초기화</button>
+        <div style="display:flex;flex-wrap:wrap;border:1px solid var(--line);background:#fff;margin-bottom:10px;">
+          <input type="text" id="filter-search" placeholder="검색 (모델명·IMEI)" style="flex:1.4;min-width:160px;border:none;border-right:1px solid var(--line);padding:9px 10px;font-size:12.5px;">
+          <select id="filter-date-type" style="flex:1;min-width:110px;border:none;border-right:1px solid var(--line);padding:9px 10px;font-size:12.5px;">
+            <option value="inDate">입고일 기준</option><option value="orderDate">주문일 기준</option><option value="expectedSaleDate">판매예정일 기준</option><option value="outDate">출고일 기준</option>
+          </select>
+          <input type="text" id="filter-date-from" placeholder="시작일 예:20260701" maxlength="8" inputmode="numeric" style="flex:1;min-width:120px;border:none;border-right:1px solid var(--line);padding:9px 10px;font-size:12.5px;">
+          <input type="text" id="filter-date-to" placeholder="종료일 예:20260731" maxlength="8" inputmode="numeric" style="flex:1;min-width:120px;border:none;border-right:1px solid var(--line);padding:9px 10px;font-size:12.5px;">
+          <label style="display:flex;align-items:center;gap:5px;padding:9px 10px;font-size:12.5px;border-right:1px solid var(--line);white-space:nowrap;">
+            <input type="checkbox" id="filter-date-all" onclick="onFilterDateAllToggle()"> 전체 기간
+          </label>
+          <button class="btn small" style="width:auto;flex-shrink:0;" onclick="loadInventoryList()">조회</button>
+          <button class="btn small secondary" style="width:auto;flex-shrink:0;" onclick="clearDateFilter()">초기화</button>
         </div>
 
         <div style="background:#fafafa;border:1px solid var(--line);border-top:none;padding:10px;margin-bottom:14px;">
@@ -1014,7 +1017,7 @@
 
       wrap.innerHTML =
         '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">' +
-        '<span style="font-size:13.5px;"><b>'+u.name+'</b> ('+u.username+') · 팀 '+(u.team||"-")+' · 생년월일 '+(u.birth||"-")+' · 휴대폰 '+(u.phone||"-")+
+        '<span style="font-size:13.5px;"><b>'+u.name+'</b>'+(u.status==="pending"?' <span class="perm-tag" style="background:#fff8e1;border-color:#e0c46c;color:#8a6d00;">🔔 승인대기</span>':'')+' ('+u.username+') · 팀 '+(u.team||"-")+' · 생년월일 '+(u.birth||"-")+' · 휴대폰 '+(u.phone||"-")+
         ' · <span style="color:'+statusColor+';font-weight:700;">'+statusLabel+'</span></span>' +
         '<span>' +
         '<button class="btn small" data-approve="'+uid+'" style="margin-right:6px;">승인</button>' +
@@ -1064,6 +1067,23 @@
         alert("권한이 저장되었습니다.");
       };
     });
+    updateUserAdminBadge();
+  }
+
+  async function updateUserAdminBadge(){
+    const badge = document.getElementById("user-admin-badge");
+    if(!badge) return;
+    try{
+      const snap = await getDocs(collection(db,"users"));
+      let count = 0;
+      snap.forEach(d=>{
+        const u = d.data();
+        if(u.status === "pending") count++;
+        if(u.requestStatus === "pending") count++;
+      });
+      if(count>0){ badge.style.display = "inline-block"; badge.textContent = count; }
+      else{ badge.style.display = "none"; }
+    }catch(err){ /* 무시 */ }
   }
 
   // ---------- 입고처 ----------
@@ -1301,18 +1321,25 @@
 
   async function checkLoginNotices(){
     try{
-      const snap = await getDocs(query(collection(db,"notices"), where("popupFlag","==",true), orderBy("createdAt","desc"), limit(5)));
+      const snap = await getDocs(query(collection(db,"notices"), where("popupFlag","==",true)));
       if(snap.empty) return;
+      let notices = [];
+      snap.forEach(d=> notices.push(d.data()));
+      notices.sort((a,b)=>{
+        const ta = a.createdAt && a.createdAt.toMillis ? a.createdAt.toMillis() : 0;
+        const tb = b.createdAt && b.createdAt.toMillis ? b.createdAt.toMillis() : 0;
+        return tb - ta;
+      });
+      notices = notices.slice(0,5);
       let html = "";
-      snap.forEach(d=>{
-        const n = d.data();
+      notices.forEach(n=>{
         html += '<div style="border-bottom:1px solid var(--line);padding-bottom:10px;margin-bottom:10px;">' +
           '<div style="font-weight:700;font-size:14px;margin-bottom:4px;">'+n.title+'</div>' +
           '<div style="font-size:13px;color:var(--gray);white-space:pre-line;">'+(n.content||"")+'</div></div>';
       });
       document.getElementById("notice-popup-body").innerHTML = html;
       document.getElementById("notice-popup-overlay").style.display = "flex";
-    }catch(err){ /* 조용히 무시 */ }
+    }catch(err){ console.error("공지 팝업 조회 오류:", err); }
   }
   window.closeNoticePopup = function(){
     document.getElementById("notice-popup-overlay").style.display = "none";
@@ -2123,9 +2150,21 @@
   window.clearDateFilter = function(){
     document.getElementById("filter-date-from").value = "";
     document.getElementById("filter-date-to").value = "";
+    document.getElementById("filter-date-all").checked = false;
+    document.getElementById("filter-date-from").disabled = false;
+    document.getElementById("filter-date-to").disabled = false;
     document.getElementById("filter-search").value = "";
     document.getElementById("filter-conditions").innerHTML = "";
     loadInventoryList();
+  };
+  window.onFilterDateAllToggle = function(){
+    const all = document.getElementById("filter-date-all").checked;
+    document.getElementById("filter-date-from").disabled = all;
+    document.getElementById("filter-date-to").disabled = all;
+    if(all){
+      document.getElementById("filter-date-from").value = "";
+      document.getElementById("filter-date-to").value = "";
+    }
   };
 
   const FILTER_FIELDS = INV_COLUMNS.concat([{ key:"status", label:"현재상태", get:it=>it.status||"" }]);
@@ -2832,6 +2871,7 @@
       const showLogs = (perms.permissionManage === true);
       const showDashboard = hasPerm(perms,"dashboard");
       const showInvWork = hasPerm(perms,"input");
+      if(showUsers) updateUserAdminBadge();
 
       document.getElementById("tabbtn-site").style.display = showSite ? "block":"none";
       document.getElementById("tabbtn-notices").style.display = showSite ? "block":"none";
