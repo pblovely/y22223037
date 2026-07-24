@@ -4772,7 +4772,8 @@
     allItems.forEach(it=>{
       const qty = it.entryType==="imei" ? 1 : (Number(it.quantity)||0);
       const inScopeIn = inScope(it.inDate);
-      const inScopeOut = inScope(it.outDate);
+      // 전체 모드에서는 출고일이 비어있어도 상태가 "판매"면 매출로 인정 (날짜 누락된 예전 데이터 대응)
+      const inScopeOut = dashboardScope==="all" ? (it.status==="판매") : inScope(it.outDate);
       if(dashboardScope==="all" || inScopeIn || inScopeOut){
         totalCount += qty;
         const s = it.status || "미지정";
@@ -4862,8 +4863,7 @@
         statRow(keyPrefix+'-pending', pendingLabel, pendingValue, false) +
         '</div>';
     }
-    let statHtml = statCard("입고 건수 (기간 내 입고일 기준)", inCount, null, "dash-in");
-    statHtml += statCard("판매 건수 (기간 내 출고일 기준)", saleCount, null, "dash-out");
+    let statHtml = statCard("입고", inCount, null, "dash-in");
     statHtml += statCard("전체 재고", totalCount, null, "dash-total-stock");
     const soldStatusCount = statusCounts["판매"] || 0;
     const heldStatusCount = totalCount - soldStatusCount;
