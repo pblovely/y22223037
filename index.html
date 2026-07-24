@@ -270,6 +270,7 @@
         <table class="data-table" style="min-width:900px;">
           <thead>
             <tr>
+              <th>#</th>
               <th>펫네임</th>
               <th>전산모델명</th>
               <th>모델명</th>
@@ -284,6 +285,7 @@
           <tbody id="model-table-body"></tbody>
         </table>
         </div>
+        <div id="model-pagination"></div>
       </div>
     </div>
 
@@ -298,6 +300,7 @@
         <table class="data-table" style="min-width:700px;">
           <thead>
             <tr>
+              <th>#</th>
               <th>모델</th>
               <th>제조사색상</th>
               <th>전산색상</th>
@@ -308,6 +311,7 @@
           <tbody id="color-table-body"></tbody>
         </table>
         </div>
+        <div id="color-pagination"></div>
       </div>
     </div>
 
@@ -805,25 +809,83 @@
     }
   }
 
+  // ---------- 공용 페이지네이션 (순번 + 10/30/100줄 보기) ----------
+  const paginationState = {};
+  function getPageState(key){
+    if(!paginationState[key]) paginationState[key] = { page:1, size:10 };
+    return paginationState[key];
+  }
+  function renderPaginationBar(key, totalCount, onChange){
+    const st = getPageState(key);
+    const totalPages = Math.max(1, Math.ceil(totalCount/st.size));
+    if(st.page > totalPages) st.page = totalPages;
+    const bar = document.createElement("div");
+    bar.style.display = "flex"; bar.style.alignItems = "center"; bar.style.gap = "6px";
+    bar.style.margin = "8px 0"; bar.style.flexWrap = "wrap"; bar.style.fontSize = "12px";
+
+    [10,30,100].forEach(n=>{
+      const btn = document.createElement("button");
+      btn.textContent = n+"줄";
+      btn.className = "btn small" + (st.size===n ? "" : " secondary");
+      btn.style.width = "auto"; btn.style.padding = "4px 10px";
+      btn.onclick = ()=>{ st.size=n; st.page=1; onChange(); };
+      bar.appendChild(btn);
+    });
+
+    const prevBtn = document.createElement("button");
+    prevBtn.textContent = "이전"; prevBtn.className = "btn small secondary";
+    prevBtn.style.width = "auto"; prevBtn.style.padding = "4px 10px";
+    prevBtn.disabled = st.page<=1;
+    prevBtn.onclick = ()=>{ st.page--; onChange(); };
+
+    const info = document.createElement("span");
+    info.textContent = st.page+" / "+totalPages+" 페이지 (총 "+totalCount+"건)";
+    info.style.padding = "0 4px";
+
+    const nextBtn = document.createElement("button");
+    nextBtn.textContent = "다음"; nextBtn.className = "btn small secondary";
+    nextBtn.style.width = "auto"; nextBtn.style.padding = "4px 10px";
+    nextBtn.disabled = st.page>=totalPages;
+    nextBtn.onclick = ()=>{ st.page++; onChange(); };
+
+    bar.appendChild(prevBtn); bar.appendChild(info); bar.appendChild(nextBtn);
+    return bar;
+  }
+  function paginateSlice(fullArray, key){
+    const st = getPageState(key);
+    const start = (st.page-1)*st.size;
+    return { pageItems: fullArray.slice(start, start+st.size), startIndex: start };
+  }
+
   // ---------- 수정 가능한 범용 목록 (팀/입고처/출고처/통신사 공용) ----------
   async function renderEditableList(opts){
     const listEl = document.getElementById(opts.listElId);
     listEl.innerHTML = "";
     const snap = await getDocs(query(collection(db, opts.collectionName), orderBy("name")));
     if(snap.empty){ listEl.innerHTML = '<div class="list-empty">등록된 항목이 없습니다.</div>'; return; }
-    snap.forEach(d=>{
+
+    const allDocs = snap.docs;
+    const stateKey = opts.collectionName;
+    const { pageItems, startIndex } = paginateSlice(allDocs, stateKey);
+
+    pageItems.forEach((d, i)=>{
+      const rowNum = startIndex + i + 1;
       const val = d.data().name;
       const row = document.createElement("div");
       row.className = "list-row compact";
+      const numSpan = document.createElement("span");
+      numSpan.textContent = rowNum;
+      numSpan.style.color = "var(--gray)"; numSpan.style.width = "32px"; numSpan.style.flexShrink = "0"; numSpan.style.fontSize = "12px";
       const span = document.createElement("span");
       span.textContent = val;
+      span.style.flex = "1";
       const btnWrap = document.createElement("span");
       const editBtn = document.createElement("button");
       editBtn.className = "btn small secondary"; editBtn.textContent = "수정"; editBtn.style.marginRight = "6px";
       const delBtn = document.createElement("button");
       delBtn.className = "btn small danger"; delBtn.textContent = "삭제";
       btnWrap.appendChild(editBtn); btnWrap.appendChild(delBtn);
-      row.appendChild(span); row.appendChild(btnWrap);
+      row.appendChild(numSpan); row.appendChild(span); row.appendChild(btnWrap);
       listEl.appendChild(row);
 
       editBtn.onclick = ()=>{
@@ -861,6 +923,8 @@
         }
       };
     });
+
+    listEl.appendChild(renderPaginationBar(stateKey, allDocs.length, opts.reload));
   }
 
   // ---------- 팀 ----------
@@ -987,7 +1051,10 @@
     const snap = await getDocs(collection(db, "users"));
     if(snap.empty){ listEl.innerHTML = '<div class="list-empty">가입된 사용자가 없습니다.</div>'; return; }
     listEl.innerHTML = "";
-    snap.forEach(d=>{
+    const allDocs = snap.docs;
+    const { pageItems, startIndex } = paginateSlice(allDocs, "users");
+    pageItems.forEach((d, i)=>{
+      const rowNum = startIndex + i + 1;
       const u = d.data();
       const uid = d.id;
       const perms = u.permissions || {};
@@ -1017,7 +1084,7 @@
 
       wrap.innerHTML =
         '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">' +
-        '<span style="font-size:13.5px;"><b>'+u.name+'</b>'+(u.status==="pending"?' <span class="perm-tag" style="background:#fff8e1;border-color:#e0c46c;color:#8a6d00;">🔔 승인대기</span>':'')+' ('+u.username+') · 팀 '+(u.team||"-")+' · 생년월일 '+(u.birth||"-")+' · 휴대폰 '+(u.phone||"-")+
+        '<span style="font-size:13.5px;"><span style="color:var(--gray);margin-right:6px;">'+rowNum+'.</span><b>'+u.name+'</b>'+(u.status==="pending"?' <span class="perm-tag" style="background:#fff8e1;border-color:#e0c46c;color:#8a6d00;">🔔 승인대기</span>':'')+' ('+u.username+') · 팀 '+(u.team||"-")+' · 생년월일 '+(u.birth||"-")+' · 휴대폰 '+(u.phone||"-")+
         ' · <span style="color:'+statusColor+';font-weight:700;">'+statusLabel+'</span></span>' +
         '<span>' +
         '<button class="btn small" data-approve="'+uid+'" style="margin-right:6px;">승인</button>' +
@@ -1067,6 +1134,7 @@
         alert("권한이 저장되었습니다.");
       };
     });
+    listEl.appendChild(renderPaginationBar("users", allDocs.length, loadUserAdminList));
     updateUserAdminBadge();
   }
 
@@ -1356,11 +1424,13 @@
     await fetchModelsCache();
     const bodyEl = document.getElementById("model-table-body");
     if(modelsCache.length === 0){
-      bodyEl.innerHTML = '<tr><td colspan="9" class="list-empty">등록된 모델이 없습니다. 위에서 등록해주세요.</td></tr>';
+      bodyEl.innerHTML = '<tr><td colspan="10" class="list-empty">등록된 모델이 없습니다. 위에서 등록해주세요.</td></tr>';
       return;
     }
     bodyEl.innerHTML = "";
-    modelsCache.forEach((m)=>{
+    const { pageItems, startIndex } = paginateSlice(modelsCache, "models");
+    pageItems.forEach((m, i)=>{
+      const rowNum = startIndex + i + 1;
       const colors = m.colors || [];
       const missingSkuCount = colors.filter(c=>!c.sku).length;
       const firstColor = colors.length>0 ? colors[0] : null;
@@ -1369,6 +1439,7 @@
 
       const tr = document.createElement("tr");
       tr.innerHTML =
+        '<td style="color:var(--gray);">'+rowNum+'</td>' +
         '<td>'+(m.petName||"-")+'</td>' +
         '<td>'+(m.systemModel||"-")+'</td>' +
         '<td>'+(m.baseModel||"-")+'</td>' +
@@ -1396,6 +1467,8 @@
         }
       };
     });
+    document.getElementById("model-pagination").innerHTML = "";
+    document.getElementById("model-pagination").appendChild(renderPaginationBar("models", modelsCache.length, loadModelAdminList));
   }
 
   // ---------- 모델 수정 팝업 ----------
@@ -1484,14 +1557,18 @@
       (m.colors||[]).forEach((c, idx)=>{ rows.push({ m, c, idx }); });
     });
     if(rows.length===0){
-      bodyEl.innerHTML = '<tr><td colspan="5" class="list-empty">등록된 색상이 없습니다.</td></tr>';
+      bodyEl.innerHTML = '<tr><td colspan="6" class="list-empty">등록된 색상이 없습니다.</td></tr>';
+      document.getElementById("color-pagination").innerHTML = "";
       return;
     }
-    rows.forEach(({m,c,idx})=>{
+    const { pageItems, startIndex } = paginateSlice(rows, "colors");
+    pageItems.forEach(({m,c,idx}, i)=>{
+      const rowNum = startIndex + i + 1;
       const hasSku = !!c.sku;
       const tr = document.createElement("tr");
       if(!hasSku){ tr.style.color = "var(--danger)"; tr.style.fontWeight = "600"; }
       tr.innerHTML =
+        '<td style="color:var(--gray);">'+rowNum+'</td>' +
         '<td>'+(m.petName||m.modelGroup||m.systemModel||"-")+'</td>' +
         '<td>'+(c.manufacturerColor||"-")+'</td>' +
         '<td>'+(c.systemColor||"-")+'</td>' +
@@ -1504,6 +1581,8 @@
       tr.querySelector('[data-color-row-edit]').onclick = ()=> openColorModal(m.id);
       tr.querySelector('[data-color-row-del]').onclick = ()=> deleteColorStandalone(m.id, idx);
     });
+    document.getElementById("color-pagination").innerHTML = "";
+    document.getElementById("color-pagination").appendChild(renderPaginationBar("colors", rows.length, loadColorAdminList));
   }
 
   async function deleteColorStandalone(modelId, idx){
@@ -2392,6 +2471,7 @@
     table.style.minWidth = "1200px";
     const thead = document.createElement("thead");
     const headRow = document.createElement("tr");
+    const thNum = document.createElement("th"); thNum.textContent = "#"; headRow.appendChild(thNum);
     const thCheck = document.createElement("th"); thCheck.textContent = ""; headRow.appendChild(thCheck);
     visibleCols.forEach(c=>{
       const th = document.createElement("th");
@@ -2404,8 +2484,13 @@
     table.appendChild(thead);
 
     const tbody = document.createElement("tbody");
-    items.forEach(it=>{
+    const { pageItems, startIndex } = paginateSlice(items, "inventory");
+    pageItems.forEach((it, i)=>{
+      const rowNum = startIndex + i + 1;
       const tr = document.createElement("tr");
+      const tdNum = document.createElement("td");
+      tdNum.textContent = rowNum; tdNum.style.color = "var(--gray)";
+      tr.appendChild(tdNum);
       const tdCheck = document.createElement("td");
       const rowCb = document.createElement("input");
       rowCb.type = "checkbox"; rowCb.className = "row-select-cb"; rowCb.dataset.id = it.id;
@@ -2461,6 +2546,7 @@
     });
     table.appendChild(tbody);
     listEl.appendChild(table);
+    listEl.appendChild(renderPaginationBar("inventory", items.length, loadInventoryList));
   }
 
   window.downloadInventoryExcel = function(){
@@ -2681,21 +2767,26 @@
     const listEl = document.getElementById("log-list");
     listEl.innerHTML = '<div class="list-empty">불러오는 중...</div>';
     try{
-      const snap = await getDocs(query(collection(db,"activityLogs"), orderBy("createdAt","desc"), limit(100)));
+      const snap = await getDocs(query(collection(db,"activityLogs"), orderBy("createdAt","desc"), limit(500)));
       if(snap.empty){ listEl.innerHTML = '<div class="list-empty">아직 기록된 활동이 없습니다.</div>'; return; }
       listEl.innerHTML = "";
       document.getElementById("log-select-all").checked = false;
-      snap.forEach(d=>{
+      const allDocs = snap.docs;
+      const { pageItems, startIndex } = paginateSlice(allDocs, "logs");
+      pageItems.forEach((d, i)=>{
+        const rowNum = startIndex + i + 1;
         const l = d.data();
         const t = l.createdAt && l.createdAt.toDate ? l.createdAt.toDate().toLocaleString("ko-KR") : "-";
         const row = document.createElement("div");
         row.className = "list-row"; row.style.display="flex"; row.style.alignItems="flex-start"; row.style.gap="10px";
         row.innerHTML =
           '<input type="checkbox" class="log-check" data-id="'+d.id+'" style="margin-top:3px;">' +
+          '<span style="color:var(--gray);font-size:12px;width:28px;flex-shrink:0;">'+rowNum+'.</span>' +
           '<div style="flex:1;"><div style="font-size:12px;color:var(--gray);margin-bottom:2px;">'+t+' · '+(l.actorName||"-")+'('+(l.actorUsername||"-")+')</div>' +
           '<div style="font-size:13.5px;"><b>'+(l.action||"")+'</b> '+(l.detail||"")+'</div></div>';
         listEl.appendChild(row);
       });
+      listEl.appendChild(renderPaginationBar("logs", allDocs.length, loadLogs));
     }catch(err){ listEl.innerHTML = '<div class="list-empty">이력을 불러오지 못했습니다: '+err.message+'</div>'; }
   }
   window.toggleAllLogs = function(masterCb){
