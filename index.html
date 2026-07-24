@@ -63,7 +63,7 @@
   .sidebar .tab-btn.active{ border-bottom-color:transparent; border-left-color:var(--navy); background:#f2f2f2; }
   #admin-toggle-btn{ display:block; width:100%; text-align:left; padding:9px 16px; font-size:12.5px; font-weight:700; color:var(--navy); background:#eee; border:none; cursor:pointer; border-top:1px solid var(--line); margin-top:8px; }
   #admin-toggle-btn:hover{ background:#e6e6e6; }
-  #admin-group.sidebar{ border-left:1px solid var(--line); }
+  #admin-group.tabbar{ margin-bottom:4px; }
   .content-wrap{ flex:1; min-width:0; }
   .tab-panel{ display:none; padding:24px; }
   .tab-panel.active{ display:block; }
@@ -165,17 +165,16 @@
         <button id="admin-toggle-btn" onclick="toggleAdminMenu()" style="display:none;">⚙ 관리자</button>
       </div>
 
-      <div class="sidebar" id="admin-group" style="display:none;">
-        <div class="sidebar-section-label">관리자 메뉴</div>
-        <button class="tab-btn" data-tab="tab-site" id="tabbtn-site" onclick="switchTab('tab-site')" style="display:none;">사이트 설정</button>
-        <button class="tab-btn" data-tab="tab-team" id="tabbtn-team" onclick="switchTab('tab-team')" style="display:none;">팀 관리</button>
-        <button class="tab-btn" data-tab="tab-inv-admin" id="tabbtn-inv-admin" onclick="switchTab('tab-inv-admin')" style="display:none;">재고 기초설정</button>
-        <button class="tab-btn" data-tab="tab-users" id="tabbtn-users" onclick="switchTab('tab-users')" style="display:none;">사용자 관리</button>
-        <button class="tab-btn" data-tab="tab-settlement" id="tabbtn-settlement" onclick="switchTab('tab-settlement')" style="display:none;">정산 설정</button>
-        <button class="tab-btn" data-tab="tab-logs" id="tabbtn-logs" onclick="switchTab('tab-logs')" style="display:none;">이력</button>
-      </div>
-
       <div class="content-wrap">
+
+        <div class="tabbar" id="admin-group" style="display:none;">
+          <button class="tab-btn" data-tab="tab-site" id="tabbtn-site" onclick="switchTab('tab-site')" style="display:none;">사이트 설정</button>
+          <button class="tab-btn" data-tab="tab-team" id="tabbtn-team" onclick="switchTab('tab-team')" style="display:none;">팀 관리</button>
+          <button class="tab-btn" data-tab="tab-inv-admin" id="tabbtn-inv-admin" onclick="switchTab('tab-inv-admin')" style="display:none;">재고 기초설정</button>
+          <button class="tab-btn" data-tab="tab-users" id="tabbtn-users" onclick="switchTab('tab-users')" style="display:none;">사용자 관리</button>
+          <button class="tab-btn" data-tab="tab-settlement" id="tabbtn-settlement" onclick="switchTab('tab-settlement')" style="display:none;">정산 설정</button>
+          <button class="tab-btn" data-tab="tab-logs" id="tabbtn-logs" onclick="switchTab('tab-logs')" style="display:none;">이력</button>
+        </div>
 
     <!-- ===== 작업: 대시보드 ===== -->
     <div id="tab-dashboard" class="tab-panel">
@@ -1939,7 +1938,7 @@
   const ADMIN_TAB_IDS = ["tab-site","tab-team","tab-inv-admin","tab-users","tab-settlement","tab-logs"];
   window.toggleAdminMenu = function(){
     const el = document.getElementById("admin-group");
-    el.style.display = (el.style.display === "none") ? "block" : "none";
+    el.style.display = (el.style.display === "none") ? "flex" : "none";
   };
   window.switchTab = function(tabId){
     document.querySelectorAll(".tab-panel").forEach(el=>el.classList.remove("active"));
@@ -1948,7 +1947,7 @@
     const btn = document.querySelector('.tab-btn[data-tab="'+tabId+'"]');
     if(btn) btn.classList.add("active");
     if(ADMIN_TAB_IDS.includes(tabId) && document.getElementById("admin-toggle-btn").style.display !== "none"){
-      document.getElementById("admin-group").style.display = "block";
+      document.getElementById("admin-group").style.display = "flex";
     }
 
     if(tabId==="tab-team") loadTeamList();
