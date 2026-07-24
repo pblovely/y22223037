@@ -204,6 +204,7 @@
           <span>
             <button class="btn small" id="dash-scope-month-btn" style="width:auto;" onclick="setDashboardScope('month')">당월</button>
             <button class="btn small secondary" id="dash-scope-all-btn" style="width:auto;" onclick="setDashboardScope('all')">전체</button>
+            <select id="dash-month-picker" onchange="setDashboardCustomMonth(this.value)" style="padding:5px 6px;border:1px solid #c7c7c7;font-size:12.5px;height:28px;"><option value="">월 선택</option></select>
           </span>
         </div>
         <div id="dash-stat-cards" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px;"></div>
@@ -2260,6 +2261,7 @@
       opt.value = m.id; opt.textContent = m.modelGroup + " (" + m.baseModel + " " + m.capacity + ")";
       sel.appendChild(opt);
     });
+    if(typeof resetSelectSearchCache === "function") resetSelectSearchCache("item-model-select");
     onItemModelChange();
   }
   window.onItemModelChange = function(){
@@ -2793,11 +2795,7 @@
       return cell;
     }
 
-    // 모델 칸: 검색 입력 + 선택 드롭다운을 세로로 함께 배치
-    const modelCellWrap = document.createElement("div");
-    modelCellWrap.style.display = "flex"; modelCellWrap.style.flexDirection = "column"; modelCellWrap.style.gap = "3px";
-    const modelSearch = document.createElement("input");
-    modelSearch.type = "text"; modelSearch.placeholder = "검색"; modelSearch.style.width = "150px"; modelSearch.style.fontSize = "11px"; modelSearch.style.padding = "3px"; modelSearch.style.boxSizing = "border-box";
+    // 모델 선택 드롭다운
     const modelSel = document.createElement("select");
     modelSel.className = "ol-model"; modelSel.style.fontSize = "11.5px"; modelSel.style.padding = "4px"; modelSel.style.width = "150px";
     modelSel.innerHTML = '<option value="">모델 선택</option>';
@@ -2807,16 +2805,8 @@
       opt.textContent = (m.baseModel||m.systemModel||m.petName||"모델") + (m.capacity?(" "+m.capacity):"");
       modelSel.appendChild(opt);
     });
-    modelSearch.oninput = ()=>{
-      const q = modelSearch.value.trim().toLowerCase();
-      Array.from(modelSel.options).forEach(opt=>{
-        if(!opt.value){ opt.style.display=""; return; }
-        opt.style.display = (!q || opt.textContent.toLowerCase().includes(q)) ? "" : "none";
-      });
-    };
     modelSel.onchange = ()=> onOrderLineModelChange(tr);
-    modelCellWrap.appendChild(modelSearch); modelCellWrap.appendChild(modelSel);
-    td(modelCellWrap);
+    td(modelSel);
 
     const qtyInput = smallInput("ol-qty","number","50px"); qtyInput.value = "1";
     qtyInput.oninput = ()=> updateOrderLineSubtotal(tr);
@@ -3413,6 +3403,7 @@
       opt.textContent = (m.baseModel||m.systemModel||m.petName||"모델") + (m.capacity?(" "+m.capacity):"");
       modelSel.appendChild(opt);
     });
+    if(typeof resetSelectSearchCache === "function") resetSelectSearchCache("salereq-model-select");
   }
   window.onSaleReqQtyChange = function(){
     const qty = Number(document.getElementById("salereq-qty-input").value) || 0;
@@ -3930,15 +3921,27 @@
 
   let activeConditions = []; // {field, matchType, value} - "+조건 추가"로 넣는 추가 조건들
 
-  // 옵션 많은 드롭다운을 입력한 글자로 필터링 (모델 선택 등)
+  // 옵션 많은 드롭다운을 입력한 글자로 필터링 (모델 선택 등) - 옵션을 직접 다시 그려서 확실히 동작하게 함
+  const selectOptionsCache = {};
+  window.resetSelectSearchCache = function(selectId){ delete selectOptionsCache[selectId]; };
   window.filterSelectOptions = function(selectId, query){
     const sel = document.getElementById(selectId);
     if(!sel) return;
+    if(!selectOptionsCache[selectId]){
+      selectOptionsCache[selectId] = Array.from(sel.options).map(o=>({ value:o.value, text:o.textContent }));
+    }
+    const all = selectOptionsCache[selectId];
     const q = query.trim().toLowerCase();
-    Array.from(sel.options).forEach(opt=>{
-      if(!opt.value){ opt.style.display = ""; return; } // 안내용 첫 옵션은 항상 표시
-      opt.style.display = (!q || opt.textContent.toLowerCase().includes(q)) ? "" : "none";
+    const currentVal = sel.value;
+    sel.innerHTML = "";
+    all.forEach(o=>{
+      if(!o.value || !q || o.text.toLowerCase().includes(q)){
+        const opt = document.createElement("option");
+        opt.value = o.value; opt.textContent = o.text;
+        sel.appendChild(opt);
+      }
     });
+    if(Array.from(sel.options).some(o=>o.value===currentVal)) sel.value = currentVal;
   };
 
   function populatePrimaryCondField(){
@@ -4236,10 +4239,21 @@
   };
 
   let dashboardScope = "month"; // "month" | "all"
+  let dashboardCustomMonth = ""; // "" 이면 당월, 아니면 YYYYMM
   window.setDashboardScope = function(scope){
     dashboardScope = scope;
+    dashboardCustomMonth = "";
+    document.getElementById("dash-month-picker").value = "";
     document.getElementById("dash-scope-month-btn").className = "btn small" + (scope==="month" ? "" : " secondary");
     document.getElementById("dash-scope-all-btn").className = "btn small" + (scope==="all" ? "" : " secondary");
+    loadDashboard();
+  };
+  window.setDashboardCustomMonth = function(month){
+    if(!month) return;
+    dashboardScope = "month";
+    dashboardCustomMonth = month;
+    document.getElementById("dash-scope-month-btn").className = "btn small secondary";
+    document.getElementById("dash-scope-all-btn").className = "btn small secondary";
     loadDashboard();
   };
 
@@ -4255,9 +4269,21 @@
     const snap = await getDocs(collection(db,"inventoryItems"));
     const allItems = []; snap.forEach(d=> allItems.push(d.data()));
 
-    const thisMonth = todayStr().slice(0,6); // YYYYMM
     const normDate = v=> String(v||"").replace(/\D/g,"");
+    const thisMonth = dashboardCustomMonth || todayStr().slice(0,6); // YYYYMM
     const inScope = (dateStr)=> dashboardScope==="all" ? true : (normDate(dateStr).slice(0,6) === thisMonth);
+
+    // 월 선택 드롭다운 채우기 (데이터에 있는 월들만)
+    const monthPicker = document.getElementById("dash-month-picker");
+    const monthSet = new Set();
+    allItems.forEach(it=>{
+      const im = normDate(it.inDate).slice(0,6); if(im.length===6) monthSet.add(im);
+      const om = normDate(it.outDate).slice(0,6); if(om.length===6) monthSet.add(om);
+    });
+    const sortedMonths = Array.from(monthSet).sort().reverse();
+    monthPicker.innerHTML = '<option value="">월 선택</option>' + sortedMonths.map(m=>
+      '<option value="'+m+'"'+(m===dashboardCustomMonth?' selected':'')+'>'+m.slice(0,4)+'년 '+m.slice(4,6)+'월</option>'
+    ).join("");
 
     let totalCount = 0;
     const statusCounts = {};
@@ -4345,7 +4371,7 @@
         '<div style="font-size:11.5px;color:var(--gray);margin-bottom:4px;">'+label+'</div>' +
         '<div style="font-size:'+(big?'26px':'20px')+';font-weight:800;color:'+(color||'var(--navy)')+';">'+value+'</div></div>';
     }
-    const scopeLabel = dashboardScope==="all" ? "전체" : "당월";
+    const scopeLabel = dashboardScope==="all" ? "전체" : (dashboardCustomMonth ? (dashboardCustomMonth.slice(0,4)+"년 "+dashboardCustomMonth.slice(4,6)+"월") : "당월");
     let statHtml = statCard(scopeLabel+" 수익 (판매가-입고가만, 공시지원금 별도)", profitSum.toLocaleString()+"원", "#2e7d32", true);
     statHtml += statCard(scopeLabel+" 공시지원금 순액 (귀속월 기준, 지급-환수)", (subsidyReceivedSum-subsidyClawbackSum).toLocaleString()+"원 ("+subsidyCount+"건)", "#6a1b9a", true);
     statHtml += statCard("전체 재고", totalCount+"대");
@@ -4363,8 +4389,8 @@
     function renderFullList(el, agg, nameLabel){
       const entries = Object.entries(agg).sort((a,b)=>b[1].count-a[1].count);
       if(entries.length===0){ el.innerHTML = '<div class="list-empty">데이터가 없습니다.</div>'; return; }
-      let html = '<div style="overflow-x:auto;"><table class="data-table"><thead><tr>' +
-        '<th>'+nameLabel+'</th><th class="ta-right">대수</th><th class="ta-right">매입액</th><th class="ta-right">매출액</th>' +
+      let html = '<div style="overflow-x:auto;"><table class="data-table" style="width:auto;max-width:640px;table-layout:fixed;"><thead><tr>' +
+        '<th style="width:220px;">'+nameLabel+'</th><th class="ta-right" style="width:80px;">대수</th><th class="ta-right" style="width:150px;">매입액</th><th class="ta-right" style="width:150px;">매출액</th>' +
         '</tr></thead><tbody>';
       entries.forEach(([k,v])=>{
         html += '<tr><td>'+k+'</td><td class="ta-right">'+v.count+'대</td><td class="ta-right">'+v.purchaseAmount.toLocaleString()+'원</td><td class="ta-right">'+v.saleAmount.toLocaleString()+'원</td></tr>';
