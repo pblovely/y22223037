@@ -205,8 +205,6 @@
             <button class="btn small" id="dash-scope-month-btn" style="width:auto;" onclick="setDashboardScope('month')">당월</button>
             <button class="btn small secondary" id="dash-scope-all-btn" style="width:auto;" onclick="setDashboardScope('all')">전체</button>
             <select id="dash-month-picker" onchange="setDashboardCustomMonth(this.value)" style="padding:5px 6px;border:1px solid #c7c7c7;font-size:12.5px;height:28px;"><option value="">월 선택</option></select>
-            <span style="color:var(--line);margin:0 4px;">|</span>
-            <button class="btn small secondary" style="width:auto;padding:5px 8px;" onclick="resetHiddenDashItems()">숨긴 항목 복원</button>
           </span>
         </div>
         <div id="dash-stat-cards" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px;"></div>
@@ -328,6 +326,11 @@
         <div class="field"><label>아이콘 이미지 주소 (선택)</label><input type="text" id="pending-icon-input" placeholder="https://..."></div>
         <button class="btn small" onclick="savePendingScreen()">저장</button>
         <div id="pending-screen-msg" style="font-size:12px;color:var(--navy);display:none;margin-top:8px;">저장되었습니다.</div>
+      </div>
+      <div class="card">
+        <h3>화면 커스터마이징</h3>
+        <p class="desc">버튼·제목·대시보드 카드를 마우스 오른쪽 버튼으로 눌러서 이름·색상·글씨크기를 바꾸거나 숨길 수 있습니다. 숨긴 항목은 여기서 되돌릴 수 있어요.</p>
+        <button class="btn small secondary" style="width:auto;" onclick="resetHiddenDashItems()">숨긴 항목 전부 복원</button>
       </div>
     </div>
 
@@ -4795,17 +4798,16 @@
         statRow(keyPrefix+'-pending', pendingLabel, pendingValue, false) +
         '</div>';
     }
-    const scopeLabel = dashboardScope==="all" ? "전체" : (dashboardCustomMonth ? (dashboardCustomMonth.slice(0,4)+"년 "+dashboardCustomMonth.slice(4,6)+"월") : "당월");
-    let statHtml = statCard(scopeLabel+" 수익 (판매가-입고가만, 공시지원금 별도)", profitSum.toLocaleString(), null, "dash-profit");
-    statHtml += statCard(scopeLabel+" 공시지원금 순액 (귀속월 기준, 지급-환수)", (subsidyReceivedSum-subsidyClawbackSum).toLocaleString()+" ("+subsidyCount+"건)", null, "dash-subsidy");
-    statHtml += statCard("전체 재고", totalCount+"대", null, "dash-total-stock");
+    let statHtml = statCard("수익 (판매가-입고가만, 공시지원금 별도)", profitSum.toLocaleString(), null, "dash-profit");
+    statHtml += statCardTriple("공시지원금 (귀속월 기준)", "지급", subsidyReceivedSum.toLocaleString(), "환수", subsidyClawbackSum.toLocaleString(), null, "dash-subsidy");
+    statHtml += statCard("전체 재고", totalCount, null, "dash-total-stock");
     Object.keys(statusCounts).sort().forEach(s=>{
-      statHtml += statCard(s, statusCounts[s]+"대", null, "dash-status-"+s);
+      statHtml += statCard(s, statusCounts[s], null, "dash-status-"+s);
     });
-    statHtml += statCard(scopeLabel+" 입고", inCount+"대", null, "dash-in");
-    statHtml += statCard(scopeLabel+" 판매", saleCount+"대", null, "dash-out");
-    statHtml += statCardTriple(scopeLabel+" 매입", "입고", purchaseSum.toLocaleString(), "미입고", pendingPurchaseAmount.toLocaleString(), null, "dash-purchase");
-    statHtml += statCardTriple(scopeLabel+" 매출", "출고", saleSum.toLocaleString(), "미출고", pendingSaleAmount.toLocaleString(), null, "dash-sale");
+    statHtml += statCard("입고", inCount, null, "dash-in");
+    statHtml += statCard("판매", saleCount, null, "dash-out");
+    statHtml += statCardTriple("매입", "입고", purchaseSum.toLocaleString(), "미입고", pendingPurchaseAmount.toLocaleString(), null, "dash-purchase");
+    statHtml += statCardTriple("매출", "출고", saleSum.toLocaleString(), "미출고", pendingSaleAmount.toLocaleString(), null, "dash-sale");
     statEl.innerHTML = statHtml;
     applyCustomTabLabels();
     applyDashFontSize();
@@ -4817,7 +4819,7 @@
         '<th style="width:220px;">'+nameLabel+'</th><th class="ta-right" style="width:80px;">대수</th><th class="ta-right" style="width:150px;">매입액</th><th class="ta-right" style="width:150px;">매출액</th>' +
         '</tr></thead><tbody>';
       entries.forEach(([k,v])=>{
-        html += '<tr><td>'+k+'</td><td class="ta-right">'+v.count+'대</td><td class="ta-right">'+v.purchaseAmount.toLocaleString()+'</td><td class="ta-right">'+v.saleAmount.toLocaleString()+'</td></tr>';
+        html += '<tr><td>'+k+'</td><td class="ta-right">'+v.count+'</td><td class="ta-right">'+v.purchaseAmount.toLocaleString()+'</td><td class="ta-right">'+v.saleAmount.toLocaleString()+'</td></tr>';
       });
       html += '</tbody></table></div>';
       el.innerHTML = html;
@@ -4834,9 +4836,9 @@
       discountCount++;
     });
     discountEl.innerHTML =
-      statCard(scopeLabel+" 선할인 합계 (이체 기준)", preDiscountSum.toLocaleString()+" ("+discountCount+"건)", "#1565c0") +
-      statCard(scopeLabel+" 타할인 합계 (여신 등 반영)", otherDiscountSum.toLocaleString(), "#8a6d00") +
-      statCard(scopeLabel+" 입고할인 합계 (선할인+타할인)", (preDiscountSum+otherDiscountSum).toLocaleString(), "#2e7d32");
+      statCard("선할인 합계 (이체 기준)", preDiscountSum.toLocaleString(), "#1565c0") +
+      statCard("타할인 합계 (여신 등 반영)", otherDiscountSum.toLocaleString(), "#8a6d00") +
+      statCard("입고할인 합계 (선할인+타할인)", (preDiscountSum+otherDiscountSum).toLocaleString(), "#2e7d32");
 
     const batchSnap = await getDocs(query(collection(db,"masterStockBatches"), orderBy("uploadedAt","desc"), limit(1)));
     if(batchSnap.empty){
@@ -4858,7 +4860,7 @@
         const entries = Object.entries(regionCounts).sort((a,b)=>b[1]-a[1]);
         let html = '<div style="overflow-x:auto;"><table class="data-table"><thead><tr><th>지역</th><th class="ta-right">대수</th></tr></thead><tbody>';
         entries.forEach(([k,v])=>{
-          html += '<tr><td>'+k+'</td><td class="ta-right">'+v+'대</td></tr>';
+          html += '<tr><td>'+k+'</td><td class="ta-right">'+v+'</td></tr>';
         });
         html += '</tbody></table></div>';
         regionEl.innerHTML = html;
