@@ -213,7 +213,7 @@
             <div id="dash-carrier-list"></div>
           </div>
           <div style="flex:1;min-width:260px;">
-            <h3 style="font-size:13px;">모델(펫네임)별</h3>
+            <h3 style="font-size:13px;">모델/펫네임별</h3>
             <div id="dash-model-list"></div>
           </div>
           <div style="flex:1;min-width:260px;">
@@ -4250,20 +4250,47 @@
 
       if(inScopeIn || inScopeOut){
         const c = it.carrier || "미지정";
-        if(!carrierAgg[c]) carrierAgg[c] = {count:0, amount:0};
+        if(!carrierAgg[c]) carrierAgg[c] = {count:0, purchaseAmount:0, saleAmount:0};
         carrierAgg[c].count += qty;
-        if(it.salePrice) carrierAgg[c].amount += Number(it.salePrice)*qty;
+        if(it.purchasePrice) carrierAgg[c].purchaseAmount += Number(it.purchasePrice)*qty;
+        if(it.salePrice) carrierAgg[c].saleAmount += Number(it.salePrice)*qty;
 
-        const m = it.petName || it.modelGroup || it.systemModel || "미지정";
-        if(!modelAgg[m]) modelAgg[m] = {count:0, amount:0};
+        const m = (it.petName||it.modelGroup||"미지정") + "/" + (it.baseModel||it.systemModel||"-");
+        if(!modelAgg[m]) modelAgg[m] = {count:0, purchaseAmount:0, saleAmount:0};
         modelAgg[m].count += qty;
-        if(it.purchasePrice) modelAgg[m].amount += Number(it.purchasePrice)*qty;
+        if(it.purchasePrice) modelAgg[m].purchaseAmount += Number(it.purchasePrice)*qty;
+        if(it.salePrice) modelAgg[m].saleAmount += Number(it.salePrice)*qty;
 
         if(it.destination){
-          if(!destAgg[it.destination]) destAgg[it.destination] = {count:0, amount:0};
+          if(!destAgg[it.destination]) destAgg[it.destination] = {count:0, purchaseAmount:0, saleAmount:0};
           destAgg[it.destination].count += qty;
-          if(it.salePrice) destAgg[it.destination].amount += Number(it.salePrice)*qty;
+          if(it.purchasePrice) destAgg[it.destination].purchaseAmount += Number(it.purchasePrice)*qty;
+          if(it.salePrice) destAgg[it.destination].saleAmount += Number(it.salePrice)*qty;
         }
+      }
+    });
+
+    // 예약(주문/판매요청) 중 아직 실물이 오가지 않은 것 — 금액으로 집계
+    const ordersSnap = await getDocs(collection(db,"orders"));
+    let pendingPurchaseAmount = 0, pendingPurchaseCount = 0;
+    ordersSnap.forEach(d=>{
+      const o = d.data();
+      if(o.status==="취소") return;
+      const remain = (o.quantity||0) - (o.fulfilledCount||0);
+      if(remain>0 && o.purchasePrice){
+        pendingPurchaseAmount += remain * Number(o.purchasePrice);
+        pendingPurchaseCount += remain;
+      }
+    });
+    const saleReqSnap = await getDocs(collection(db,"saleRequests"));
+    let pendingSaleAmount = 0, pendingSaleCount = 0;
+    saleReqSnap.forEach(d=>{
+      const s = d.data();
+      if(s.status==="취소") return;
+      const remain = (s.quantity||0) - (s.fulfilledCount||0);
+      if(remain>0 && s.salePrice){
+        pendingSaleAmount += remain * Number(s.salePrice);
+        pendingSaleCount += remain;
       }
     });
 
@@ -4283,23 +4310,25 @@
     statHtml += statCard(scopeLabel+" 판매", saleCount+"대", "#8a6d00");
     statHtml += statCard(scopeLabel+" 매입액", purchaseSum.toLocaleString()+"원", "#1565c0");
     statHtml += statCard(scopeLabel+" 매출액", saleSum.toLocaleString()+"원", "#8a6d00");
+    statHtml += statCard("샀는데 도착 안한 금액", pendingPurchaseAmount.toLocaleString()+"원 ("+pendingPurchaseCount+"대)", "#1565c0", true);
+    statHtml += statCard("팔았는데 안 준 금액", pendingSaleAmount.toLocaleString()+"원 ("+pendingSaleCount+"대)", "#8a6d00", true);
     statEl.innerHTML = statHtml;
 
-    function renderFullList(el, agg, nameLabel, amountLabel){
+    function renderFullList(el, agg, nameLabel){
       const entries = Object.entries(agg).sort((a,b)=>b[1].count-a[1].count);
       if(entries.length===0){ el.innerHTML = '<div class="list-empty">데이터가 없습니다.</div>'; return; }
       let html = '<div style="overflow-x:auto;"><table class="data-table"><thead><tr>' +
-        '<th>'+nameLabel+'</th><th class="ta-right">대수</th><th class="ta-right">'+amountLabel+'</th>' +
+        '<th>'+nameLabel+'</th><th class="ta-right">대수</th><th class="ta-right">매입액</th><th class="ta-right">매출액</th>' +
         '</tr></thead><tbody>';
       entries.forEach(([k,v])=>{
-        html += '<tr><td>'+k+'</td><td class="ta-right">'+v.count+'대</td><td class="ta-right">'+v.amount.toLocaleString()+'원</td></tr>';
+        html += '<tr><td>'+k+'</td><td class="ta-right">'+v.count+'대</td><td class="ta-right">'+v.purchaseAmount.toLocaleString()+'원</td><td class="ta-right">'+v.saleAmount.toLocaleString()+'원</td></tr>';
       });
       html += '</tbody></table></div>';
       el.innerHTML = html;
     }
-    renderFullList(carrierEl, carrierAgg, "통신사", "매출액");
-    renderFullList(modelEl, modelAgg, "모델(펫네임)", "매입액");
-    renderFullList(destEl, destAgg, "판매처", "매출액");
+    renderFullList(carrierEl, carrierAgg, "통신사");
+    renderFullList(modelEl, modelAgg, "모델/펫네임");
+    renderFullList(destEl, destAgg, "판매처");
 
     const discountItems = allItems.filter(it => (it.purchaseDiscountAmt!=null || it.otherDiscountAmt!=null) && (dashboardScope==="all" || inScope(it.inDate)));
     let preDiscountSum = 0, otherDiscountSum = 0, discountCount = 0;
