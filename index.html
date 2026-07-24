@@ -1166,9 +1166,10 @@
     setDoc(doc(db,"settings","general"), { dashFontSize: size }, { merge:true }).catch(()=>{});
   };
 
-  // ---------- 탭 이름 우클릭으로 수정 ----------
+  // ---------- 버튼·제목 우클릭으로 이름 수정 (전체 적용) ----------
   let customTabLabels = {};
   function applyCustomTabLabels(){
+    // 1) 미리 키가 지정된 것들 (사이드바 메뉴, 대시보드 카드 라벨)
     document.querySelectorAll("[data-label-key]").forEach(btn=>{
       const key = btn.dataset.labelKey;
       const labelSpan = btn.querySelector(".tab-label-text");
@@ -1177,22 +1178,56 @@
         labelSpan.textContent = customTabLabels[key];
       }
     });
+    // 2) 나머지 일반 버튼/제목들: 처음 보이는 텍스트를 그대로 키로 사용
+    document.querySelectorAll("button:not([data-label-key]), h3:not([data-label-key])").forEach(el=>{
+      if(!el.dataset.origText){
+        // 배지·아이콘 같은 자식 요소가 있으면 건드리지 않음 (안전하게 건너뜀)
+        if(el.children.length>0) return;
+        const t = el.textContent.trim();
+        if(!t) return;
+        el.dataset.origText = t;
+      }
+      const key = "btn:" + el.dataset.origText;
+      if(customTabLabels[key]){
+        el.textContent = customTabLabels[key];
+      }
+    });
   }
   document.addEventListener("contextmenu", function(e){
-    const btn = e.target.closest("[data-label-key]");
-    if(!btn) return;
+    const keyedEl = e.target.closest("[data-label-key]");
+    if(keyedEl){
+      e.preventDefault();
+      const key = keyedEl.dataset.labelKey;
+      const labelSpan = keyedEl.querySelector(".tab-label-text");
+      const current = labelSpan ? labelSpan.textContent : keyedEl.textContent;
+      const newName = prompt("이 메뉴의 이름을 입력하세요 (같은 메뉴는 어디서든 이 이름으로 바뀝니다):", current);
+      if(newName===null) return;
+      const trimmed = newName.trim();
+      if(!trimmed) return;
+      customTabLabels[key] = trimmed;
+      applyCustomTabLabels();
+      setDoc(doc(db,"settings","general"), { tabLabels: customTabLabels }, { merge:true })
+        .then(()=> logAction("메뉴 이름 변경", key+" → "+trimmed))
+        .catch(()=> alert("저장에 실패했습니다. 다시 시도해주세요."));
+      return;
+    }
+    const genericEl = e.target.closest("button, h3");
+    if(!genericEl) return;
+    if(genericEl.children.length>0) return; // 배지·아이콘 있는 요소는 안전하게 건너뜀
+    const origText = genericEl.dataset.origText || genericEl.textContent.trim();
+    if(!origText) return;
     e.preventDefault();
-    const key = btn.dataset.labelKey;
-    const labelSpan = btn.querySelector(".tab-label-text");
-    const current = labelSpan ? labelSpan.textContent : btn.textContent;
-    const newName = prompt("이 메뉴의 이름을 입력하세요 (같은 메뉴는 어디서든 이 이름으로 바뀝니다):", current);
+    genericEl.dataset.origText = origText;
+    const key = "btn:" + origText;
+    const current = customTabLabels[key] || origText;
+    const newName = prompt("이 버튼(제목)의 이름을 입력하세요 (같은 이름을 쓰는 곳은 전부 같이 바뀝니다):", current);
     if(newName===null) return;
     const trimmed = newName.trim();
     if(!trimmed) return;
     customTabLabels[key] = trimmed;
     applyCustomTabLabels();
     setDoc(doc(db,"settings","general"), { tabLabels: customTabLabels }, { merge:true })
-      .then(()=> logAction("메뉴 이름 변경", key+" → "+trimmed))
+      .then(()=> logAction("버튼 이름 변경", key+" → "+trimmed))
       .catch(()=> alert("저장에 실패했습니다. 다시 시도해주세요."));
   });
 
@@ -3113,7 +3148,7 @@
       createdAt: serverTimestamp()
     });
 
-    let autoSaleReqCount = 0;
+    const orderRefs = [];
     for(const l of lines){
       const orderRef = await addDoc(collection(db,"orders"), {
         batchId: batchRef.id,
@@ -3128,14 +3163,35 @@
         orderDate, status: "주문중",
         createdAt: serverTimestamp()
       });
+      orderRefs.push({ orderRef, l });
+    }
 
-      // 판매처+판매가가 이미 정해진 품목은 판매요청도 자동 생성 (받을 돈으로 정산에 반영)
-      if(l.destination && l.salePrice){
+    // 판매처+판매가가 이미 정해진 품목들은 판매처별로 묶어서 판매요청 배치 하나로 생성
+    const salesByDest = {};
+    orderRefs.forEach(({orderRef, l})=>{
+      if(!l.destination || !l.salePrice) return;
+      if(!salesByDest[l.destination]) salesByDest[l.destination] = [];
+      salesByDest[l.destination].push({ orderRef, l });
+    });
+
+    let autoSaleReqCount = 0;
+    for(const dest of Object.keys(salesByDest)){
+      const group = salesByDest[dest];
+      const depositTotal = group.reduce((sum,g)=> sum + g.l.salePrice*g.l.quantity, 0);
+      const srBatchRef = await addDoc(collection(db,"saleRequestBatches"), {
+        destination: dest, requestDate: orderDate,
+        depositRequired: depositTotal, depositReceived:false, depositReceivedDate:"",
+        lineCount: group.length, status:"대기중",
+        fromOrderBatchId: batchRef.id,
+        createdBy: currentUser.name, createdByUsername: currentUser.username, createdAt: serverTimestamp()
+      });
+      for(const {orderRef, l} of group){
         await addDoc(collection(db,"saleRequests"), {
-          destination: l.destination, modelId: l.modelId, modelGroup:l.m.modelGroup, baseModel:l.m.baseModel, capacity:l.m.capacity,
+          batchId: srBatchRef.id,
+          destination: dest, modelId: l.modelId, modelGroup:l.m.modelGroup, baseModel:l.m.baseModel, capacity:l.m.capacity,
           systemModel:l.m.systemModel, petName:l.m.petName||"", carrier,
           quantity: l.quantity, fulfilledCount:0, matchedItemIds:[],
-          salePrice: l.salePrice, depositRequired: l.salePrice*l.quantity, depositReceived:false, depositReceivedDate:"",
+          salePrice: l.salePrice, saleDiscountAmt: l.saleDiscountAmt, saleDiscountPct: l.saleDiscountPct,
           requestDate: orderDate, status:"대기중",
           fromOrderId: orderRef.id,
           createdBy: currentUser.name, createdByUsername: currentUser.username, createdAt: serverTimestamp()
@@ -3768,23 +3824,42 @@
     const linkedOrderIds = new Set();
     saleReqSnap.forEach(d=>{ const s = d.data(); if(s.fromOrderId) linkedOrderIds.add(s.fromOrderId); });
 
-    let created = 0;
-    for(const d of ordersSnap.docs){
+    // 주문배치(batchId)+판매처 단위로 묶어서 판매요청 배치를 하나씩만 생성
+    const groups = {}; // "batchId|destination" -> [{id, o}]
+    ordersSnap.forEach(d=>{
       const o = d.data();
-      if(o.status==="취소") continue;
-      if(!o.destination || !o.salePrice) continue;
-      if(linkedOrderIds.has(d.id)) continue;
+      if(o.status==="취소") return;
+      if(!o.destination || !o.salePrice) return;
+      if(linkedOrderIds.has(d.id)) return;
+      const key = (o.batchId||"none") + "|" + o.destination;
+      if(!groups[key]) groups[key] = [];
+      groups[key].push({ id:d.id, o });
+    });
 
-      await addDoc(collection(db,"saleRequests"), {
-        destination: o.destination, modelId: o.modelId, modelGroup:o.modelGroup, baseModel:o.baseModel, capacity:o.capacity,
-        systemModel:o.systemModel, petName:o.petName||"", carrier: o.carrier||"",
-        quantity: o.quantity, fulfilledCount:0, matchedItemIds:[],
-        salePrice: o.salePrice, depositRequired: o.salePrice*o.quantity, depositReceived:false, depositReceivedDate:"",
-        requestDate: o.orderDate||todayStr(), status:"대기중",
-        fromOrderId: d.id,
+    let created = 0;
+    for(const key of Object.keys(groups)){
+      const group = groups[key];
+      const dest = group[0].o.destination;
+      const requestDate = group[0].o.orderDate || todayStr();
+      const depositTotal = group.reduce((sum,g)=> sum + g.o.salePrice*g.o.quantity, 0);
+      const srBatchRef = await addDoc(collection(db,"saleRequestBatches"), {
+        destination: dest, requestDate,
+        depositRequired: depositTotal, depositReceived:false, depositReceivedDate:"",
+        lineCount: group.length, status:"대기중",
         createdBy: currentUser.name, createdByUsername: currentUser.username, createdAt: serverTimestamp()
       });
-      created++;
+      for(const {id, o} of group){
+        await addDoc(collection(db,"saleRequests"), {
+          batchId: srBatchRef.id,
+          destination: dest, modelId: o.modelId, modelGroup:o.modelGroup, baseModel:o.baseModel, capacity:o.capacity,
+          systemModel:o.systemModel, petName:o.petName||"", carrier: o.carrier||"",
+          quantity: o.quantity, fulfilledCount:0, matchedItemIds:[],
+          salePrice: o.salePrice, requestDate, status:"대기중",
+          fromOrderId: id,
+          createdBy: currentUser.name, createdByUsername: currentUser.username, createdAt: serverTimestamp()
+        });
+        created++;
+      }
     }
     if(created>0){
       logAction("주문 판매조건 자동반영", created+"건");
@@ -5902,6 +5977,7 @@
         document.getElementById("item-indate-input").value = todayStr();
       }
     }
+    setTimeout(applyCustomTabLabels, 400);
   };
 
   function showMsg(elId, text, type){
