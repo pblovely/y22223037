@@ -207,19 +207,17 @@
           </span>
         </div>
         <div id="dash-stat-cards" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px;"></div>
-        <div style="display:flex;gap:16px;flex-wrap:wrap;">
-          <div style="flex:1;min-width:260px;">
-            <h3 style="font-size:13px;">통신사별</h3>
-            <div id="dash-carrier-list"></div>
-          </div>
-          <div style="flex:1;min-width:260px;">
-            <h3 style="font-size:13px;">모델/펫네임별</h3>
-            <div id="dash-model-list"></div>
-          </div>
-          <div style="flex:1;min-width:260px;">
-            <h3 style="font-size:13px;">판매처별</h3>
-            <div id="dash-dest-list"></div>
-          </div>
+        <div>
+          <h3 style="font-size:13px;">통신사별</h3>
+          <div id="dash-carrier-list"></div>
+        </div>
+        <div style="margin-top:18px;">
+          <h3 style="font-size:13px;">모델/펫네임별</h3>
+          <div id="dash-model-list"></div>
+        </div>
+        <div style="margin-top:18px;">
+          <h3 style="font-size:13px;">판매처별</h3>
+          <div id="dash-dest-list"></div>
         </div>
       </div>
       <div class="card">
@@ -291,6 +289,9 @@
           <span style="color:var(--line);">|</span>
           <label style="font-size:12.5px;">기타 금액(원)<input type="number" id="payment-other-amount-input" placeholder="주문에 없는 결제분" style="margin-left:6px;width:130px;padding:5px 6px;border:1px solid #c7c7c7;font-size:12.5px;"></label>
           <span class="info-tip" title="체크한 주문 외에 같이 이체해야 할 금액이 있으면 여기 적으세요. 이 금액은 주문과 연결되지 않으니, 나중에 재고를 따로 등록해주셔야 합니다.">ⓘ</span>
+          <span style="color:var(--line);">|</span>
+          <button class="btn small secondary" style="width:auto;" onclick="backfillSaleRequestsFromOrders()">기존 주문 판매조건 → 판매요청 반영</button>
+          <span class="info-tip" title="예전에 만든 주문 중 판매처·판매가가 있는데 판매요청이 안 만들어진 것들을 지금 한 번에 만들어줍니다.">ⓘ</span>
         </div>
         <div id="order-list"></div>
       </div>
@@ -3035,6 +3036,38 @@
     loadOrderList();
   };
 
+  window.backfillSaleRequestsFromOrders = async function(){
+    if(!confirm("판매처·판매가가 있는데 판매요청이 아직 없는 기존 주문들을 찾아서, 판매요청을 만들어드릴까요?")) return;
+
+    const ordersSnap = await getDocs(collection(db,"orders"));
+    const saleReqSnap = await getDocs(collection(db,"saleRequests"));
+    const linkedOrderIds = new Set();
+    saleReqSnap.forEach(d=>{ const s = d.data(); if(s.fromOrderId) linkedOrderIds.add(s.fromOrderId); });
+
+    let created = 0;
+    for(const d of ordersSnap.docs){
+      const o = d.data();
+      if(o.status==="취소") continue;
+      if(!o.destination || !o.salePrice) continue;
+      if(linkedOrderIds.has(d.id)) continue; // 이미 판매요청이 있음
+
+      await addDoc(collection(db,"saleRequests"), {
+        destination: o.destination, modelId: o.modelId, modelGroup:o.modelGroup, baseModel:o.baseModel, capacity:o.capacity,
+        systemModel:o.systemModel, petName:o.petName||"", carrier: o.carrier||"",
+        quantity: o.quantity, fulfilledCount:0, matchedItemIds:[],
+        salePrice: o.salePrice, depositRequired: o.salePrice*o.quantity, depositReceived:false, depositReceivedDate:"",
+        requestDate: o.orderDate||todayStr(), status:"대기중",
+        fromOrderId: d.id,
+        createdBy: currentUser.name, createdByUsername: currentUser.username, createdAt: serverTimestamp()
+      });
+      created++;
+    }
+
+    logAction("기존 주문 판매요청 소급생성", created+"건");
+    alert(created+"건의 판매요청을 새로 만들었습니다.");
+    loadSaleRequestList();
+  };
+
   let orderBatchLinesCache = {}; // batchId -> lines[]
 
   async function loadOrderList(){
@@ -4309,9 +4342,9 @@
     statHtml += statCard(scopeLabel+" 입고", inCount+"대", "#1565c0");
     statHtml += statCard(scopeLabel+" 판매", saleCount+"대", "#8a6d00");
     statHtml += statCard(scopeLabel+" 매입액", purchaseSum.toLocaleString()+"원", "#1565c0");
+    statHtml += statCard("샀는데 도착 안한 금액 (매입)", pendingPurchaseAmount.toLocaleString()+"원 ("+pendingPurchaseCount+"대)", "#1565c0");
     statHtml += statCard(scopeLabel+" 매출액", saleSum.toLocaleString()+"원", "#8a6d00");
-    statHtml += statCard("샀는데 도착 안한 금액", pendingPurchaseAmount.toLocaleString()+"원 ("+pendingPurchaseCount+"대)", "#1565c0", true);
-    statHtml += statCard("팔았는데 안 준 금액", pendingSaleAmount.toLocaleString()+"원 ("+pendingSaleCount+"대)", "#8a6d00", true);
+    statHtml += statCard("팔았는데 안 준 금액 (매출)", pendingSaleAmount.toLocaleString()+"원 ("+pendingSaleCount+"대)", "#8a6d00");
     statEl.innerHTML = statHtml;
 
     function renderFullList(el, agg, nameLabel){
