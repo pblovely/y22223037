@@ -30,7 +30,7 @@
   .btn{ width:100%; padding:11px; background:var(--navy); color:#fff; border:none; font-size:14px; font-weight:700; cursor:pointer; }
   .btn:hover{ background:var(--navy-dark); }
   .btn.secondary{ background:#fff; color:var(--navy); border:1px solid var(--navy); margin-top:8px; }
-  .btn.small{ width:auto; padding:8px 16px; font-size:13px; }
+  .btn.small{ width:auto; padding:5px 12px; font-size:12.5px; }
   .btn.danger{ background:var(--danger); }
   .btn.danger:hover{ background:#96291d; }
   .switch-link{ margin-top:16px; text-align:center; font-size:12.5px; color:var(--gray); }
@@ -56,13 +56,23 @@
   .tab-btn{ padding:13px 18px; font-size:13.5px; font-weight:600; color:var(--gray); background:none; border:none; cursor:pointer; border-bottom:3px solid transparent; }
   .tab-btn.active{ color:var(--navy); border-bottom-color:var(--navy); }
   .tab-btn:hover{ color:var(--navy); }
+  .app-body{ display:flex; align-items:flex-start; }
+  .sidebar{ width:190px; flex-shrink:0; background:#fff; border-right:1px solid var(--line); }
+  .sidebar-section-label{ padding:12px 16px 4px 16px; font-size:11px; font-weight:700; color:var(--gray); letter-spacing:0.5px; }
+  .sidebar .tab-btn{ display:block; width:100%; text-align:left; padding:9px 16px; border-bottom:none; border-left:3px solid transparent; }
+  .sidebar .tab-btn.active{ border-bottom-color:transparent; border-left-color:var(--navy); background:#f2f2f2; }
+  #admin-toggle-btn{ display:block; width:100%; text-align:left; padding:9px 16px; font-size:12.5px; font-weight:700; color:var(--navy); background:#eee; border:none; cursor:pointer; border-top:1px solid var(--line); margin-top:8px; }
+  #admin-toggle-btn:hover{ background:#e6e6e6; }
+  #admin-submenu{ display:none; border-bottom:1px solid var(--line); }
+  #admin-submenu.open{ display:block; }
+  .content-wrap{ flex:1; min-width:0; }
   .tab-panel{ display:none; padding:24px; }
   .tab-panel.active{ display:block; }
   .card{ background:#fff; border:1px solid var(--line); padding:20px; margin-bottom:16px; max-width:960px; }
   .card h3{ margin:0 0 6px 0; font-size:14px; color:var(--navy); }
   .card p.desc{ font-size:12.5px; color:var(--gray); margin:0 0 12px 0; }
   .perm-tag{ display:inline-block; font-size:11px; padding:3px 8px; margin:3px 4px 0 0; background:#eee; color:var(--navy); border:1px solid var(--navy); }
-  .inline-form{ display:flex; gap:0; margin-bottom:16px; flex-wrap:wrap; }
+  .inline-form{ display:flex; gap:0; margin-bottom:10px; flex-wrap:wrap; }
   .inline-form input, .inline-form select{ margin-left:-1px; }
   .inline-form input:first-child, .inline-form select:first-child{ margin-left:0; }
   .inline-form button{ margin-left:6px; }
@@ -77,8 +87,8 @@
   .stack-row input:focus, .stack-row select:focus{ outline:2px solid var(--accent); outline-offset:-2px; }
   .field{ margin-bottom:0; }
   .auth-box .field{ margin-bottom:13px; }
-  .inline-form input{ flex:1; min-width:140px; padding:9px 10px; border:1px solid #c7c7c7; font-size:13px; }
-  .list-row{ display:flex; justify-content:space-between; align-items:center; padding:10px 12px; border:1px solid var(--line); border-top:none; font-size:13.5px; }
+  .inline-form input{ flex:1; min-width:140px; padding:5px 9px; border:1px solid #c7c7c7; font-size:12.5px; }
+  .list-row{ display:flex; justify-content:space-between; align-items:center; padding:5px 10px; border:1px solid var(--line); border-top:none; font-size:13px; }
   .list-row:first-of-type{ border-top:1px solid var(--line); }
   .list-empty{ font-size:12.5px; color:var(--gray); padding:12px; border:1px dashed var(--line); }
   .soon{ font-size:13px; color:var(--gray); }
@@ -146,27 +156,28 @@
       </div>
     </div>
 
-    <!-- 관리자 메뉴 -->
-    <div id="admin-group">
-      <div class="group-label">관리자 메뉴</div>
-      <div class="tabbar" id="admin-tabbar">
-        <button class="tab-btn" data-tab="tab-site" id="tabbtn-site" onclick="switchTab('tab-site')" style="display:none;">사이트 설정</button>
-        <button class="tab-btn" data-tab="tab-team" id="tabbtn-team" onclick="switchTab('tab-team')" style="display:none;">팀 관리</button>
-        <button class="tab-btn" data-tab="tab-inv-admin" id="tabbtn-inv-admin" onclick="switchTab('tab-inv-admin')" style="display:none;">재고 기초설정</button>
-        <button class="tab-btn" data-tab="tab-users" id="tabbtn-users" onclick="switchTab('tab-users')" style="display:none;">사용자 관리</button>
-        <button class="tab-btn" data-tab="tab-settlement" id="tabbtn-settlement" onclick="switchTab('tab-settlement')" style="display:none;">정산 설정</button>
-        <button class="tab-btn" data-tab="tab-logs" id="tabbtn-logs" onclick="switchTab('tab-logs')" style="display:none;">이력</button>
-      </div>
-    </div>
+    <div class="app-body">
+      <div class="sidebar" id="app-sidebar">
+        <div id="work-group">
+          <div class="sidebar-section-label">작업 메뉴</div>
+          <button class="tab-btn" data-tab="tab-dashboard" id="tabbtn-dashboard" onclick="switchTab('tab-dashboard')" style="display:none;">대시보드</button>
+          <button class="tab-btn" data-tab="tab-inv-work" id="tabbtn-inv-work" onclick="switchTab('tab-inv-work')" style="display:none;">재고 등록</button>
+        </div>
 
-    <!-- 작업 메뉴 -->
-    <div id="work-group">
-      <div class="group-label">작업 메뉴 (협업)</div>
-      <div class="tabbar" id="work-tabbar">
-        <button class="tab-btn" data-tab="tab-dashboard" id="tabbtn-dashboard" onclick="switchTab('tab-dashboard')" style="display:none;">대시보드</button>
-        <button class="tab-btn" data-tab="tab-inv-work" id="tabbtn-inv-work" onclick="switchTab('tab-inv-work')" style="display:none;">재고 등록</button>
+        <div id="admin-group">
+          <button id="admin-toggle-btn" onclick="toggleAdminMenu()">⚙ 관리자</button>
+          <div id="admin-submenu">
+            <button class="tab-btn" data-tab="tab-site" id="tabbtn-site" onclick="switchTab('tab-site')" style="display:none;">사이트 설정</button>
+            <button class="tab-btn" data-tab="tab-team" id="tabbtn-team" onclick="switchTab('tab-team')" style="display:none;">팀 관리</button>
+            <button class="tab-btn" data-tab="tab-inv-admin" id="tabbtn-inv-admin" onclick="switchTab('tab-inv-admin')" style="display:none;">재고 기초설정</button>
+            <button class="tab-btn" data-tab="tab-users" id="tabbtn-users" onclick="switchTab('tab-users')" style="display:none;">사용자 관리</button>
+            <button class="tab-btn" data-tab="tab-settlement" id="tabbtn-settlement" onclick="switchTab('tab-settlement')" style="display:none;">정산 설정</button>
+            <button class="tab-btn" data-tab="tab-logs" id="tabbtn-logs" onclick="switchTab('tab-logs')" style="display:none;">이력</button>
+          </div>
+        </div>
       </div>
-    </div>
+
+      <div class="content-wrap">
 
     <!-- ===== 작업: 대시보드 ===== -->
     <div id="tab-dashboard" class="tab-panel">
@@ -513,6 +524,9 @@
           <div class="stack-row"><label>출고일 (선택)</label><input type="date" id="item-outdate-input"></div>
         </div>
         <button class="btn small" onclick="addInventoryItem()">재고 등록</button>
+      </div>
+    </div>
+
       </div>
     </div>
 
@@ -1924,12 +1938,19 @@
     document.getElementById("signup-form").style.display="none";
     document.getElementById("login-form").style.display="block";
   };
+  const ADMIN_TAB_IDS = ["tab-site","tab-team","tab-inv-admin","tab-users","tab-settlement","tab-logs"];
+  window.toggleAdminMenu = function(){
+    document.getElementById("admin-submenu").classList.toggle("open");
+  };
   window.switchTab = function(tabId){
     document.querySelectorAll(".tab-panel").forEach(el=>el.classList.remove("active"));
     document.querySelectorAll(".tab-btn").forEach(el=>el.classList.remove("active"));
     document.getElementById(tabId).classList.add("active");
     const btn = document.querySelector('.tab-btn[data-tab="'+tabId+'"]');
     if(btn) btn.classList.add("active");
+    if(ADMIN_TAB_IDS.includes(tabId)){
+      document.getElementById("admin-submenu").classList.add("open");
+    }
 
     if(tabId==="tab-team") loadTeamList();
     if(tabId==="tab-users") loadUserAdminList();
