@@ -163,18 +163,29 @@
           <button class="tab-btn" data-tab="tab-inv-work" id="tabbtn-inv-work" onclick="switchTab('tab-inv-work')" style="display:none;">재고 등록</button>
         </div>
         <button id="admin-toggle-btn" onclick="toggleAdminMenu()" style="display:none;">⚙ 관리자</button>
-      </div>
-
-      <div class="content-wrap">
-
-        <div class="tabbar" id="admin-group" style="display:none;">
+        <div id="admin-group" style="display:none;">
           <button class="tab-btn" data-tab="tab-site" id="tabbtn-site" onclick="switchTab('tab-site')" style="display:none;">사이트 설정</button>
           <button class="tab-btn" data-tab="tab-team" id="tabbtn-team" onclick="switchTab('tab-team')" style="display:none;">팀 관리</button>
-          <button class="tab-btn" data-tab="tab-inv-admin" id="tabbtn-inv-admin" onclick="switchTab('tab-inv-admin')" style="display:none;">재고 기초설정</button>
+          <button class="tab-btn" id="tabbtn-inv-admin" onclick="openInvAdminSection()" style="display:none;">재고 기초설정</button>
           <button class="tab-btn" data-tab="tab-users" id="tabbtn-users" onclick="switchTab('tab-users')" style="display:none;">사용자 관리</button>
           <button class="tab-btn" data-tab="tab-settlement" id="tabbtn-settlement" onclick="switchTab('tab-settlement')" style="display:none;">정산 설정</button>
           <button class="tab-btn" data-tab="tab-logs" id="tabbtn-logs" onclick="switchTab('tab-logs')" style="display:none;">이력</button>
         </div>
+      </div>
+
+      <div class="sidebar" id="inv-admin-submenu" style="display:none;">
+        <div class="sidebar-section-label">재고 기초설정</div>
+        <button class="tab-btn" data-tab="tab-inv-model" onclick="switchTab('tab-inv-model')">모델 등록</button>
+        <button class="tab-btn" data-tab="tab-inv-color" onclick="switchTab('tab-inv-color')">색상 등록</button>
+        <button class="tab-btn" data-tab="tab-inv-manufacturer" onclick="switchTab('tab-inv-manufacturer')">제조사</button>
+        <button class="tab-btn" data-tab="tab-inv-location" onclick="switchTab('tab-inv-location')">위치</button>
+        <button class="tab-btn" data-tab="tab-inv-status" onclick="switchTab('tab-inv-status')">현재상태</button>
+        <button class="tab-btn" data-tab="tab-inv-source" onclick="switchTab('tab-inv-source')">입고처</button>
+        <button class="tab-btn" data-tab="tab-inv-dest" onclick="switchTab('tab-inv-dest')">출고처</button>
+        <button class="tab-btn" data-tab="tab-inv-carrier" onclick="switchTab('tab-inv-carrier')">통신사</button>
+      </div>
+
+      <div class="content-wrap">
 
     <!-- ===== 작업: 대시보드 ===== -->
     <div id="tab-dashboard" class="tab-panel">
@@ -215,7 +226,7 @@
     </div>
 
     <!-- ===== 관리자: 재고 기초설정 ===== -->
-    <div id="tab-inv-admin" class="tab-panel">
+    <div id="tab-inv-model" class="tab-panel">
       <div class="card" style="max-width:1400px;">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
           <h3 style="margin:0;">모델 등록</h3>
@@ -244,7 +255,9 @@
         </table>
         </div>
       </div>
+    </div>
 
+    <div id="tab-inv-color" class="tab-panel">
       <div class="card" style="max-width:1400px;">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
           <h3 style="margin:0;">색상 등록</h3>
@@ -266,7 +279,9 @@
         </table>
         </div>
       </div>
+    </div>
 
+    <div id="tab-inv-source" class="tab-panel">
       <div class="card">
         <h3>입고처 종류</h3>
         <p class="desc">단말기를 사오는 곳(매입처) 목록입니다. 재고 등록 시 여기서 선택합니다.</p>
@@ -276,7 +291,9 @@
         </div>
         <div id="source-list"></div>
       </div>
+    </div>
 
+    <div id="tab-inv-dest" class="tab-panel">
       <div class="card">
         <h3>출고처 종류</h3>
         <p class="desc">단말기가 나가는 곳(판매처·개통처) 목록입니다.</p>
@@ -286,7 +303,9 @@
         </div>
         <div id="dest-list"></div>
       </div>
+    </div>
 
+    <div id="tab-inv-carrier" class="tab-panel">
       <div class="card">
         <h3>통신사 관리</h3>
         <p class="desc">기본값 SK/KT/LG가 자동 등록되어 있습니다. 필요시 추가·수정·삭제하세요. (표기는 SK/KT/LG로 통일)</p>
@@ -296,7 +315,9 @@
         </div>
         <div id="carrier-list"></div>
       </div>
+    </div>
 
+    <div id="tab-inv-manufacturer" class="tab-panel">
       <div class="card">
         <h3>제조사 관리</h3>
         <div class="inline-form">
@@ -305,7 +326,9 @@
         </div>
         <div id="manufacturer-list"></div>
       </div>
+    </div>
 
+    <div id="tab-inv-location" class="tab-panel">
       <div class="card">
         <h3>위치 관리</h3>
         <p class="desc">단말기가 현재 보관된 위치(사무실·지점 등) 목록입니다.</p>
@@ -315,7 +338,9 @@
         </div>
         <div id="location-list"></div>
       </div>
+    </div>
 
+    <div id="tab-inv-status" class="tab-panel">
       <div class="card">
         <h3>현재상태 관리</h3>
         <p class="desc">기본값 보유중/판매가 자동 등록되어 있습니다. 필요한 상태값을 자유롭게 추가하세요 (예: 개통완료).</p>
@@ -1111,7 +1136,8 @@
   };
 
   // ---------- 색상 전체 목록 (모델 등록 리스트처럼) ----------
-  function loadColorAdminList(){
+  async function loadColorAdminList(){
+    await fetchModelsCache();
     const bodyEl = document.getElementById("color-table-body");
     if(!bodyEl) return;
     bodyEl.innerHTML = "";
@@ -1935,10 +1961,17 @@
     document.getElementById("signup-form").style.display="none";
     document.getElementById("login-form").style.display="block";
   };
-  const ADMIN_TAB_IDS = ["tab-site","tab-team","tab-inv-admin","tab-users","tab-settlement","tab-logs"];
+  const ADMIN_TAB_IDS = ["tab-site","tab-team","tab-users","tab-settlement","tab-logs"];
+  const INV_ADMIN_TAB_IDS = ["tab-inv-model","tab-inv-color","tab-inv-manufacturer","tab-inv-location","tab-inv-status","tab-inv-source","tab-inv-dest","tab-inv-carrier"];
+
   window.toggleAdminMenu = function(){
     const el = document.getElementById("admin-group");
-    el.style.display = (el.style.display === "none") ? "flex" : "none";
+    el.style.display = (el.style.display === "none") ? "block" : "none";
+  };
+  window.openInvAdminSection = function(){
+    document.getElementById("admin-group").style.display = "block";
+    document.getElementById("inv-admin-submenu").style.display = "block";
+    switchTab("tab-inv-model");
   };
   window.switchTab = function(tabId){
     document.querySelectorAll(".tab-panel").forEach(el=>el.classList.remove("active"));
@@ -1946,18 +1979,28 @@
     document.getElementById(tabId).classList.add("active");
     const btn = document.querySelector('.tab-btn[data-tab="'+tabId+'"]');
     if(btn) btn.classList.add("active");
+
     if(ADMIN_TAB_IDS.includes(tabId) && document.getElementById("admin-toggle-btn").style.display !== "none"){
-      document.getElementById("admin-group").style.display = "flex";
+      document.getElementById("admin-group").style.display = "block";
+    }
+    if(INV_ADMIN_TAB_IDS.includes(tabId) && document.getElementById("tabbtn-inv-admin").style.display !== "none"){
+      document.getElementById("admin-group").style.display = "block";
+      document.getElementById("inv-admin-submenu").style.display = "block";
+      const invBtn = document.getElementById("tabbtn-inv-admin");
+      invBtn.classList.add("active");
     }
 
     if(tabId==="tab-team") loadTeamList();
     if(tabId==="tab-users") loadUserAdminList();
     if(tabId==="tab-logs") loadLogs();
-    if(tabId==="tab-inv-admin"){
-      loadModelAdminList().then(()=> loadColorAdminList());
-      loadSourceList(); loadDestList(); loadCarrierList();
-      loadManufacturerList(); loadLocationList(); loadStatusOptionList();
-    }
+    if(tabId==="tab-inv-model") loadModelAdminList();
+    if(tabId==="tab-inv-color") loadColorAdminList();
+    if(tabId==="tab-inv-source") loadSourceList();
+    if(tabId==="tab-inv-dest") loadDestList();
+    if(tabId==="tab-inv-carrier") loadCarrierList();
+    if(tabId==="tab-inv-manufacturer") loadManufacturerList();
+    if(tabId==="tab-inv-location") loadLocationList();
+    if(tabId==="tab-inv-status") loadStatusOptionList();
     if(tabId==="tab-inv-work"){
       loadModelsIntoItemSelect(); loadSourcesIntoSelect(); loadDestIntoSelect(); loadCarriersIntoSelect();
       loadManufacturersIntoSelect(); loadLocationsIntoSelect(); loadStatusesIntoSelect();
@@ -2078,6 +2121,7 @@
       const hasAnyAdmin = (showSite||showTeam||showInvAdmin||showUsers||showSettlement||showLogs);
       document.getElementById("admin-toggle-btn").style.display = hasAnyAdmin ? "block":"none";
       document.getElementById("admin-group").style.display = "none";
+      document.getElementById("inv-admin-submenu").style.display = "none";
       document.getElementById("work-group").style.display =
         (showDashboard||showInvWork) ? "block":"none";
 
@@ -2090,7 +2134,7 @@
 
       if(showDashboard) switchTab("tab-dashboard");
       else if(showInvWork) switchTab("tab-inv-work");
-      else if(showInvAdmin) switchTab("tab-inv-admin");
+      else if(showInvAdmin) openInvAdminSection();
       else if(showSite) switchTab("tab-site");
       else if(showTeam) switchTab("tab-team");
 
