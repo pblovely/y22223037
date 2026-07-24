@@ -290,9 +290,6 @@
           <span style="color:var(--line);">|</span>
           <label style="font-size:12.5px;">기타 금액(원)<input type="number" id="payment-other-amount-input" placeholder="주문에 없는 결제분" style="margin-left:6px;width:130px;padding:5px 6px;border:1px solid #c7c7c7;font-size:12.5px;"></label>
           <span class="info-tip" title="체크한 주문 외에 같이 이체해야 할 금액이 있으면 여기 적으세요. 이 금액은 주문과 연결되지 않으니, 나중에 재고를 따로 등록해주셔야 합니다.">ⓘ</span>
-          <span style="color:var(--line);">|</span>
-          <button class="btn small secondary" style="width:auto;" onclick="backfillSaleRequestsFromOrders()">기존 주문 판매조건 → 판매요청 반영</button>
-          <span class="info-tip" title="예전에 만든 주문 중 판매처·판매가가 있는데 판매요청이 안 만들어진 것들을 지금 한 번에 만들어줍니다.">ⓘ</span>
         </div>
         <div id="order-list"></div>
       </div>
@@ -304,6 +301,7 @@
           <h3 style="margin:0;">판매 관리 <span class="info-tip" title="구매자가 먼저 입금하고, 실제로 어떤 일련번호를 보낼지는 나중에 정해지는 경우 여기 걸어두세요. 입금 체크 후, 재고 매칭으로 보유중인 실제 재고(일련번호)를 연결하면 그 재고가 판매 처리됩니다. 주문 관리에서 판매조건까지 미리 정한 주문은 여기에 자동으로 반영됩니다.">ⓘ</span></h3>
           <span>
             <button class="btn small secondary" style="width:auto;margin-right:6px;" onclick="openInstantSaleModal()">+ 즉시 판매 (보유중 재고)</button>
+            <button class="btn small secondary" style="width:auto;margin-right:6px;" onclick="openPasteSaleModal()">텍스트로 붙여넣기 판매처리</button>
             <button class="btn small" style="width:auto;" onclick="openSaleRequestModal()">+ 새 판매요청 (예약)</button>
           </span>
         </div>
@@ -734,6 +732,18 @@
       </div>
     </div>
 
+    <!-- 텍스트 붙여넣기 판매처리 팝업 -->
+    <div id="paste-sale-modal-overlay" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.55);z-index:1000;align-items:center;justify-content:center;">
+      <div style="background:#fff;border:2px solid var(--navy);max-width:700px;width:96%;max-height:90vh;overflow-y:auto;padding:22px;position:relative;">
+        <button onclick="closePasteSaleModal()" style="position:absolute;top:12px;right:12px;background:none;border:1px solid var(--navy);width:26px;height:26px;cursor:pointer;font-size:13px;">✕</button>
+        <h3 style="margin-top:0;margin-bottom:4px;">텍스트로 붙여넣기 판매처리</h3>
+        <p class="desc">보유중인 재고를 여러 대 한 번에 판매 처리합니다. 한 줄에 "일련번호" 만 있어도 되고, "일련번호  판매가"처럼 써도 됩니다. 나머지 줄(업체명·날짜 등)에서 판매처·출고일을 최대한 찾아드려요.</p>
+        <textarea id="paste-sale-textarea" rows="8" style="width:100%;box-sizing:border-box;padding:8px;border:1px solid #c7c7c7;font-size:12.5px;font-family:monospace;" placeholder="예:&#10;에이스 판매 7/24&#10;55762   396000&#10;79798   396000"></textarea>
+        <button class="btn small" style="width:auto;margin-top:8px;" onclick="analyzePasteSale()">분석하기</button>
+        <div id="paste-sale-analysis" style="margin-top:14px;"></div>
+      </div>
+    </div>
+
     <!-- 조건 추가 팝업 -->
     <div id="add-condition-modal-overlay" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.55);z-index:1000;align-items:center;justify-content:center;">
       <div style="background:#fff;border:2px solid var(--navy);max-width:480px;width:94%;padding:22px;position:relative;">
@@ -871,21 +881,40 @@
     </div>
 
     <div id="salereq-modal-overlay" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.55);z-index:1000;align-items:center;justify-content:center;">
-      <div style="background:#fff;border:2px solid var(--navy);max-width:560px;width:94%;max-height:90vh;overflow-y:auto;padding:22px;position:relative;">
+      <div style="background:#fff;border:2px solid var(--navy);max-width:820px;width:96%;max-height:90vh;overflow-y:auto;padding:22px;position:relative;">
         <button onclick="closeSaleRequestModal()" style="position:absolute;top:12px;right:12px;background:none;border:1px solid var(--navy);width:26px;height:26px;cursor:pointer;font-size:13px;">✕</button>
-        <h3 style="margin-top:0;margin-bottom:4px;" id="salereq-modal-title">새 판매요청</h3>
-        <p class="desc">구매자가 입금할 예정이거나 이미 입금한 건을 등록합니다. 실제 재고(일련번호)는 나중에 매칭하세요.</p>
+        <h3 style="margin-top:0;margin-bottom:4px;">새 판매요청</h3>
+        <p class="desc">한 업체에 여러 모델을 한 번에 예약 판매할 때, 아래 표에 품목을 계속 추가하세요. 구매자가 입금하면 입금완료 체크하고, 실제 재고는 나중에 "재고 매칭"으로 연결하세요.</p>
         <div class="stack-form">
           <div class="stack-row"><label>요청일</label><input type="text" id="salereq-date-input" placeholder="예: 20260724" maxlength="8" inputmode="numeric"></div>
           <div class="stack-row"><label>판매처</label><select id="salereq-dest-select"><option value="">선택</option></select></div>
-          <div class="stack-row"><label>모델 검색</label><input type="text" id="salereq-model-search" placeholder="모델명 입력해서 찾기" oninput="filterSelectOptions('salereq-model-select', this.value)"></div>
-          <div class="stack-row"><label>모델 (모델명+기가수)</label><select id="salereq-model-select"><option value="">모델을 선택하세요</option></select></div>
-          <div class="stack-row"><label>통신사</label><select id="salereq-carrier-select"></select></div>
-          <div class="stack-row"><label>수량</label><input type="number" id="salereq-qty-input" value="1" oninput="onSaleReqQtyChange()"></div>
-          <div class="stack-row"><label>판매가 (대당)</label><input type="number" id="salereq-price-input" oninput="onSaleReqQtyChange()"></div>
-          <div class="stack-row"><label>입금받을 총액</label><input type="number" id="salereq-deposit-input" placeholder="자동계산: 판매가×수량, 수정 가능"></div>
         </div>
-        <button class="btn small" style="width:auto;" onclick="submitSaleRequest()">저장</button>
+
+        <p class="desc" style="margin-top:14px;margin-bottom:4px;font-weight:700;color:var(--navy);">판매 품목</p>
+        <div style="overflow-x:auto;border:1px solid var(--line);margin-bottom:8px;">
+          <table style="border-collapse:collapse;font-size:12px;white-space:nowrap;width:100%;">
+            <thead>
+              <tr style="background:#fafafa;">
+                <th style="padding:6px;border:1px solid var(--line);">모델</th>
+                <th style="padding:6px;border:1px solid var(--line);">통신사</th>
+                <th style="padding:6px;border:1px solid var(--line);">수량</th>
+                <th style="padding:6px;border:1px solid var(--line);">출고가</th>
+                <th style="padding:6px;border:1px solid var(--line);">판매가</th>
+                <th style="padding:6px;border:1px solid var(--line);">판매할인</th>
+                <th style="padding:6px;border:1px solid var(--line);">판매할인%</th>
+                <th style="padding:6px;border:1px solid var(--line);">소계</th>
+                <th style="padding:6px;border:1px solid var(--line);"></th>
+              </tr>
+            </thead>
+            <tbody id="salereq-lines-body"></tbody>
+          </table>
+        </div>
+        <button class="btn small secondary" style="width:auto;margin-bottom:14px;" onclick="addSaleReqLine()">+ 품목 추가</button>
+
+        <div class="stack-form">
+          <div class="stack-row"><label>입금받을 총액</label><input type="number" id="salereq-deposit-input" placeholder="자동계산: 품목 판매가×수량 합계, 수정 가능"></div>
+        </div>
+        <button class="btn small" style="width:auto;" onclick="submitSaleRequest()">판매요청 등록</button>
       </div>
     </div>
 
@@ -909,7 +938,8 @@
         <button onclick="closeItemModal()" style="position:absolute;top:12px;right:12px;background:none;border:1px solid var(--navy);width:26px;height:26px;cursor:pointer;font-size:13px;">✕</button>
         <h3 id="item-modal-title" style="margin-top:0;margin-bottom:4px;">재고 입고 등록</h3>
         <p class="desc">모델·색상을 선택하면 출고가가 자동으로 채워집니다.</p>
-        <button class="btn small secondary" id="item-modal-excel-btn" style="width:auto;margin-bottom:12px;" onclick="closeItemModal();openExcelUploadModal();">파일로 여러 건 업로드</button>
+        <button class="btn small secondary" id="item-modal-excel-btn" style="width:auto;margin-bottom:12px;margin-right:6px;" onclick="closeItemModal();openExcelUploadModal();">파일로 여러 건 업로드</button>
+        <button class="btn small secondary" id="item-modal-paste-btn" style="width:auto;margin-bottom:12px;" onclick="closeItemModal();openPasteRegisterModal();">텍스트로 붙여넣기 등록</button>
 
         <div class="stack-form">
           <div class="stack-row"><label>주문일</label><input type="text" id="item-orderdate-input" placeholder="예: 20260724" maxlength="8" inputmode="numeric"></div>
@@ -2445,6 +2475,7 @@
     document.getElementById("item-submit-btn").textContent = "재고 등록";
     document.getElementById("item-cancelsale-btn").style.display = "none";
     document.getElementById("item-modal-excel-btn").style.display = "inline-block";
+    document.getElementById("item-modal-paste-btn").style.display = "inline-block";
     clearItemModalFields();
     document.getElementById("item-modal-overlay").style.display = "flex";
     if(!document.getElementById("item-indate-input").value){
@@ -2565,6 +2596,7 @@
     document.getElementById("item-submit-btn").textContent = "수정 저장";
     document.getElementById("item-cancelsale-btn").style.display = "inline-block";
     document.getElementById("item-modal-excel-btn").style.display = "none";
+    document.getElementById("item-modal-paste-btn").style.display = "none";
     document.getElementById("item-modal-overlay").style.display = "flex";
   };
 
@@ -3039,38 +3071,6 @@
     loadOrderList();
   };
 
-  window.backfillSaleRequestsFromOrders = async function(){
-    if(!confirm("판매처·판매가가 있는데 판매요청이 아직 없는 기존 주문들을 찾아서, 판매요청을 만들어드릴까요?")) return;
-
-    const ordersSnap = await getDocs(collection(db,"orders"));
-    const saleReqSnap = await getDocs(collection(db,"saleRequests"));
-    const linkedOrderIds = new Set();
-    saleReqSnap.forEach(d=>{ const s = d.data(); if(s.fromOrderId) linkedOrderIds.add(s.fromOrderId); });
-
-    let created = 0;
-    for(const d of ordersSnap.docs){
-      const o = d.data();
-      if(o.status==="취소") continue;
-      if(!o.destination || !o.salePrice) continue;
-      if(linkedOrderIds.has(d.id)) continue; // 이미 판매요청이 있음
-
-      await addDoc(collection(db,"saleRequests"), {
-        destination: o.destination, modelId: o.modelId, modelGroup:o.modelGroup, baseModel:o.baseModel, capacity:o.capacity,
-        systemModel:o.systemModel, petName:o.petName||"", carrier: o.carrier||"",
-        quantity: o.quantity, fulfilledCount:0, matchedItemIds:[],
-        salePrice: o.salePrice, depositRequired: o.salePrice*o.quantity, depositReceived:false, depositReceivedDate:"",
-        requestDate: o.orderDate||todayStr(), status:"대기중",
-        fromOrderId: d.id,
-        createdBy: currentUser.name, createdByUsername: currentUser.username, createdAt: serverTimestamp()
-      });
-      created++;
-    }
-
-    logAction("기존 주문 판매요청 소급생성", created+"건");
-    alert(created+"건의 판매요청을 새로 만들었습니다.");
-    loadSaleRequestList();
-  };
-
   let orderBatchLinesCache = {}; // batchId -> lines[]
 
   async function loadOrderList(){
@@ -3383,152 +3383,337 @@
   }
 
   // ---------- 판매 요청 ----------
-  async function populateSaleReqSelects(){
+  let saleReqLineSeq = 0;
+  async function populateSaleReqTopSelects(){
     const destSel = document.getElementById("salereq-dest-select");
     destSel.innerHTML = '<option value="">선택</option>';
     const destNames = await fetchNamesList("outboundDestinations");
     destNames.forEach(n=>{ const opt=document.createElement("option"); opt.value=n; opt.textContent=n; destSel.appendChild(opt); });
-
-    const carrierSel = document.getElementById("salereq-carrier-select");
-    carrierSel.innerHTML = "";
-    const carrierNames = await fetchNamesList("carriers");
-    carrierNames.forEach(n=>{ const opt=document.createElement("option"); opt.value=n; opt.textContent=n; carrierSel.appendChild(opt); });
-
     await fetchModelsCache();
-    const modelSel = document.getElementById("salereq-model-select");
-    modelSel.innerHTML = '<option value="">모델을 선택하세요</option>';
+  }
+
+  window.openSaleRequestModal = async function(){
+    document.getElementById("salereq-date-input").value = todayStr();
+    document.getElementById("salereq-deposit-input").value = "";
+    document.getElementById("salereq-lines-body").innerHTML = "";
+    saleReqLineSeq = 0;
+    await populateSaleReqTopSelects();
+    await addSaleReqLine();
+    document.getElementById("salereq-modal-overlay").style.display = "flex";
+  };
+  window.closeSaleRequestModal = function(){
+    document.getElementById("salereq-modal-overlay").style.display = "none";
+  };
+
+  window.addSaleReqLine = async function(){
+    const lineId = "sl" + (saleReqLineSeq++);
+    const carrierNames = await fetchNamesList("carriers");
+    const tr = document.createElement("tr");
+    tr.dataset.lineId = lineId;
+
+    function smallInput(cls, type, width){
+      const inp = document.createElement("input");
+      inp.type = type; inp.className = cls; inp.style.width = width; inp.style.fontSize = "11.5px"; inp.style.padding = "4px"; inp.style.boxSizing = "border-box";
+      return inp;
+    }
+    function td(el){
+      const cell = document.createElement("td");
+      cell.style.padding = "4px"; cell.style.border = "1px solid var(--line)";
+      cell.appendChild(el);
+      tr.appendChild(cell);
+      return cell;
+    }
+
+    const modelSel = document.createElement("select");
+    modelSel.className = "sl-model"; modelSel.style.fontSize = "11.5px"; modelSel.style.padding = "4px"; modelSel.style.width = "150px";
+    modelSel.innerHTML = '<option value="">모델 선택</option>';
     modelsCache.forEach(m=>{
       const opt = document.createElement("option");
       opt.value = m.id;
       opt.textContent = (m.baseModel||m.systemModel||m.petName||"모델") + (m.capacity?(" "+m.capacity):"");
       modelSel.appendChild(opt);
     });
-    if(typeof resetSelectSearchCache === "function") resetSelectSearchCache("salereq-model-select");
-  }
-  window.onSaleReqQtyChange = function(){
-    const qty = Number(document.getElementById("salereq-qty-input").value) || 0;
-    const price = Number(document.getElementById("salereq-price-input").value) || 0;
-    document.getElementById("salereq-deposit-input").value = qty*price;
+    modelSel.onchange = ()=> onSaleReqLineModelChange(tr);
+    td(modelSel);
+
+    const carrierSel = document.createElement("select");
+    carrierSel.className = "sl-carrier"; carrierSel.style.fontSize = "11.5px"; carrierSel.style.padding = "4px"; carrierSel.style.width = "70px";
+    carrierNames.forEach(n=>{ const opt=document.createElement("option"); opt.value=n; opt.textContent=n; carrierSel.appendChild(opt); });
+    td(carrierSel);
+
+    const qtyInput = smallInput("sl-qty","number","50px"); qtyInput.value = "1";
+    qtyInput.oninput = ()=> updateSaleReqLineSubtotal(tr);
+    td(qtyInput);
+
+    const listPriceInput = smallInput("sl-listprice","number","85px");
+    listPriceInput.disabled = true; listPriceInput.style.background = "#f2f2f2";
+    td(listPriceInput);
+
+    const saleInput = smallInput("sl-saleprice","number","85px");
+    saleInput.oninput = ()=> onSaleReqLineSalePriceInput(tr);
+    td(saleInput);
+
+    const discAmtInput = smallInput("sl-discountamt","number","70px");
+    discAmtInput.oninput = ()=> onSaleReqLineDiscountAmtInput(tr);
+    td(discAmtInput);
+
+    const discPctInput = smallInput("sl-discountpct","number","60px");
+    discPctInput.oninput = ()=> onSaleReqLineDiscountPctInput(tr);
+    td(discPctInput);
+
+    const subtotalSpan = document.createElement("span");
+    subtotalSpan.className = "sl-subtotal"; subtotalSpan.textContent = "-";
+    td(subtotalSpan);
+
+    const delBtn = document.createElement("button");
+    delBtn.className = "btn small danger"; delBtn.style.width = "auto"; delBtn.style.padding = "3px 8px"; delBtn.textContent = "삭제";
+    delBtn.onclick = ()=>{ tr.remove(); recalcSaleReqDeposit(); };
+    td(delBtn);
+
+    document.getElementById("salereq-lines-body").appendChild(tr);
   };
-  let editingSaleReqId = null;
-  window.openSaleRequestModal = async function(saleReqId, s){
-    editingSaleReqId = saleReqId || null;
-    await populateSaleReqSelects();
-    document.getElementById("salereq-model-search").value = "";
-    filterSelectOptions("salereq-model-select", "");
-    if(editingSaleReqId && s){
-      document.getElementById("salereq-modal-title").textContent = "판매요청 수정";
-      document.getElementById("salereq-date-input").value = s.requestDate || todayStr();
-      document.getElementById("salereq-dest-select").value = s.destination || "";
-      document.getElementById("salereq-model-select").value = s.modelId || "";
-      document.getElementById("salereq-carrier-select").value = s.carrier || "";
-      document.getElementById("salereq-qty-input").value = s.quantity || 1;
-      document.getElementById("salereq-price-input").value = s.salePrice || "";
-      document.getElementById("salereq-deposit-input").value = s.depositRequired || "";
-    }else{
-      document.getElementById("salereq-modal-title").textContent = "새 판매요청";
-      document.getElementById("salereq-date-input").value = todayStr();
-      document.getElementById("salereq-qty-input").value = "1";
-      document.getElementById("salereq-price-input").value = "";
-      document.getElementById("salereq-deposit-input").value = "";
-    }
-    document.getElementById("salereq-modal-overlay").style.display = "flex";
-  };
-  window.closeSaleRequestModal = function(){
-    document.getElementById("salereq-modal-overlay").style.display = "none";
-  };
-  window.submitSaleRequest = async function(){
-    const modelId = document.getElementById("salereq-model-select").value;
+
+  function onSaleReqLineModelChange(tr){
+    const modelId = tr.querySelector(".sl-model").value;
     const m = modelsCache.find(x=>x.id===modelId);
-    if(!m){ alert("모델을 선택해주세요."); return; }
+    if(m){ tr.querySelector(".sl-listprice").value = m.priceIncVat || ""; }
+    updateSaleReqLineSubtotal(tr);
+  }
+  function onSaleReqLineSalePriceInput(tr){
+    const listPrice = Number(tr.querySelector(".sl-listprice").value) || 0;
+    const sale = Number(tr.querySelector(".sl-saleprice").value) || 0;
+    if(listPrice && sale){
+      const amt = listPrice - sale;
+      tr.querySelector(".sl-discountamt").value = amt;
+      tr.querySelector(".sl-discountpct").value = ((amt/listPrice)*100).toFixed(2);
+    }
+    updateSaleReqLineSubtotal(tr);
+  }
+  function onSaleReqLineDiscountAmtInput(tr){
+    const listPrice = Number(tr.querySelector(".sl-listprice").value) || 0;
+    const amt = Number(tr.querySelector(".sl-discountamt").value) || 0;
+    if(listPrice){
+      tr.querySelector(".sl-saleprice").value = listPrice - amt;
+      tr.querySelector(".sl-discountpct").value = ((amt/listPrice)*100).toFixed(2);
+    }
+    updateSaleReqLineSubtotal(tr);
+  }
+  function onSaleReqLineDiscountPctInput(tr){
+    const listPrice = Number(tr.querySelector(".sl-listprice").value) || 0;
+    const pct = tr.querySelector(".sl-discountpct").value;
+    if(listPrice && pct !== ""){
+      const amt = Math.round(listPrice * Number(pct)/100);
+      tr.querySelector(".sl-discountamt").value = amt;
+      tr.querySelector(".sl-saleprice").value = listPrice - amt;
+    }
+    updateSaleReqLineSubtotal(tr);
+  }
+  function updateSaleReqLineSubtotal(tr){
+    const qty = Number(tr.querySelector(".sl-qty").value) || 0;
+    const sale = Number(tr.querySelector(".sl-saleprice").value) || 0;
+    tr.querySelector(".sl-subtotal").textContent = (qty*sale).toLocaleString();
+    recalcSaleReqDeposit();
+  }
+  function recalcSaleReqDeposit(){
+    let total = 0;
+    document.querySelectorAll("#salereq-lines-body tr").forEach(tr=>{
+      const qty = Number(tr.querySelector(".sl-qty").value) || 0;
+      const sale = Number(tr.querySelector(".sl-saleprice").value) || 0;
+      total += qty*sale;
+    });
+    document.getElementById("salereq-deposit-input").value = total;
+  }
+
+  window.submitSaleRequest = async function(){
     const dest = document.getElementById("salereq-dest-select").value;
     if(!dest){ alert("판매처를 선택해주세요."); return; }
-    const carrier = document.getElementById("salereq-carrier-select").value;
-    const qty = Number(document.getElementById("salereq-qty-input").value) || 1;
-    const salePrice = document.getElementById("salereq-price-input").value ? Number(document.getElementById("salereq-price-input").value) : null;
-    const depositRequired = Number(document.getElementById("salereq-deposit-input").value) || 0;
+    const lineRows = Array.from(document.querySelectorAll("#salereq-lines-body tr"));
+    if(lineRows.length===0){ alert("품목을 1개 이상 추가해주세요."); return; }
+
+    const lines = [];
+    for(const tr of lineRows){
+      const modelId = tr.querySelector(".sl-model").value;
+      const m = modelsCache.find(x=>x.id===modelId);
+      if(!m){ alert("모델을 선택하지 않은 품목이 있습니다."); return; }
+      lines.push({
+        modelId, m,
+        carrier: tr.querySelector(".sl-carrier").value,
+        quantity: Number(tr.querySelector(".sl-qty").value) || 1,
+        salePrice: tr.querySelector(".sl-saleprice").value ? Number(tr.querySelector(".sl-saleprice").value) : null,
+        saleDiscountAmt: tr.querySelector(".sl-discountamt").value ? Number(tr.querySelector(".sl-discountamt").value) : null,
+        saleDiscountPct: tr.querySelector(".sl-discountpct").value ? Number(tr.querySelector(".sl-discountpct").value) : null
+      });
+    }
+
     const requestDate = document.getElementById("salereq-date-input").value || todayStr();
+    const depositRequired = Number(document.getElementById("salereq-deposit-input").value) || 0;
 
-    const data = {
-      destination: dest, modelId, modelGroup:m.modelGroup, baseModel:m.baseModel, capacity:m.capacity,
-      systemModel:m.systemModel, petName:m.petName||"", carrier,
-      quantity: qty, salePrice, depositRequired, requestDate
-    };
+    const batchRef = await addDoc(collection(db,"saleRequestBatches"), {
+      destination: dest, requestDate,
+      depositRequired, depositReceived:false, depositReceivedDate:"",
+      lineCount: lines.length, status:"대기중",
+      createdBy: currentUser.name, createdByUsername: currentUser.username, createdAt: serverTimestamp()
+    });
 
-    if(editingSaleReqId){
-      await updateDoc(doc(db,"saleRequests", editingSaleReqId), data);
-      logAction("판매요청 수정", dest+" / "+(m.petName||m.baseModel)+" "+qty+"대");
-    }else{
+    for(const l of lines){
       await addDoc(collection(db,"saleRequests"), {
-        ...data, fulfilledCount:0, matchedItemIds:[],
-        depositReceived:false, depositReceivedDate:"", status:"대기중",
+        batchId: batchRef.id,
+        destination: dest, modelId: l.modelId, modelGroup:l.m.modelGroup, baseModel:l.m.baseModel, capacity:l.m.capacity,
+        systemModel:l.m.systemModel, petName:l.m.petName||"", carrier: l.carrier,
+        quantity: l.quantity, fulfilledCount:0, matchedItemIds:[],
+        salePrice: l.salePrice, saleDiscountAmt: l.saleDiscountAmt, saleDiscountPct: l.saleDiscountPct,
+        requestDate, status:"대기중",
         createdBy: currentUser.name, createdByUsername: currentUser.username, createdAt: serverTimestamp()
       });
-      logAction("판매요청 등록", dest+" / "+(m.petName||m.baseModel)+" "+qty+"대");
     }
+
+    logAction("판매요청 등록", dest+" / 품목 "+lines.length+"개 / 총 "+depositRequired.toLocaleString()+"원");
     closeSaleRequestModal();
     loadSaleRequestList();
   };
+
+  let saleReqBatchLinesCache = {}; // batchId -> lines[]
 
   async function loadSaleRequestList(){
     const listEl = document.getElementById("sale-request-list");
     if(!listEl) return;
     listEl.innerHTML = '<div class="list-empty">불러오는 중...</div>';
-    const snap = await getDocs(query(collection(db,"saleRequests"), orderBy("createdAt","desc")));
-    if(snap.empty){ listEl.innerHTML = '<div class="list-empty">등록된 판매요청이 없습니다.</div>'; return; }
 
-    let html = '<div style="overflow-x:auto;"><table class="data-table" style="min-width:1000px;"><thead><tr>' +
-      '<th>판매처</th><th>펫네임/모델명</th><th>용량</th><th>통신사</th><th class="ta-right">요청수량</th><th class="ta-right">매칭</th>' +
-      '<th class="ta-right">판매가</th><th class="ta-right">입금필요액</th><th>입금상태</th><th>상태</th><th class="ta-right">관리</th>' +
-      '</tr></thead><tbody id="sale-request-tbody"></tbody></table></div>';
-    listEl.innerHTML = html;
-    const tbody = document.getElementById("sale-request-tbody");
+    // 주문에서 판매조건이 잡힌 것들을 조용히 자동 반영 (버튼 없이)
+    await backfillSaleRequestsFromOrders(true);
 
-    snap.forEach(d=>{
+    const batchSnap = await getDocs(query(collection(db,"saleRequestBatches"), orderBy("createdAt","desc")));
+    const linesSnap = await getDocs(collection(db,"saleRequests"));
+
+    const linesByBatch = {};
+    const legacyLines = [];
+    linesSnap.forEach(d=>{
       const s = d.data();
+      if(s.batchId){
+        if(!linesByBatch[s.batchId]) linesByBatch[s.batchId] = [];
+        linesByBatch[s.batchId].push({ id:d.id, ...s });
+      }else{
+        legacyLines.push({ id:d.id, ...s });
+      }
+    });
+    saleReqBatchLinesCache = linesByBatch;
+
+    if(batchSnap.empty && legacyLines.length===0){
+      listEl.innerHTML = '<div class="list-empty">등록된 판매요청이 없습니다.</div>';
+      return;
+    }
+
+    listEl.innerHTML = "";
+
+    function renderBatchRow(batchId, b, lines, isLegacy){
+      const row = document.createElement("div");
+      row.className = "list-row"; row.style.flexWrap = "wrap";
+      const depositLabel = b.depositReceived
+        ? '<span style="color:var(--navy);font-weight:700;">입금완료('+(b.depositReceivedDate||"-")+')</span>'
+        : '<span style="color:var(--danger);font-weight:700;">입금필요 '+(b.depositRequired||0).toLocaleString()+'</span>';
+      row.innerHTML =
+        '<span style="font-size:12.5px;"><b>'+(b.destination||"-")+'</b> · 요청일 '+(b.requestDate||"-")+' · 품목 '+lines.length+'개 · '+depositLabel+(isLegacy?' <span style="color:var(--gray);">(기존건)</span>':'')+'</span>' +
+        '<span>' +
+        '<button class="btn small secondary" style="width:auto;margin-right:4px;" data-detail>상세보기</button>' +
+        (!b.depositReceived ? '<button class="btn small secondary" style="width:auto;margin-right:4px;" data-pay>입금 완료 처리</button>' : '') +
+        '<button class="btn small danger" style="width:auto;" data-cancel>취소</button>' +
+        '</span>';
+      listEl.appendChild(row);
+
+      row.querySelector('[data-detail]').onclick = ()=> openSaleReqBatchDetailModal(batchId, b, lines, isLegacy);
+      const payBtn = row.querySelector('[data-pay]');
+      if(payBtn) payBtn.onclick = async ()=>{
+        const dateInput = prompt("입금일 (예: 20260724)", todayStr());
+        if(dateInput===null) return;
+        if(isLegacy){
+          await updateDoc(doc(db,"saleRequests", batchId), { depositReceived:true, depositReceivedDate:dateInput.trim(), status:"입금완료" });
+        }else{
+          await updateDoc(doc(db,"saleRequestBatches", batchId), { depositReceived:true, depositReceivedDate:dateInput.trim(), status:"입금완료" });
+        }
+        logAction("판매요청 입금 완료 처리", (b.destination||"-")+" / "+(b.depositRequired||0).toLocaleString()+"원");
+        loadSaleRequestList(); loadSettlementTab();
+      };
+      row.querySelector('[data-cancel]').onclick = async ()=>{
+        if(!confirm("이 판매요청을 취소하시겠습니까?")) return;
+        if(isLegacy){
+          await updateDoc(doc(db,"saleRequests", batchId), { status:"취소" });
+        }else{
+          await updateDoc(doc(db,"saleRequestBatches", batchId), { status:"취소" });
+          for(const l of lines){ await updateDoc(doc(db,"saleRequests", l.id), { status:"취소" }); }
+        }
+        logAction("판매요청 취소", b.destination||"-");
+        loadSaleRequestList();
+      };
+    }
+
+    batchSnap.forEach(bd=>{
+      const b = bd.data();
+      renderBatchRow(bd.id, b, linesByBatch[bd.id]||[], false);
+    });
+    legacyLines.forEach(s=>{
+      // 개별건 하나를 "1개 품목짜리 묶음"처럼 표시
+      const pseudoBatch = { destination:s.destination, requestDate:s.requestDate, depositRequired:s.depositRequired, depositReceived:s.depositReceived, depositReceivedDate:s.depositReceivedDate, status:s.status };
+      renderBatchRow(s.id, pseudoBatch, [s], true);
+    });
+  }
+
+  function openSaleReqBatchDetailModal(batchId, b, lines, isLegacy){
+    document.getElementById("order-detail-title").textContent = (b.destination||"-") + " · 요청일 " + (b.requestDate||"-");
+    let html = '<div style="overflow-x:auto;"><table class="data-table" style="min-width:850px;"><thead><tr>' +
+      '<th>펫네임/모델명</th><th>용량</th><th>통신사</th><th class="ta-right">요청수량</th><th class="ta-right">판매가</th><th class="ta-right">판매할인</th><th class="ta-right">매칭</th><th>상태</th><th class="ta-right">관리</th>' +
+      '</tr></thead><tbody id="order-detail-tbody"></tbody></table></div>';
+    document.getElementById("order-detail-body").innerHTML = html;
+    const tbody = document.getElementById("order-detail-tbody");
+    lines.forEach(s=>{
       const remain = (s.quantity||0) - (s.fulfilledCount||0);
-      const depositLabel = s.depositReceived
-        ? '<span style="color:var(--navy);font-weight:700;">입금완료('+(s.depositReceivedDate||"-")+')</span>'
-        : '<span style="color:var(--danger);font-weight:700;">입금대기</span>';
       const tr = document.createElement("tr");
       tr.innerHTML =
-        '<td>'+(s.destination||"-")+'</td>' +
-        '<td>'+(s.petName||s.modelGroup)+'/'+(s.baseModel||s.systemModel||"-")+'</td>' +
+        '<td>'+(s.petName||s.modelGroup||"-")+'/'+(s.baseModel||s.systemModel||"-")+'</td>' +
         '<td>'+(s.capacity||"-")+'</td>' +
         '<td>'+(s.carrier||"-")+'</td>' +
         '<td class="ta-right">'+s.quantity+'대</td>' +
+        '<td class="ta-right">'+(s.salePrice?Number(s.salePrice).toLocaleString():'-')+'</td>' +
+        '<td class="ta-right">'+(s.saleDiscountAmt?Number(s.saleDiscountAmt).toLocaleString():'-')+'</td>' +
         '<td class="ta-right">'+s.fulfilledCount+'/'+s.quantity+'</td>' +
-        '<td class="ta-right">'+(s.salePrice?Number(s.salePrice).toLocaleString()+'원':'-')+'</td>' +
-        '<td class="ta-right">'+(s.depositRequired||0).toLocaleString()+'원</td>' +
-        '<td>'+depositLabel+'</td>' +
         '<td>'+s.status+'</td>' +
-        '<td class="ta-right">' +
-        '<button class="btn small secondary" style="width:auto;margin-right:4px;" data-edit="'+d.id+'">수정</button>' +
-        (!s.depositReceived ? '<button class="btn small secondary" style="width:auto;margin-right:4px;" data-recv="'+d.id+'">입금완료</button>' : '') +
-        (remain>0 ? '<button class="btn small" style="width:auto;margin-right:4px;" data-match="'+d.id+'">재고매칭</button>' : '') +
-        '<button class="btn small danger" style="width:auto;" data-cancel-sr="'+d.id+'">취소</button>' +
-        '</td>';
+        '<td class="ta-right">'+(remain>0 ? '<button class="btn small" style="width:auto;" data-match="'+s.id+'">재고 매칭</button>' : '<span style="color:var(--gray);">완료</span>')+'</td>';
       tbody.appendChild(tr);
-
-      tr.querySelector('[data-edit]').onclick = ()=> openSaleRequestModal(d.id, s);
-      const recvBtn = tr.querySelector('[data-recv]');
-      if(recvBtn) recvBtn.onclick = async ()=>{
-        const dateInput = prompt("입금일 (예: 20260724)", todayStr());
-        if(dateInput===null) return;
-        await updateDoc(doc(db,"saleRequests", d.id), { depositReceived:true, depositReceivedDate: dateInput.trim(), status:"입금완료" });
-        logAction("판매요청 입금 완료 처리", (s.destination||"-")+" / "+(s.depositRequired||0).toLocaleString()+"원");
-        loadSaleRequestList(); loadSettlementTab();
-      };
       const matchBtn = tr.querySelector('[data-match]');
-      if(matchBtn) matchBtn.onclick = ()=> openSaleReqMatchModal(d.id, s);
-      tr.querySelector('[data-cancel-sr]').onclick = async ()=>{
-        if(!confirm("이 판매요청을 취소하시겠습니까?")) return;
-        await updateDoc(doc(db,"saleRequests", d.id), { status:"취소" });
-        logAction("판매요청 취소", s.destination||"-");
-        loadSaleRequestList();
-      };
+      if(matchBtn) matchBtn.onclick = ()=>{ closeOrderDetailModal(); openSaleReqMatchModal(s.id, s); };
     });
+    document.getElementById("order-detail-modal-overlay").style.display = "flex";
   }
+
+  window.backfillSaleRequestsFromOrders = async function(silent){
+    const ordersSnap = await getDocs(collection(db,"orders"));
+    const saleReqSnap = await getDocs(collection(db,"saleRequests"));
+    const linkedOrderIds = new Set();
+    saleReqSnap.forEach(d=>{ const s = d.data(); if(s.fromOrderId) linkedOrderIds.add(s.fromOrderId); });
+
+    let created = 0;
+    for(const d of ordersSnap.docs){
+      const o = d.data();
+      if(o.status==="취소") continue;
+      if(!o.destination || !o.salePrice) continue;
+      if(linkedOrderIds.has(d.id)) continue;
+
+      await addDoc(collection(db,"saleRequests"), {
+        destination: o.destination, modelId: o.modelId, modelGroup:o.modelGroup, baseModel:o.baseModel, capacity:o.capacity,
+        systemModel:o.systemModel, petName:o.petName||"", carrier: o.carrier||"",
+        quantity: o.quantity, fulfilledCount:0, matchedItemIds:[],
+        salePrice: o.salePrice, depositRequired: o.salePrice*o.quantity, depositReceived:false, depositReceivedDate:"",
+        requestDate: o.orderDate||todayStr(), status:"대기중",
+        fromOrderId: d.id,
+        createdBy: currentUser.name, createdByUsername: currentUser.username, createdAt: serverTimestamp()
+      });
+      created++;
+    }
+    if(created>0){
+      logAction("주문 판매조건 자동반영", created+"건");
+      if(!silent) alert(created+"건의 판매요청을 새로 만들었습니다.");
+    }
+    return created;
+  };
 
   let currentSaleReqId = null, currentSaleReqData = null;
   window.openSaleReqMatchModal = function(saleReqId, s){
@@ -4366,24 +4551,28 @@
       }
     });
 
-    function statCard(label, value, color, big){
-      return '<div style="flex:1;min-width:'+(big?'180px':'130px')+';border:1px solid var(--line);background:#fff;padding:10px 14px;">' +
+    function statCard(label, value, color){
+      return '<div style="flex:1;min-width:150px;border:1px solid var(--line);background:#fff;padding:10px 14px;">' +
         '<div style="font-size:11.5px;color:var(--gray);margin-bottom:4px;">'+label+'</div>' +
-        '<div style="font-size:'+(big?'26px':'20px')+';font-weight:800;color:'+(color||'var(--navy)')+';">'+value+'</div></div>';
+        '<div style="font-size:19px;font-weight:800;color:'+(color||'var(--navy)')+';">'+value+'</div></div>';
+    }
+    function statCardWithSub(label, value, subLabel, subValue, color){
+      return '<div style="flex:1;min-width:150px;border:1px solid var(--line);background:#fff;padding:10px 14px;">' +
+        '<div style="font-size:11.5px;color:var(--gray);margin-bottom:4px;">'+label+'</div>' +
+        '<div style="font-size:19px;font-weight:800;color:'+(color||'var(--navy)')+';">'+value+'</div>' +
+        '<div style="font-size:11px;color:var(--gray);margin-top:6px;">'+subLabel+' <span style="font-weight:700;color:'+(color||'var(--navy)')+';">'+subValue+'</span></div></div>';
     }
     const scopeLabel = dashboardScope==="all" ? "전체" : (dashboardCustomMonth ? (dashboardCustomMonth.slice(0,4)+"년 "+dashboardCustomMonth.slice(4,6)+"월") : "당월");
-    let statHtml = statCard(scopeLabel+" 수익 (판매가-입고가만, 공시지원금 별도)", profitSum.toLocaleString()+"원", "#2e7d32", true);
-    statHtml += statCard(scopeLabel+" 공시지원금 순액 (귀속월 기준, 지급-환수)", (subsidyReceivedSum-subsidyClawbackSum).toLocaleString()+"원 ("+subsidyCount+"건)", "#6a1b9a", true);
+    let statHtml = statCard(scopeLabel+" 수익 (판매가-입고가만, 공시지원금 별도)", profitSum.toLocaleString(), "#2e7d32");
+    statHtml += statCard(scopeLabel+" 공시지원금 순액 (귀속월 기준, 지급-환수)", (subsidyReceivedSum-subsidyClawbackSum).toLocaleString()+" ("+subsidyCount+"건)", "#6a1b9a");
     statHtml += statCard("전체 재고", totalCount+"대");
     Object.keys(statusCounts).sort().forEach(s=>{
       statHtml += statCard(s, statusCounts[s]+"대");
     });
     statHtml += statCard(scopeLabel+" 입고", inCount+"대", "#1565c0");
     statHtml += statCard(scopeLabel+" 판매", saleCount+"대", "#8a6d00");
-    statHtml += statCard(scopeLabel+" 매입액", purchaseSum.toLocaleString()+"원", "#1565c0");
-    statHtml += statCard("샀는데 도착 안한 금액 (매입)", pendingPurchaseAmount.toLocaleString()+"원 ("+pendingPurchaseCount+"대)", "#1565c0");
-    statHtml += statCard(scopeLabel+" 매출액", saleSum.toLocaleString()+"원", "#8a6d00");
-    statHtml += statCard("팔았는데 안 준 금액 (매출)", pendingSaleAmount.toLocaleString()+"원 ("+pendingSaleCount+"대)", "#8a6d00");
+    statHtml += statCardWithSub(scopeLabel+" 매입액", purchaseSum.toLocaleString(), "미입고금액", pendingPurchaseAmount.toLocaleString(), "#1565c0");
+    statHtml += statCardWithSub(scopeLabel+" 매출액", saleSum.toLocaleString(), "미출고금액", pendingSaleAmount.toLocaleString(), "#8a6d00");
     statEl.innerHTML = statHtml;
 
     function renderFullList(el, agg, nameLabel){
@@ -4393,7 +4582,7 @@
         '<th style="width:220px;">'+nameLabel+'</th><th class="ta-right" style="width:80px;">대수</th><th class="ta-right" style="width:150px;">매입액</th><th class="ta-right" style="width:150px;">매출액</th>' +
         '</tr></thead><tbody>';
       entries.forEach(([k,v])=>{
-        html += '<tr><td>'+k+'</td><td class="ta-right">'+v.count+'대</td><td class="ta-right">'+v.purchaseAmount.toLocaleString()+'원</td><td class="ta-right">'+v.saleAmount.toLocaleString()+'원</td></tr>';
+        html += '<tr><td>'+k+'</td><td class="ta-right">'+v.count+'대</td><td class="ta-right">'+v.purchaseAmount.toLocaleString()+'</td><td class="ta-right">'+v.saleAmount.toLocaleString()+'</td></tr>';
       });
       html += '</tbody></table></div>';
       el.innerHTML = html;
@@ -4410,9 +4599,9 @@
       discountCount++;
     });
     discountEl.innerHTML =
-      statCard(scopeLabel+" 선할인 합계 (이체 기준)", preDiscountSum.toLocaleString()+"원 ("+discountCount+"건)", "#1565c0") +
-      statCard(scopeLabel+" 타할인 합계 (여신 등 반영)", otherDiscountSum.toLocaleString()+"원", "#8a6d00") +
-      statCard(scopeLabel+" 입고할인 합계 (선할인+타할인)", (preDiscountSum+otherDiscountSum).toLocaleString()+"원", "#2e7d32");
+      statCard(scopeLabel+" 선할인 합계 (이체 기준)", preDiscountSum.toLocaleString()+" ("+discountCount+"건)", "#1565c0") +
+      statCard(scopeLabel+" 타할인 합계 (여신 등 반영)", otherDiscountSum.toLocaleString(), "#8a6d00") +
+      statCard(scopeLabel+" 입고할인 합계 (선할인+타할인)", (preDiscountSum+otherDiscountSum).toLocaleString(), "#2e7d32");
 
     const batchSnap = await getDocs(query(collection(db,"masterStockBatches"), orderBy("uploadedAt","desc"), limit(1)));
     if(batchSnap.empty){
@@ -4820,6 +5009,124 @@
     if(unmatched.length>0) html += '<div style="color:var(--danger);margin-top:6px;">모델을 찾지 못해 등록 안 된 건:<br>'+unmatched.join("<br>")+'</div>';
     resultEl.innerHTML = html;
     loadInventoryList();
+  };
+
+  // ---------- 텍스트 붙여넣기 판매처리 ----------
+  window.openPasteSaleModal = function(){
+    document.getElementById("paste-sale-textarea").value = "";
+    document.getElementById("paste-sale-analysis").innerHTML = "";
+    document.getElementById("paste-sale-modal-overlay").style.display = "flex";
+  };
+  window.closePasteSaleModal = function(){
+    document.getElementById("paste-sale-modal-overlay").style.display = "none";
+  };
+
+  function parsePasteSaleText(text){
+    const lines = text.split(/\r?\n/).map(l=>l.trim()).filter(l=>l);
+    const dataRows = []; const contextLines = [];
+    lines.forEach(line=>{
+      const parts = line.split(/\t+| {2,}/).map(p=>p.trim()).filter(p=>p);
+      if(parts.length===1 && /^\d{4,}$/.test(parts[0])){
+        dataRows.push({ serial:parts[0], price:null });
+      }else if(parts.length===2 && /^\d{4,}$/.test(parts[0]) && /^\d+$/.test(parts[1])){
+        dataRows.push({ serial:parts[0], price:Number(parts[1]) });
+      }else{
+        contextLines.push(line);
+      }
+    });
+    return { dataRows, contextLines };
+  }
+
+  window.analyzePasteSale = async function(){
+    const text = document.getElementById("paste-sale-textarea").value;
+    const { dataRows, contextLines } = parsePasteSaleText(text);
+    const analysisEl = document.getElementById("paste-sale-analysis");
+    if(dataRows.length===0){
+      analysisEl.innerHTML = '<div class="list-empty">일련번호 줄을 찾지 못했습니다. "일련번호" 또는 "일련번호  판매가" 형식으로 써주세요.</div>';
+      return;
+    }
+
+    const destNames = await fetchNamesList("outboundDestinations");
+    const allContextText = contextLines.join(" ");
+    const matchedDest = destNames.find(n=> allContextText.includes(n)) || "";
+    const dateMatch = allContextText.match(/(\d{1,2})\s*\/\s*(\d{1,2})/);
+    let matchedDate = "";
+    if(dateMatch){
+      const year = todayStr().slice(0,4);
+      matchedDate = year + dateMatch[1].padStart(2,"0") + dateMatch[2].padStart(2,"0");
+    }
+
+    // 보유중 재고에서 일련번호 매칭 확인
+    const serials = dataRows.map(r=>r.serial);
+    const foundMap = {};
+    for(let i=0;i<serials.length;i+=30){
+      const chunk = serials.slice(i,i+30);
+      const s = await getDocs(query(collection(db,"inventoryItems"), where("serialNumber","in", chunk)));
+      s.forEach(d=>{ foundMap[d.data().serialNumber] = { id:d.id, ...d.data() }; });
+    }
+
+    let html = '<div style="background:#fafafa;border:1px solid var(--line);padding:10px;margin-bottom:12px;font-size:12.5px;">';
+    html += '<b>파악한 정보</b> — 확인 후 등록해주세요.<br>';
+    html += '인식된 일련번호: <b>'+dataRows.length+'개</b> · 나머지 줄: '+(contextLines.length>0 ? contextLines.map(l=>'"'+l+'"').join(", ") : "없음");
+    html += '</div>';
+
+    html += '<div class="stack-form">';
+    html += '<div class="stack-row"><label>판매처</label><select id="paste-sale-dest-select"></select></div>';
+    html += '<div class="stack-row"><label>출고일</label><input type="text" id="paste-sale-outdate-input" maxlength="8" inputmode="numeric" value="'+(matchedDate||todayStr())+'"></div>';
+    html += '</div>';
+
+    html += '<p class="desc" style="margin-top:10px;margin-bottom:4px;font-weight:700;color:var(--navy);">인식된 품목 미리보기</p>';
+    html += '<div style="overflow-x:auto;border:1px solid var(--line);max-height:260px;overflow-y:auto;"><table class="data-table"><thead><tr><th>일련번호</th><th>펫네임/모델명</th><th class="ta-right">판매가</th><th>상태</th></tr></thead><tbody>';
+    dataRows.forEach(r=>{
+      const it = foundMap[r.serial];
+      html += '<tr'+(it?'':' style="color:var(--danger);"')+'>' +
+        '<td>'+r.serial+'</td>' +
+        '<td>'+(it ? (it.petName||it.modelGroup)+'/'+(it.baseModel||it.systemModel||'-') : '-')+'</td>' +
+        '<td class="ta-right">'+(r.price!=null?r.price.toLocaleString():(it&&it.listPrice?Number(it.listPrice).toLocaleString()+'(출고가)':'-'))+'</td>' +
+        '<td>'+(it ? (it.status==='판매'?'이미 판매됨':'✓ 보유중') : '재고를 찾을 수 없음')+'</td>' +
+        '</tr>';
+    });
+    html += '</tbody></table></div>';
+    html += '<button class="btn small" style="width:auto;margin-top:10px;" onclick="submitPasteSale()">이 내용으로 일괄 판매처리</button>';
+    html += '<div id="paste-sale-result" style="font-size:12.5px;margin-top:10px;"></div>';
+
+    analysisEl.innerHTML = html;
+    analysisEl.dataset.rows = JSON.stringify(dataRows);
+
+    const destSel = document.getElementById("paste-sale-dest-select");
+    destSel.innerHTML = '<option value="">선택</option>';
+    destNames.forEach(n=>{ const opt=document.createElement("option"); opt.value=n; opt.textContent=n; if(n===matchedDest) opt.selected=true; destSel.appendChild(opt); });
+  };
+
+  window.submitPasteSale = async function(){
+    const dataRows = JSON.parse(document.getElementById("paste-sale-analysis").dataset.rows||"[]");
+    const dest = document.getElementById("paste-sale-dest-select").value;
+    const outDate = document.getElementById("paste-sale-outdate-input").value || todayStr();
+    const resultEl = document.getElementById("paste-sale-result");
+    if(!dest){ alert("판매처를 선택해주세요."); return; }
+
+    let sold = 0; const notFound = [];
+    for(const r of dataRows){
+      const snap = await getDocs(query(collection(db,"inventoryItems"), where("serialNumber","==",r.serial)));
+      if(snap.empty){ notFound.push(r.serial); continue; }
+      const itemDoc = snap.docs[0];
+      const it = itemDoc.data();
+      const patch = { destination: dest, status:"판매", outDate };
+      const salePrice = r.price!=null ? r.price : it.listPrice;
+      if(salePrice){
+        patch.salePrice = Number(salePrice);
+        if(it.purchasePrice) patch.profit = Number(salePrice) - Number(it.purchasePrice);
+      }
+      await updateDoc(doc(db,"inventoryItems", itemDoc.id), patch);
+      sold++;
+    }
+
+    logAction("텍스트 붙여넣기 판매처리", dest+" / "+sold+"건");
+    let html = '<b>'+sold+'건 판매처리 완료</b>';
+    if(notFound.length>0) html += '<div style="color:var(--danger);margin-top:6px;">재고를 못 찾아 처리 안 된 일련번호:<br>'+notFound.join(", ")+'</div>';
+    resultEl.innerHTML = html;
+    loadInventoryList();
+    loadSaleRequestList();
   };
 
   window.handleExcelUpload = async function(){
