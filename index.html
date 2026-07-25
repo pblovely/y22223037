@@ -279,7 +279,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-07-25 v92</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-07-25 v93</span>
       <span id="topbar-username">-</span>
       <button onclick="openPersonalSettingsModal()">개인설정</button>
       <button onclick="handleLogout()">로그아웃</button>
@@ -1505,7 +1505,7 @@
           <div class="stack-row"><label>출고가 <span class="info-tip" title="모델을 고르면 모델 등록의 출고가(VAT포함)를 자동으로 가져옵니다. 필요하면 직접 고칠 수 있습니다.">ⓘ</span></label><input type="number" id="resv-listprice-input" oninput="onResvListPriceInput()" placeholder="모델을 고르면 자동으로 채워집니다"></div>
           <div class="stack-row"><label>판매할인 <span class="info-tip" title="정액 또는 %를 넣으면 나머지와 판매가가 자동으로 계산됩니다.">ⓘ</span></label><input type="number" id="resv-salediscountamt-input" oninput="onResvSaleDiscountAmtInput()" placeholder="예: 100000"></div>
           <div class="stack-row"><label>판매할인%</label><input type="number" step="0.01" id="resv-salediscountpct-input" oninput="onResvSaleDiscountPctInput()" placeholder="예: 4.00"></div>
-          <div class="stack-row"><label>판매가 (선택) <span class="info-tip" title="비우면 목록에 '미입력'으로 표시되고, 배정할 때 입력하면 됩니다.">ⓘ</span></label><input type="number" id="resv-saleprice-input" oninput="onResvSalePriceInput()" placeholder="비우면 미입력으로 표시됩니다"></div>
+          <div class="stack-row"><label id="resv-price-label">판매가 (선택) <span class="info-tip" title="비우면 목록에 '미입력'으로 표시되고, 배정할 때 입력하면 됩니다.">ⓘ</span></label><input type="number" id="resv-saleprice-input" oninput="onResvSalePriceInput()" placeholder="비우면 미입력으로 표시됩니다"></div>
         </div>
         <button class="btn small" id="resv-submit-btn" style="width:auto;" onclick="submitReservation()">예약 등록</button>
         <div id="resv-result-msg" style="display:none;font-size:12.5px;margin-top:10px;padding:8px 10px;border-left:3px solid var(--navy);background:#f2f2f2;line-height:1.6;"></div>
@@ -2869,14 +2869,7 @@
       afterChange: loadSourcesIntoSelect
     });
   }
-  window.addSource = async function(){
-    const input = document.getElementById("new-source-input");
-    const name = input.value.trim();
-    if(!name) return;
-    await addDoc(collection(db, "inboundSources"), { name });
-    logAction("입고처 추가", name);
-    input.value = ""; loadSourceList();
-  };
+  // 입고처·출고처는 업체정보로 통합되어 여기서 직접 추가하지 않습니다.
   async function loadSourcesIntoSelect(){
     const sel = document.getElementById("item-source-select");
     sel.innerHTML = '<option value="">입고처를 선택하세요</option>';
@@ -2899,14 +2892,7 @@
       afterChange: loadDestIntoSelect
     });
   }
-  window.addDestination = async function(){
-    const input = document.getElementById("new-dest-input");
-    const name = input.value.trim();
-    if(!name) return;
-    await addDoc(collection(db, "outboundDestinations"), { name });
-    logAction("출고처 추가", name);
-    input.value = ""; loadDestList();
-  };
+  // (위와 같음)
   async function loadDestIntoSelect(){
     const sel = document.getElementById("item-dest-select");
     sel.innerHTML = '<option value="">해당없음</option>';
