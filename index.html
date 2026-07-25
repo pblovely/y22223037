@@ -249,7 +249,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-07-25 v52</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-07-25 v55</span>
       <span id="topbar-username">-</span>
       <button onclick="openPersonalSettingsModal()">개인설정</button>
       <button onclick="handleLogout()">로그아웃</button>
@@ -289,6 +289,7 @@
           <button class="tab-btn" data-label-key="inv-admin" id="tabbtn-inv-admin" onclick="openInvAdminSection()" style="display:none;"><span class="tab-label-text">재고 기초설정</span></button>
           <button class="tab-btn" data-tab="tab-users" data-label-key="tab-users" id="tabbtn-users" onclick="switchTab('tab-users')" style="display:none;"><span class="tab-label-text">사용자 관리</span> <span id="user-admin-badge" style="display:none;background:var(--danger);color:#fff;font-size:10px;padding:1px 6px;margin-left:4px;">0</span></button>
           <button class="tab-btn" data-tab="tab-settlement" data-label-key="tab-settlement" id="tabbtn-settlement" onclick="switchTab('tab-settlement')" style="display:none;"><span class="tab-label-text">정산 관리</span></button>
+          <button class="tab-btn" data-tab="tab-ledger" data-label-key="tab-ledger" id="tabbtn-ledger" onclick="switchTab('tab-ledger')" style="display:none;"><span class="tab-label-text">거래처 정산</span></button>
           <button class="tab-btn" data-tab="tab-b2b" data-label-key="tab-b2b" id="tabbtn-b2b" onclick="switchTab('tab-b2b')" style="display:none;"><span class="tab-label-text">삼성 B2B 여신</span></button>
           <button class="tab-btn" data-tab="tab-logs" data-label-key="tab-logs" id="tabbtn-logs" onclick="switchTab('tab-logs')" style="display:none;"><span class="tab-label-text">이력</span></button>
         </div>
@@ -411,8 +412,9 @@
           <span style="font-size:12px;color:var(--gray);margin-right:8px;">보기</span>
           <button class="btn small" id="order-filter-ing" style="width:auto;padding:0 12px;height:26px;border:1px solid var(--navy);" onclick="setOrderListFilter('ing')">진행중</button>
           <button class="btn small secondary" id="order-filter-done" style="width:auto;padding:0 12px;height:26px;border:1px solid var(--navy);margin-left:-1px;" onclick="setOrderListFilter('done')">최종완료</button>
-          <button class="btn small secondary" id="order-filter-all" style="width:auto;padding:0 12px;height:26px;border:1px solid var(--navy);margin-left:-1px;" onclick="setOrderListFilter('all')">전체</button>
           <button class="btn small secondary" id="order-filter-cancel" style="width:auto;padding:0 12px;height:26px;border:1px solid var(--navy);margin-left:-1px;" onclick="setOrderListFilter('cancel')">취소</button>
+          <button class="btn small secondary" id="order-filter-all" style="width:auto;padding:0 12px;height:26px;border:1px solid var(--navy);margin-left:-1px;" onclick="setOrderListFilter('all')">전체</button>
+          <span id="order-wait-summary" style="margin-left:12px;font-size:12.5px;"></span>
         </div>
         <div id="order-price-notice" style="display:none;font-size:12.5px;padding:9px 11px;margin-bottom:8px;border:1px solid var(--danger);background:#fdecea;line-height:1.7;"></div>
         <div id="order-list"></div>
@@ -446,7 +448,9 @@
           <button class="btn small secondary" id="sale-filter-cancel" style="width:auto;padding:0 12px;height:26px;border:1px solid var(--navy);margin-left:-1px;" onclick="setSaleFilter('cancel')">취소</button>
           <button class="btn small secondary" id="sale-filter-all" style="width:auto;padding:0 12px;height:26px;border:1px solid var(--navy);margin-left:-1px;" onclick="setSaleFilter('all')">전체</button>
           <span id="sale-wait-summary" style="margin-left:12px;font-size:12.5px;"></span>
+          <button class="btn small secondary" style="width:auto;margin-left:12px;" title="재고에서 이미 판매처리된 건을 찾아 판매요청의 매칭 현황을 다시 계산합니다" onclick="recalcSaleMatching()">매칭 현황 다시 계산</button>
         </div>
+        <div id="sale-model-notice" style="display:none;font-size:12.5px;padding:9px 11px;margin-bottom:8px;border:1px solid var(--danger);background:#fdecea;line-height:1.7;"></div>
         <div id="sale-request-list"></div>
       </div>
     </div>
@@ -478,6 +482,7 @@
           <button class="btn small secondary" id="resvf-buy" style="width:auto;padding:0 12px;height:26px;border:1px solid var(--navy);margin-left:-1px;" onclick="setResvListFilter('buy')">구매</button>
         </div>
         <div id="quotation-list-area" style="display:none;margin-bottom:10px;"></div>
+        <div id="resv-model-notice" style="display:none;font-size:12.5px;padding:9px 11px;margin-bottom:8px;border:1px solid var(--danger);background:#fdecea;line-height:1.7;"></div>
         <div id="resv-listprice-notice" style="display:none;font-size:12.5px;padding:9px 11px;margin-bottom:8px;border:1px solid var(--danger);background:#fdecea;line-height:1.7;"></div>
         <div id="reservation-list-area"></div>
       </div>
@@ -490,6 +495,44 @@
         </div>
         <div id="reservation-stat-cards" class="dash-cards" style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-start;margin-bottom:14px;"></div>
         <div id="reservation-table-area"></div>
+      </div>
+    </div>
+
+    <!-- ===== 관리자: 거래처 정산(원장·상계) ===== -->
+    <div id="tab-ledger" class="tab-panel">
+      <div class="card" style="max-width:1500px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+          <h3 style="margin:0;">거래처 정산 <span class="info-tip" title="한 거래처의 받을 돈(판매)과 줄 돈(매입)을 한 화면에서 보고, 서로 상계 처리합니다.">ⓘ</span></h3>
+          <button class="btn small secondary" style="width:auto;" onclick="toggleVoucherList()">발행한 상계 전표</button>
+        </div>
+        <p class="desc" style="margin-top:0;">거래처를 고르면 <b>미수(받을 돈)</b>와 <b>미지급(줄 돈)</b>이 나란히 나옵니다. 상계할 건을 양쪽에서 체크하고 <b>상계 처리</b>를 누르면 전표가 만들어집니다.</p>
+        <div class="stack-form" style="max-width:520px;margin-bottom:12px;">
+          <div class="stack-row"><label>거래처</label><select id="ledger-company-select" onchange="loadLedger()"><option value="">거래처를 선택하세요</option></select></div>
+        </div>
+        <div id="ledger-cards" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px;"></div>
+        <div id="voucher-list-area" style="display:none;margin-bottom:14px;"></div>
+        <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:flex-start;">
+          <div style="flex:1 1 460px;min-width:340px;">
+            <h3 style="font-size:13px;margin:0 0 6px 0;">미수 — 받을 돈 (판매)</h3>
+            <div id="ledger-recv"></div>
+          </div>
+          <div style="flex:1 1 460px;min-width:340px;">
+            <h3 style="font-size:13px;margin:0 0 6px 0;">미지급 — 줄 돈 (매입)</h3>
+            <div id="ledger-pay"></div>
+          </div>
+        </div>
+        <div id="ledger-offset-box" style="display:none;border:1px solid var(--navy);background:#f4f7fb;padding:11px 13px;margin-top:14px;font-size:12.5px;line-height:1.9;"></div>
+      </div>
+    </div>
+
+    <!-- 상계 전표 보기 -->
+    <div id="voucher-view-modal-overlay" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.55);z-index:1050;align-items:center;justify-content:center;">
+      <div id="voucher-sheet" class="print-sheet" style="background:#fff;border:2px solid var(--navy);max-width:720px;width:96%;max-height:90vh;overflow-y:auto;padding:24px;position:relative;">
+        <button class="no-print" onclick="closeVoucherView()" style="position:absolute;top:12px;right:12px;background:none;border:1px solid var(--navy);width:26px;height:26px;cursor:pointer;font-size:13px;">✕</button>
+        <div class="no-print" style="display:flex;justify-content:flex-end;margin-bottom:8px;margin-right:32px;">
+          <button class="btn small secondary" style="width:auto;" onclick="printVoucher()">인쇄 / PDF 저장</button>
+        </div>
+        <div id="voucher-body"></div>
       </div>
     </div>
 
@@ -5095,6 +5138,23 @@
     });
     orderBatchLinesCache = ordersByBatch;
 
+    // 요약: 도착대기 · 이체대기 (필터와 무관하게 전체 기준)
+    let arriveWait = 0, payWaitCnt = 0, payWaitAmt = 0;
+    batchSnap.forEach(bd=>{
+      const b = bd.data();
+      if(b.status === "취소") return;
+      const ls = (ordersByBatch[bd.id]||[]).filter(o=>o.status!=="취소");
+      if(ls.some(o=> (Number(o.fulfilledCount)||0) < (Number(o.quantity)||0))) arriveWait++;
+      if(b.depositPaid !== true){ payWaitCnt++; payWaitAmt += Number(b.depositRequired)||0; }
+    });
+    const oSum = document.getElementById("order-wait-summary");
+    if(oSum){
+      oSum.innerHTML =
+        '<span style="color:#b8860b;font-weight:700;">도착대기 ' + arriveWait + '건</span>' +
+        ' · <span style="color:var(--danger);font-weight:700;">이체대기 ' + payWaitCnt + '건</span>' +
+        ' <span style="color:var(--gray);">' + payWaitAmt.toLocaleString() + '</span>';
+    }
+
     // 필터를 먼저 적용해 배열로 모은 뒤 페이지 단위로 그립니다.
     const visibleBatches = [];
     batchSnap.forEach(bd=>{
@@ -5174,6 +5234,72 @@
       return;
     }
     listEl.prepend(renderPaginationBar("orders", visibleBatches.length, loadOrderList));
+  }
+
+  // 어떤 컬렉션이든 모델 정보(펫네임·모델명·기가수·전산모델명·모델군)를 모델 등록 기준으로 맞춥니다.
+  const MODEL_SYNC_LABELS = {
+    saleRequests: "판매요청", reservations: "예약", inventoryItems: "재고"
+  };
+  window.syncModelInfoIn = async function(col, reloadFn){
+    await fetchModelsCache();
+    const label = MODEL_SYNC_LABELS[col] || col;
+    const snap = await getDocs(collection(db, col));
+    const plan = [], noModel = [];
+    snap.forEach(d=>{
+      const o = { id:d.id, ...d.data() };
+      if(o.status === "취소") return;
+      const m = findModelForItem(o);
+      if(!m){ noModel.push(o); return; }
+      const patch = {};
+      [["petName",m.petName||""],["modelGroup",m.modelGroup||""],["baseModel",m.baseModel||""],
+       ["capacity",m.capacity||""],["systemModel",m.systemModel||""]].forEach(([k,v])=>{
+        if(String(o[k]||"") !== String(v)) patch[k] = v;
+      });
+      if(Object.keys(patch).length>0) plan.push({ id:o.id, o, m, patch });
+    });
+    if(plan.length === 0){
+      alert(label + " 중 고칠 것이 없습니다." + (noModel.length ? "\n\n모델 못 찾음: "+noModel.length+"건" : ""));
+      return;
+    }
+    const preview = plan.slice(0,8).map(x=>
+      "· " + (x.m.systemModel||"-") + '  "' + (x.o.petName||"-") + '" → "' + (x.patch.petName!==undefined ? x.patch.petName : (x.o.petName||"-")) + '"'
+    ).join("\n");
+    if(!confirm(label + " " + plan.length + "건의 모델 정보를 모델 등록 기준으로 맞춥니다.\n\n" + preview +
+      (plan.length>8 ? "\n... 외 " + (plan.length-8) + "건" : "") +
+      "\n\n· 펫네임·모델명·기가수·전산모델명만 바꿉니다.\n· 수량·금액·상태는 건드리지 않습니다.\n" +
+      (noModel.length ? "\n제외: 모델 못 찾음 " + noModel.length + "건\n" : "") + "\n진행하시겠습니까?")) return;
+    try{
+      for(let i=0; i<plan.length; i+=300){
+        const batch = writeBatch(db);
+        plan.slice(i, i+300).forEach(x=> batch.update(doc(db, col, x.id), x.patch));
+        await batch.commit();
+      }
+    }catch(e){ alert("처리에 실패했습니다.\n" + ((e && e.message) ? e.message : String(e))); return; }
+    logAction(label + " 모델정보 최신화", plan.length + "건");
+    alert(plan.length + "건을 고쳤습니다." + (noModel.length ? "\n\n모델 못 찾음 " + noModel.length + "건은 전산모델명을 확인해주세요." : ""));
+    if(typeof reloadFn === "function") reloadFn();
+  };
+
+  // 모델과 다른 건이 있으면 안내 줄을 그립니다.
+  async function renderModelSyncNotice(elId, col, reloadName){
+    const el = document.getElementById(elId);
+    if(!el) return;
+    try{
+      await fetchModelsCache();
+      const snap = await getDocs(collection(db, col));
+      let diff = 0;
+      snap.forEach(d=>{
+        const o = d.data();
+        if(o.status === "취소") return;
+        const m = findModelForItem(o);
+        if(m && String(o.petName||"") !== String(m.petName||"")) diff++;
+      });
+      if(diff === 0){ el.style.display = "none"; el.innerHTML = ""; return; }
+      el.style.display = "block";
+      el.innerHTML = '<b>모델 등록과 펫네임이 다른 ' + (MODEL_SYNC_LABELS[col]||col) + ' ' + diff + '건</b>이 있습니다.'
+        + '<br><span style="color:var(--gray);">펫네임·모델명·전산모델명만 맞춥니다. 수량·금액·상태는 그대로입니다.</span>'
+        + '<br><button class="btn small" style="width:auto;margin-top:6px;" onclick="syncModelInfoIn(\''+col+'\', '+reloadName+')">모델 기준으로 최신화 (' + diff + '건)</button>';
+    }catch(e){ el.style.display = "none"; }
   }
 
   // 주문 품목을 모델 등록 기준으로 최신화합니다.
@@ -5625,6 +5751,8 @@
     // 이 주문에서 자동생성된 판매요청 현황을 머리부 아래에 보여줍니다.
     renderOrderSaleLink(batchId, lines);
     currentPoBatch = { batchId, b };
+    const poBtn2 = document.getElementById("order-po-btn");
+    if(poBtn2) poBtn2.style.display = "";
 
     let sumQty = 0, sumPurchase = 0, sumSale = 0;
     lines.forEach(o=>{
@@ -7195,6 +7323,343 @@
     loadQuotationList(); loadReservationTable();
   };
 
+  // ================= 거래처 정산 (원장 · 상계) =================
+  // 새 데이터를 만들지 않고 기존 주문묶음(줄 돈)·판매요청묶음(받을 돈)을 그대로 씁니다.
+  // 상계한 금액은 각 묶음의 offsetAmount 에 누적되고, 전액 상계되면 결제완료로 처리합니다.
+  let ledgerRecvRows = [];   // 미수 (받을 돈)
+  let ledgerPayRows  = [];   // 미지급 (줄 돈)
+
+  window.initLedgerTab = async function(){
+    const sel = document.getElementById("ledger-company-select");
+    if(sel.options.length <= 1){
+      await fetchCompanies();
+      const names = [...new Set(companiesCache.map(c=>String(c.name||"").trim()).filter(Boolean))].sort();
+      names.forEach(n=>{ const o=document.createElement("option"); o.value=n; o.textContent=n; sel.appendChild(o); });
+      initSearchableSelect("ledger-company-select", "거래처를 입력하면 목록이 나옵니다");
+      syncSearchableSelect("ledger-company-select");
+    }
+    if(sel.value) loadLedger();
+  };
+
+  const remainOf = (b)=> Math.max(0, (Number(b.depositRequired)||0) - (Number(b.offsetAmount)||0));
+
+  window.loadLedger = async function(){
+    const company = document.getElementById("ledger-company-select").value;
+    const recvEl = document.getElementById("ledger-recv");
+    const payEl  = document.getElementById("ledger-pay");
+    const cardEl = document.getElementById("ledger-cards");
+    document.getElementById("ledger-offset-box").style.display = "none";
+    if(!company){
+      recvEl.innerHTML = payEl.innerHTML = '<div class="list-empty">거래처를 먼저 선택해주세요.</div>';
+      cardEl.innerHTML = ""; return;
+    }
+    recvEl.innerHTML = payEl.innerHTML = '<div class="list-empty">불러오는 중...</div>';
+
+    // 받을 돈 = 판매요청 묶음 (입금 안 받은 것)
+    const srSnap = await getDocs(query(collection(db,"saleRequestBatches"), where("destination","==",company)));
+    ledgerRecvRows = [];
+    srSnap.forEach(d=>{
+      const b = d.data();
+      if(b.status === "취소" || b.depositReceived === true) return;
+      if(remainOf(b) <= 0) return;
+      ledgerRecvRows.push({ id:d.id, b, remain: remainOf(b) });
+    });
+    // 줄 돈 = 주문 묶음 (이체 안 한 것)
+    const obSnap = await getDocs(query(collection(db,"orderBatches"), where("source","==",company)));
+    ledgerPayRows = [];
+    obSnap.forEach(d=>{
+      const b = d.data();
+      if(b.status === "취소" || b.depositPaid === true) return;
+      if(remainOf(b) <= 0) return;
+      ledgerPayRows.push({ id:d.id, b, remain: remainOf(b) });
+    });
+    ledgerRecvRows.sort((a,b)=> String(a.b.requestDate||"").localeCompare(String(b.b.requestDate||"")));
+    ledgerPayRows.sort((a,b)=> String(a.b.orderDate||"").localeCompare(String(b.b.orderDate||"")));
+
+    const recvTotal = ledgerRecvRows.reduce((n,r)=> n + r.remain, 0);
+    const payTotal  = ledgerPayRows.reduce((n,r)=> n + r.remain, 0);
+    const net = recvTotal - payTotal;
+    const card = (label, value, color, note)=>
+      '<div style="border:1px solid var(--line);padding:9px 12px;min-width:170px;background:#fff;">' +
+      '<div style="font-size:11px;color:var(--gray);">'+label+'</div>' +
+      '<div style="font-size:17px;font-weight:800;'+(color?('color:'+color+';'):'')+'">'+value+'</div>' +
+      (note?'<div style="font-size:10.5px;color:var(--gray);">'+note+'</div>':'') + '</div>';
+    cardEl.innerHTML =
+      card("받을 돈 (미수)", recvTotal.toLocaleString(), "#1565c0", ledgerRecvRows.length+"건") +
+      card("줄 돈 (미지급)", payTotal.toLocaleString(), "var(--danger)", ledgerPayRows.length+"건") +
+      card("상계 가능액", Math.min(recvTotal, payTotal).toLocaleString(), "#6a1b9a", "적은 쪽 기준") +
+      card(net>=0 ? "최종 받을 돈" : "최종 줄 돈", Math.abs(net).toLocaleString(),
+           net>=0 ? "#2e7d32" : "var(--danger)", "상계 후 실제 이체액");
+
+    const rowsHtml = (rows, side)=>{
+      if(rows.length === 0) return '<div class="list-empty">남은 건이 없습니다.</div>';
+      let h = '<div style="border:1px solid var(--line);max-height:340px;overflow-y:auto;">' +
+        '<table class="data-table"><thead><tr>' +
+        '<th style="width:34px;"><input type="checkbox" onclick="toggleLedgerAll(\''+side+'\', this)"></th>' +
+        '<th>일자</th><th class="ta-right">금액</th><th class="ta-right">기상계</th><th class="ta-right">남은 금액</th>' +
+        '</tr></thead><tbody>';
+      rows.forEach(r=>{
+        const off = Number(r.b.offsetAmount)||0;
+        h += '<tr>' +
+          '<td><input type="checkbox" class="ledger-cb-'+side+'" data-id="'+r.id+'" data-remain="'+r.remain+'"></td>' +
+          '<td>'+comboEsc((side==="recv" ? r.b.requestDate : r.b.orderDate)||"-")+'</td>' +
+          '<td class="ta-right">'+(Number(r.b.depositRequired)||0).toLocaleString()+'</td>' +
+          '<td class="ta-right">'+(off ? '<span style="color:#6a1b9a;">'+off.toLocaleString()+'</span>' : '-')+'</td>' +
+          '<td class="ta-right"><b>'+r.remain.toLocaleString()+'</b></td></tr>';
+      });
+      h += '</tbody></table></div>';
+      return h;
+    };
+    recvEl.innerHTML = rowsHtml(ledgerRecvRows, "recv");
+    payEl.innerHTML  = rowsHtml(ledgerPayRows, "pay");
+    recvEl.querySelectorAll(".ledger-cb-recv").forEach(cb=> cb.onchange = updateOffsetBox);
+    payEl.querySelectorAll(".ledger-cb-pay").forEach(cb=> cb.onchange = updateOffsetBox);
+    updateOffsetBox();
+  };
+
+  window.toggleLedgerAll = function(side, cb){
+    document.querySelectorAll(".ledger-cb-"+side).forEach(x=> x.checked = cb.checked);
+    updateOffsetBox();
+  };
+
+  function checkedSum(side){
+    let sum = 0; const ids = [];
+    document.querySelectorAll(".ledger-cb-"+side+":checked").forEach(cb=>{
+      sum += Number(cb.dataset.remain)||0; ids.push(cb.dataset.id);
+    });
+    return { sum, ids };
+  }
+
+  function updateOffsetBox(){
+    const box = document.getElementById("ledger-offset-box");
+    const r = checkedSum("recv"), p = checkedSum("pay");
+    if(r.ids.length === 0 && p.ids.length === 0){ box.style.display = "none"; return; }
+    const offset = Math.min(r.sum, p.sum);
+    const diff = r.sum - p.sum;
+    box.style.display = "block";
+    box.innerHTML =
+      '<b>선택한 금액</b>  받을 돈 ' + r.sum.toLocaleString() + ' (' + r.ids.length + '건)' +
+      '  ·  줄 돈 ' + p.sum.toLocaleString() + ' (' + p.ids.length + '건)' +
+      '<br><b style="color:#6a1b9a;">상계액 ' + offset.toLocaleString() + '</b>' +
+      (offset>0 ? '  →  상계 후 ' + (diff>0 ? '<b style="color:#2e7d32;">받을 돈 ' + diff.toLocaleString() + '</b>'
+                                            : (diff<0 ? '<b style="color:var(--danger);">줄 돈 ' + Math.abs(diff).toLocaleString() + '</b>'
+                                                      : '<b>정확히 상계 (잔액 0)</b>')) : '') +
+      (offset<=0 ? '<br><span style="color:var(--danger);">양쪽 모두 체크해야 상계할 수 있습니다.</span>'
+                 : '<br><button class="btn small" style="width:auto;margin-top:6px;" onclick="submitOffset()">상계 처리하고 전표 발행</button>');
+  }
+
+  window.submitOffset = async function(){
+    const company = document.getElementById("ledger-company-select").value;
+    const r = checkedSum("recv"), p = checkedSum("pay");
+    const offset = Math.min(r.sum, p.sum);
+    if(offset <= 0){ alert("받을 돈과 줄 돈을 양쪽 다 체크해주세요."); return; }
+
+    const dateIn = prompt("상계 기준일을 입력하세요.", todayStr());
+    if(dateIn === null) return;
+    const date = String(dateIn).replace(/\D/g,"") || todayStr();
+    const memo = prompt("비고 (선택)", "") || "";
+
+    if(!confirm(
+      company + " 상계 처리\n\n" +
+      "  받을 돈 " + r.sum.toLocaleString() + " (" + r.ids.length + "건)\n" +
+      "  줄 돈   " + p.sum.toLocaleString() + " (" + p.ids.length + "건)\n" +
+      "  상계액  " + offset.toLocaleString() + "\n\n" +
+      "선택한 건에 상계액이 오래된 순으로 채워집니다.\n전액 상계된 건은 결제완료로 바뀝니다.\n\n진행하시겠습니까?")) return;
+
+    // 오래된 건부터 상계액을 채웁니다.
+    const applyTo = (rows, ids, col, doneField, doneDateField)=>{
+      let left = offset;
+      const applied = [];
+      rows.filter(x=> ids.includes(x.id)).forEach(x=>{
+        if(left <= 0) return;
+        const use = Math.min(left, x.remain);
+        left -= use;
+        applied.push({ id:x.id, use, col, doneField, doneDateField,
+          newOffset: (Number(x.b.offsetAmount)||0) + use,
+          full: use >= x.remain,
+          label: (col==="saleRequestBatches" ? (x.b.requestDate||"-") : (x.b.orderDate||"-")),
+          total: Number(x.b.depositRequired)||0 });
+      });
+      return applied;
+    };
+    const recvApplied = applyTo(ledgerRecvRows, r.ids, "saleRequestBatches", "depositReceived", "depositReceivedDate");
+    const payApplied  = applyTo(ledgerPayRows,  p.ids, "orderBatches",       "depositPaid",     "depositPaidDate");
+
+    // 전표번호
+    const vSnap = await getDocs(collection(db,"offsetVouchers"));
+    let seq = 1; vSnap.forEach(d=>{ if(String(d.data().no||"").startsWith("O-"+date)) seq++; });
+    const voucherNo = "O-" + date + "-" + String(seq).padStart(2,"0");
+
+    try{
+      const batch = writeBatch(db);
+      [...recvApplied, ...payApplied].forEach(a=>{
+        const patch = { offsetAmount: a.newOffset, lastOffsetVoucher: voucherNo };
+        if(a.full){ patch[a.doneField] = true; patch[a.doneDateField] = date; patch.settledBy = "상계"; }
+        batch.update(doc(db, a.col, a.id), patch);
+      });
+      await batch.commit();
+
+      await addDoc(collection(db,"offsetVouchers"), {
+        no: voucherNo, company, date, amount: offset, memo,
+        recvTotal: r.sum, payTotal: p.sum, diff: r.sum - p.sum,
+        recvItems: recvApplied.map(a=>({ id:a.id, date:a.label, total:a.total, applied:a.use, full:a.full })),
+        payItems:  payApplied.map(a=>({ id:a.id, date:a.label, total:a.total, applied:a.use, full:a.full })),
+        createdBy: currentUser.name, createdByUsername: currentUser.username, createdAt: serverTimestamp()
+      });
+    }catch(e){
+      alert("상계 처리에 실패했습니다.\n" + ((e && e.message) ? e.message : String(e)));
+      return;
+    }
+    logAction("상계 처리", company + " / " + voucherNo + " / " + offset.toLocaleString());
+    alert("상계했습니다.\n전표번호 " + voucherNo);
+    loadLedger();
+    if(typeof loadSaleRequestList === "function") loadSaleRequestList();
+    loadOrderList();
+    openVoucherByNo(voucherNo);
+  };
+
+  // 재고를 기준으로 판매요청의 매칭 현황을 다시 계산합니다.
+  // 재고 수정·즉시판매 등으로 따로 판매처리한 건이 판매요청에 반영되지 않은 경우를 바로잡습니다.
+  window.recalcSaleMatching = async function(){
+    const srSnap = await getDocs(collection(db,"saleRequests"));
+    const invSnap = await getDocs(collection(db,"inventoryItems"));
+    const items = []; invSnap.forEach(d=> items.push({ id:d.id, ...d.data() }));
+
+    // 주문 → 재고 연결도 함께 봅니다.
+    const ordSnap = await getDocs(collection(db,"orders"));
+    const linkedByOrder = {};
+    ordSnap.forEach(d=>{ linkedByOrder[d.id] = d.data().linkedItemIds || []; });
+
+    const plan = [];
+    srSnap.forEach(d=>{
+      const sr = { id:d.id, ...d.data() };
+      if(sr.status === "취소") return;
+      const found = new Set(sr.matchedItemIds || []);
+      // ① 재고에 saleRequestId 가 이 요청을 가리키는 것
+      items.forEach(it=>{ if(it.saleRequestId === sr.id && it.status === "판매") found.add(it.id); });
+      // ② 이 요청이 나온 주문에 연결된 재고 중 판매처리된 것
+      if(sr.fromOrderId){
+        (linkedByOrder[sr.fromOrderId]||[]).forEach(iid=>{
+          const it = items.find(x=>x.id===iid);
+          if(it && it.status === "판매" && String(it.destination||"") === String(sr.destination||"")) found.add(iid);
+        });
+      }
+      const qty = Number(sr.quantity)||0;
+      const ids = Array.from(found).slice(0, qty || undefined);
+      const cnt = ids.length;
+      const newStatus = cnt >= qty && qty>0 ? "매칭완료" : (cnt>0 ? "부분매칭" : "대기중");
+      if(cnt !== (Number(sr.fulfilledCount)||0) || newStatus !== sr.status){
+        plan.push({ id:sr.id, sr, cnt, ids, newStatus });
+      }
+    });
+
+    if(plan.length === 0){ alert("매칭 현황이 이미 모두 맞습니다."); return; }
+    const preview = plan.slice(0,10).map(x=>
+      "· " + (x.sr.destination||"-") + " " + (x.sr.systemModel||"-") +
+      "  " + (Number(x.sr.fulfilledCount)||0) + "/" + (x.sr.quantity||0) + " → " + x.cnt + "/" + (x.sr.quantity||0) +
+      " (" + x.newStatus + ")").join("\n");
+    if(!confirm("재고 기준으로 판매요청 매칭 현황을 다시 계산합니다.\n\n" + preview +
+      (plan.length>10 ? "\n... 외 " + (plan.length-10) + "건" : "") +
+      "\n\n대상 " + plan.length + "건. 진행하시겠습니까?")) return;
+    try{
+      for(let i=0; i<plan.length; i+=300){
+        const batch = writeBatch(db);
+        plan.slice(i, i+300).forEach(x=> batch.update(doc(db,"saleRequests", x.id), {
+          fulfilledCount: x.cnt, matchedItemIds: x.ids, status: x.newStatus
+        }));
+        await batch.commit();
+      }
+    }catch(e){ alert("실패했습니다.\n" + ((e && e.message) ? e.message : String(e))); return; }
+    logAction("판매요청 매칭 재계산", plan.length + "건");
+    alert(plan.length + "건을 고쳤습니다.");
+    loadSaleRequestList();
+  };
+
+  window.toggleVoucherList = function(){
+    const el = document.getElementById("voucher-list-area");
+    if(el.style.display === "none"){ el.style.display = "block"; loadVoucherList(); }
+    else el.style.display = "none";
+  };
+
+  async function loadVoucherList(){
+    const el = document.getElementById("voucher-list-area");
+    el.innerHTML = '<div class="list-empty">불러오는 중...</div>';
+    const snap = await getDocs(query(collection(db,"offsetVouchers"), orderBy("createdAt","desc")));
+    if(snap.empty){ el.innerHTML = '<div class="list-empty">발행한 상계 전표가 없습니다.</div>'; return; }
+    let h = '<div style="overflow-x:auto;"><table class="data-table" style="min-width:760px;"><thead><tr>' +
+      '<th>전표번호</th><th>일자</th><th>거래처</th><th class="ta-right">상계액</th><th class="ta-right">차액</th><th>비고</th><th class="ta-right">관리</th>' +
+      '</tr></thead><tbody>';
+    snap.forEach(d=>{
+      const v = d.data();
+      h += '<tr><td><b>'+comboEsc(v.no||"-")+'</b></td><td>'+comboEsc(v.date||"-")+'</td>' +
+        '<td>'+comboEsc(v.company||"-")+'</td>' +
+        '<td class="ta-right">'+(Number(v.amount)||0).toLocaleString()+'</td>' +
+        '<td class="ta-right">'+(Number(v.diff)||0).toLocaleString()+'</td>' +
+        '<td>'+comboEsc(v.memo||"-")+'</td>' +
+        '<td class="ta-right"><button class="btn small secondary" style="width:auto;" data-v-view="'+d.id+'">보기</button></td></tr>';
+    });
+    h += '</tbody></table></div>';
+    el.innerHTML = h;
+    el.querySelectorAll('[data-v-view]').forEach(b=> b.onclick = ()=> openVoucherView(b.dataset.vView));
+  }
+
+  async function openVoucherByNo(no){
+    const snap = await getDocs(query(collection(db,"offsetVouchers"), where("no","==",no)));
+    if(!snap.empty) openVoucherView(snap.docs[0].id);
+  }
+
+  window.closeVoucherView = function(){
+    const ov = document.getElementById("voucher-view-modal-overlay");
+    ov.style.display = "none"; ov.classList.remove("print-open");
+  };
+  window.printVoucher = function(){
+    document.getElementById("voucher-view-modal-overlay").classList.add("print-open");
+    window.print();
+  };
+
+  window.openVoucherView = async function(id){
+    const snap = await getDoc(doc(db,"offsetVouchers", id));
+    if(!snap.exists()){ alert("전표를 찾을 수 없습니다."); return; }
+    const v = snap.data();
+    const st = currentSettings || {};
+    const rowsTable = (title, items, color)=>{
+      let h = '<div style="font-size:12px;font-weight:700;color:'+color+';margin:12px 0 4px 0;">'+title+'</div>';
+      if(!items || items.length===0) return h + '<div style="font-size:12px;color:var(--gray);">없음</div>';
+      h += '<table class="data-table"><thead><tr><th>일자</th><th class="ta-right">원금액</th><th class="ta-right">상계 적용액</th><th>상태</th></tr></thead><tbody>';
+      items.forEach(it=>{
+        h += '<tr><td>'+comboEsc(it.date||"-")+'</td>' +
+          '<td class="ta-right">'+(Number(it.total)||0).toLocaleString()+'</td>' +
+          '<td class="ta-right"><b>'+(Number(it.applied)||0).toLocaleString()+'</b></td>' +
+          '<td>'+(it.full ? '<span style="color:#2e7d32;font-weight:700;">전액 상계</span>' : '부분 상계')+'</td></tr>';
+      });
+      return h + '</tbody></table>';
+    };
+    let h = '<div class="quote-title">상 계 전 표</div>';
+    h += '<div class="quote-head">' +
+      '<div><div class="t">전표번호</div><div class="v">'+comboEsc(v.no||"-")+'</div></div>' +
+      '<div><div class="t">상계일자</div><div class="v">'+comboEsc(v.date||"-")+'</div></div>' +
+      '<div><div class="t">거래처</div><div class="v">'+comboEsc(v.company||"-")+'</div></div>' +
+      '<div><div class="t">발행자</div><div class="v">'+comboEsc(st.issuerName || "-")+' / '+comboEsc(v.createdBy||"-")+'</div></div>' +
+      '</div>';
+    h += rowsTable("받을 돈 (판매) — 상계 대상", v.recvItems, "#1565c0");
+    h += rowsTable("줄 돈 (매입) — 상계 대상", v.payItems, "var(--danger)");
+    const diff = Number(v.diff)||0;
+    h += '<div style="margin-top:16px;border:2px solid var(--navy);padding:11px 13px;font-size:13px;line-height:2;">' +
+      '받을 돈 합계 <b>' + (Number(v.recvTotal)||0).toLocaleString() + '</b>' +
+      ' · 줄 돈 합계 <b>' + (Number(v.payTotal)||0).toLocaleString() + '</b>' +
+      '<br><b style="font-size:15px;">상계액 ' + (Number(v.amount)||0).toLocaleString() + ' 원</b>' +
+      '<br>상계 후 ' + (diff>0 ? '<b style="color:#2e7d32;">받을 돈 ' + diff.toLocaleString() + ' 원</b>'
+                             : (diff<0 ? '<b style="color:var(--danger);">줄 돈 ' + Math.abs(diff).toLocaleString() + ' 원</b>' : '<b>잔액 없음</b>')) +
+      (v.memo ? '<br>비고: ' + comboEsc(v.memo) : '') +
+      '</div>';
+    h += '<div style="margin-top:28px;display:flex;justify-content:space-between;font-size:12.5px;">' +
+      '<span>공급자 확인 ______________ (인)</span><span>거래처 확인 ______________ (인)</span></div>';
+
+    document.getElementById("voucher-body").innerHTML = h;
+    document.getElementById("voucher-sheet").classList.add("print-sheet");
+    document.getElementById("voucher-view-modal-overlay").style.display = "flex";
+  };
+
   // ================= 삼성전자 유통직판 발주서 =================
   window.closePoView = function(){
     const ov = document.getElementById("po-view-modal-overlay");
@@ -7391,6 +7856,8 @@
     let rows = []; snap.forEach(d=> rows.push({ id:d.id, ...d.data() }));
     if(resvListFilter === "sale") rows = rows.filter(r=> r.kind !== "buy");
     if(resvListFilter === "buy")  rows = rows.filter(r=> r.kind === "buy");
+
+    renderModelSyncNotice("resv-model-notice", "reservations", "loadReservationTable");
 
     // 출고가가 비어 있는 예약이 있으면 위에 안내를 띄웁니다.
     const noticeEl = document.getElementById("resv-listprice-notice");
@@ -7652,6 +8119,8 @@
     if(!listEl) return;
     listEl.innerHTML = '<div class="list-empty">불러오는 중...</div>';
 
+    renderModelSyncNotice("sale-model-notice", "saleRequests", "loadSaleRequestList");
+
     // 자동 정리 단계에서 오류가 나도 목록은 그려지도록 감싸둡니다.
     try{
       await backfillSaleRequestsFromOrders(true);
@@ -7710,7 +8179,8 @@
       row.innerHTML =
         (isFinal ? '<span style="background:#2e7d32;color:#fff;font-size:10.5px;padding:1px 6px;margin-right:6px;">최종완료</span>' : '') +
         '<span style="font-size:12.5px;"><label style="margin-right:8px;"><input type="checkbox" class="sale-pay-cb" data-batch-id="'+batchId+'" data-legacy="'+(isLegacy?'1':'0')+'" data-amount="'+(b.depositRequired||0)+'" '+cbDisabled+'></label>' +
-        '<b>'+(b.destination||"-")+'</b> · 요청일 '+(b.requestDate||"-")+' · 품목 '+lines.length+'개 · '+depositLabel+(isLegacy?' <span style="color:var(--gray);">(기존건)</span>':'')+(b.depositRequestId?' <span style="color:var(--gray);">(입금요청됨)</span>':'')+'</span>' +
+        '<b>'+(b.destination||"-")+'</b> · 요청일 '+(b.requestDate||"-")+' · 품목 '+lines.length+'개 (판매대기 '
+          + lines.reduce((n,l)=> n + Math.max(0, (Number(l.quantity)||0) - (Number(l.fulfilledCount)||0)), 0) + ') · '+depositLabel+(isLegacy?' <span style="color:var(--gray);">(기존건)</span>':'')+(b.depositRequestId?' <span style="color:var(--gray);">(입금요청됨)</span>':'')+'</span>' +
         '<span>' +
         '<button class="btn small secondary" style="width:auto;margin-right:4px;" data-detail>상세보기</button>' +
         (!b.depositReceived ? '<button class="btn small secondary" style="width:auto;margin-right:4px;" data-pay>입금 완료 처리</button>' : '') +
@@ -7789,6 +8259,8 @@
 
   function openSaleReqBatchDetailModal(batchId, b, lines, isLegacy){
     document.getElementById("order-detail-heading").textContent = "판매 요청서";
+    const poBtn = document.getElementById("order-po-btn");
+    if(poBtn) poBtn.style.display = "none";   // 발주서는 주문에서만
     // 이 판매요청이 어디서 왔는지 표시 (주문에서 자동생성 / 예약 배정 / 직접 등록)
     setTimeout(()=> renderSaleReqOrigin(b, lines), 0);
     document.getElementById("order-detail-title").textContent = (b.destination||"-") + " · 요청일 " + (b.requestDate||"-");
@@ -11034,6 +11506,7 @@
     if(tabId==="tab-inv-model") loadModelAdminList();
     if(tabId==="tab-inv-color") loadColorAdminList();
     if(tabId==="tab-inv-company") loadCompanyList();
+    if(tabId==="tab-ledger") initLedgerTab();
     if(tabId==="tab-inv-carrier") loadCarrierList();
     if(tabId==="tab-inv-manufacturer") loadManufacturerList();
     if(tabId==="tab-inv-location") loadLocationList();
@@ -11162,6 +11635,7 @@
       document.getElementById("tabbtn-users").style.display = showUsers ? "block":"none";
       document.getElementById("tabbtn-settlement").style.display = showSettlement ? "block":"none";
       document.getElementById("tabbtn-b2b").style.display = showSettlement ? "block":"none";
+      document.getElementById("tabbtn-ledger").style.display = showSettlement ? "block":"none";
       document.getElementById("tabbtn-logs").style.display = showLogs ? "block":"none";
       document.getElementById("tabbtn-dashboard").style.display = showDashboard ? "block":"none";
       document.getElementById("tabbtn-inv-work").style.display = showInvWork ? "block":"none";
