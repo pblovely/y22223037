@@ -962,9 +962,21 @@
         <button class="btn small secondary" style="width:auto;margin-bottom:14px;" onclick="addArrivalRow()">+ 한 대 더</button>
         <datalist id="arrival-color-datalist"></datalist>
         <div class="stack-form">
-          <div class="stack-row"><label>출고일</label><input type="text" id="arrival-bulk-indate-input" placeholder="예: 20260724" maxlength="8" inputmode="numeric"></div>
+          <div class="stack-row"><label>입고일 (도착일)</label><input type="text" id="arrival-bulk-indate-input" placeholder="예: 20260724" maxlength="8" inputmode="numeric"></div>
         </div>
-        <button class="btn small" style="width:auto;" onclick="submitArrivalBulk()">이 목록으로 도착 등록</button>
+        <div id="arrival-autosell-box" style="display:none;border:1px solid var(--navy);background:#fafafa;padding:9px 11px;margin-top:10px;font-size:12.5px;">
+          <label style="display:flex;align-items:center;gap:6px;font-weight:700;color:var(--navy);">
+            <input type="checkbox" id="arrival-bulk-autosell" checked onchange="onArrivalAutoSellToggle()">
+            도착과 동시에 <span id="arrival-autosell-dest"></span>(으)로 판매처리
+          </label>
+          <div style="color:var(--gray);margin-top:4px;line-height:1.6;">
+            주문에 판매처와 판매가가 정해져 있어 바로 매출로 잡습니다. 연결된 판매요청도 함께 매칭완료 처리됩니다.
+          </div>
+          <div class="stack-form" id="arrival-outdate-wrap" style="margin-top:8px;">
+            <div class="stack-row"><label>출고일 (판매일)</label><input type="text" id="arrival-bulk-outdate-input" placeholder="비우면 입고일과 동일" maxlength="8" inputmode="numeric"></div>
+          </div>
+        </div>
+        <button class="btn small" style="width:auto;margin-top:12px;" onclick="submitArrivalBulk()">이 목록으로 도착 등록</button>
         <div id="arrival-bulk-result" style="font-size:12.5px;margin-top:10px;"></div>
       </div>
     </div>
@@ -3914,12 +3926,29 @@
       descCell("펫네임/모델명", (o.petName||o.modelGroup)+'/'+(o.baseModel||o.systemModel||'-')) +
       descCell("용량", o.capacity||"-") +
       descCell("통신사", o.carrier||"-") +
-      descCell("남은 대수", remain);
+      descCell("남은 대수", remain) +
+      descCell("판매처", o.destination || "미지정");
     document.getElementById("arrival-bulk-indate-input").value = todayStr();
+
+    // 주문에 판매처가 정해져 있으면 "도착 즉시 판매처리" 선택지를 보여줍니다.
+    const autoBox = document.getElementById("arrival-autosell-box");
+    if(o.destination){
+      document.getElementById("arrival-autosell-dest").textContent = o.destination;
+      document.getElementById("arrival-bulk-autosell").checked = true;
+      document.getElementById("arrival-bulk-outdate-input").value = "";
+      autoBox.style.display = "block";
+      onArrivalAutoSellToggle();
+    }else{
+      autoBox.style.display = "none";
+    }
     document.getElementById("arrival-bulk-rows").innerHTML = "";
     document.getElementById("arrival-bulk-result").innerHTML = "";
     for(let i=0;i<remain;i++) addArrivalRow();
     document.getElementById("arrival-bulk-modal-overlay").style.display = "flex";
+  };
+  window.onArrivalAutoSellToggle = function(){
+    const on = document.getElementById("arrival-bulk-autosell").checked;
+    document.getElementById("arrival-outdate-wrap").style.display = on ? "" : "none";
   };
   window.closeArrivalBulkModal = function(){
     document.getElementById("arrival-bulk-modal-overlay").style.display = "none";
@@ -3979,6 +4008,13 @@
     const freshModel = modelsCache.find(x=>x.id===currentArrivalOrderData.modelId);
 
     const o = currentArrivalOrderData;
+
+    // 주문에 판매처가 정해져 있고 체크가 켜져 있으면, 도착과 동시에 판매처리합니다.
+    const autoSellEl = document.getElementById("arrival-bulk-autosell");
+    const autoSell = !!(o.destination && autoSellEl && autoSellEl.checked);
+    const outDateInput = (document.getElementById("arrival-bulk-outdate-input").value || "").trim();
+    const outDate = autoSell ? (outDateInput || inDate) : "";
+
     const batch = writeBatch(db);
     const newItemIds = [];
     entries.forEach(e=>{
@@ -3994,7 +4030,7 @@
         otherDiscountAmt:o.otherDiscountAmt||null, otherDiscountPct:o.otherDiscountPct||null,
         saleDiscountAmt:o.saleDiscountAmt||null, saleDiscount:o.saleDiscountPct||null,
         profit: (o.salePrice && o.purchasePrice) ? (Number(o.salePrice)-Number(o.purchasePrice)) : null,
-        imei:"", status:"보유중", orderDate:o.orderDate||"", inDate, expectedSaleDate:"", outDate:"",
+        imei:"", status: autoSell ? "판매" : "보유중", orderDate:o.orderDate||"", inDate, expectedSaleDate:"", outDate,
         entryType:"imei", quantity:1, serialNumber:e.serial,
         orderId: currentArrivalOrderId,
         createdAt: serverTimestamp()
@@ -4010,11 +4046,40 @@
     batch.update(doc(db,"orders", currentArrivalOrderId), orderPatch);
 
     await batch.commit();
-    logAction("주문 도착 일괄등록", (o.petName||o.modelGroup)+" / 수량 "+entries.length);
-    resultEl.innerHTML = '<b>등록 완료 — 수량 '+entries.length+'</b>';
+
+    // 판매처리한 경우, 이 주문으로 자동생성된 판매요청도 매칭 처리해서 이중 관리를 막습니다.
+    let srMatched = 0;
+    if(autoSell){
+      const srSnap = await getDocs(query(collection(db,"saleRequests"), where("fromOrderId","==",currentArrivalOrderId)));
+      let pool = [...newItemIds];
+      for(const d of srSnap.docs){
+        if(pool.length === 0) break;
+        const sr = d.data();
+        if(sr.status === "취소") continue;
+        const srRemain = (Number(sr.quantity)||0) - (Number(sr.fulfilledCount)||0);
+        if(srRemain <= 0) continue;
+        const take = pool.splice(0, Math.min(srRemain, pool.length));
+        const nf = (Number(sr.fulfilledCount)||0) + take.length;
+        await updateDoc(doc(db,"saleRequests", d.id), {
+          fulfilledCount: nf,
+          matchedItemIds: [...(sr.matchedItemIds||[]), ...take],
+          status: nf >= (Number(sr.quantity)||0) ? "매칭완료" : "부분매칭"
+        });
+        srMatched += take.length;
+      }
+    }
+
+    logAction("주문 도착 일괄등록",
+      (o.petName||o.modelGroup)+" / 수량 "+entries.length
+      + (autoSell ? " / "+(o.destination||"-")+" 판매처리(출고일 "+outDate+")" : "")
+      + (srMatched>0 ? " / 판매요청 "+srMatched+"건 매칭" : ""));
+    resultEl.innerHTML = '<b>등록 완료 — 수량 '+entries.length+'</b>'
+      + (autoSell ? '<br>'+comboEsc(o.destination||"-")+'(으)로 판매처리했습니다. 출고일 '+comboEsc(outDate)
+          + (srMatched>0 ? ' · 판매요청 '+srMatched+'건 매칭완료' : '') : '');
     loadOrderList();
     loadInventoryList();
-    setTimeout(closeArrivalBulkModal, 700);
+    if(typeof loadSaleRequestList === "function") loadSaleRequestList();
+    setTimeout(closeArrivalBulkModal, autoSell ? 1600 : 700);
   };
 
   async function advanceOrderFulfillment(orderId, newItemId){
@@ -5106,6 +5171,8 @@
 
   const FILTER_FIELDS = INV_COLUMNS.concat([{ key:"status", label:"현재상태", get:it=>it.status||"" }]);
 
+  // 재고 목록 컬럼 순서와 같게 배치했습니다.
+  // 모델명·펫네임·색상·SKU·일련번호·수량은 일부러 제외했습니다 (아래 주석 참고).
   const BULK_EDIT_FIELDS = [
     { key:"source", label:"입고처", type:"select", collection:"inboundSources" },
     { key:"manufacturer", label:"제조사", type:"select", collection:"manufacturers" },
@@ -5113,16 +5180,32 @@
     { key:"location", label:"위치", type:"select", collection:"locations" },
     { key:"status", label:"현재상태", type:"select", collection:"statusOptions" },
     { key:"destination", label:"판매처", type:"select", collection:"outboundDestinations" },
+    { key:"imei", label:"IMEI", type:"text" },
     { key:"listPrice", label:"출고가", type:"number" },
     { key:"purchasePrice", label:"입고가", type:"number" },
+    { key:"purchaseDiscountAmt", label:"선할인", type:"number" },
     { key:"purchaseDiscount", label:"선할인%", type:"number" },
+    { key:"otherDiscountAmt", label:"타할인", type:"number" },
+    { key:"otherDiscountPct", label:"타할인%", type:"number" },
     { key:"salePrice", label:"판매가", type:"number" },
+    { key:"saleDiscountAmt", label:"판매할인", type:"number" },
     { key:"saleDiscount", label:"판매할인%", type:"number" },
+    { key:"subsidyAmount", label:"공시지원금", type:"number" },
+    { key:"subsidyStatus", label:"공시지원금 상태", type:"options", options:["지급대기","지급완료","환수"] },
+    { key:"clawbackAmount", label:"환수액", type:"number" },
+    { key:"subsidyAccrualMonth", label:"공시지원금 귀속월", type:"text", placeholder:"예: 202607" },
+    { key:"profit", label:"수익", type:"number" },
     { key:"orderDate", label:"주문일", type:"text" },
     { key:"inDate", label:"입고일", type:"text" },
     { key:"expectedSaleDate", label:"판매예정일", type:"text" },
     { key:"outDate", label:"출고일", type:"text" }
   ];
+  // 제외한 항목과 이유:
+  //  - 펫네임/전산모델명/모델명/용량/제조사색상/전산색상/SKU: 모델 등록에서 관리하는 값.
+  //    재고에서 개별 변경하면 모델 마스터와 어긋나 집계가 깨집니다.
+  //  - 일련번호: 건마다 고유해야 하므로 여러 건에 같은 값을 넣으면 중복이 됩니다.
+  //  - 수량: 일련번호 등록건은 항상 1이어야 합니다.
+  //  - 입고할인: 선할인+타할인의 계산 결과이며 따로 저장되는 값이 아닙니다.
 
   function populateBulkEditFieldSelect(){
     const sel = document.getElementById("bulk-edit-field");
@@ -5155,10 +5238,16 @@
       snap.forEach(d=>{ html += '<option value="'+d.data().name+'">'+d.data().name+'</option>'; });
       html += '</select>';
       wrap.innerHTML = html;
+    }else if(fieldDef.type === "options"){
+      // 기초설정에 없는 고정 선택지 (공시지원금 상태 등)
+      let html = '<select id="bulk-edit-value" style="padding:5px 8px;border:1px solid #c7c7c7;font-size:12.5px;height:28px;box-sizing:border-box;">';
+      (fieldDef.options||[]).forEach(v=>{ html += '<option value="'+v+'">'+v+'</option>'; });
+      html += '</select>';
+      wrap.innerHTML = html;
     }else if(fieldDef.type === "number"){
       wrap.innerHTML = '<input type="number" id="bulk-edit-value" style="padding:5px 8px;border:1px solid #c7c7c7;font-size:12.5px;width:150px;height:28px;box-sizing:border-box;">';
     }else{
-      wrap.innerHTML = '<input type="text" id="bulk-edit-value" placeholder="예: 20260724" style="padding:5px 8px;border:1px solid #c7c7c7;font-size:12.5px;width:150px;height:28px;box-sizing:border-box;">';
+      wrap.innerHTML = '<input type="text" id="bulk-edit-value" placeholder="'+(fieldDef.placeholder||"예: 20260724")+'" style="padding:5px 8px;border:1px solid #c7c7c7;font-size:12.5px;width:150px;height:28px;box-sizing:border-box;">';
     }
   };
 
