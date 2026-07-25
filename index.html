@@ -495,6 +495,7 @@
             <button class="btn small" style="width:auto;" onclick="openModelSingleModal()">+ 건별 등록</button>
           </span>
         </div>
+        <div id="model-syscode-notice" style="display:none;font-size:12.5px;padding:9px 11px;margin-bottom:8px;border:1px solid var(--danger);background:#fdecea;line-height:1.7;"></div>
         <p class="desc">등록된 모델을 한눈에 볼 수 있습니다. SKU가 없는 색상은 빨간색으로 표시되니 클릭해서 채워주세요.</p>
         <div id="model-pagination"></div>
         <div style="overflow-x:auto;">
@@ -1135,7 +1136,7 @@
         <div class="stack-form">
           <div class="stack-row"><label>일련번호</label><input type="text" id="instant-sale-serial-input" list="instant-sale-serial-datalist" placeholder="보유중인 재고의 일련번호" oninput="onInstantSaleSerialInput()"></div>
           <datalist id="instant-sale-serial-datalist"></datalist>
-          <div class="stack-row"><label>펫네임/모델명</label><input type="text" id="instant-sale-model-display" disabled style="background:#f2f2f2;"></div>
+          <div class="stack-row"><label>모델 (전산모델명)</label><input type="text" id="instant-sale-model-display" disabled style="background:#f2f2f2;"></div>
           <div class="stack-row"><label>출고가</label><input type="text" id="instant-sale-listprice-display" disabled style="background:#f2f2f2;"></div>
           <div class="stack-row"><label>입고가</label><input type="text" id="instant-sale-purchaseprice-display" disabled style="background:#f2f2f2;"></div>
           <div class="stack-row"><label>판매처</label><select id="instant-sale-dest-select"><option value="">선택</option></select></div>
@@ -2456,14 +2457,99 @@
     return head + (pet ? " · " + pet : "");
   }
 
+  // 재고·주문·판매요청 문서를 화면에 표시할 때도 전산모델명이 기준입니다.
+  // 전산모델명은 바뀌지 않는 식별값이고, 펫네임은 참고용으로 뒤에 붙입니다.
+  function docModelLabel(o){
+    if(!o) return "-";
+    const sys  = String(o.systemModel||"").trim();
+    const base = String(o.baseModel||"").trim();
+    const cap  = String(o.capacity||"").trim();
+    const pet  = String(o.petName||"").trim();
+    const head = sys || (base ? (base + (cap ? " " + cap : "")) : (String(o.modelGroup||"").trim() || pet || "-"));
+    return head + (pet ? " · " + pet : "");
+  }
+
   async function fetchModelsCache(){
     const snap = await getDocs(query(collection(db, "inventoryModels"), orderBy("modelGroup")));
     modelsCache = [];
     snap.forEach(d=> modelsCache.push({ id:d.id, ...d.data() }));
   }
 
+  // 전산모델명은 비어 있으면 안 되는 값입니다. 비어 있는 모델을 찾아 안내합니다.
+  function renderSystemModelNotice(){
+    const el = document.getElementById("model-syscode-notice");
+    if(!el) return;
+    const empties = modelsCache.filter(m=> !String(m.systemModel||"").trim());
+    if(empties.length === 0){ el.style.display = "none"; el.innerHTML = ""; return; }
+    el.style.display = "block";
+    el.innerHTML =
+      '<b>전산모델명이 비어 있는 모델 ' + empties.length + '개</b>가 있습니다. ' +
+      '전산모델명은 모든 대조의 기준값이라 비어 있으면 재고·주문과 연결되지 않습니다.' +
+      '<br><span style="color:var(--gray);">모델명+용량을 붙여서 임시로 채워드립니다. 채운 뒤 <b>검수</b> 표시가 붙으니, 마스터재고와 대조해 정확한 값으로 고쳐주세요.</span>' +
+      '<br><button class="btn small" style="width:auto;margin-top:6px;" onclick="fillEmptySystemModels()">전산모델명 임시로 채우기 (' + empties.length + '개)</button>';
+  }
+
+  // 비어 있는 전산모델명을 "모델명+용량" 으로 채웁니다. (마스터재고 형식과 동일: SM-F936N + 512 → SM-F936N512)
+  window.fillEmptySystemModels = async function(){
+    await fetchModelsCache();
+    const empties = modelsCache.filter(m=> !String(m.systemModel||"").trim());
+    if(empties.length === 0){ alert("전산모델명이 비어 있는 모델이 없습니다."); return; }
+
+    const used = new Set(modelsCache.map(m=>String(m.systemModel||"").trim()).filter(Boolean));
+    const plan = [];      // {id, value, from}
+    const skipped = [];   // {name, reason}
+    empties.forEach(m=>{
+      const base = String(m.baseModel||"").trim();
+      const cap  = String(m.capacity||"").trim();
+      let candidate = "";
+      let from = "";
+      if(base){ candidate = base + cap; from = "모델명+용량"; }
+      else if(String(m.modelGroup||"").trim()){ candidate = String(m.modelGroup).trim(); from = "모델군"; }
+      else if(String(m.petName||"").trim()){ candidate = String(m.petName).trim(); from = "펫네임"; }
+
+      const label = m.petName || m.modelGroup || m.baseModel || "(이름 없음)";
+      if(!candidate){ skipped.push({ name: label, reason: "채울 근거가 되는 값이 없음" }); return; }
+      if(used.has(candidate)){ skipped.push({ name: label, reason: "'"+candidate+"' 은 이미 다른 모델이 쓰는 중" }); return; }
+      used.add(candidate);
+      plan.push({ id:m.id, value:candidate, from });
+    });
+
+    if(plan.length === 0){
+      alert("자동으로 채울 수 있는 모델이 없습니다.\n" + skipped.map(x=>"· "+x.name+" — "+x.reason).join("\n"));
+      return;
+    }
+
+    const preview = plan.slice(0,10).map(x=>"· "+x.value+"  ("+x.from+")").join("\n");
+    if(!confirm(
+      "전산모델명을 임시로 채웁니다.\n\n" + preview +
+      (plan.length>10 ? "\n... 외 " + (plan.length-10) + "개" : "") +
+      (skipped.length>0 ? "\n\n건너뜀 " + skipped.length + "개 (중복이거나 근거값 없음)" : "") +
+      "\n\n채운 모델에는 검수 표시가 붙습니다. 진행하시겠습니까?")) return;
+
+    try{
+      for(let i=0; i<plan.length; i+=400){
+        const batch = writeBatch(db);
+        plan.slice(i, i+400).forEach(x=>{
+          batch.update(doc(db,"inventoryModels", x.id), {
+            systemModel: x.value, needsReview: true, updatedAt: serverTimestamp()
+          });
+        });
+        await batch.commit();
+      }
+    }catch(e){
+      alert("채우는 중 오류가 났습니다.\n" + ((e && e.message) ? e.message : String(e)));
+      return;
+    }
+    logAction("전산모델명 임시 채움", plan.length + "개" + (skipped.length ? " / 건너뜀 " + skipped.length : ""));
+    alert(plan.length + "개를 채웠습니다."
+      + (skipped.length ? "\n건너뛴 " + skipped.length + "개는 직접 입력해주세요:\n" + skipped.map(x=>"· "+x.name+" — "+x.reason).join("\n") : "")
+      + "\n\n검수 표시가 붙은 모델을 마스터재고와 대조해 확인해주세요.");
+    loadModelAdminList();
+  };
+
   async function loadModelAdminList(){
     await fetchModelsCache();
+    renderSystemModelNotice();
     const bodyEl = document.getElementById("model-table-body");
     if(modelsCache.length === 0){
       bodyEl.innerHTML = '<tr><td colspan="12" class="list-empty">등록된 모델이 없습니다. 위에서 등록해주세요.</td></tr>';
@@ -2485,7 +2571,7 @@
         '<td>'+(m.needsReview ? '<input type="checkbox" data-review-model="'+m.id+'" style="accent-color:var(--danger);width:16px;height:16px;cursor:pointer;">' : '<span style="color:var(--gray);">✓</span>')+'</td>' +
         '<td>'+(m.manufacturer||'<span style="color:var(--danger);">미지정</span>')+'</td>' +
         '<td>'+(m.petName||"-")+'</td>' +
-        '<td>'+(m.systemModel||"-")+'</td>' +
+        '<td>'+(m.systemModel ? comboEsc(m.systemModel) : '<span style="color:var(--danger);font-weight:700;">미입력</span>')+'</td>' +
         '<td>'+(m.baseModel||"-")+'</td>' +
         '<td>'+(m.capacity||"-")+'</td>' +
         '<td'+(missingSkuCount>0&&colors.length===1?' style="color:var(--danger);"':'')+'>'+firstSkuLabel+'</td>' +
@@ -2569,6 +2655,16 @@
     }catch(e){
       showModelMsg("me-result-msg", "<b>저장에 실패했습니다.</b><br>" + comboEsc((e && e.message) ? e.message : String(e)), true);
       return;
+    }
+
+    // 전산모델명은 가입번호처럼 바뀌지 않는 식별값입니다. 바꾸면 기존 재고와의 연결이 끊길 수 있어 확인합니다.
+    if(m.systemModel && newFields.systemModel !== m.systemModel){
+      if(!confirm(
+        "전산모델명을 바꾸려고 합니다.\n\n" +
+        "  기존: " + m.systemModel + "\n" +
+        "  변경: " + (newFields.systemModel || "(비움)") + "\n\n" +
+        "전산모델명은 모델을 구분하는 기준값이라, 바꾸면 기존 재고·주문과의 연결이 끊길 수 있습니다.\n" +
+        "정말 바꾸시겠습니까?")) return;
     }
 
     const changed = newFields.modelGroup!==m.modelGroup || newFields.baseModel!==m.baseModel ||
@@ -4390,7 +4486,7 @@
       '</div>';
 
     let html = head + '<div style="overflow-x:auto;"><table class="data-table" style="min-width:1260px;"><thead><tr>' +
-      '<th>펫네임/모델명</th><th>용량</th><th>통신사</th>' +
+      '<th>모델 (전산모델명)</th><th>용량</th><th>통신사</th>' +
       '<th class="ta-right">주문수량</th>' +
       '<th class="ta-right">출고가</th>' +
       '<th class="ta-right">선할인</th><th class="ta-right">선할인%</th>' +
@@ -4413,7 +4509,7 @@
       const tr = document.createElement("tr");
       if(o.status==="취소") tr.style.color = "var(--gray)";
       tr.innerHTML =
-        '<td>'+comboEsc((o.petName||o.modelGroup||"-")+'/'+(o.baseModel||o.systemModel||"-"))+'</td>' +
+        '<td>'+comboEsc(docModelLabel(o))+'</td>' +
         '<td>'+comboEsc(o.capacity||"-")+'</td>' +
         '<td>'+comboEsc(o.carrier||"-")+'</td>' +
         '<td class="ta-right">'+qty+'</td>' +
@@ -4474,7 +4570,7 @@
       return '<div style="flex:1;padding:6px 10px;border-right:1px solid var(--line);"><div style="color:var(--gray);font-size:10.5px;">'+label+'</div><div style="font-weight:700;">'+value+'</div></div>';
     }
     document.getElementById("arrival-bulk-desc").innerHTML =
-      descCell("펫네임/모델명", (o.petName||o.modelGroup)+'/'+(o.baseModel||o.systemModel||'-')) +
+      descCell("모델 (전산모델명)", comboEsc(docModelLabel(o))) +
       descCell("용량", o.capacity||"-") +
       descCell("통신사", o.carrier||"-") +
       descCell("남은 대수", remain) +
@@ -5322,7 +5418,7 @@
       const remain = (s.quantity||0) - (s.fulfilledCount||0);
       const tr = document.createElement("tr");
       tr.innerHTML =
-        '<td>'+(s.petName||s.modelGroup||"-")+'/'+(s.baseModel||s.systemModel||"-")+'</td>' +
+        '<td>'+comboEsc(docModelLabel(s))+'</td>' +
         '<td>'+(s.capacity||"-")+'</td>' +
         '<td>'+(s.carrier||"-")+'</td>' +
         '<td class="ta-right">'+(s.quantity||0)+'</td>' +
@@ -5392,7 +5488,7 @@
   window.openSaleReqMatchModal = function(saleReqId, s){
     currentSaleReqId = saleReqId; currentSaleReqData = s;
     document.getElementById("salereq-match-desc").textContent =
-      (s.petName||s.modelGroup)+' '+(s.capacity||'')+' / '+(s.carrier||'-')+' — 보유중인 실제 재고의 일련번호를 입력하면 그 재고가 이 판매요청으로 처리됩니다.';
+      docModelLabel(s)+' / '+(s.carrier||'-')+' — 보유중인 실제 재고의 일련번호를 입력하면 그 재고가 이 판매요청으로 처리됩니다.';
     document.getElementById("salereq-match-serial-input").value = "";
     document.getElementById("salereq-match-outdate-input").value = todayStr();
     document.getElementById("salereq-match-modal-overlay").style.display = "flex";
@@ -5450,7 +5546,7 @@
       instantSaleSerialMap[it.serialNumber] = { id:d.id, ...it };
       const opt = document.createElement("option");
       opt.value = it.serialNumber;
-      opt.label = (it.petName||it.modelGroup||"") + " / " + (it.systemColor||it.manufacturerColor||"");
+      opt.label = docModelLabel(it) + " / " + (it.systemColor||it.manufacturerColor||"");
       dl.appendChild(opt);
     });
 
@@ -5478,7 +5574,7 @@
       document.getElementById("instant-sale-purchaseprice-display").value = "";
       return;
     }
-    document.getElementById("instant-sale-model-display").value = (it.petName||it.modelGroup||"-")+"/"+(it.baseModel||it.systemModel||"-");
+    document.getElementById("instant-sale-model-display").value = docModelLabel(it);
     document.getElementById("instant-sale-listprice-display").value = it.listPrice ? Number(it.listPrice).toLocaleString() : "-";
     document.getElementById("instant-sale-purchaseprice-display").value = it.purchasePrice ? Number(it.purchasePrice).toLocaleString() : "-";
     updateInstantSaleProfit();
@@ -6486,7 +6582,8 @@
         if(inScopeIn){ carrierAgg[c].purchaseCount += qty; if(it.purchasePrice) carrierAgg[c].purchaseAmount += Number(it.purchasePrice)*qty; }
         if(inScopeOut){ carrierAgg[c].saleCount += qty; if(it.salePrice) carrierAgg[c].saleAmount += Number(it.salePrice)*qty; }
 
-        const m = (it.petName||it.modelGroup||"미지정") + "/" + (it.baseModel||it.systemModel||"-");
+        // 전산모델명 기준으로 묶습니다. 펫네임이 바뀌어도 집계가 갈라지지 않습니다.
+        const m = docModelLabel(it);
         if(!modelAgg[m]) modelAgg[m] = {purchaseCount:0, saleCount:0, purchaseAmount:0, saleAmount:0};
         if(inScopeIn){ modelAgg[m].purchaseCount += qty; if(it.purchasePrice) modelAgg[m].purchaseAmount += Number(it.purchasePrice)*qty; }
         if(inScopeOut){ modelAgg[m].saleCount += qty; if(it.salePrice) modelAgg[m].saleAmount += Number(it.salePrice)*qty; }
@@ -7283,12 +7380,12 @@
     html += '</div>';
 
     html += '<p class="desc" style="margin-top:10px;margin-bottom:4px;font-weight:700;color:var(--navy);">인식된 품목 미리보기</p>';
-    html += '<div style="overflow-x:auto;border:1px solid var(--line);max-height:260px;overflow-y:auto;"><table class="data-table"><thead><tr><th>일련번호</th><th>펫네임/모델명</th><th class="ta-right">판매가</th><th>상태</th></tr></thead><tbody>';
+    html += '<div style="overflow-x:auto;border:1px solid var(--line);max-height:260px;overflow-y:auto;"><table class="data-table"><thead><tr><th>일련번호</th><th>모델 (전산모델명)</th><th class="ta-right">판매가</th><th>상태</th></tr></thead><tbody>';
     dataRows.forEach(r=>{
       const it = foundMap[r.serial];
       html += '<tr'+(it?'':' style="color:var(--danger);"')+'>' +
         '<td>'+r.serial+'</td>' +
-        '<td>'+(it ? (it.petName||it.modelGroup)+'/'+(it.baseModel||it.systemModel||'-') : '-')+'</td>' +
+        '<td>'+(it ? comboEsc(docModelLabel(it)) : '-')+'</td>' +
         '<td class="ta-right">'+(r.price!=null?r.price.toLocaleString():(it&&it.listPrice?Number(it.listPrice).toLocaleString()+'(출고가)':'-'))+'</td>' +
         '<td>'+(it ? (it.status==='판매'?'이미 판매됨':'✓ 보유중') : '재고를 찾을 수 없음')+'</td>' +
         '</tr>';
