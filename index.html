@@ -279,7 +279,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-07-25 v86</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-07-25 v89</span>
       <span id="topbar-username">-</span>
       <button onclick="openPersonalSettingsModal()">개인설정</button>
       <button onclick="handleLogout()">로그아웃</button>
@@ -431,7 +431,7 @@
           <span style="position:relative;">
             <button class="btn small" style="width:auto;" onclick="toggleOrderAddMenu(event)">+ 주문 ▾</button>
             <div id="order-add-menu" style="display:none;position:absolute;top:36px;right:0;background:#fff;border:1px solid var(--navy);box-shadow:0 2px 10px rgba(0,0,0,0.15);z-index:100;min-width:180px;">
-              <div class="menu-item" data-label-key="menu-order-instant" onclick="closeOrderAddMenu();openOrderModal();"><span class="tab-label-text">건별 주문 등록</span></div>
+              <div class="menu-item" data-label-key="menu-order-instant" onclick="closeOrderAddMenu();openOrderSingle();"><span class="tab-label-text">건별 주문 등록</span></div>
               <div class="menu-item" data-label-key="menu-order-paste" onclick="closeOrderAddMenu();openOrderPasteModal();"><span class="tab-label-text">텍스트로 붙여넣기 등록</span></div>
               <div class="menu-item" data-label-key="menu-order-excel" onclick="closeOrderAddMenu();openOrderModal();"><span class="tab-label-text">여러 품목 한 번에 등록</span></div>
             </div>
@@ -1343,6 +1343,46 @@
     </div>
 
     <!-- 주문 등록 팝업 -->
+    <!-- 개별 주문 등록 (세로형, 한 건씩) -->
+    <div id="order-single-modal-overlay" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.55);z-index:1000;align-items:center;justify-content:center;">
+      <div style="background:#fff;border:2px solid var(--navy);max-width:560px;width:95%;max-height:92vh;overflow-y:auto;padding:22px;position:relative;">
+        <button onclick="closeOrderSingle()" style="position:absolute;top:12px;right:12px;background:none;border:1px solid var(--navy);width:26px;height:26px;cursor:pointer;font-size:13px;">✕</button>
+        <h3 style="margin-top:0;margin-bottom:4px;">건별 주문 등록</h3>
+        <p class="desc">한 품목씩 등록합니다. 모델을 고르면 출고가가 자동으로 채워지고, 할인을 넣으면 입고가가 계산됩니다.</p>
+        <div class="stack-form">
+          <div class="stack-row"><label>주문일</label><input type="text" id="os-date" maxlength="8" inputmode="numeric" placeholder="예: 20260726"></div>
+          <div class="stack-row"><label>도착예정일 (선택)</label><input type="text" id="os-expected" maxlength="8" inputmode="numeric" placeholder="예: 20260731"></div>
+          <div class="stack-row"><label>매입처</label><select id="os-source"><option value="">선택</option></select></div>
+          <div class="stack-row"><label>통신사</label><select id="os-carrier"></select></div>
+          <div class="stack-row"><label>결제방식</label>
+            <select id="os-payment">
+              <option value="normal">일반 (계좌이체 — 출금요청 필요)</option>
+              <option value="b2b_credit">삼성여신 사용 (여신에서 자동 차감)</option>
+            </select>
+          </div>
+          <div class="stack-row"><label>모델 (전산모델명)</label><select id="os-model" onchange="onOrderSingleModelChange()"><option value="">모델을 선택하세요</option></select></div>
+          <div class="stack-row"><label>색상</label><select id="os-color"><option value="">모델을 먼저 선택하세요</option></select></div>
+          <div class="stack-row"><label>수량</label><input type="number" id="os-qty" value="1" min="1" oninput="osRecalc()"></div>
+          <div class="stack-row"><label>출고가</label><input type="number" id="os-listprice" oninput="osRecalc('list')"></div>
+          <div class="stack-row"><label>선할인</label><input type="number" id="os-preamt" oninput="osRecalc('preamt')" placeholder="예: 20000"></div>
+          <div class="stack-row"><label>선할인%</label><input type="number" step="0.01" id="os-prepct" oninput="osRecalc('prepct')" placeholder="예: 0.20"></div>
+          <div class="stack-row"><label>타할인</label><input type="number" id="os-otheramt" oninput="osRecalc('otheramt')" placeholder="여신 등 추가 할인"></div>
+          <div class="stack-row"><label>타할인%</label><input type="number" step="0.01" id="os-otherpct" oninput="osRecalc('otherpct')"></div>
+          <div class="stack-row"><label>입고가 (자동)</label><input type="number" id="os-purchase" disabled style="background:#f2f2f2;"></div>
+          <div class="stack-row"><label>판매처 (선택)</label><select id="os-dest"><option value="">해당없음</option></select></div>
+          <div class="stack-row"><label>판매가 (선택)</label><input type="number" id="os-saleprice" oninput="osRecalc('saleprice')"></div>
+          <div class="stack-row"><label>판매할인</label><input type="number" id="os-saleamt" oninput="osRecalc('saleamt')"></div>
+          <div class="stack-row"><label>판매할인%</label><input type="number" step="0.01" id="os-salepct" oninput="osRecalc('salepct')"></div>
+        </div>
+        <div style="border:1px solid var(--line);background:#fafafa;padding:9px 11px;margin-top:10px;font-size:12.5px;line-height:1.8;">
+          <b id="os-summary">-</b>
+          <div style="color:var(--gray);">판매처·판매가를 넣으면 <b>판매요청</b>이 자동으로 만들어집니다.</div>
+        </div>
+        <button class="btn small" style="width:auto;margin-top:12px;" onclick="submitOrderSingle()">주문 등록</button>
+        <div id="os-msg" style="display:none;font-size:12.5px;margin-top:10px;padding:8px 10px;border-left:3px solid var(--navy);background:#f2f2f2;line-height:1.6;"></div>
+      </div>
+    </div>
+
     <div id="order-modal-overlay" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.55);z-index:1000;align-items:center;justify-content:center;">
       <div style="background:#fff;border:2px solid var(--navy);max-width:900px;width:96%;max-height:90vh;overflow-y:auto;padding:22px;position:relative;">
         <button onclick="closeOrderModal()" style="position:absolute;top:12px;right:12px;background:none;border:1px solid var(--navy);width:26px;height:26px;cursor:pointer;font-size:13px;">✕</button>
@@ -5061,6 +5101,168 @@
     document.getElementById("order-modal-overlay").style.display = "none";
   };
 
+  // ================= 개별 주문 등록 (세로형) =================
+  window.closeOrderSingle = function(){ document.getElementById("order-single-modal-overlay").style.display = "none"; };
+
+  window.openOrderSingle = async function(){
+    await fetchModelsCache();
+    document.getElementById("os-date").value = todayStr();
+    ["os-expected","os-listprice","os-preamt","os-prepct","os-otheramt","os-otherpct",
+     "os-purchase","os-saleprice","os-saleamt","os-salepct"].forEach(id=> document.getElementById(id).value = "");
+    document.getElementById("os-qty").value = "1";
+    document.getElementById("os-payment").value = "normal";
+    document.getElementById("os-msg").style.display = "none";
+
+    const fill = async (id, col, first)=>{
+      const sel = document.getElementById(id);
+      sel.innerHTML = first;
+      (await fetchNamesList(col)).forEach(n=>{
+        const o = document.createElement("option"); o.value = n; o.textContent = n; sel.appendChild(o);
+      });
+    };
+    await fill("os-source", "inboundSources", '<option value="">선택</option>');
+    await fill("os-carrier", "carriers", '<option value="">선택</option>');
+    await fill("os-dest", "outboundDestinations", '<option value="">해당없음</option>');
+    initSearchableSelect("os-source", "매입처를 입력하면 목록이 나옵니다"); syncSearchableSelect("os-source");
+    initSearchableSelect("os-dest", "판매처를 입력하면 목록이 나옵니다"); syncSearchableSelect("os-dest");
+
+    const ms = document.getElementById("os-model");
+    ms.innerHTML = '<option value="">모델을 선택하세요</option>';
+    modelsCache.forEach(m=>{
+      const o = document.createElement("option"); o.value = m.id; o.textContent = modelOptionLabel(m); ms.appendChild(o);
+    });
+    initSearchableSelect("os-model", "전산모델명을 입력하면 목록이 나옵니다"); syncSearchableSelect("os-model");
+    document.getElementById("os-color").innerHTML = '<option value="">모델을 먼저 선택하세요</option>';
+    osRecalc();
+    document.getElementById("order-single-modal-overlay").style.display = "flex";
+  };
+
+  window.onOrderSingleModelChange = function(){
+    const m = modelsCache.find(x=>x.id === document.getElementById("os-model").value);
+    const cs = document.getElementById("os-color");
+    if(!m){ cs.innerHTML = '<option value="">모델을 먼저 선택하세요</option>'; return; }
+    const colors = m.colors || [];
+    cs.innerHTML = colors.length === 0
+      ? '<option value="">이 모델에 등록된 색상이 없습니다</option>'
+      : '<option value="">색상 선택</option>' + colors.map((c,i)=>
+          '<option value="'+i+'">'+comboEsc((c.systemColor||c.manufacturerColor||"-") + (c.sku ? "" : " · SKU 미입력"))+'</option>').join("");
+    // 출고가 자동
+    const lp = document.getElementById("os-listprice");
+    if(m.priceIncVat){ lp.value = m.priceIncVat; }
+    osRecalc("list");
+  };
+
+  function osNum(id){ const v = document.getElementById(id).value; return v==="" ? 0 : Number(v); }
+  function osSet(id, v){ document.getElementById(id).value = (v===null||v===undefined||v==="") ? "" : v; }
+
+  window.osRecalc = function(src){
+    const L = osNum("os-listprice");
+    if(src==="preamt")  osSet("os-prepct",  pctFromAmt(document.getElementById("os-preamt").value, L));
+    if(src==="prepct")  osSet("os-preamt",  amtFromPct(document.getElementById("os-prepct").value, L));
+    if(src==="otheramt") osSet("os-otherpct", pctFromAmt(document.getElementById("os-otheramt").value, L));
+    if(src==="otherpct") osSet("os-otheramt", amtFromPct(document.getElementById("os-otherpct").value, L));
+    if(src==="saleamt"){ osSet("os-salepct", pctFromAmt(document.getElementById("os-saleamt").value, L)); if(L) osSet("os-saleprice", L - osNum("os-saleamt")); }
+    if(src==="salepct"){ const a = amtFromPct(document.getElementById("os-salepct").value, L); osSet("os-saleamt", a); if(L && a!=="") osSet("os-saleprice", L - Number(a)); }
+    if(src==="saleprice" && L){ const a = L - osNum("os-saleprice"); osSet("os-saleamt", a); osSet("os-salepct", pctFromAmt(a, L)); }
+    if(src==="list"){
+      osSet("os-prepct", pctFromAmt(document.getElementById("os-preamt").value, L));
+      osSet("os-otherpct", pctFromAmt(document.getElementById("os-otheramt").value, L));
+      osSet("os-salepct", pctFromAmt(document.getElementById("os-saleamt").value, L));
+    }
+    const buy = L ? (L - osNum("os-preamt") - osNum("os-otheramt")) : 0;
+    osSet("os-purchase", L ? buy : "");
+    const qty = osNum("os-qty") || 0;
+    const sale = osNum("os-saleprice");
+    document.getElementById("os-summary").textContent =
+      "수량 " + qty + " × 입고가 " + (buy||0).toLocaleString() + " = 매입 " + ((buy||0)*qty).toLocaleString()
+      + (sale ? "   /   판매 " + (sale*qty).toLocaleString() + "   /   차액 " + ((sale-buy)*qty).toLocaleString() : "");
+  };
+
+  window.submitOrderSingle = async function(){
+    const msg = (t, err)=> showModelMsg("os-msg", t, err);
+    const m = modelsCache.find(x=>x.id === document.getElementById("os-model").value);
+    if(!m){ msg("모델을 선택해주세요.", true); return; }
+    const source = document.getElementById("os-source").value;
+    if(!source){ msg("매입처를 선택해주세요.", true); return; }
+    const qty = osNum("os-qty");
+    if(qty <= 0){ msg("수량을 1 이상으로 입력해주세요.", true); return; }
+
+    const colorIdx = document.getElementById("os-color").value;
+    const c = (colorIdx !== "" && m.colors && m.colors[Number(colorIdx)]) ? m.colors[Number(colorIdx)] : null;
+    const orderDate = (document.getElementById("os-date").value||"").replace(/\D/g,"") || todayStr();
+    const expected = (document.getElementById("os-expected").value||"").replace(/\D/g,"");
+    const carrier = document.getElementById("os-carrier").value;
+    const dest = document.getElementById("os-dest").value;
+    const useB2B = document.getElementById("os-payment").value === "b2b_credit";
+    const L = osNum("os-listprice");
+    const buy = L ? (L - osNum("os-preamt") - osNum("os-otheramt")) : 0;
+    const sale = osNum("os-saleprice");
+
+    try{
+      msg("저장 중...", false);
+      const batchRef = await withTimeout(addDoc(collection(db,"orderBatches"), {
+        source, carrier, orderDate, expectedArrivalDate: expected,
+        depositRequired: buy * qty,
+        depositPaid: useB2B, depositPaidDate: useB2B ? orderDate : "",
+        paymentMethod: useB2B ? "b2b_credit" : "normal",
+        lineCount: 1, status:"주문중",
+        createdBy: currentUser.name, createdByUsername: currentUser.username, createdAt: serverTimestamp()
+      }), 12000, "주문 등록");
+
+      const orderRef = await addDoc(collection(db,"orders"), {
+        batchId: batchRef.id, source, orderDate, expectedArrivalDate: expected,
+        modelId: m.id, modelGroup: m.modelGroup||"", baseModel: m.baseModel||"",
+        capacity: m.capacity||"", systemModel: m.systemModel||"", petName: m.petName||"",
+        manufacturerColor: c ? (c.manufacturerColor||"") : "",
+        systemColor: c ? (c.systemColor||"") : "",
+        sku: c ? (c.sku||"") : "",
+        carrier,
+        quantity: qty, fulfilledCount: 0, linkedItemIds: [],
+        listPrice: L || null, purchasePrice: buy || null,
+        preDiscountAmt: document.getElementById("os-preamt").value ? osNum("os-preamt") : null,
+        preDiscountPct: document.getElementById("os-prepct").value ? Number(osNum("os-prepct").toFixed(2)) : null,
+        otherDiscountAmt: document.getElementById("os-otheramt").value ? osNum("os-otheramt") : null,
+        otherDiscountPct: document.getElementById("os-otherpct").value ? Number(osNum("os-otherpct").toFixed(2)) : null,
+        destination: dest, salePrice: sale || null,
+        saleDiscountAmt: document.getElementById("os-saleamt").value ? osNum("os-saleamt") : null,
+        saleDiscountPct: document.getElementById("os-salepct").value ? Number(osNum("os-salepct").toFixed(2)) : null,
+        status: "주문중",
+        createdBy: currentUser.name, createdByUsername: currentUser.username, createdAt: serverTimestamp()
+      });
+
+      // 판매처·판매가가 있으면 판매요청도 만들어 둡니다.
+      if(dest && sale){
+        const srBatch = await addDoc(collection(db,"saleRequestBatches"), {
+          destination: dest, requestDate: orderDate,
+          depositRequired: sale * qty, depositReceived:false, depositReceivedDate:"",
+          lineCount: 1, status:"대기중", fromOrderBatchId: batchRef.id,
+          createdBy: currentUser.name, createdByUsername: currentUser.username, createdAt: serverTimestamp()
+        });
+        await addDoc(collection(db,"saleRequests"), {
+          batchId: srBatch.id, destination: dest,
+          modelId: m.id, modelGroup: m.modelGroup||"", baseModel: m.baseModel||"",
+          capacity: m.capacity||"", systemModel: m.systemModel||"", petName: m.petName||"",
+          manufacturerColor: c ? (c.manufacturerColor||"") : "",
+          systemColor: c ? (c.systemColor||"") : "", sku: c ? (c.sku||"") : "",
+          carrier, quantity: qty, fulfilledCount: 0, matchedItemIds: [],
+          salePrice: sale,
+          saleDiscountAmt: document.getElementById("os-saleamt").value ? osNum("os-saleamt") : null,
+          saleDiscountPct: document.getElementById("os-salepct").value ? Number(osNum("os-salepct").toFixed(2)) : null,
+          requestDate: orderDate, status: "대기중", fromOrderId: orderRef.id,
+          createdBy: currentUser.name, createdByUsername: currentUser.username, createdAt: serverTimestamp()
+        });
+      }
+    }catch(e){
+      msg("<b>저장에 실패했습니다.</b><br>" + comboEsc((e && e.message) ? e.message : String(e)), true);
+      return;
+    }
+    logAction("건별 주문 등록", source + " / " + docModelLabel(m) + " / " + qty + "대");
+    msg("등록되었습니다." + (dest && sale ? " 판매요청도 함께 만들었습니다." : ""), false);
+    loadOrderList();
+    if(dest && sale && typeof loadSaleRequestList === "function") loadSaleRequestList();
+    setTimeout(closeOrderSingle, 900);
+  };
+
   window.addOrderLine = async function(){
     const lineId = "ol" + (orderLineSeq++);
     const destNames = await fetchNamesList("outboundDestinations");
@@ -7806,6 +8008,49 @@
     return String(v||"").trim();
   }
 
+  // 붙여넣기에서 알아낸 삼성모델명(SKU)을 해당 색상에 저장합니다.
+  // 색상별로 코드가 다르므로, 색상 하나하나에 채워 넣습니다.
+  async function saveSkuToColors(rows){
+    const byModel = {};   // modelId → [{colorName, sku}]
+    rows.forEach(r=>{
+      if(!r.skuCand) return;
+      const already = r.colorObj && String(r.colorObj.sku||"").trim();
+      if(already) return;
+      const colorName = r.colorObj
+        ? (r.colorObj.systemColor || r.colorObj.manufacturerColor || "")
+        : (r.colorText || "");
+      if(!colorName) return;
+      if(!byModel[r.model.id]) byModel[r.model.id] = [];
+      byModel[r.model.id].push({ colorName, sku: r.skuCand });
+    });
+
+    let saved = 0, added = 0;
+    for(const modelId of Object.keys(byModel)){
+      const snap = await getDoc(doc(db,"inventoryModels", modelId));
+      if(!snap.exists()) continue;
+      const colors = (snap.data().colors || []).map(c=>({ ...c }));
+      let changed = false;
+      byModel[modelId].forEach(({colorName, sku})=>{
+        const idx = colors.findIndex(c=> c.systemColor === colorName || c.manufacturerColor === colorName);
+        if(idx >= 0){
+          if(!String(colors[idx].sku||"").trim()){ colors[idx].sku = sku; changed = true; saved++; }
+        }else{
+          // 등록되지 않은 색상이면 새로 만들어 둡니다. (검수 대상으로 표시)
+          colors.push({ manufacturerColor: colorName, systemColor: colorName, sku, needsReview: true });
+          changed = true; added++;
+        }
+      });
+      if(changed){
+        await updateDoc(doc(db,"inventoryModels", modelId), { colors, updatedAt: serverTimestamp() });
+      }
+    }
+    if(saved || added){
+      logAction("삼성모델명 자동 저장", "채움 " + saved + "건" + (added ? " / 색상 신규 " + added + "건" : ""));
+      await fetchModelsCache();
+    }
+    return { saved, added };
+  }
+
   // 한 줄에서 모델을 찾습니다.
   // 순서: 삼성코드(SKU) → 전산모델명 → 모델명 → "모델군/모델명 + 기가수" (예: "플립 256")
   function findModelFromCells(cells){
@@ -7929,14 +8174,21 @@
     }
     if(ok.length){
       h += '<div style="border:1px solid var(--line);max-height:260px;overflow-y:auto;margin-bottom:10px;">'
-        + '<table class="data-table" style="min-width:720px;"><thead><tr><th>모델 (전산모델명)</th><th>제조사색상</th><th>전산색상</th><th>통신사</th><th class="ta-right">수량</th><th class="ta-right">출고가</th></tr></thead><tbody>'
+        + '<table class="data-table" style="min-width:720px;"><thead><tr><th>모델 (전산모델명)</th><th>제조사색상</th><th>전산색상</th><th>통신사</th><th class="ta-right">수량</th><th class="ta-right">출고가</th><th>삼성모델명(SKU)</th></tr></thead><tbody>'
         + ok.map(r=>'<tr><td>'+comboEsc(modelOptionLabel(r.model))+'</td>'
             + '<td>'+comboEsc(r.colorObj ? (r.colorObj.manufacturerColor || r.colorText || "-") : (r.colorText||"-"))+'</td>'
             + '<td>'+comboEsc(r.colorObj ? (r.colorObj.systemColor || r.colorText || "-") : (r.colorText||"-"))+'</td>'
             + '<td>'+comboEsc(r.carrier||"-")+'</td>'
             + '<td class="ta-right">'+r.qty+'</td>'
-            + '<td class="ta-right">'+(r.model.priceIncVat ? Number(r.model.priceIncVat).toLocaleString() : '<span style="color:var(--danger);">미입력</span>')+'</td></tr>').join("")
+            + '<td class="ta-right">'+(r.model.priceIncVat ? Number(r.model.priceIncVat).toLocaleString() : '<span style="color:var(--danger);">미입력</span>')+'</td>'
+            + '<td>'+(r.colorObj && r.colorObj.sku ? comboEsc(r.colorObj.sku)
+                : (r.skuCand ? '<span style="color:#1565c0;">'+comboEsc(r.skuCand)+' <b>새로 저장</b></span>' : '-'))+'</td></tr>').join("")
         + '</tbody></table></div>'
+        + (ok.filter(r=>r.skuMissing).length
+            ? '<div style="border:1px solid #1565c0;background:#eef4fb;padding:8px 10px;margin-bottom:10px;font-size:12.5px;line-height:1.7;">'
+              + '<b>삼성모델명(SKU)이 없는 색상 ' + ok.filter(r=>r.skuMissing).length + '건</b>을 찾았습니다.'
+              + '<br><span style="color:var(--gray);">등록하면 해당 색상에 삼성모델명이 자동으로 저장됩니다.</span></div>'
+            : '')
         + '<button class="btn small" style="width:auto;" onclick="fillOrderModalFromPaste()">주문 등록창에 넣기 ('+ok.reduce((n,r)=>n+r.qty,0)+'대)</button>'
         + '<button class="btn small secondary" style="width:auto;" onclick="submitOrderPaste()">바로 등록 (할인 없이)</button>'
         + '<div style="font-size:11.5px;color:var(--gray);margin-top:6px;line-height:1.6;">'
@@ -7952,6 +8204,7 @@
     const orderDate = (document.getElementById("order-paste-date").value||"").replace(/\D/g,"") || todayStr();
     const rows = orderPasteRows.slice();
 
+    const skuRes = await saveSkuToColors(rows);
     closeOrderPasteModal();
     await openOrderModal();
 
@@ -7991,7 +8244,11 @@
       if(q){ q.value = r.qty; if(typeof updateOrderLineSubtotal === "function") updateOrderLineSubtotal(tr); }
     }
     if(typeof recalcOrderTotal === "function") recalcOrderTotal();
-    alert(rows.length + "줄을 주문 등록창에 넣었습니다.\n할인·판매조건을 넣고 등록해주세요.");
+    alert(rows.length + "줄을 주문 등록창에 넣었습니다."
+      + (skuRes.saved || skuRes.added
+          ? "\n삼성모델명(SKU) " + (skuRes.saved + skuRes.added) + "건을 색상에 저장했습니다."
+          : "")
+      + "\n할인·판매조건을 넣고 등록해주세요.");
   };
 
   window.submitOrderPaste = async function(){
@@ -8038,8 +8295,14 @@
       alert("등록에 실패했습니다.\n" + ((e && e.message) ? e.message : String(e)));
       return;
     }
+    const skuRes = await saveSkuToColors(orderPasteRows);
     logAction("주문 붙여넣기 등록", source + " / " + orderPasteRows.length + "줄 / " + totalQty + "대");
-    alert("주문을 등록했습니다.\n요청서에서 입고가·판매조건을 넣어주세요.");
+    alert("주문을 등록했습니다."
+      + (skuRes.saved || skuRes.added
+          ? "\n\n삼성모델명(SKU)을 색상에 저장했습니다. 채움 " + skuRes.saved + "건"
+            + (skuRes.added ? " / 색상 신규 " + skuRes.added + "건 (검수 표시)" : "")
+          : "")
+      + "\n요청서에서 입고가·판매조건을 넣어주세요.");
     orderPasteRows = [];
     closeOrderPasteModal();
     loadOrderList();
@@ -11429,19 +11692,26 @@
 
   window.downloadInventoryExcel = function(){
     if(!lastRenderedItems || lastRenderedItems.length===0){ alert("다운로드할 재고가 없습니다."); return; }
-    const headers = INV_COLUMNS.map(c=>c.label).concat(["현재상태"]);
+    // 보기 설정에서 체크한 컬럼만 내려받습니다. (화면에 안 보이는 칸은 파일에도 안 넣습니다)
+    const cols = INV_COLUMNS.filter(c=> currentViewSettings.includes(c.key));
+    if(cols.length === 0){ alert("보기 설정에서 컬럼을 하나 이상 선택해주세요."); return; }
+    // 현재상태는 보기 설정 항목이 아니라 항상 보이는 칸이라 그대로 넣습니다.
+    const headers = cols.map(c=>c.label).concat(["현재상태"]);
     const numericColIndices = new Set();
-    INV_COLUMNS.forEach((c,idx)=>{ if(c.getRaw) numericColIndices.add(idx); });
+    cols.forEach((c,idx)=>{ if(c.getRaw) numericColIndices.add(idx); });
     const rows = lastRenderedItems.map(it=>{
-      const row = INV_COLUMNS.map(c=> c.getRaw ? c.getRaw(it) : c.get(it));
+      const row = cols.map(c=> c.getRaw ? c.getRaw(it) : c.get(it));
       row.push(it.status||"-");
       return row;
     });
+    const hiddenCnt = INV_COLUMNS.length - cols.length;
     const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
     forceTextFormat(ws, numericColIndices);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "재고목록");
     XLSX.writeFile(wb, "재고목록_"+todayStr()+".xlsx");
+    logAction("재고 엑셀 다운로드", lastRenderedItems.length + "건 / 컬럼 " + cols.length + "개"
+      + (hiddenCnt ? " (숨긴 " + hiddenCnt + "개 제외)" : ""));
   };
 
   // ---------- 재고 일괄수정 (다운로드 → 채워서 업로드) ----------
