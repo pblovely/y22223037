@@ -85,6 +85,19 @@
   .stack-row label{ width:170px; flex-shrink:0; padding:5px 8px; font-size:12px; font-weight:600; color:var(--navy); background:#fafafa; border-right:1px solid var(--line); display:flex; align-items:center; }
   .stack-row input, .stack-row select{ flex:1; border:none; padding:5px 8px; font-size:12.5px; min-height:28px; }
   .stack-row input:focus, .stack-row select:focus{ outline:2px solid var(--accent); outline-offset:-2px; }
+  /* 드롭다운 메뉴 항목 (우클릭으로 이름 변경 가능) */
+  .menu-item{ padding:10px 14px; cursor:pointer; font-size:13px; border-bottom:1px solid var(--line); }
+  .menu-item:last-child{ border-bottom:none; }
+  .menu-item:hover{ background:#eee; }
+  /* 검색되는 드롭다운(콤보박스) */
+  .combo-wrap{ flex:1; position:relative; min-width:0; display:flex; }
+  .combo-wrap input.combo-input{ flex:1; width:100%; border:none; padding:5px 8px; font-size:12.5px; min-height:28px; box-sizing:border-box; font-family:inherit; background:#fff; }
+  .combo-wrap input.combo-input:focus{ outline:2px solid var(--accent); outline-offset:-2px; }
+  .combo-list{ display:none; position:absolute; left:0; right:0; top:100%; max-height:240px; overflow-y:auto; background:#fff; border:1px solid var(--navy); z-index:1200; box-shadow:0 4px 12px rgba(0,0,0,0.18); }
+  .combo-item{ padding:7px 10px; font-size:12.5px; cursor:pointer; border-top:1px solid var(--line); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .combo-item:first-child{ border-top:none; }
+  .combo-item:hover, .combo-item.active{ background:#e6e6e6; }
+  .combo-empty{ padding:8px 10px; font-size:12.5px; color:var(--gray); }
   .field{ margin-bottom:0; }
   .auth-box .field{ margin-bottom:13px; }
   .inline-form input{ flex:1; min-width:140px; padding:5px 9px; border:1px solid #c7c7c7; font-size:12.5px; }
@@ -284,8 +297,9 @@
           <span style="position:relative;">
             <button class="btn small" style="width:auto;" onclick="toggleOrderAddMenu(event)">+ 주문 ▾</button>
             <div id="order-add-menu" style="display:none;position:absolute;top:36px;right:0;background:#fff;border:1px solid var(--navy);box-shadow:0 2px 10px rgba(0,0,0,0.15);z-index:100;min-width:180px;">
-              <div style="padding:10px 14px;cursor:pointer;border-bottom:1px solid var(--line);font-size:13px;" onclick="closeOrderAddMenu();openItemModal();">즉시 주문 (바로 등록)</div>
-              <div style="padding:10px 14px;cursor:pointer;font-size:13px;" onclick="closeOrderAddMenu();openOrderModal();">새 주문 (예약)</div>
+              <div class="menu-item" data-label-key="menu-order-instant" onclick="closeOrderAddMenu();openItemModal();"><span class="tab-label-text">즉시 주문 (바로 등록)</span></div>
+              <div class="menu-item" data-label-key="menu-order-paste" onclick="closeOrderAddMenu();openPasteRegisterModal();"><span class="tab-label-text">텍스트로 붙여넣기 등록</span></div>
+              <div class="menu-item" data-label-key="menu-order-new" onclick="closeOrderAddMenu();openOrderModal();"><span class="tab-label-text">새 주문 (예약)</span></div>
             </div>
           </span>
         </div>
@@ -308,9 +322,9 @@
           <span style="position:relative;">
             <button class="btn small" style="width:auto;" onclick="toggleSaleAddMenu(event)">+ 판매 ▾</button>
             <div id="sale-add-menu" style="display:none;position:absolute;top:36px;right:0;background:#fff;border:1px solid var(--navy);box-shadow:0 2px 10px rgba(0,0,0,0.15);z-index:100;min-width:220px;">
-              <div style="padding:10px 14px;cursor:pointer;border-bottom:1px solid var(--line);font-size:13px;" onclick="closeSaleAddMenu();openInstantSaleModal();">즉시 판매 (보유중 재고)</div>
-              <div style="padding:10px 14px;cursor:pointer;border-bottom:1px solid var(--line);font-size:13px;" onclick="closeSaleAddMenu();openPasteSaleModal();">텍스트로 붙여넣기 판매처리</div>
-              <div style="padding:10px 14px;cursor:pointer;font-size:13px;" onclick="closeSaleAddMenu();openSaleRequestModal();">새 판매요청 (예약)</div>
+              <div class="menu-item" data-label-key="menu-sale-instant" onclick="closeSaleAddMenu();openInstantSaleModal();"><span class="tab-label-text">즉시 판매 (보유중 재고)</span></div>
+              <div class="menu-item" data-label-key="menu-sale-paste" onclick="closeSaleAddMenu();openPasteSaleModal();"><span class="tab-label-text">텍스트로 붙여넣기 판매처리</span></div>
+              <div class="menu-item" data-label-key="menu-sale-new" onclick="closeSaleAddMenu();openSaleRequestModal();"><span class="tab-label-text">새 판매요청 (예약)</span></div>
             </div>
           </span>
         </div>
@@ -716,7 +730,12 @@
         </div>
 
         <div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px;border:1px solid var(--line);padding:5px 10px;margin-bottom:6px;">
-          <input type="hidden" id="filter-date-type" value="inDate">
+          <select id="filter-date-type" title="기간 조회의 기준이 되는 날짜" style="height:28px;border:1px solid #c7c7c7;padding:0 6px;font-size:12.5px;box-sizing:border-box;">
+            <option value="inDate">입고일</option>
+            <option value="outDate">출고일(판매일)</option>
+            <option value="orderDate">주문일</option>
+            <option value="expectedSaleDate">판매예정일</option>
+          </select>
           <label style="display:flex;align-items:center;gap:5px;font-size:12.5px;white-space:nowrap;">
             <input type="checkbox" id="filter-date-all" onclick="onFilterDateAllToggle()"> 전체
           </label>
@@ -987,7 +1006,6 @@
         <p class="desc">모델·용량 단위로, 거래처별 예약(주문) 수량을 등록합니다. 같은 모델을 여러 거래처가 각각 예약하면 줄을 나눠서 추가하세요.</p>
         <div class="stack-form">
           <div class="stack-row"><label>요청일</label><input type="text" id="resv-date-input" placeholder="예: 20260724" maxlength="8" inputmode="numeric"></div>
-          <div class="stack-row"><label>모델 검색</label><input type="text" id="resv-model-search" placeholder="모델명 입력해서 찾기" oninput="filterSelectOptions('resv-model-select', this.value)"></div>
           <div class="stack-row"><label>모델 (모델명+용량)</label><select id="resv-model-select"><option value="">모델을 선택하세요</option></select></div>
           <div class="stack-row"><label>거래처</label><select id="resv-dest-select"><option value="">선택</option></select></div>
           <div class="stack-row"><label>예약(주문) 수량</label><input type="number" id="resv-order-qty-input" value="1"></div>
@@ -1068,7 +1086,6 @@
           <div class="stack-row"><label>제조사</label><select id="item-manufacturer-select"><option value="">선택</option></select></div>
           <div class="stack-row"><label>통신사</label><select id="item-carrier-select"></select></div>
           <div class="stack-row"><label>위치</label><select id="item-location-select"><option value="">선택</option></select></div>
-          <div class="stack-row"><label>모델 검색</label><input type="text" id="item-model-search" placeholder="모델명 입력해서 찾기" oninput="filterSelectOptions('item-model-select', this.value)"></div>
           <div class="stack-row"><label>모델 (모델명+기가수)</label><select id="item-model-select" onchange="onItemModelChange()"><option value="">모델을 선택하세요</option></select></div>
           <div class="stack-row"><label>전산색상</label><select id="item-syscolor-select" onchange="onSysColorChange()"><option value="">모델을 먼저 선택하세요</option></select></div>
           <div class="stack-row"><label>제조사색상</label><select id="item-manucolor-select" onchange="onManuColorChange()"><option value="">모델을 먼저 선택하세요</option></select></div>
@@ -1435,7 +1452,7 @@
   document.addEventListener("contextmenu", function(e){
     if(!hasPerm(currentUserPerms, "uiCustomize")) return; // 권한 없으면 기본 브라우저 메뉴만 사용
     const keyedEl = e.target.closest("[data-label-key]");
-    const genericEl = keyedEl ? null : e.target.closest("button, h3, p, label");
+    const genericEl = keyedEl ? null : e.target.closest("button, h3, p, label, .menu-item");
     const targetEl = keyedEl || genericEl;
     if(!targetEl) return;
     const key = getElKey(targetEl);
@@ -2624,7 +2641,8 @@
       opt.value = m.id; opt.textContent = m.modelGroup + " (" + m.baseModel + " " + m.capacity + ")";
       sel.appendChild(opt);
     });
-    if(typeof resetSelectSearchCache === "function") resetSelectSearchCache("item-model-select");
+    initSearchableSelect("item-model-select", "모델명을 입력하면 목록이 나옵니다");
+    syncSearchableSelect("item-model-select");
     onItemModelChange();
   }
   window.onItemModelChange = function(){
@@ -2836,8 +2854,7 @@
     document.getElementById("item-status-select").selectedIndex = 0;
     document.getElementById("item-entry-type").value = "qty";
     currentOrderLinkId = null;
-    document.getElementById("item-model-search").value = "";
-    filterSelectOptions("item-model-select", "");
+    syncSearchableSelect("item-model-select");
     onItemModelChange();
     toggleEntryType();
   }
@@ -2874,6 +2891,7 @@
     }
     if(model){
       document.getElementById("item-model-select").value = model.id;
+      syncSearchableSelect("item-model-select");
       onItemModelChange();
       const sysSel = document.getElementById("item-syscolor-select");
       const manuSel = document.getElementById("item-manucolor-select");
@@ -4082,7 +4100,6 @@
   window.openReservationModal = async function(){
     document.getElementById("resv-date-input").value = todayStr();
     document.getElementById("resv-order-qty-input").value = "1";
-    document.getElementById("resv-model-search").value = "";
 
     await fetchModelsCache();
     const modelSel = document.getElementById("resv-model-select");
@@ -4093,8 +4110,8 @@
       opt.textContent = (m.baseModel||m.systemModel||m.petName||"모델") + (m.capacity?(" "+m.capacity):"");
       modelSel.appendChild(opt);
     });
-    if(typeof resetSelectSearchCache === "function") resetSelectSearchCache("resv-model-select");
-    filterSelectOptions("resv-model-select", "");
+    initSearchableSelect("resv-model-select", "모델명을 입력하면 목록이 나옵니다");
+    syncSearchableSelect("resv-model-select");
 
     const destSel = document.getElementById("resv-dest-select");
     destSel.innerHTML = '<option value="">선택</option>';
@@ -4917,6 +4934,103 @@
     if(Array.from(sel.options).some(o=>o.value===currentVal)) sel.value = currentVal;
   };
 
+  // ---------- 검색되는 드롭다운(콤보박스) ----------
+  // 기존 <select>는 그대로 두고 화면에만 입력칸을 덮어씌워, 값을 읽는 기존 코드는 전부 그대로 동작합니다.
+  function comboEsc(t){ return String(t==null?"":t).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;"); }
+
+  window.initSearchableSelect = function(selectId, placeholder){
+    const sel = document.getElementById(selectId);
+    if(!sel || sel.dataset.combo === "1") return;   // 이미 만들었으면 재생성하지 않음
+    sel.dataset.combo = "1";
+
+    const wrap = document.createElement("div");
+    wrap.className = "combo-wrap";
+    sel.parentNode.insertBefore(wrap, sel);
+    wrap.appendChild(sel);
+    sel.style.display = "none";
+
+    const input = document.createElement("input");
+    input.type = "text"; input.className = "combo-input";
+    input.id = selectId + "-combo"; input.autocomplete = "off";
+    input.placeholder = placeholder || "입력하면 목록이 나옵니다";
+    const list = document.createElement("div");
+    list.className = "combo-list";
+    wrap.appendChild(input); wrap.appendChild(list);
+
+    let activeIdx = -1;
+    function matches(){
+      const q = input.value.trim().toLowerCase();
+      return Array.from(sel.options)
+        .filter(o=>o.value)
+        .filter(o=> !q || o.textContent.toLowerCase().includes(q));
+    }
+    function draw(){
+      const ms = matches();
+      if(ms.length === 0){
+        list.innerHTML = '<div class="combo-empty">등록된 모델 중 일치하는 항목이 없습니다</div>';
+      }else{
+        list.innerHTML = ms.slice(0,200).map((o,i)=>
+          '<div class="combo-item'+(i===activeIdx?' active':'')+'" data-val="'+comboEsc(o.value)+'">'+comboEsc(o.textContent)+'</div>'
+        ).join("");
+      }
+      list.style.display = "block";
+    }
+    function pick(val, text){
+      sel.value = val;
+      input.value = text;
+      list.style.display = "none";
+      activeIdx = -1;
+      sel.dispatchEvent(new Event("change"));   // onchange="onItemModelChange()" 등이 정상 실행됨
+    }
+
+    input.addEventListener("focus", ()=>{ activeIdx = -1; draw(); });
+    input.addEventListener("input", ()=>{ activeIdx = -1; draw(); });
+    input.addEventListener("keydown", (e)=>{
+      const items = Array.from(list.querySelectorAll(".combo-item"));
+      if(e.key === "ArrowDown" || e.key === "ArrowUp"){
+        e.preventDefault();
+        if(list.style.display !== "block"){ draw(); return; }
+        activeIdx += (e.key === "ArrowDown" ? 1 : -1);
+        if(activeIdx < 0) activeIdx = items.length - 1;
+        if(activeIdx >= items.length) activeIdx = 0;
+        items.forEach((el,i)=> el.classList.toggle("active", i===activeIdx));
+        if(items[activeIdx]) items[activeIdx].scrollIntoView({ block:"nearest" });
+      }else if(e.key === "Enter"){
+        e.preventDefault();
+        const target = items[activeIdx >= 0 ? activeIdx : 0];
+        if(target) pick(target.dataset.val, target.textContent);
+      }else if(e.key === "Escape"){
+        list.style.display = "none";
+      }
+    });
+    // mousedown으로 처리 — blur보다 먼저 실행되어 클릭이 씹히지 않음
+    list.addEventListener("mousedown", (e)=>{
+      const item = e.target.closest(".combo-item");
+      if(!item) return;
+      e.preventDefault();
+      pick(item.dataset.val, item.textContent);
+    });
+    input.addEventListener("blur", ()=>{
+      setTimeout(()=>{
+        list.style.display = "none";
+        if(input.value.trim() === ""){        // 비우면 선택도 해제
+          if(sel.value !== ""){ sel.value = ""; sel.dispatchEvent(new Event("change")); }
+        }else{
+          window.syncSearchableSelect(selectId);  // 고르지 않고 나가면 선택된 값으로 복원
+        }
+      }, 150);
+    });
+  };
+
+  // 코드에서 select.value 를 바꿨을 때 화면 입력칸을 맞춰줌
+  window.syncSearchableSelect = function(selectId){
+    const sel = document.getElementById(selectId);
+    const input = document.getElementById(selectId + "-combo");
+    if(!sel || !input) return;
+    const opt = sel.options[sel.selectedIndex];
+    input.value = (sel.value && opt) ? opt.textContent : "";
+  };
+
   function populatePrimaryCondField(){
     const sel = document.getElementById("primary-cond-field");
     if(!sel || sel.options.length>0) return;
@@ -5480,6 +5594,7 @@
     return set;
   }
 
+  window.loadInventoryList = loadInventoryList;
   async function loadInventoryList(){
     const listEl = document.getElementById("inventory-list");
     listEl.innerHTML = "";
