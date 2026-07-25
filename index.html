@@ -98,6 +98,24 @@
   .combo-item:first-child{ border-top:none; }
   .combo-item:hover, .combo-item.active{ background:#e6e6e6; }
   .combo-empty{ padding:8px 10px; font-size:12.5px; color:var(--gray); }
+  /* 목록 상단 툴바 — 칸을 붙여서 한 줄로 */
+  .tbar{ border:1px solid var(--line); background:#fff; padding:5px 7px; margin-bottom:8px; }
+  .tbar-row{ display:flex; flex-wrap:wrap; align-items:center; row-gap:4px; }
+  .tbar-row + .tbar-row{ border-top:1px solid var(--line); margin-top:5px; padding-top:5px; }
+  .tbar-row > *{ height:28px; box-sizing:border-box; font-size:12.5px; }
+  .tbar-row select,
+  .tbar-row input[type="text"],
+  .tbar-row input[type="date"]{ border:1px solid #c7c7c7; padding:0 6px; margin-left:-1px; background:#fff; font-family:inherit; }
+  .tbar-row > *:first-child{ margin-left:0; }
+  .tbar-row .tbar-chk{ display:flex; align-items:center; gap:4px; white-space:nowrap; padding:0 8px; border:1px solid #c7c7c7; margin-left:-1px; background:#fafafa; }
+  .tbar-row .tbar-chk input{ height:auto; }
+  .tbar-row .tbar-sep{ display:flex; align-items:center; justify-content:center; width:16px; color:var(--gray); }
+  .tbar-row .btn.small{ width:auto; padding:0 12px; border:1px solid var(--navy); margin-left:-1px; }
+  .tbar-row .push{ margin-left:auto; }
+  .tbar-row input[type="date"]{ width:126px; }
+  /* 재고 목록 화면: 위쪽 여백 줄이고 폭 넓게 (툴바가 한 줄에 들어가도록) */
+  #tab-inv-work{ padding:14px 16px; }
+  #tab-inv-work .card{ max-width:none; padding:12px 14px; }
   .field{ margin-bottom:0; }
   .auth-box .field{ margin-bottom:13px; }
   .inline-form input{ flex:1; min-width:140px; padding:5px 9px; border:1px solid #c7c7c7; font-size:12.5px; }
@@ -222,6 +240,7 @@
             <select id="dash-month-picker" onchange="setDashboardCustomMonth(this.value)" style="padding:5px 6px;border:1px solid #c7c7c7;font-size:12.5px;height:28px;"><option value="">월 선택</option></select>
           </span>
         </div>
+        <div id="dash-scope-note" style="font-size:12px;color:var(--gray);margin-bottom:8px;"></div>
         <div id="dash-stat-cards" style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-start;margin-bottom:16px;"></div>
         <div>
           <h3 style="font-size:13px;">통신사별</h3>
@@ -717,51 +736,47 @@
     <div id="tab-inv-work" class="tab-panel">
 
       <div class="card">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
-          <h3 style="margin:0;">재고 목록 <button class="btn small secondary" style="width:auto;padding:6px 12px;margin-left:8px;" onclick="toggleViewPanel()">보기 설정</button></h3>
-          <span>
-            <button class="btn small" style="width:auto;" onclick="openItemModal()">+ 재고 등록</button>
-          </span>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:7px;">
+          <h3 data-label-key="inv-list-title" style="margin:0;"><span class="tab-label-text">재고 목록</span> <span class="info-tip" data-label-key="desc-serial-warning" title="번호 옆 ● 표시는 최신 마스터재고 파일에서 해당 일련번호가 확인되지 않았다는 뜻입니다 — 이미 판매되었을 가능성이 있으니 확인해주세요.">ⓘ</span></h3>
+          <button class="btn small" style="width:auto;" onclick="openItemModal()">+ 재고 등록</button>
         </div>
-        <p class="desc" data-label-key="desc-serial-warning" style="margin-top:0;"><span class="tab-label-text">번호 옆 <span style="color:var(--danger);">●</span> 표시는 최신 마스터재고 파일에서 해당 일련번호가 확인되지 않았다는 뜻입니다 — 이미 판매되었을 가능성이 있으니 확인해주세요.</span></p>
-        <div class="check-panel" id="view-panel" style="display:none;">
+
+        <div class="tbar">
+          <!-- 1행: 조회 조건 -->
+          <div class="tbar-row">
+            <select id="filter-date-type" title="기간 조회의 기준이 되는 날짜">
+              <option value="inDate">입고일</option>
+              <option value="outDate">출고일(판매일)</option>
+              <option value="orderDate">주문일</option>
+              <option value="expectedSaleDate">판매예정일</option>
+            </select>
+            <label class="tbar-chk"><input type="checkbox" id="filter-date-all" onclick="onFilterDateAllToggle()"> 전체</label>
+            <input type="date" id="filter-date-from-native">
+            <span class="tbar-sep">~</span>
+            <input type="date" id="filter-date-to-native">
+            <select id="primary-cond-field"></select>
+            <select id="primary-cond-match">
+              <option value="포함">포함</option><option value="일치">일치</option>
+            </select>
+            <input type="text" id="primary-cond-value" placeholder="검색어" style="width:115px;">
+            <button class="btn small secondary" onclick="openAddConditionModal()">+ 조건 추가</button>
+            <button class="btn small push" style="padding:0 18px;" onclick="loadInventoryList()">조회</button>
+          </div>
+          <!-- 2행: 목록 도구 -->
+          <div class="tbar-row">
+            <label class="tbar-chk"><input type="checkbox" id="bulk-select-all" onclick="toggleAllInventoryRows(this)"> 전체</label>
+            <button class="btn small secondary" onclick="openBulkChangeModal()">변경</button>
+            <button class="btn small secondary" id="inv-sort-toggle-btn" onclick="toggleInventorySortField()">정렬: 판매일 ▾</button>
+            <button class="btn small secondary" onclick="toggleViewPanel()">보기 설정</button>
+            <button class="btn small secondary push" onclick="downloadInventoryExcel()">엑셀다운</button>
+            <select id="inv-page-size-select" onchange="onInvPageSizeChange()"></select>
+          </div>
+        </div>
+
+        <div id="active-conditions-chips" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px;"></div>
+        <div class="check-panel" id="view-panel" style="display:none;margin-bottom:8px;">
           <div id="view-panel-checks"></div>
           <button class="btn small" style="width:auto;margin-top:6px;" onclick="saveViewSettings()">이 설정 저장 (내 계정에 유지)</button>
-        </div>
-
-        <div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px;border:1px solid var(--line);padding:5px 10px;margin-bottom:6px;">
-          <select id="filter-date-type" title="기간 조회의 기준이 되는 날짜" style="height:28px;border:1px solid #c7c7c7;padding:0 6px;font-size:12.5px;box-sizing:border-box;">
-            <option value="inDate">입고일</option>
-            <option value="outDate">출고일(판매일)</option>
-            <option value="orderDate">주문일</option>
-            <option value="expectedSaleDate">판매예정일</option>
-          </select>
-          <label style="display:flex;align-items:center;gap:5px;font-size:12.5px;white-space:nowrap;">
-            <input type="checkbox" id="filter-date-all" onclick="onFilterDateAllToggle()"> 전체
-          </label>
-          <label style="display:flex;align-items:center;gap:5px;font-size:12.5px;white-space:nowrap;">기간
-            <input type="date" id="filter-date-from-native" style="height:28px;border:1px solid #c7c7c7;padding:0 6px;font-size:12.5px;box-sizing:border-box;">
-            ~
-            <input type="date" id="filter-date-to-native" style="height:28px;border:1px solid #c7c7c7;padding:0 6px;font-size:12.5px;box-sizing:border-box;">
-          </label>
-          <select id="primary-cond-field" style="height:28px;border:1px solid #c7c7c7;padding:0 6px;font-size:12.5px;box-sizing:border-box;"></select>
-          <select id="primary-cond-match" style="height:28px;border:1px solid #c7c7c7;padding:0 6px;font-size:12.5px;box-sizing:border-box;">
-            <option value="포함">포함</option><option value="일치">일치</option>
-          </select>
-          <input type="text" id="primary-cond-value" placeholder="검색어" style="width:130px;height:28px;border:1px solid #c7c7c7;padding:0 8px;font-size:12.5px;box-sizing:border-box;">
-          <button class="btn small secondary" style="width:auto;height:28px;box-sizing:border-box;border:1px solid var(--navy);padding:0 12px;" onclick="openAddConditionModal()">+ 조건 추가</button>
-          <button class="btn small" style="width:auto;height:28px;box-sizing:border-box;border:1px solid var(--navy);padding:0 16px;margin-left:auto;" onclick="loadInventoryList()">조회</button>
-        </div>
-        <div id="active-conditions-chips" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px;"></div>
-
-        <div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px;border:1px solid var(--line);padding:5px 10px;margin-bottom:0;">
-          <label style="font-size:12.5px;display:flex;align-items:center;gap:5px;height:28px;">
-            <input type="checkbox" id="bulk-select-all" onclick="toggleAllInventoryRows(this)"> 전체
-          </label>
-          <button class="btn small secondary" style="width:auto;height:28px;box-sizing:border-box;border:1px solid var(--navy);padding:0 12px;" onclick="openBulkChangeModal()">변경</button>
-          <button class="btn small secondary" id="inv-sort-toggle-btn" style="width:auto;height:28px;box-sizing:border-box;border:1px solid var(--navy);padding:0 12px;" onclick="toggleInventorySortField()">정렬: 판매일 ▾</button>
-          <button class="btn small secondary" style="width:auto;height:28px;box-sizing:border-box;border:1px solid var(--navy);padding:0 12px;margin-left:auto;" onclick="downloadInventoryExcel()">엑셀다운</button>
-          <select id="inv-page-size-select" onchange="onInvPageSizeChange()" style="padding:5px 6px;border:1px solid #c7c7c7;font-size:12px;height:28px;box-sizing:border-box;"></select>
         </div>
 
         <div style="overflow-x:auto;">
@@ -1208,6 +1223,54 @@
   let currentSettings = {};
   let currentUser = { name:"알수없음", username:"unknown", uid:null };
   let currentUserPerms = {};
+  // ---------- 할인 금액 ↔ 율 역산 (한쪽만 저장된 예전 데이터도 둘 다 보이게) ----------
+  // 저장된 값이 있으면 그대로, 없으면 출고가·입고가·판매가에서 역산합니다.
+  // 둘 다 낼 수 없으면 null(화면에서는 "-", 엑셀에서는 빈칸)
+  function preDiscountAmtOf(it){
+    if(it.purchaseDiscountAmt != null) return Number(it.purchaseDiscountAmt);
+    const list = Number(it.listPrice) || 0;
+    if(!list) return null;
+    const other = Number(it.otherDiscountAmt) || 0;
+    if(it.purchasePrice != null) return list - Number(it.purchasePrice) - other;   // 입고가로 역산 (가장 정확)
+    if(it.purchaseDiscount != null) return Math.round(list * Number(it.purchaseDiscount)/100);
+    return null;
+  }
+  function preDiscountPctOf(it){
+    if(it.purchaseDiscount != null) return Number(it.purchaseDiscount);
+    const list = Number(it.listPrice) || 0;
+    const amt = preDiscountAmtOf(it);
+    if(!list || amt === null) return null;
+    return Number(((amt/list)*100).toFixed(2));
+  }
+  function saleDiscountAmtOf(it){
+    if(it.saleDiscountAmt != null) return Number(it.saleDiscountAmt);
+    const list = Number(it.listPrice) || 0;
+    if(!list) return null;
+    if(it.salePrice != null) return list - Number(it.salePrice);
+    if(it.saleDiscount != null) return Math.round(list * Number(it.saleDiscount)/100);
+    return null;
+  }
+  function saleDiscountPctOf(it){
+    if(it.saleDiscount != null) return Number(it.saleDiscount);
+    const list = Number(it.listPrice) || 0;
+    const amt = saleDiscountAmtOf(it);
+    if(!list || amt === null) return null;
+    return Number(((amt/list)*100).toFixed(2));
+  }
+  function totalInDiscountOf(it){
+    const pre = preDiscountAmtOf(it);
+    const other = (it.otherDiscountAmt != null) ? Number(it.otherDiscountAmt) : null;
+    if(pre === null && other === null) return null;   // 둘 다 없으면 0 대신 빈칸
+    return (pre || 0) + (other || 0);
+  }
+  const numFmt = v => (v === null || v === "") ? "-" : Number(v).toLocaleString();
+  const pctFmt = v => (v === null || v === "") ? "-" : Number(v).toFixed(2)+"%";
+  // 할인 항목은 "0" 과 "할인 없음"이 실무상 같은 뜻이라 0도 "-"로 표시하고 엑셀에는 빈칸으로 내보냅니다.
+  const isBlankDisc = v => (v === null || v === "" || Number(v) === 0);
+  const discFmt    = v => isBlankDisc(v) ? "-" : Number(v).toLocaleString();
+  const discPctFmt = v => isBlankDisc(v) ? "-" : Number(v).toFixed(2)+"%";
+  const discRaw    = v => isBlankDisc(v) ? ""  : Number(v);
+
   // ---------- 보기 설정 ----------
   const INV_COLUMNS = [
     { key:"orderDate", label:"주문일", get:it=>it.orderDate||"-" },
@@ -1230,15 +1293,15 @@
     { key:"imei", label:"IMEI", get:it=>it.imei||"-" },
     { key:"listPrice", label:"출고가", get:it=>it.listPrice?Number(it.listPrice).toLocaleString():"-", getRaw:it=>it.listPrice!=null?Number(it.listPrice):"" },
     { key:"purchasePrice", label:"입고가", get:it=>it.purchasePrice?Number(it.purchasePrice).toLocaleString():"-", getRaw:it=>it.purchasePrice!=null?Number(it.purchasePrice):"" },
-    { key:"purchaseDiscountAmt", label:"선할인", get:it=> (it.purchaseDiscountAmt!=null)?Number(it.purchaseDiscountAmt).toLocaleString():"-", getRaw:it=>it.purchaseDiscountAmt!=null?Number(it.purchaseDiscountAmt):"" },
-    { key:"purchaseDiscount", label:"선할인%", get:it=> (it.purchaseDiscount!=null)?Number(it.purchaseDiscount).toFixed(2)+"%":"-", getRaw:it=>it.purchaseDiscount!=null?Number(it.purchaseDiscount):"" },
-    { key:"otherDiscountAmt", label:"타할인", get:it=> (it.otherDiscountAmt!=null)?Number(it.otherDiscountAmt).toLocaleString():"-", getRaw:it=>it.otherDiscountAmt!=null?Number(it.otherDiscountAmt):"" },
-    { key:"otherDiscountPct", label:"타할인%", get:it=> (it.otherDiscountPct!=null)?Number(it.otherDiscountPct).toFixed(2)+"%":"-", getRaw:it=>it.otherDiscountPct!=null?Number(it.otherDiscountPct):"" },
-    { key:"totalPurchaseDiscount", label:"입고할인", get:it=> ((Number(it.purchaseDiscountAmt)||0)+(Number(it.otherDiscountAmt)||0)).toLocaleString(), getRaw:it=> (Number(it.purchaseDiscountAmt)||0)+(Number(it.otherDiscountAmt)||0) },
+    { key:"purchaseDiscountAmt", label:"선할인", get:it=> discFmt(preDiscountAmtOf(it)), getRaw:it=> discRaw(preDiscountAmtOf(it)) },
+    { key:"purchaseDiscount", label:"선할인%", get:it=> discPctFmt(preDiscountPctOf(it)), getRaw:it=> discRaw(preDiscountPctOf(it)) },
+    { key:"otherDiscountAmt", label:"타할인", get:it=> discFmt(it.otherDiscountAmt), getRaw:it=> discRaw(it.otherDiscountAmt) },
+    { key:"otherDiscountPct", label:"타할인%", get:it=> discPctFmt(it.otherDiscountPct), getRaw:it=> discRaw(it.otherDiscountPct) },
+    { key:"totalPurchaseDiscount", label:"입고할인", get:it=> discFmt(totalInDiscountOf(it)), getRaw:it=> discRaw(totalInDiscountOf(it)) },
     { key:"destination", label:"판매처", get:it=>it.destination||"-" },
     { key:"salePrice", label:"판매가", get:it=>it.salePrice?Number(it.salePrice).toLocaleString():"-", getRaw:it=>it.salePrice!=null?Number(it.salePrice):"" },
-    { key:"saleDiscountAmt", label:"판매할인", get:it=> (it.saleDiscountAmt!=null)?Number(it.saleDiscountAmt).toLocaleString():"-", getRaw:it=>it.saleDiscountAmt!=null?Number(it.saleDiscountAmt):"" },
-    { key:"saleDiscount", label:"판매할인%", get:it=> (it.saleDiscount!=null)?Number(it.saleDiscount).toFixed(2)+"%":"-", getRaw:it=>it.saleDiscount!=null?Number(it.saleDiscount):"" },
+    { key:"saleDiscountAmt", label:"판매할인", get:it=> discFmt(saleDiscountAmtOf(it)), getRaw:it=> discRaw(saleDiscountAmtOf(it)) },
+    { key:"saleDiscount", label:"판매할인%", get:it=> discPctFmt(saleDiscountPctOf(it)), getRaw:it=> discRaw(saleDiscountPctOf(it)) },
     { key:"subsidyAmount", label:"공시지원금", get:it=> (it.subsidyAmount!=null)?Number(it.subsidyAmount).toLocaleString():"-", getRaw:it=>it.subsidyAmount!=null?Number(it.subsidyAmount):"" },
     { key:"subsidyStatus", label:"공시지원금 상태", get:it=>it.subsidyStatus||"-" },
     { key:"clawbackAmount", label:"환수액", get:it=> (it.clawbackAmount!=null)?Number(it.clawbackAmount).toLocaleString():"-", getRaw:it=>it.clawbackAmount!=null?Number(it.clawbackAmount):"" },
@@ -5369,6 +5432,18 @@
       '<option value="'+m+'"'+(m===dashboardCustomMonth?' selected':'')+'>'+m.slice(0,4)+'년 '+m.slice(4,6)+'월</option>'
     ).join("");
 
+    // 대시보드가 왜 비었는지 화면에서 바로 알 수 있도록 진단값을 미리 계산
+    const scopeLabel = dashboardScope==="all"
+      ? "전체 기간"
+      : (thisMonth.slice(0,4)+"년 "+thisMonth.slice(4,6)+"월");
+    const noDateCount = allItems.filter(it=> !normDate(it.inDate) && !normDate(it.outDate)).length;
+    const noteEl = document.getElementById("dash-scope-note");
+    if(noteEl){
+      noteEl.textContent = "표시 기간: " + scopeLabel + " (입고일·출고일 기준) · 전체 재고 "
+        + allItems.length + "건"
+        + (noDateCount>0 ? " · 입고일·출고일이 비어 있어 집계 제외 " + noDateCount + "건" : "");
+    }
+
     let totalCount = 0;
     let allTimeTotalCount = 0, allTimeSoldCount = 0;
     let heldListPriceSum = 0, soldProfitSum = 0;
@@ -5519,7 +5594,19 @@
 
     function renderFullList(el, agg, nameLabel){
       const entries = Object.entries(agg).sort((a,b)=>(b[1].purchaseCount+b[1].saleCount)-(a[1].purchaseCount+a[1].saleCount));
-      if(entries.length===0){ el.innerHTML = '<div class="list-empty">데이터가 없습니다.</div>'; return; }
+      if(entries.length===0){
+        let why = '<div class="list-empty">' + scopeLabel + ' 기준으로 집계할 재고가 없습니다.';
+        if(allItems.length === 0){
+          why += '<br>등록된 재고 자체가 없습니다.';
+        }else if(dashboardScope !== "all"){
+          why += '<br>전체 재고 ' + allItems.length + '건 중 이 기간에 입고·출고된 건이 없습니다. 위의 <b>전체</b> 버튼 또는 <b>월 선택</b>으로 기간을 바꿔보세요.';
+        }else if(noDateCount > 0){
+          why += '<br>재고 ' + noDateCount + '건에 입고일·출고일이 비어 있어 집계에서 제외됐습니다. 재고 목록에서 날짜를 채워주세요.';
+        }
+        why += '</div>';
+        el.innerHTML = why;
+        return;
+      }
       let html = '<div style="overflow-x:auto;"><table class="data-table" style="width:auto;max-width:760px;table-layout:fixed;"><thead><tr>' +
         '<th style="width:220px;">'+nameLabel+'</th><th class="ta-right" style="width:80px;">매입대수</th><th class="ta-right" style="width:150px;">매입액</th><th class="ta-right" style="width:80px;">매출대수</th><th class="ta-right" style="width:150px;">매출액</th>' +
         '</tr></thead><tbody>';
@@ -5672,6 +5759,7 @@
     visibleCols.forEach(c=>{
       const th = document.createElement("th");
       th.textContent = c.label;
+      if(c.getRaw) th.className = "ta-right";   // 금액·율 컬럼은 오른쪽 정렬
       headRow.appendChild(th);
     });
     const thStatus = document.createElement("th"); thStatus.textContent = "현재상태"; headRow.appendChild(thStatus);
@@ -5697,6 +5785,7 @@
       visibleCols.forEach(c=>{
         const td = document.createElement("td");
         td.textContent = c.get(it);
+        if(c.getRaw) td.className = "ta-right";   // 금액·율 컬럼은 오른쪽 정렬
         tr.appendChild(td);
       });
 
@@ -6518,6 +6607,20 @@
         saleDiscountNum = Number(((1 - salePriceNum/listPriceNum) * 100).toFixed(2));
       }
 
+      // 할인율만 있으면 금액도 함께 계산해서 저장 (예전에는 율만 저장되어 금액칸이 비었음)
+      let purchaseDiscountAmtNum = null;
+      if(listPriceNum && purchasePriceNum != null){
+        purchaseDiscountAmtNum = listPriceNum - purchasePriceNum;
+      }else if(listPriceNum && purchaseDiscountNum != null){
+        purchaseDiscountAmtNum = Math.round(listPriceNum * purchaseDiscountNum / 100);
+      }
+      let saleDiscountAmtNum = null;
+      if(listPriceNum && salePriceNum != null){
+        saleDiscountAmtNum = listPriceNum - salePriceNum;
+      }else if(listPriceNum && saleDiscountNum != null){
+        saleDiscountAmtNum = Math.round(listPriceNum * saleDiscountNum / 100);
+      }
+
       if(errs.length>0){
         errorRows.push({ rowNum:excelRowNum, reasons:errs.join(" / ") });
       }else{
@@ -6528,7 +6631,9 @@
           carrier, source, manufacturer, location, destination:dest,
           listPrice:listPriceNum, purchasePrice:purchasePriceNum,
           purchaseDiscount: purchaseDiscountNum,
+          purchaseDiscountAmt: purchaseDiscountAmtNum,
           salePrice:salePriceNum, saleDiscount: saleDiscountNum,
+          saleDiscountAmt: saleDiscountAmtNum,
           profit, imei, status, orderDate, inDate, expectedSaleDate, outDate,
           entryType:"imei", quantity:1, serialNumber,
           rowNum: excelRowNum
