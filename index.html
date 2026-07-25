@@ -249,7 +249,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-07-25 v62</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-07-25 v63</span>
       <span id="topbar-username">-</span>
       <button onclick="openPersonalSettingsModal()">개인설정</button>
       <button onclick="handleLogout()">로그아웃</button>
@@ -1407,7 +1407,7 @@
         <p class="desc" id="me-multi-desc"></p>
         <div style="border:1px solid var(--navy);background:#f4f7fb;padding:8px 11px;margin-bottom:10px;font-size:12px;line-height:1.7;">
           왼쪽 <b>체크한 항목만</b> 바뀝니다. 체크하지 않은 칸은 건드리지 않습니다.
-          <br>칸에는 <b>체크한 건들의 현재 값</b>이 미리 들어 있습니다. 값이 서로 다르면 <span style="color:var(--danger);">건별 다름</span>으로 표시됩니다.
+          <br>칸에는 <b>체크한 건들의 현재 값</b>이 미리 들어 있습니다. 값이 서로 다르면 <span style="color:var(--danger);">건별 다름</span>으로 표시되고, 아래 <b>값 버튼</b>을 누르면 그 값으로 채워집니다. (숫자는 그 값을 쓰는 건수입니다)
           <br><b>일련번호·IMEI·수량·모델·색상은 바꿀 수 없습니다.</b> 건별로 다른 값이라 일괄 변경 대상이 아닙니다.
         </div>
         <div class="stack-form" id="multi-edit-form"></div>
@@ -9355,8 +9355,12 @@
     const curOf = (key)=>{
       const vals = items.map(it=> (it[key]===undefined || it[key]===null) ? "" : String(it[key]));
       const uniq = [...new Set(vals)];
+      // 값별 건수도 세어서 어느 값이 많은지 보이게 합니다.
+      const cnt = {};
+      vals.forEach(v=>{ cnt[v] = (cnt[v]||0)+1; });
+      const list = uniq.filter(v=>v!=="").sort((a,b)=> cnt[b]-cnt[a]);
       return { same: uniq.length === 1, value: uniq[0] || "", kinds: uniq.length,
-               sample: uniq.filter(Boolean).slice(0,3).join(" / ") };
+               list, count: cnt, sample: list.slice(0,3).join(" / ") };
     };
 
     let h = "";
@@ -9384,12 +9388,36 @@
           + ' placeholder="'+(cur.same ? (f.ph||"") : "건별 다름 — 넣으면 전부 같은 값이 됩니다")+'"'
           + ' style="flex:1;border:none;padding:5px 8px;font-size:12.5px;">';
       }
+      // 등록된 값이 여러 개면 눌러서 가져올 수 있는 칩을 만듭니다.
+      let chips = "";
+      if(!cur.same && cur.list.length > 0){
+        chips = '<div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:4px;">' +
+          cur.list.slice(0,6).map(v=>
+            '<button type="button" class="btn small secondary" style="width:auto;padding:1px 8px;font-size:10.5px;"' +
+            ' data-mpick-key="'+f.key+'" data-mpick-val="'+comboEsc(v)+'" title="이 값으로 채우기">' +
+            comboEsc(v.length>18 ? v.slice(0,18)+"…" : v) + ' <span style="color:var(--gray);">'+cur.count[v]+'</span></button>').join("") +
+          (cur.list.length>6 ? '<span style="font-size:10.5px;color:var(--gray);align-self:center;">외 '+(cur.list.length-6)+'가지</span>' : '') +
+          '</div>';
+      }
       h += '<div class="stack-row" style="align-items:stretch;">' +
-        '<label style="width:150px;gap:6px;align-items:flex-start;padding-top:6px;"><input type="checkbox" id="'+meChk(f.key)+'" title="이 항목을 바꿉니다">' +
-        '<span>'+f.label+'<br><span style="font-weight:400;font-size:10.5px;color:'+(cur.same?'var(--gray)':'var(--danger)')+';">'+comboEsc(hint)+'</span></span></label>' +
-        '<span style="flex:1;display:flex;align-items:center;">'+input+'</span></div>';
+        '<label style="width:150px;gap:6px;align-items:flex-start;padding-top:6px;">' +
+        '<input type="checkbox" id="'+meChk(f.key)+'" title="이 항목을 바꿉니다" style="width:15px;height:15px;flex:0 0 15px;margin:2px 0 0 0;">' +
+        '<span style="flex:1;">'+f.label+'<br><span style="font-weight:400;font-size:10.5px;color:'+(cur.same?'var(--gray)':'var(--danger)')+';">'+comboEsc(hint)+'</span></span></label>' +
+        '<span style="flex:1;display:flex;flex-direction:column;justify-content:center;padding:4px 0;">'+input+chips+'</span></div>';
     });
     form.innerHTML = h;
+    // 칩을 누르면 그 값으로 채우고 자동으로 체크됩니다.
+    form.querySelectorAll("[data-mpick-key]").forEach(btn=>{
+      btn.onclick = ()=>{
+        const k = btn.dataset.mpickKey, v = btn.dataset.mpickVal;
+        const el = document.getElementById(meId(k));
+        if(el){ el.value = v; }
+        const c = document.getElementById(meChk(k));
+        if(c) c.checked = true;
+        const fd = MULTI_EDIT_FIELDS.find(x=>x.key===k);
+        if(fd && fd.link) multiRecalc(fd.link);
+      };
+    });
     document.getElementById("multi-edit-msg").style.display = "none";
     document.getElementById("multi-edit-modal-overlay").style.display = "flex";
   };
