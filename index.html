@@ -192,17 +192,25 @@
   .sheet-head .val{ font-weight:700; font-size:12.5px; }
   /* 목록 상단 툴바 — 칸을 붙여서 한 줄로 */
   .tbar{ border:1px solid var(--line); background:#fff; padding:5px 7px; margin-bottom:8px; }
+  /* 툴바 밖의 일반 입력칸도 같은 선색으로 맞춥니다. */
+  .stack-form input, .stack-form select, .stack-form textarea{ border-color:var(--line); }
   .tbar-row{ display:flex; flex-wrap:wrap; align-items:center; row-gap:4px; }
   .tbar-row + .tbar-row{ border-top:1px solid var(--line); margin-top:5px; padding-top:5px; }
   .tbar-row > *{ height:28px; box-sizing:border-box; font-size:12.5px; }
+  /* 툴바 안 요소는 모두 같은 선색을 씁니다. */
   .tbar-row select,
   .tbar-row input[type="text"],
-  .tbar-row input[type="date"]{ border:1px solid #c7c7c7; padding:0 6px; margin-left:-1px; background:#fff; font-family:inherit; }
+  .tbar-row input[type="number"],
+  .tbar-row input[type="date"]{ border:1px solid var(--line); padding:0 6px; margin-left:-1px; background:#fff; font-family:inherit; }
+  .tbar-row select:focus,
+  .tbar-row input:focus{ outline:none; border-color:var(--navy); position:relative; z-index:1; }
   .tbar-row > *:first-child{ margin-left:0; }
-  .tbar-row .tbar-chk{ display:flex; align-items:center; gap:4px; white-space:nowrap; padding:0 8px; border:1px solid #c7c7c7; margin-left:-1px; background:#fafafa; }
+  .tbar-row .tbar-chk{ display:flex; align-items:center; gap:4px; white-space:nowrap; padding:0 8px; border:1px solid var(--line); margin-left:-1px; background:#fafafa; }
   .tbar-row .tbar-chk input{ height:auto; }
   .tbar-row .tbar-sep{ display:flex; align-items:center; justify-content:center; width:16px; color:var(--gray); }
-  .tbar-row .btn.small{ width:auto; padding:0 12px; border:1px solid var(--navy); margin-left:-1px; }
+  /* 툴바 버튼도 같은 선색. 눌린 상태(진한 버튼)만 자기 색 테두리를 씁니다. */
+  .tbar-row .btn.small{ width:auto; padding:0 12px; margin-left:-1px; }
+  .tbar-row .btn.small.secondary{ border:1px solid var(--line); }
   .tbar-row .push{ margin-left:auto; }
   .tbar-row input[type="date"]{ width:126px; }
   /* 재고 목록 화면: 위쪽 여백 줄이고 폭 넓게 (툴바가 한 줄에 들어가도록) */
@@ -268,7 +276,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-07-25 v77</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-07-25 v82</span>
       <span id="topbar-username">-</span>
       <button onclick="openPersonalSettingsModal()">개인설정</button>
       <button onclick="handleLogout()">로그아웃</button>
@@ -653,9 +661,12 @@
       <div class="card">
         <h3>화면 커스터마이징</h3>
         <p class="desc">버튼·제목·대시보드 카드를 마우스 오른쪽 버튼으로 눌러서 이름·색상·글씨크기를 바꾸거나 숨길 수 있습니다. 숨긴 항목은 여기서 되돌릴 수 있어요.</p>
-        <button class="btn small secondary" style="width:auto;margin-right:6px;" onclick="resetHiddenDashItems()">숨긴 항목 전부 복원</button>
-        <button class="btn small secondary" style="width:auto;" onclick="resetAllTips()">도움말(ⓘ) 문구 전부 복원</button>
         <p class="desc" style="margin-top:8px;">ⓘ 아이콘을 <b>마우스 오른쪽 버튼</b>으로 누르면 설명 문구를 고치거나 아이콘을 없앨 수 있습니다.</p>
+        <h3 style="font-size:13px;margin-top:14px;">숨긴 항목 <span class="info-tip" title="숨긴 버튼·제목과 도움말(ⓘ)이 여기 모입니다. 하나씩 되돌릴 수 있습니다.">ⓘ</span></h3>
+        <div id="hidden-items-list" style="margin-bottom:10px;"></div>
+        <button class="btn small secondary" style="width:auto;margin-right:6px;" onclick="renderHiddenList()">목록 새로고침</button>
+        <button class="btn small secondary" style="width:auto;margin-right:6px;" onclick="resetHiddenDashItems()">숨긴 항목 전부 복원</button>
+        <button class="btn small secondary" style="width:auto;" onclick="resetAllTips()">도움말(ⓘ) 전부 복원</button>
       </div>
     </div>
 
@@ -751,7 +762,7 @@
             <tr>
               <th>#</th>
               <th>검수</th>
-              <th>모델</th>
+              <th>모델 (전산모델명/펫네임)</th>
               <th>제조사색상</th>
               <th>전산색상</th>
               <th>삼성모델명(SKU)</th>
@@ -1516,8 +1527,8 @@
         <button onclick="closeOrderPasteModal()" style="position:absolute;top:12px;right:12px;background:none;border:1px solid var(--navy);width:26px;height:26px;cursor:pointer;font-size:13px;">✕</button>
         <h3 style="margin-top:0;margin-bottom:4px;">주문 텍스트로 붙여넣기</h3>
         <p class="desc">엑셀·메모장에서 복사한 내용을 그대로 붙여넣으세요. 주문은 <b>수량 단위</b>입니다.<br>
-          한 줄에 <b>모델 · 색상 · 통신사 · 수량</b> 순서로, 탭이나 2칸 이상 띄어쓰기로 구분합니다.<br>
-          <span style="color:var(--gray);">모델은 <b>삼성코드(SKU)</b> 또는 <b>전산모델명</b> 아무거나 됩니다. 통신사는 U+ / LG / SK / KT 로 적으세요.</span></p>
+          탭이나 2칸 이상 띄어쓰기로 구분하면 <b>칸 순서가 달라도</b> 알아서 찾습니다. 머리글 줄은 건너뜁니다.<br>
+          <span style="color:var(--gray);">모델은 <b>삼성코드(SKU)</b> · <b>전산모델명</b> · <b>모델명</b> · <b>"모델군 기가수"(예: 플립 256)</b> 중 아무거나 되고, 통신사는 U+ / LG / SK / KT 로 적으세요.</span></p>
         <textarea id="order-paste-text" rows="9" style="width:100%;border:1px solid #c7c7c7;padding:8px;font-size:12.5px;font-family:monospace;box-sizing:border-box;" placeholder="SM-F976NZKPKOD&#9;그라파이트&#9;U+&#9;6&#10;SM-F976NZYPKOD&#9;바이올렛쉐도우&#9;U+&#9;5"></textarea>
         <div class="stack-form" style="max-width:520px;margin-top:10px;">
           <div class="stack-row"><label>매입처</label><select id="order-paste-source"><option value="">선택</option></select></div>
@@ -1922,6 +1933,8 @@
         customTabFontSizes = currentSettings.tabFontSizes || {};
         customHiddenKeys = currentSettings.hiddenKeys || {};
         customTips = currentSettings.tips || {};
+        hiddenLabels = currentSettings.hiddenLabels || {};
+        tipLabels = currentSettings.tipLabels || {};
         dashFontSize = currentSettings.dashFontSize || "medium";
         applyCustomTabLabels();
         applyCustomTips();
@@ -1950,6 +1963,8 @@
   let customTabColors = {};
   let customTabFontSizes = {};
   let customHiddenKeys = {};
+  let hiddenLabels = {};   // 숨긴 항목의 이름 (되돌릴 때 무엇인지 보여주기 위함)
+  let tipLabels = {};      // 숨긴 도움말의 원래 문구
 
   function getElKey(el){
     if(el.dataset.labelKey) return el.dataset.labelKey;
@@ -1996,13 +2011,31 @@
     if(kind==="label") customTabLabels[key] = value;
     if(kind==="color") customTabColors[key] = value;
     if(kind==="fontSize") customTabFontSizes[key] = value;
-    if(kind==="hide") customHiddenKeys[key] = value;
+    if(kind==="hide"){
+      customHiddenKeys[key] = value;
+      // 무엇을 숨겼는지 나중에 알아볼 수 있게 이름을 함께 남깁니다.
+      if(value === true){
+        const el = document.querySelector('[data-label-key="'+key+'"]');
+        const span = el ? el.querySelector(".tab-label-text") : null;
+        let nm = span ? span.textContent : (el ? (el.textContent||"").trim() : "");
+        nm = nm.replace(/\s+/g," ").slice(0, 40);
+        hiddenLabels[key] = nm || key;
+      }else{
+        delete hiddenLabels[key];
+      }
+    }
+    if(kind==="tip"){
+      const el2 = document.querySelector('.info-tip[data-tip-key="'+key+'"]');
+      if(value === "") tipLabels[key] = (el2 ? (el2.dataset.tipOrig||"") : "").slice(0, 60) || key;
+      else delete tipLabels[key];
+    }
     if(kind==="tip") customTips[key] = value;
     applyCustomTabLabels();
     applyCustomTips();
     setDoc(doc(db,"settings","general"), {
       tabLabels: customTabLabels, tabColors: customTabColors, tabFontSizes: customTabFontSizes,
-      hiddenKeys: customHiddenKeys, tips: customTips
+      hiddenKeys: customHiddenKeys, tips: customTips,
+      hiddenLabels, tipLabels
     }, { merge:true })
       .then(()=> logAction(actionLabel, key+" → "+value))
       .catch(()=> alert("저장에 실패했습니다. 다시 시도해주세요."));
@@ -2198,10 +2231,59 @@
     showCustomizeMenu(e.clientX, e.clientY, targetEl, key);
   });
 
-  window.resetHiddenDashItems = function(){
-    customHiddenKeys = {};
+  // 숨긴 항목을 목록으로 보여주고 하나씩 되돌립니다.
+  window.renderHiddenList = function(){
+    const el = document.getElementById("hidden-items-list");
+    if(!el) return;
+    const hKeys = Object.keys(customHiddenKeys).filter(k=> customHiddenKeys[k] === true);
+    const tKeys = Object.keys(customTips).filter(k=> customTips[k] === "");
+    if(hKeys.length === 0 && tKeys.length === 0){
+      el.innerHTML = '<div class="list-empty">숨긴 항목이 없습니다.</div>';
+      return;
+    }
+    let h = '<div style="border:1px solid var(--line);">';
+    hKeys.forEach(k=>{
+      h += '<div class="list-row"><span><span style="background:var(--navy);color:#fff;font-size:10.5px;padding:1px 6px;margin-right:6px;">항목</span>'
+        + '<b>' + comboEsc(hiddenLabels[k] || k) + '</b>'
+        + ' <span style="color:var(--gray);font-size:11px;">' + comboEsc(k) + '</span></span>'
+        + '<span><button class="btn small secondary" style="width:auto;" data-unhide="'+comboEsc(k)+'">다시 보이기</button></span></div>';
+    });
+    tKeys.forEach(k=>{
+      h += '<div class="list-row"><span><span style="background:#b8860b;color:#fff;font-size:10.5px;padding:1px 6px;margin-right:6px;">도움말</span>'
+        + comboEsc((tipLabels[k] || k).slice(0,50)) + (String(tipLabels[k]||"").length>50 ? "…" : "")
+        + '</span><span><button class="btn small secondary" style="width:auto;" data-untip="'+comboEsc(k)+'">다시 보이기</button></span></div>';
+    });
+    h += '</div>';
+    el.innerHTML = h;
+    el.querySelectorAll("[data-unhide]").forEach(b=> b.onclick = ()=> unhideOne(b.dataset.unhide));
+    el.querySelectorAll("[data-untip]").forEach(b=> b.onclick = ()=> untipOne(b.dataset.untip));
+  };
+
+  window.unhideOne = function(key){
+    delete customHiddenKeys[key];
+    delete hiddenLabels[key];
     applyCustomTabLabels();
-    setDoc(doc(db,"settings","general"), { hiddenKeys: {} }, { merge:true }).catch(()=>{});
+    setDoc(doc(db,"settings","general"), { hiddenKeys: customHiddenKeys, hiddenLabels }, { merge:true })
+      .then(()=> logAction("숨긴 항목 되돌림", key)).catch(()=> alert("저장에 실패했습니다."));
+    renderHiddenList();
+  };
+  window.untipOne = function(key){
+    delete customTips[key];
+    delete tipLabels[key];
+    applyCustomTips();
+    setDoc(doc(db,"settings","general"), { tips: customTips, tipLabels }, { merge:true })
+      .then(()=> logAction("숨긴 도움말 되돌림", key)).catch(()=> alert("저장에 실패했습니다."));
+    renderHiddenList();
+  };
+
+  window.resetHiddenDashItems = function(){
+    const cnt = Object.keys(customHiddenKeys).filter(k=>customHiddenKeys[k]===true).length;
+    if(cnt === 0){ alert("숨긴 항목이 없습니다."); return; }
+    if(!confirm("숨긴 항목 " + cnt + "개를 모두 다시 보이게 하시겠습니까?")) return;
+    customHiddenKeys = {}; hiddenLabels = {};
+    applyCustomTabLabels();
+    setDoc(doc(db,"settings","general"), { hiddenKeys: {}, hiddenLabels: {} }, { merge:true }).catch(()=>{});
+    renderHiddenList();
     alert("숨겼던 항목이 모두 다시 보이게 됩니다.");
   };
 
@@ -3300,7 +3382,7 @@
         tr.querySelector('[data-review-model]').onchange = async (ev)=>{
           if(!ev.target.checked) return;
           await updateDoc(doc(db,"inventoryModels", m.id), { needsReview: false });
-          logAction("모델 최종검수 완료", m.petName||m.modelGroup);
+          logAction("모델 최종검수 완료", docModelLabel(m));
           loadModelAdminList();
         };
       }
@@ -3308,7 +3390,7 @@
       tr.querySelector('[data-open-color]').onclick = ()=> openColorModal(m.id);
       tr.querySelector('[data-edit-model]').onclick = ()=> openModelEditModal(m.id);
       tr.querySelector('[data-del-model]').onclick = async ()=>{
-        if(confirm((m.petName||m.modelGroup) + " 모델을 삭제하시겠습니까? (색상도 함께 삭제되며, 기존 재고 기록은 유지됩니다)")){
+        if(confirm(docModelLabel(m) + " 모델을 삭제하시겠습니까? (색상도 함께 삭제되며, 기존 재고 기록은 유지됩니다)")){
           await deleteDoc(doc(db, "inventoryModels", m.id));
           logAction("모델 삭제", m.modelGroup);
           loadModelAdminList();
@@ -3446,7 +3528,7 @@
     const m = modelsCache.find(x=>x.id===modelId);
     if(!m) return;
     currentColorModelId = modelId;
-    document.getElementById("color-modal-model-name").textContent = m.petName || m.modelGroup || m.systemModel || "-";
+    document.getElementById("color-modal-model-name").textContent = docModelLabel(m);
     cancelColorEdit();
     renderColorModalList();
     document.getElementById("color-modal-overlay").style.display = "flex";
@@ -3483,7 +3565,7 @@
       tr.innerHTML =
         '<td style="color:var(--gray);">'+rowNum+'</td>' +
         '<td>'+(c.needsReview ? '<input type="checkbox" class="color-review-cb" style="accent-color:var(--danger);width:16px;height:16px;cursor:pointer;">' : '<span style="color:var(--gray);">✓</span>')+'</td>' +
-        '<td>'+(m.petName||m.modelGroup||m.systemModel||"-")+'</td>' +
+        '<td>'+comboEsc(docModelLabel(m))+'</td>' +
         '<td>'+(c.manufacturerColor||"-")+'</td>' +
         '<td>'+(c.systemColor||"-")+'</td>' +
         '<td>'+(c.sku||"(미입력)")+'</td>' +
@@ -3500,7 +3582,7 @@
           const updated = { ...c }; delete updated.needsReview;
           await updateDoc(doc(db,"inventoryModels", m.id), { colors: arrayRemove(c) });
           await updateDoc(doc(db,"inventoryModels", m.id), { colors: arrayUnion(updated) });
-          logAction("색상 최종검수 완료", (m.petName||m.modelGroup)+" / "+(c.systemColor||c.manufacturerColor));
+          logAction("색상 최종검수 완료", docModelLabel(m)+" / "+(c.systemColor||c.manufacturerColor));
           loadColorAdminList();
         };
       }
@@ -3515,7 +3597,7 @@
     const c = m.colors[idx];
     if(!confirm((c.systemColor||c.manufacturerColor) + " 색상을 삭제하시겠습니까? (기존 재고 기록은 유지됩니다)")) return;
     await updateDoc(doc(db,"inventoryModels", modelId), { colors: arrayRemove(c) });
-    logAction("색상 삭제", (m.petName||m.modelGroup) + " / " + (c.systemColor||c.manufacturerColor));
+    logAction("색상 삭제", docModelLabel(m) + " / " + (c.systemColor||c.manufacturerColor));
     await fetchModelsCache();
     loadColorAdminList();
     loadModelAdminList();
@@ -3549,7 +3631,7 @@
     const sku = document.getElementById("csa-sku-input").value.trim();
     if(!manufacturerColor && !systemColor){ alert("제조사색상 또는 전산색상 중 하나는 입력해주세요."); return; }
     await updateDoc(doc(db,"inventoryModels", modelId), { colors: arrayUnion({ manufacturerColor, systemColor, sku }) });
-    logAction("색상 추가", (m.petName||m.modelGroup) + " / " + (systemColor||manufacturerColor));
+    logAction("색상 추가", docModelLabel(m) + " / " + (systemColor||manufacturerColor));
     closeColorStandaloneAddModal();
     await fetchModelsCache();
     loadColorAdminList();
@@ -3596,7 +3678,7 @@
         const updated = { ...c }; delete updated.needsReview;
         await updateDoc(doc(db,"inventoryModels", m.id), { colors: arrayRemove(c) });
         await updateDoc(doc(db,"inventoryModels", m.id), { colors: arrayUnion(updated) });
-        logAction("색상 최종검수 완료", (m.petName||m.modelGroup)+" / "+(c.systemColor||c.manufacturerColor));
+        logAction("색상 최종검수 완료", docModelLabel(m)+" / "+(c.systemColor||c.manufacturerColor));
         await fetchModelsCache();
         renderColorModalList();
       };
@@ -3648,10 +3730,10 @@
           await updateDoc(doc(db,"inventoryItems", dd.id), { manufacturerColor, systemColor, sku });
         }
       }
-      logAction("색상 수정", (m.petName||m.modelGroup) + " / " + (c.systemColor||c.manufacturerColor) + " → " + (systemColor||manufacturerColor));
+      logAction("색상 수정", docModelLabel(m) + " / " + (c.systemColor||c.manufacturerColor) + " → " + (systemColor||manufacturerColor));
     }else{
       await updateDoc(doc(db,"inventoryModels", m.id), { colors: arrayUnion(updated) });
-      logAction("색상 추가", (m.petName||m.modelGroup) + " / " + (systemColor||manufacturerColor));
+      logAction("색상 추가", docModelLabel(m) + " / " + (systemColor||manufacturerColor));
     }
 
     cancelColorEdit();
@@ -3665,7 +3747,7 @@
     const c = m.colors[idx];
     if(!confirm((c.systemColor||c.manufacturerColor) + " 색상을 삭제하시겠습니까? (기존 재고 기록은 유지됩니다)")) return;
     await updateDoc(doc(db,"inventoryModels", m.id), { colors: arrayRemove(c) });
-    logAction("색상 삭제", (m.petName||m.modelGroup) + " / " + (c.systemColor||c.manufacturerColor));
+    logAction("색상 삭제", docModelLabel(m) + " / " + (c.systemColor||c.manufacturerColor));
     if(editingColorIndex === idx) cancelColorEdit();
     await fetchModelsCache();
     renderColorModalList();
@@ -4483,7 +4565,7 @@
         showModelMsg("item-result-msg", "<b>저장에 실패했습니다.</b><br>" + comboEsc((e && e.message) ? e.message : String(e)), true);
         return;
       }
-      logAction("재고 수정", (m.petName||m.modelGroup||m.systemModel||"-")+" "+colorLabel+" / "+carrier);
+      logAction("재고 수정", docModelLabel(m)+" "+colorLabel+" / "+carrier);
       showModelMsg("item-result-msg", "저장되었습니다.", false);
       loadInventoryList();
       setTimeout(closeItemModal, 600);
@@ -7662,6 +7744,56 @@
     return String(v||"").trim();
   }
 
+  // 한 줄에서 모델을 찾습니다.
+  // 순서: 삼성코드(SKU) → 전산모델명 → 모델명 → "모델군/모델명 + 기가수" (예: "플립 256")
+  function findModelFromCells(cells){
+    const norm = v => String(v||"").trim().toLowerCase();
+    // 1) 삼성코드
+    for(const c of cells){
+      const v = norm(c); if(!v) continue;
+      for(const m of modelsCache){
+        const hit = (m.colors||[]).find(x=> norm(x.sku) === v);
+        if(hit) return { model:m, colorObj:hit, usedCell:c };
+      }
+    }
+    // 2) 전산모델명
+    for(const c of cells){
+      const v = norm(c); if(!v) continue;
+      const m = modelsCache.find(x=> norm(x.systemModel) === v);
+      if(m) return { model:m, colorObj:null, usedCell:c };
+    }
+    // 3) 모델명
+    for(const c of cells){
+      const v = norm(c); if(!v) continue;
+      const m = modelsCache.find(x=> norm(x.baseModel) === v);
+      if(m) return { model:m, colorObj:null, usedCell:c };
+    }
+    // 4) "이름 + 기가수" 형태 (예: "플립 256", "폴드 512")
+    for(const c of cells){
+      const t = String(c||"").trim();
+      const mm = t.match(/^(.+?)[\s_-]*(\d{2,4})$/);
+      if(!mm) continue;
+      const name = norm(mm[1]), cap = mm[2];
+      const found = modelsCache.find(x=>
+        String(x.capacity||"").replace(/\D/g,"") === cap &&
+        (norm(x.modelGroup).includes(name) || norm(x.petName).includes(name) ||
+         norm(x.baseModel).includes(name) || name.includes(norm(x.modelGroup))));
+      if(found) return { model:found, colorObj:null, usedCell:c };
+    }
+    // 5) 이름과 기가수가 다른 칸에 있는 경우
+    const nums = cells.filter(c=> /^\d{2,4}$/.test(String(c).trim()));
+    for(const c of cells){
+      const name = norm(c); if(!name || /^\d+$/.test(name)) continue;
+      for(const cap of nums){
+        const found = modelsCache.find(x=>
+          String(x.capacity||"").replace(/\D/g,"") === String(cap).trim() &&
+          (norm(x.modelGroup).includes(name) || norm(x.petName).includes(name) || name.includes(norm(x.modelGroup))));
+        if(found) return { model:found, colorObj:null, usedCell:c, usedCap:String(cap).trim() };
+      }
+    }
+    return null;
+  }
+
   window.analyzeOrderPaste = async function(){
     const el = document.getElementById("order-paste-result");
     const text = document.getElementById("order-paste-text").value;
@@ -7670,53 +7802,72 @@
     el.innerHTML = "분석 중...";
     await fetchModelsCache();
 
-    const ok = [], bad = [];
-    lines.forEach((line, i)=>{
-      // 탭 또는 2칸 이상 띄어쓰기로 나눕니다.
-      const c = line.split(/\t|\s{2,}/).map(x=>x.trim()).filter(x=>x!=="");
-      const label = (i+1) + "번째 줄";
-      if(c.length < 3){ bad.push({ label, reason:"칸이 부족합니다 (모델·색상·통신사·수량 필요)", raw:line }); return; }
+    const HEADER_WORDS = ["모델군","모델명","색상","통신사","수량","전산모델명","기가수","삼성코드","합계"];
+    const ok = [], bad = [], skipped = [];
 
-      // 마지막 숫자를 수량으로 봅니다.
-      let qty = 0, rest = [...c];
-      for(let k=rest.length-1; k>=0; k--){
-        const n = Number(String(rest[k]).replace(/[^0-9]/g,""));
-        if(n > 0 && /^[0-9,]+$/.test(String(rest[k]).trim())){ qty = n; rest.splice(k,1); break; }
-      }
+    lines.forEach((line, i)=>{
+      const cells = line.split(/\t|\s{2,}/).map(x=>x.trim()).filter(x=>x!=="");
+      const label = (i+1) + "번째 줄";
+
+      // 머리글 줄은 건너뜁니다.
+      const headerHits = cells.filter(c=> HEADER_WORDS.includes(c)).length;
+      if(headerHits >= 2){ skipped.push({ label, raw:line }); return; }
+      if(cells.length < 3){ bad.push({ label, reason:"칸이 부족합니다", raw:line }); return; }
+
+      // 통신사 칸 찾기
+      let carrier = "", carrierIdx = -1;
+      cells.forEach((c, idx)=>{
+        const n = normCarrier(c);
+        if(["LG","SK","KT"].includes(n)){ carrier = n; carrierIdx = idx; }
+      });
+
+      // 수량: 통신사 뒤의 숫자 우선, 없으면 마지막 숫자
+      let qty = 0, qtyIdx = -1;
+      const numIdx = [];
+      cells.forEach((c, idx)=>{ if(/^[0-9,]+$/.test(String(c).trim())) numIdx.push(idx); });
+      const after = numIdx.filter(idx=> carrierIdx >= 0 && idx > carrierIdx);
+      const pick = after.length ? after[after.length-1] : (numIdx.length ? numIdx[numIdx.length-1] : -1);
+      if(pick >= 0){ qty = Number(String(cells[pick]).replace(/[^0-9]/g,"")) || 0; qtyIdx = pick; }
       if(qty <= 0){ bad.push({ label, reason:"수량을 찾지 못했습니다", raw:line }); return; }
 
-      const codeRaw = rest[0] || "";
-      const carrier = normCarrier(rest[rest.length-1] || "");
-      const colorText = rest.slice(1, rest.length-1).join(" ").trim();
-
-      // 모델 찾기: 삼성코드(SKU) → 전산모델명 → 모델명
-      let model = null, colorObj = null;
-      const code = codeRaw.trim();
-      for(const m of modelsCache){
-        const hit = (m.colors||[]).find(x=> String(x.sku||"").trim().toLowerCase() === code.toLowerCase());
-        if(hit){ model = m; colorObj = hit; break; }
+      // 모델 찾기 (통신사·수량 칸은 제외)
+      const modelCells = cells.filter((c, idx)=> idx !== carrierIdx && idx !== qtyIdx);
+      const found = findModelFromCells(modelCells);
+      if(!found){
+        bad.push({ label, reason:"등록되지 않은 모델 — 삼성코드·전산모델명·모델명+기가수 중 하나가 맞아야 합니다", raw:line });
+        return;
       }
-      if(!model) model = modelsCache.find(m=> String(m.systemModel||"").toLowerCase() === code.toLowerCase());
-      if(!model) model = modelsCache.find(m=> String(m.baseModel||"").toLowerCase() === code.toLowerCase());
-      if(!model){ bad.push({ label, reason:"등록되지 않은 모델('"+code+"') — 삼성코드나 전산모델명을 확인해주세요", raw:line }); return; }
+      const model = found.model;
+      let colorObj = found.colorObj;
 
-      if(!colorObj && colorText){
-        colorObj = (model.colors||[]).find(x=> x.systemColor===colorText || x.manufacturerColor===colorText);
-        if(!colorObj) bad.push({ label, reason:"이 모델에 없는 색상('"+colorText+"')", raw:line });
-        if(!colorObj) return;
+      // 색상 찾기: 모델의 색상 목록과 대조
+      let colorText = "";
+      if(!colorObj){
+        for(const c of modelCells){
+          if(c === found.usedCell || c === found.usedCap) continue;
+          const hit = (model.colors||[]).find(x=> x.systemColor === c || x.manufacturerColor === c);
+          if(hit){ colorObj = hit; colorText = c; break; }
+        }
       }
+      if(!colorObj){
+        // 등록된 색상이 없으면 글자만 가져옵니다. (숫자·모델칸 제외)
+        const cand = modelCells.filter(c=> c !== found.usedCell && c !== found.usedCap && !/^[0-9,]+$/.test(c) && !/^SM-/i.test(c));
+        colorText = cand.length ? cand[cand.length-1] : "";
+      }
+
       ok.push({ label, model, colorObj, carrier, qty, colorText });
     });
 
     orderPasteRows = ok;
-    let h = '<div style="font-weight:700;margin-bottom:8px;">분석 결과 — 정상 '+ok.length+'줄 / 오류 '+bad.length+'줄</div>';
+    let h = '<div style="font-weight:700;margin-bottom:8px;">분석 결과 — 정상 '+ok.length+'줄 / 오류 '+bad.length+'줄'
+      + (skipped.length ? ' <span style="color:var(--gray);font-weight:400;">(머리글 '+skipped.length+'줄 건너뜀)</span>' : '') + '</div>';
     if(bad.length){
       h += '<div style="border:1px solid var(--danger);background:#fdecea;padding:8px 10px;margin-bottom:10px;max-height:180px;overflow-y:auto;">'
         + bad.map(b=>'· '+comboEsc(b.label)+' — '+comboEsc(b.reason)+'<br><span style="color:var(--gray);font-size:11px;">'+comboEsc(b.raw)+'</span>').join('<br>') + '</div>';
     }
     if(ok.length){
-      h += '<div style="border:1px solid var(--line);max-height:240px;overflow-y:auto;margin-bottom:10px;">'
-        + '<table class="data-table" style="min-width:700px;"><thead><tr><th>모델 (전산모델명)</th><th>제조사색상</th><th>전산색상</th><th>통신사</th><th class="ta-right">수량</th><th class="ta-right">출고가</th></tr></thead><tbody>'
+      h += '<div style="border:1px solid var(--line);max-height:260px;overflow-y:auto;margin-bottom:10px;">'
+        + '<table class="data-table" style="min-width:720px;"><thead><tr><th>모델 (전산모델명)</th><th>제조사색상</th><th>전산색상</th><th>통신사</th><th class="ta-right">수량</th><th class="ta-right">출고가</th></tr></thead><tbody>'
         + ok.map(r=>'<tr><td>'+comboEsc(modelOptionLabel(r.model))+'</td>'
             + '<td>'+comboEsc(r.colorObj ? (r.colorObj.manufacturerColor || r.colorText || "-") : (r.colorText||"-"))+'</td>'
             + '<td>'+comboEsc(r.colorObj ? (r.colorObj.systemColor || r.colorText || "-") : (r.colorText||"-"))+'</td>'
@@ -12350,6 +12501,7 @@
     if(tabId==="tab-inv-color") loadColorAdminList();
     if(tabId==="tab-inv-company") loadCompanyList();
     if(tabId==="tab-ledger") initLedgerTab();
+    if(tabId==="tab-site" && typeof renderHiddenList === "function") renderHiddenList();
     if(tabId==="tab-inv-carrier") loadCarrierList();
     if(tabId==="tab-inv-manufacturer") loadManufacturerList();
     if(tabId==="tab-inv-location") loadLocationList();
