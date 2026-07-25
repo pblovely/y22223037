@@ -124,22 +124,34 @@
   .user-card-foot{ padding:9px 12px; background:#fafafa; border-top:1px solid var(--line); display:flex; justify-content:flex-end; }
   /* 요청서 인쇄: 팝업 내용만 인쇄되도록 */
   @media print{
-    /* 인쇄 대상(.print-open)만 남기고 나머지는 숨깁니다 */
-    body.printing > *:not(.print-open){ display:none !important; }
-    body:not(.printing) > *:not(#order-detail-modal-overlay){ display:none !important; }
-    .print-open, #order-detail-modal-overlay{ position:static !important; display:block !important; background:none !important; }
-    .print-sheet, #order-detail-sheet{ max-width:none !important; width:auto !important; max-height:none !important;
-      overflow:visible !important; border:none !important; padding:0 !important; box-shadow:none !important; }
-    .no-print{ display:none !important; }
+    /* 팝업이 화면 깊숙이 들어 있어서 display 로 숨기면 팝업까지 사라집니다.
+       그래서 전부 안 보이게 한 뒤(visibility) 인쇄 대상만 다시 보이게 합니다. */
+    body * { visibility: hidden !important; }
+    .print-open, .print-open * { visibility: visible !important; }
+    .print-open{
+      position:absolute !important; left:0 !important; top:0 !important;
+      width:100% !important; height:auto !important; margin:0 !important;
+      background:#fff !important; display:block !important; overflow:visible !important; z-index:auto !important;
+    }
+    .print-sheet{
+      max-width:none !important; width:100% !important; max-height:none !important;
+      overflow:visible !important; border:none !important; padding:0 !important;
+      box-shadow:none !important; margin:0 !important;
+    }
+    .no-print, .no-print * { visibility: hidden !important; display:none !important; }
     .data-table{ font-size:11px; }
-    .data-table th, .data-table td{ padding:2px 5px; }
+    .data-table th, .data-table td{ padding:3px 5px; }
+    @page { size: A4 portrait; margin: 12mm; }
   }
   /* 견적서 */
-  .quote-head{ display:flex; flex-wrap:wrap; gap:0; border:1px solid var(--navy); margin-bottom:12px; }
-  .quote-head > div{ flex:1 1 240px; padding:8px 11px; border-right:1px solid var(--line); }
-  .quote-head .t{ font-size:10.5px; color:var(--gray); }
-  .quote-head .v{ font-size:12.5px; font-weight:700; }
-  .quote-title{ text-align:center; font-size:22px; font-weight:800; letter-spacing:8px; margin:0 0 14px 0; color:var(--navy); }
+  /* 견적서 — 세로(A4 인쇄용) */
+  .quote-head{ border:1px solid var(--navy); margin-bottom:12px; }
+  .quote-head > div{ display:flex; align-items:flex-start; gap:0; border-bottom:1px solid var(--line); }
+  .quote-head > div:last-child{ border-bottom:none; }
+  .quote-head .t{ width:130px; flex-shrink:0; padding:7px 10px; font-size:11.5px; color:var(--navy);
+    font-weight:700; background:#fafafa; border-right:1px solid var(--line); }
+  .quote-head .v{ flex:1; padding:7px 10px; font-size:12.5px; }
+  .quote-title{ text-align:center; font-size:24px; font-weight:800; letter-spacing:10px; margin:0 0 16px 0; color:var(--navy); }
   /* 요청서 머리부 */
   .sheet-head{ display:flex; flex-wrap:wrap; border:1px solid var(--line); margin-bottom:10px; }
   .sheet-head > div{ flex:1 1 160px; padding:6px 10px; border-right:1px solid var(--line); border-bottom:1px solid var(--line); }
@@ -220,7 +232,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-07-25 v36</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-07-25 v40</span>
       <span id="topbar-username">-</span>
       <button onclick="openPersonalSettingsModal()">개인설정</button>
       <button onclick="handleLogout()">로그아웃</button>
@@ -415,6 +427,7 @@
           <button class="btn small secondary" id="sale-filter-done" style="width:auto;padding:0 12px;height:26px;border:1px solid var(--navy);margin-left:-1px;" onclick="setSaleFilter('done')">최종완료</button>
           <button class="btn small secondary" id="sale-filter-cancel" style="width:auto;padding:0 12px;height:26px;border:1px solid var(--navy);margin-left:-1px;" onclick="setSaleFilter('cancel')">취소</button>
           <button class="btn small secondary" id="sale-filter-all" style="width:auto;padding:0 12px;height:26px;border:1px solid var(--navy);margin-left:-1px;" onclick="setSaleFilter('all')">전체</button>
+          <span id="sale-wait-summary" style="margin-left:12px;font-size:12.5px;"></span>
         </div>
         <div id="sale-request-list"></div>
       </div>
@@ -1092,7 +1105,7 @@
         <div id="bulk-samemodel-box" style="border:1px solid var(--navy);background:#f4f7fb;padding:9px 11px;margin-bottom:12px;font-size:12.5px;line-height:1.7;">
           <label style="display:flex;align-items:flex-start;gap:6px;font-weight:700;color:var(--navy);cursor:pointer;">
             <input type="checkbox" id="bulk-same-model" onchange="onBulkSameModelToggle()" style="margin-top:2px;">
-            <span>체크한 것과 <b>같은 모델 전체</b>에 적용 (일련번호 무시)</span>
+            <span>체크한 것과 <b>같은 모델 전체</b>에 적용 (일련번호 무시) <span style="color:var(--danger);font-size:11px;">⚠ 승인 권한 필요</span></span>
           </label>
           <div id="bulk-samemodel-desc" style="color:var(--gray);margin-top:4px;padding-left:22px;">전산모델명이 같은 재고를 모두 찾아 한 번에 바꿉니다. 페이지를 넘기지 않아도 됩니다.</div>
         </div>
@@ -1103,7 +1116,11 @@
           </label>
           <div id="bulk-link-desc" style="color:var(--gray);margin-top:4px;padding-left:22px;"></div>
         </div>
-        <button class="btn small" style="width:auto;margin-bottom:16px;" onclick="applyBulkEdit()">이 값으로 변경</button>
+        <button class="btn small" style="width:auto;margin-bottom:8px;" onclick="applyBulkEdit()">이 값으로 변경</button>
+        <div style="border-top:1px solid var(--line);padding-top:10px;margin-bottom:16px;">
+          <button class="btn small" style="width:auto;" onclick="openMultiEdit()">여러 항목 한 번에 수정</button>
+          <div style="font-size:11.5px;color:var(--gray);margin-top:6px;line-height:1.6;">날짜·입고처·판매처·금액·할인 등을 <b>한 화면에서 여러 개</b> 바꿉니다. 일련번호는 그대로 유지됩니다.</div>
+        </div>
         <div style="border-top:1px solid var(--line);padding-top:14px;">
           <button class="btn small danger" style="width:auto;" onclick="deleteSelectedInventoryRows()">선택 항목 삭제 (삭제함으로)</button>
           <div style="font-size:11.5px;color:var(--gray);margin-top:6px;line-height:1.6;">삭제하면 목록에서 숨겨지고 집계에서 빠집니다. 목록 위 <b>삭제함</b> 버튼으로 다시 볼 수 있습니다.</div>
@@ -1122,7 +1139,10 @@
         <button class="no-print" onclick="closeOrderDetailModal()" style="position:absolute;top:12px;right:12px;background:none;border:1px solid var(--navy);width:26px;height:26px;cursor:pointer;font-size:13px;">✕</button>
         <div style="display:flex;justify-content:space-between;align-items:flex-start;">
           <h3 style="margin-top:0;margin-bottom:4px;" id="order-detail-heading">주문 요청서</h3>
-          <button class="btn small secondary no-print" style="width:auto;margin-right:34px;" onclick="printOrderDetail()">인쇄 / PDF 저장</button>
+          <span class="no-print" style="margin-right:34px;">
+            <button class="btn small secondary" style="width:auto;margin-right:6px;" id="order-po-btn" onclick="openPoFromDetail()">삼성전자 발주서</button>
+            <button class="btn small secondary" style="width:auto;" onclick="printOrderDetail()">인쇄 / PDF 저장</button>
+          </span>
         </div>
         <p class="desc" id="order-detail-title"></p>
         <div id="order-detail-body"></div>
@@ -1264,9 +1284,36 @@
       </div>
     </div>
 
+    <!-- 선택 항목 일괄 수정 (재고 수정과 같은 모양, 일련번호 제외) -->
+    <div id="multi-edit-modal-overlay" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.55);z-index:1060;align-items:center;justify-content:center;">
+      <div style="background:#fff;border:2px solid var(--navy);max-width:640px;width:96%;max-height:92vh;overflow-y:auto;padding:22px;position:relative;">
+        <button onclick="closeMultiEdit()" style="position:absolute;top:12px;right:12px;background:none;border:1px solid var(--navy);width:26px;height:26px;cursor:pointer;font-size:13px;">✕</button>
+        <h3 style="margin-top:0;margin-bottom:4px;">선택 항목 일괄 수정</h3>
+        <p class="desc" id="me-multi-desc"></p>
+        <div style="border:1px solid var(--navy);background:#f4f7fb;padding:8px 11px;margin-bottom:10px;font-size:12px;line-height:1.7;">
+          왼쪽 <b>체크한 항목만</b> 바뀝니다. 체크하지 않은 칸은 건드리지 않습니다.
+          <br><b>일련번호·IMEI·수량·모델·색상은 바꿀 수 없습니다.</b> 건별로 다른 값이라 일괄 변경 대상이 아닙니다.
+        </div>
+        <div class="stack-form" id="multi-edit-form"></div>
+        <button class="btn small" style="width:auto;margin-top:12px;" onclick="submitMultiEdit()">체크한 항목만 일괄 적용</button>
+        <div id="multi-edit-msg" style="display:none;font-size:12.5px;margin-top:10px;padding:8px 10px;border-left:3px solid var(--navy);background:#f2f2f2;line-height:1.6;"></div>
+      </div>
+    </div>
+
+    <!-- 발주서 보기 (삼성전자 유통직판 양식) -->
+    <div id="po-view-modal-overlay" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.55);z-index:1050;align-items:center;justify-content:center;">
+      <div id="po-sheet" class="print-sheet" style="background:#fff;border:2px solid var(--navy);max-width:720px;width:96%;max-height:90vh;overflow-y:auto;padding:24px;position:relative;">
+        <button class="no-print" onclick="closePoView()" style="position:absolute;top:12px;right:12px;background:none;border:1px solid var(--navy);width:26px;height:26px;cursor:pointer;font-size:13px;">✕</button>
+        <div class="no-print" style="display:flex;justify-content:flex-end;gap:6px;margin-bottom:8px;margin-right:32px;">
+          <button class="btn small secondary" style="width:auto;" onclick="printPoSheet()">인쇄 / PDF 저장</button>
+        </div>
+        <div id="po-body"></div>
+      </div>
+    </div>
+
     <!-- 견적서 보기 -->
     <div id="quotation-view-modal-overlay" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.55);z-index:1050;align-items:center;justify-content:center;">
-      <div id="quotation-sheet" class="print-sheet" style="background:#fff;border:2px solid var(--navy);max-width:900px;width:96%;max-height:90vh;overflow-y:auto;padding:24px;position:relative;">
+      <div id="quotation-sheet" class="print-sheet" style="background:#fff;border:2px solid var(--navy);max-width:720px;width:96%;max-height:90vh;overflow-y:auto;padding:24px;position:relative;">
         <button class="no-print" onclick="closeQuotationView()" style="position:absolute;top:12px;right:12px;background:none;border:1px solid var(--navy);width:26px;height:26px;cursor:pointer;font-size:13px;">✕</button>
         <div class="no-print" style="display:flex;justify-content:flex-end;gap:6px;margin-bottom:8px;margin-right:32px;">
           <button class="btn small secondary" style="width:auto;" onclick="printQuotation()">인쇄 / PDF 저장</button>
@@ -1542,6 +1589,7 @@
     menuOrders:"메뉴: 주문 관리", menuSaleReq:"메뉴: 판매 관리", menuDataUpload:"메뉴: 자료업로드",
     excelExport:"엑셀 다운로드",
     bulkEdit:"재고 일괄수정 (다운로드/업로드로 기존 재고 값 변경)",
+    bulkModelApply:"⚠ 같은 모델 전체 일괄변경 (위험 — 승인자만)",
     uiCustomize:"화면 문구·버튼 이름 수정 (마우스 오른쪽 클릭)",
     userApproval:"사용자 승인·추방", permissionManage:"권한 설정 관리(전체 관리자)",
     teamManage:"팀 관리", inventorySettings:"재고 기초설정 관리",
@@ -1550,7 +1598,7 @@
   // 권한을 성격별로 묶어서 보여줍니다 (화면에서 찾기 쉽게)
   const PERMISSION_GROUPS = [
     { title:"화면 메뉴", keys:["dashboard","menuInvWork","menuInvUpload","menuOrders","menuSaleReq","menuDataUpload"] },
-    { title:"기능", keys:["excelExport","bulkEdit","uiCustomize"] },
+    { title:"기능", keys:["excelExport","bulkEdit","bulkModelApply","uiCustomize"] },
     { title:"관리자", keys:["userApproval","permissionManage","teamManage","inventorySettings","settlementSettings","siteSettings","dataReset"] }
   ];
   const PERMISSION_SUB_KEYS = ["menuInvUpload"];   // 상위 항목 아래에 들여쓰기할 항목
@@ -2004,6 +2052,12 @@
   function paginateSlice(fullArray, key){
     const st = getPageState(key);
     if(st.size === "all"){ return { pageItems: fullArray, startIndex: 0 }; }
+    // 필터를 걸어 건수가 줄면 지금 페이지가 범위를 넘어 빈 화면이 됩니다.
+    // 그래서 자르기 전에 페이지 번호를 범위 안으로 맞춥니다.
+    const total = Array.isArray(fullArray) ? fullArray.length : 0;
+    const totalPages = Math.max(1, Math.ceil(total / st.size));
+    if(st.page > totalPages) st.page = totalPages;
+    if(st.page < 1) st.page = 1;
     const start = (st.page-1)*st.size;
     return { pageItems: fullArray.slice(start, start+st.size), startIndex: start };
   }
@@ -2254,7 +2308,7 @@
     closePersonalSettingsModal();
   };
 
-  const ALL_PERM_KEYS = ["dashboard","menuInvWork","menuInvUpload","menuOrders","menuSaleReq","menuDataUpload","excelExport","bulkEdit","uiCustomize","userApproval","permissionManage","teamManage","inventorySettings","settlementSettings","siteSettings","dataReset"];
+  const ALL_PERM_KEYS = ["dashboard","menuInvWork","menuInvUpload","menuOrders","menuSaleReq","menuDataUpload","excelExport","bulkEdit","bulkModelApply","uiCustomize","userApproval","permissionManage","teamManage","inventorySettings","settlementSettings","siteSettings","dataReset"];
 
   async function loadUserAdminList(){
     const listEl = document.getElementById("user-admin-list");
@@ -4948,9 +5002,20 @@
     listEl.prepend(renderPaginationBar("orders", visibleBatches.length, loadOrderList));
   }
 
-  window.printOrderDetail = function(){ window.print(); };
+  let currentPoBatch = null;
+  window.openPoFromDetail = function(){
+    if(!currentPoBatch) return;
+    closeOrderDetailModal();
+    openPoSheet(currentPoBatch.batchId, currentPoBatch.b);
+  };
+  window.printOrderDetail = function(){
+    const ov = document.getElementById("order-detail-modal-overlay");
+    if(ov) ov.classList.add("print-open");
+    const sheet = document.getElementById("order-detail-sheet");
+    if(sheet) sheet.classList.add("print-sheet");
+    window.print();
+  };
   window.addEventListener("afterprint", ()=>{
-    document.body.classList.remove("printing");
     document.querySelectorAll(".print-open").forEach(el=> el.classList.remove("print-open"));
   });
 
@@ -5271,6 +5336,7 @@
 
     // 이 주문에서 자동생성된 판매요청 현황을 머리부 아래에 보여줍니다.
     renderOrderSaleLink(batchId, lines);
+    currentPoBatch = { batchId, b };
 
     let sumQty = 0, sumPurchase = 0, sumSale = 0;
     lines.forEach(o=>{
@@ -6778,13 +6844,74 @@
     loadQuotationList(); loadReservationTable();
   };
 
+  // ================= 삼성전자 유통직판 발주서 =================
+  window.closePoView = function(){
+    const ov = document.getElementById("po-view-modal-overlay");
+    ov.style.display = "none"; ov.classList.remove("print-open");
+  };
+  window.printPoSheet = function(){
+    document.getElementById("po-view-modal-overlay").classList.add("print-open");
+    window.print();
+  };
+
+  // 주문 묶음으로 발주서를 만듭니다. (삼성전자 양식)
+  window.openPoSheet = async function(batchId, b){
+    const lines = orderBatchLinesCache[batchId] || [];
+    const st = currentSettings || {};
+    await fetchCompanies();
+    // 납품처(계약처) = 매입처 업체정보
+    const co = companiesCache.find(c=> String(c.name||"").trim() === String(b.source||"").trim()) || {};
+
+    const row = (t, v)=> '<div><div class="t">'+t+'</div><div class="v">'+v+'</div></div>';
+    let h = '<div class="quote-title">유통직판 발주서</div>';
+    h += '<div class="quote-head">' +
+      row("발주일자", comboEsc(b.orderDate||todayStr())) +
+      row("파트너", comboEsc(st.issuerName || "포피플")) +
+      row("사업자번호", comboEsc(st.issuerBizNumber||"-") + " · 대표자 " + comboEsc(st.issuerCeo||"-")) +
+      row("전화/팩스", comboEsc(st.issuerContact||"-")) +
+      row("납품처(계약처)", comboEsc(co.bizName || co.name || b.source || "-")
+        + (co.bizNumber ? ' <span style="color:var(--gray);font-size:11.5px;">사업자 '+comboEsc(co.bizNumber)+'</span>' : '')) +
+      '</div>';
+
+    h += '<table class="data-table" style="width:100%;"><thead><tr>' +
+      '<th>품목명</th><th>모델명</th><th>색상</th>' +
+      '<th class="ta-right">출고가</th><th class="ta-right">수량</th><th class="ta-right">합계</th>' +
+      '</tr></thead><tbody>';
+    let totQty=0, totAmt=0;
+    lines.forEach(o=>{
+      if(o.status === "취소") return;
+      const q = Number(o.quantity)||0;
+      const lp = Number(o.listPrice)||0;
+      totQty += q; totAmt += lp*q;
+      h += '<tr>' +
+        '<td>'+comboEsc(o.petName||o.modelGroup||"-")+'</td>' +
+        '<td>'+comboEsc(o.systemModel||o.baseModel||"-")+'</td>' +
+        '<td>'+comboEsc(o.systemColor||o.manufacturerColor||"-")+'</td>' +
+        '<td class="ta-right">'+(lp?lp.toLocaleString():"-")+'</td>' +
+        '<td class="ta-right">'+q+'</td>' +
+        '<td class="ta-right">'+(lp*q).toLocaleString()+'</td></tr>';
+    });
+    h += '<tr style="background:#fafafa;font-weight:700;border-top:2px solid var(--navy);">' +
+      '<td colspan="4">합계</td><td class="ta-right">'+totQty+'</td><td class="ta-right">'+totAmt.toLocaleString()+'</td></tr>';
+    h += '</tbody></table>';
+
+    h += '<div style="margin-top:18px;font-size:13px;line-height:2;">' +
+      '상기 내역의 제품을 삼성전자에 발주하오니 납품하여주시기 바랍니다.' +
+      '<div style="margin-top:26px;display:flex;justify-content:flex-end;align-items:flex-end;gap:14px;">' +
+        '<span style="color:var(--gray);font-size:12px;">명판 / 날인</span>' +
+        '<span style="display:inline-block;width:150px;height:70px;border:1px solid var(--line);"></span>' +
+      '</div></div>';
+
+    document.getElementById("po-body").innerHTML = h;
+    document.getElementById("po-view-modal-overlay").style.display = "flex";
+  };
+
   window.closeQuotationView = function(){
-    document.getElementById("quotation-view-modal-overlay").style.display = "none";
-    document.getElementById("quotation-view-modal-overlay").classList.remove("print-open");
-    document.body.classList.remove("printing");
+    const ov = document.getElementById("quotation-view-modal-overlay");
+    ov.style.display = "none";
+    ov.classList.remove("print-open");
   };
   window.printQuotation = function(){
-    document.body.classList.add("printing");
     document.getElementById("quotation-view-modal-overlay").classList.add("print-open");
     window.print();
   };
@@ -6797,7 +6924,7 @@
     const co = companiesCache.find(c=> String(c.name||"").trim() === String(q.destination||"").trim()) || {};
     const st = currentSettings || {};
     const box = (title, rows)=>
-      '<div><div class="t">'+title+'</div>' + rows.map(r=>'<div class="v">'+r+'</div>').join("") + '</div>';
+      '<div><div class="t">'+title+'</div><div class="v">' + rows.join("<br>") + '</div></div>';
 
     let h = '<div class="quote-title">견 적 서</div>';
     h += '<div class="quote-head">' +
@@ -6843,6 +6970,7 @@
       '</div>';
 
     document.getElementById("quotation-body").innerHTML = h;
+    document.getElementById("quotation-sheet").classList.add("print-sheet");
     document.getElementById("quotation-view-modal-overlay").style.display = "flex";
   };
 
@@ -7111,10 +7239,13 @@
     if(!listEl) return;
     listEl.innerHTML = '<div class="list-empty">불러오는 중...</div>';
 
-    // 주문에서 판매조건이 잡힌 것들을 조용히 자동 반영 (버튼 없이)
-    await backfillSaleRequestsFromOrders(true);
-    // 예전에 개별로 만들어진 건들도 판매처+요청일 기준으로 조용히 자동 정리
-    await consolidateLegacySaleRequests();
+    // 자동 정리 단계에서 오류가 나도 목록은 그려지도록 감싸둡니다.
+    try{
+      await backfillSaleRequestsFromOrders(true);
+      await consolidateLegacySaleRequests();
+    }catch(e){
+      console.error("판매요청 자동정리 오류", e);
+    }
 
     const batchSnap = await getDocs(query(collection(db,"saleRequestBatches"), orderBy("createdAt","desc")));
     const linesSnap = await getDocs(collection(db,"saleRequests"));
@@ -7193,6 +7324,19 @@
       };
     }
 
+    // 입금 대기 현황 요약 (건수·금액)
+    const waitRows = saleRows.filter(r=> r.b.status!=="취소" && r.b.depositReceived !== true);
+    const waitAmt = waitRows.reduce((n,r)=> n + (Number(r.b.depositRequired)||0), 0);
+    const matchWait = saleRows.filter(r=> r.b.status!=="취소" &&
+      !(r.lines.length>0 && r.lines.every(l=> (Number(l.fulfilledCount)||0) >= (Number(l.quantity)||0)))).length;
+    const sumEl = document.getElementById("sale-wait-summary");
+    if(sumEl){
+      sumEl.innerHTML =
+        '<span style="color:var(--danger);font-weight:700;">입금대기 ' + waitRows.length + '건</span>' +
+        ' <span style="color:var(--gray);">' + waitAmt.toLocaleString() + '</span>' +
+        ' · <span style="color:#b8860b;font-weight:700;">매칭대기 ' + matchWait + '건</span>';
+    }
+
     // 보기 필터 적용 — 최종완료는 기본으로 숨깁니다.
     const visibleSale = saleRows.filter(r=>{
       const cancelled = r.b.status === "취소";
@@ -7204,7 +7348,16 @@
     });
     if(visibleSale.length === 0){
       const label = { all:"", ing:"진행중인", done:"최종완료된", cancel:"취소된" }[saleListFilter] || "";
-      listEl.innerHTML = '<div class="list-empty">' + (label ? label + ' 판매요청이 없습니다. 위 <b>전체</b>를 누르면 모두 보입니다.' : '등록된 판매요청이 없습니다.') + '</div>';
+      const finCnt = saleRows.filter(r=> r.b.status!=="취소" && isSaleFinal(r.b, r.lines)).length;
+      const cancelCnt = saleRows.filter(r=> r.b.status==="취소").length;
+      listEl.innerHTML = '<div class="list-empty" style="text-align:left;line-height:1.9;">'
+        + (label ? '<b>' + label + ' 판매요청이 없습니다.</b>' : '<b>등록된 판매요청이 없습니다.</b>')
+        + '<br><span style="color:var(--gray);">전체 ' + saleRows.length + '건'
+        + ' · 진행중 ' + (saleRows.length - finCnt - cancelCnt) + '건'
+        + ' · 최종완료 ' + finCnt + '건'
+        + ' · 취소 ' + cancelCnt + '건</span>'
+        + (saleRows.length>0 ? '<br>위 <b>전체</b> 버튼을 누르면 모두 보입니다.' : '')
+        + '</div>';
       return;
     }
     const { pageItems: salePage } = paginateSlice(visibleSale, "saleRequests");
@@ -7901,8 +8054,16 @@
     return lastRenderedItems.filter(it=> keys.has(itemModelKey(it))).map(it=>it.id);
   }
   window.onBulkSameModelToggle = function(){
-    const on = document.getElementById("bulk-same-model").checked;
+    const cb = document.getElementById("bulk-same-model");
     const el = document.getElementById("bulk-samemodel-desc");
+    // 위험한 기능이라 권한이 있어야 켤 수 있습니다.
+    if(cb.checked && !hasPerm(currentUserPerms, "bulkModelApply")){
+      cb.checked = false;
+      el.innerHTML = '<span style="color:var(--danger);font-weight:700;">이 기능은 승인 권한이 필요합니다.</span>'
+        + '<br>관리자에게 <b>같은 모델 전체 일괄변경</b> 권한을 요청해주세요. (개인설정 → 권한 요청)';
+      return;
+    }
+    const on = cb.checked;
     const base = getSelectedInventoryIds();
     if(!on){
       el.innerHTML = "전산모델명이 같은 재고를 모두 찾아 한 번에 바꿉니다. 페이지를 넘기지 않아도 됩니다.";
@@ -7915,11 +8076,165 @@
       + "<br>모델: <b>" + comboEsc(keys.join(", ")) + "</b>";
   };
 
+  // ================= 선택 항목 일괄 수정 (여러 칸 동시) =================
+  // 일련번호·IMEI·수량·모델·색상은 건별 고유값이라 제외합니다.
+  const MULTI_EDIT_FIELDS = [
+    { key:"orderDate",        label:"주문일",        type:"text",   ph:"예: 20260724" },
+    { key:"inDate",           label:"입고일",        type:"text",   ph:"예: 20260725" },
+    { key:"expectedSaleDate", label:"판매예정일",     type:"text",   ph:"예: 20260725" },
+    { key:"outDate",          label:"출고일",        type:"text",   ph:"예: 20260725" },
+    { key:"source",           label:"입고처",        type:"names",  col:"inboundSources" },
+    { key:"manufacturer",     label:"제조사",        type:"names",  col:"manufacturers" },
+    { key:"carrier",          label:"통신사",        type:"names",  col:"carriers" },
+    { key:"location",         label:"위치",          type:"names",  col:"locations" },
+    { key:"status",           label:"현재상태",       type:"names",  col:"statusOptions" },
+    { key:"listPrice",        label:"출고가",        type:"number", link:"list" },
+    { key:"purchaseDiscountAmt", label:"선할인",     type:"number", link:"preamt" },
+    { key:"purchaseDiscount",    label:"선할인%",    type:"number", link:"prepct" },
+    { key:"otherDiscountAmt",    label:"타할인",     type:"number", link:"otheramt" },
+    { key:"otherDiscountPct",    label:"타할인%",    type:"number", link:"otherpct" },
+    { key:"purchasePrice",    label:"입고가",        type:"number", link:"buy" },
+    { key:"destination",      label:"판매처",        type:"names",  col:"outboundDestinations" },
+    { key:"salePrice",        label:"판매가",        type:"number", link:"saleprice" },
+    { key:"saleDiscountAmt",  label:"판매할인",      type:"number", link:"saleamt" },
+    { key:"saleDiscount",     label:"판매할인%",     type:"number", link:"salepct" },
+    { key:"subsidyAmount",    label:"공시지원금",     type:"number" },
+    { key:"subsidyStatus",    label:"공시지원금 상태", type:"options", options:["지급대기","지급완료","환수"] },
+    { key:"clawbackAmount",   label:"환수액",        type:"number" },
+    { key:"subsidyAccrualMonth", label:"공시지원금 귀속월", type:"text", ph:"예: 202607" }
+  ];
+
+  window.closeMultiEdit = function(){
+    document.getElementById("multi-edit-modal-overlay").style.display = "none";
+  };
+
+  function meId(key){ return "mev-" + key; }
+  function meChk(key){ return "mec-" + key; }
+
+  // 금액·할인 연동 (다른 화면과 같은 규칙)
+  window.multiRecalc = function(src){
+    const g = k => { const el = document.getElementById(meId(k)); return el && el.value !== "" ? Number(el.value) : null; };
+    const set = (k, v)=>{
+      const el = document.getElementById(meId(k)); if(!el) return;
+      el.value = (v===null || v===undefined || v==="") ? "" : v;
+      const c = document.getElementById(meChk(k)); if(c && el.value !== "") c.checked = true;   // 계산된 칸은 자동 체크
+    };
+    const L = g("listPrice") || 0;
+    if(src==="preamt")  set("purchaseDiscount", pctFromAmt(document.getElementById(meId("purchaseDiscountAmt")).value, L));
+    if(src==="prepct")  set("purchaseDiscountAmt", amtFromPct(document.getElementById(meId("purchaseDiscount")).value, L));
+    if(src==="otheramt") set("otherDiscountPct", pctFromAmt(document.getElementById(meId("otherDiscountAmt")).value, L));
+    if(src==="otherpct") set("otherDiscountAmt", amtFromPct(document.getElementById(meId("otherDiscountPct")).value, L));
+    if(["preamt","prepct","otheramt","otherpct","list"].includes(src) && L){
+      set("purchasePrice", L - (g("purchaseDiscountAmt")||0) - (g("otherDiscountAmt")||0));
+    }
+    if(src==="buy" && L){
+      const pre = L - (g("purchasePrice")||0) - (g("otherDiscountAmt")||0);
+      set("purchaseDiscountAmt", pre); set("purchaseDiscount", pctFromAmt(pre, L));
+    }
+    if(src==="saleamt"){ set("saleDiscount", pctFromAmt(document.getElementById(meId("saleDiscountAmt")).value, L)); if(L) set("salePrice", L - (g("saleDiscountAmt")||0)); }
+    if(src==="salepct"){ const a = amtFromPct(document.getElementById(meId("saleDiscount")).value, L); set("saleDiscountAmt", a); if(L && a!=="") set("salePrice", L - Number(a)); }
+    if(src==="saleprice" && L){ const a = L - (g("salePrice")||0); set("saleDiscountAmt", a); set("saleDiscount", pctFromAmt(a, L)); }
+    if(src==="list"){
+      set("purchaseDiscount", pctFromAmt(document.getElementById(meId("purchaseDiscountAmt")).value, L));
+      set("otherDiscountPct", pctFromAmt(document.getElementById(meId("otherDiscountAmt")).value, L));
+      set("saleDiscount", pctFromAmt(document.getElementById(meId("saleDiscountAmt")).value, L));
+    }
+  };
+
+  window.openMultiEdit = async function(){
+    const ids = getSelectedInventoryIds();
+    if(ids.length === 0){ alert("먼저 변경할 재고를 체크해주세요."); return; }
+    const items = ids.map(id=> lastRenderedItems.find(x=>x.id===id)).filter(Boolean);
+    document.getElementById("me-multi-desc").innerHTML =
+      '체크한 <b>' + ids.length + '건</b>에 적용됩니다.'
+      + (items.length ? '<br><span style="color:var(--gray);font-size:12px;">' +
+          [...new Set(items.map(it=>docModelLabel(it)))].slice(0,3).map(comboEsc).join(" · ") +
+          (new Set(items.map(it=>docModelLabel(it))).size > 3 ? " 외" : "") + '</span>' : '');
+
+    // 폼 만들기
+    const form = document.getElementById("multi-edit-form");
+    form.innerHTML = '<div style="padding:8px 10px;color:var(--gray);font-size:12px;">칸을 준비하는 중...</div>';
+    const nameCache = {};
+    for(const f of MULTI_EDIT_FIELDS){
+      if(f.type === "names" && !nameCache[f.col]) nameCache[f.col] = await fetchNamesList(f.col);
+    }
+    let h = "";
+    MULTI_EDIT_FIELDS.forEach(f=>{
+      let input = "";
+      const oninput = f.link ? ' oninput="multiRecalc(\''+f.link+'\')"' : '';
+      if(f.type === "names"){
+        input = '<select id="'+meId(f.key)+'" style="flex:1;border:none;padding:5px 8px;font-size:12.5px;">'
+          + '<option value="">(선택)</option>'
+          + (nameCache[f.col]||[]).map(n=>'<option value="'+comboEsc(n)+'">'+comboEsc(n)+'</option>').join("")
+          + '</select>';
+      }else if(f.type === "options"){
+        input = '<select id="'+meId(f.key)+'" style="flex:1;border:none;padding:5px 8px;font-size:12.5px;">'
+          + '<option value="">(선택)</option>'
+          + f.options.map(n=>'<option value="'+n+'">'+n+'</option>').join("")
+          + '</select>';
+      }else{
+        input = '<input type="'+(f.type==="number"?"number":"text")+'" id="'+meId(f.key)+'"'+oninput
+          + ' placeholder="'+(f.ph||"")+'" style="flex:1;border:none;padding:5px 8px;font-size:12.5px;">';
+      }
+      h += '<div class="stack-row">' +
+        '<label style="width:150px;gap:6px;"><input type="checkbox" id="'+meChk(f.key)+'" title="이 항목을 바꿉니다">' +
+        '<span>'+f.label+'</span></label>' + input + '</div>';
+    });
+    form.innerHTML = h;
+    document.getElementById("multi-edit-msg").style.display = "none";
+    document.getElementById("multi-edit-modal-overlay").style.display = "flex";
+  };
+
+  window.submitMultiEdit = async function(){
+    const ids = getSelectedInventoryIds();
+    if(ids.length === 0){ showModelMsg("multi-edit-msg", "체크한 재고가 없습니다. 창을 닫고 다시 선택해주세요.", true); return; }
+
+    const patch = {};
+    const changed = [];
+    MULTI_EDIT_FIELDS.forEach(f=>{
+      const c = document.getElementById(meChk(f.key));
+      if(!c || !c.checked) return;
+      const v = document.getElementById(meId(f.key)).value;
+      if(f.type === "number") patch[f.key] = (v === "" ? null : Number(v));
+      else patch[f.key] = (v === "" ? null : v);
+      changed.push(f.label + " → " + (v === "" ? "(비움)" : v));
+    });
+    if(changed.length === 0){ showModelMsg("multi-edit-msg", "바꿀 항목을 왼쪽 체크박스로 하나 이상 골라주세요.", true); return; }
+
+    if(!confirm("체크한 " + ids.length + "건에 아래 " + changed.length + "개 항목을 적용합니다.\n\n"
+      + changed.map(x=>"· "+x).join("\n") + "\n\n일련번호는 그대로 유지됩니다. 진행하시겠습니까?")) return;
+
+    try{
+      showModelMsg("multi-edit-msg", "저장 중...", false);
+      for(let i=0; i<ids.length; i+=300){
+        const batch = writeBatch(db);
+        ids.slice(i, i+300).forEach(id=>{
+          const it = lastRenderedItems.find(x=>x.id===id) || {};
+          const p = { ...patch };
+          // 수익은 항상 앞뒤가 맞게 다시 계산합니다.
+          const sale = (p.salePrice !== undefined) ? p.salePrice : it.salePrice;
+          const buy  = (p.purchasePrice !== undefined) ? p.purchasePrice : it.purchasePrice;
+          if(sale && buy) p.profit = Number(sale) - Number(buy);
+          batch.update(doc(db,"inventoryItems", id), p);
+        });
+        await batch.commit();
+      }
+    }catch(e){
+      showModelMsg("multi-edit-msg", "<b>저장에 실패했습니다.</b><br>" + comboEsc((e && e.message) ? e.message : String(e)), true);
+      return;
+    }
+    logAction("재고 일괄 수정(다중항목)", ids.length + "건 / " + changed.length + "개 항목");
+    showModelMsg("multi-edit-msg", ids.length + "건에 적용했습니다.", false);
+    document.getElementById("bulk-select-all").checked = false;
+    loadInventoryList();
+    setTimeout(()=>{ closeMultiEdit(); closeBulkChangeModal(); }, 900);
+  };
+
   window.applyBulkEdit = async function(){
     let ids = getSelectedInventoryIds();
     if(ids.length===0){ alert("적용할 재고를 먼저 선택해주세요."); return; }
     const sameModelEl = document.getElementById("bulk-same-model");
-    const useSameModel = !!(sameModelEl && sameModelEl.checked);
+    const useSameModel = !!(sameModelEl && sameModelEl.checked && hasPerm(currentUserPerms, "bulkModelApply"));
     if(useSameModel){
       const expanded = expandSameModelIds(ids);
       if(expanded.length > ids.length){
