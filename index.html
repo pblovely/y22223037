@@ -279,7 +279,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-07-25 v89</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-07-25 v91</span>
       <span id="topbar-username">-</span>
       <button onclick="openPersonalSettingsModal()">개인설정</button>
       <button onclick="handleLogout()">로그아웃</button>
@@ -1403,6 +1403,22 @@
         </div>
 
         <p class="desc" style="margin-top:14px;margin-bottom:4px;font-weight:700;color:var(--navy);">주문 품목</p>
+        <div style="border:1px solid var(--navy);background:#f4f7fb;padding:9px 11px;margin-bottom:8px;font-size:12.5px;">
+          <b>모든 줄에 한 번에 넣기</b>
+          <span class="info-tip" title="아래 값을 입력하고 적용을 누르면 모든 줄에 같은 값이 들어갑니다. 비워둔 칸은 건드리지 않습니다.">ⓘ</span>
+          <div style="display:flex;gap:0;flex-wrap:wrap;align-items:center;margin-top:6px;">
+            <input type="number" id="bulk-line-preamt" placeholder="선할인" style="width:100px;height:28px;border:1px solid var(--line);padding:0 6px;font-size:12.5px;box-sizing:border-box;">
+            <input type="number" step="0.01" id="bulk-line-prepct" placeholder="선할인%" style="width:90px;height:28px;border:1px solid var(--line);padding:0 6px;font-size:12.5px;margin-left:-1px;box-sizing:border-box;">
+            <input type="number" id="bulk-line-otheramt" placeholder="타할인" style="width:100px;height:28px;border:1px solid var(--line);padding:0 6px;font-size:12.5px;margin-left:-1px;box-sizing:border-box;">
+            <input type="number" step="0.01" id="bulk-line-otherpct" placeholder="타할인%" style="width:90px;height:28px;border:1px solid var(--line);padding:0 6px;font-size:12.5px;margin-left:-1px;box-sizing:border-box;">
+            <select id="bulk-line-dest" style="width:150px;height:28px;border:1px solid var(--line);padding:0 6px;font-size:12.5px;margin-left:-1px;box-sizing:border-box;"><option value="">판매처 (선택)</option></select>
+            <input type="number" step="0.01" id="bulk-line-salepct" placeholder="판매할인%" style="width:100px;height:28px;border:1px solid var(--line);padding:0 6px;font-size:12.5px;margin-left:-1px;box-sizing:border-box;">
+            <button class="btn small" style="width:auto;height:28px;margin-left:6px;" onclick="applyBulkToOrderLines()">모든 줄에 적용</button>
+          </div>
+          <div style="color:var(--gray);font-size:11.5px;margin-top:5px;line-height:1.6;">
+            %를 넣으면 각 줄의 <b>출고가 기준</b>으로 금액이 계산됩니다. 줄마다 출고가가 달라도 알맞게 들어갑니다.
+          </div>
+        </div>
         <div style="overflow-x:auto;border:1px solid var(--line);margin-bottom:8px;">
           <table style="border-collapse:collapse;font-size:12px;white-space:nowrap;width:100%;">
             <thead>
@@ -2029,6 +2045,8 @@
       if(span && customTabLabels[key]) span.textContent = customTabLabels[key];
       if(customTabColors[key]) el.style.setProperty("color", customTabColors[key], "important");
       if(customTabFontSizes[key]) el.style.setProperty("font-size", customTabFontSizes[key]+"px", "important");
+      // 권한으로 숨긴 메뉴는 절대 다시 보이게 하지 않습니다.
+      if(el.dataset.permHidden === "1"){ el.style.display = "none"; return; }
       // 표는 display를 건드리면 레이아웃이 깨지므로 숨김만 별도로 처리합니다.
       if(el.tagName === "TABLE"){
         el.style.display = customHiddenKeys[key] ? "none" : "table";
@@ -5094,6 +5112,16 @@
     orderLineSeq = 0;
     await populateOrderTopSelects();
     await fetchModelsCache();
+    // 일괄 입력줄 초기화
+    ["bulk-line-preamt","bulk-line-prepct","bulk-line-otheramt","bulk-line-otherpct","bulk-line-salepct"]
+      .forEach(id=>{ const el = document.getElementById(id); if(el) el.value = ""; });
+    const bd = document.getElementById("bulk-line-dest");
+    if(bd){
+      bd.innerHTML = '<option value="">판매처 (선택)</option>';
+      (await fetchNamesList("outboundDestinations")).forEach(n=>{
+        const o = document.createElement("option"); o.value = n; o.textContent = n; bd.appendChild(o);
+      });
+    }
     await addOrderLine(); // 기본 1줄 시작
     document.getElementById("order-modal-overlay").style.display = "flex";
   };
@@ -5261,6 +5289,77 @@
     loadOrderList();
     if(dest && sale && typeof loadSaleRequestList === "function") loadSaleRequestList();
     setTimeout(closeOrderSingle, 900);
+  };
+
+  // 주문 품목 여러 줄에 같은 값을 한 번에 넣습니다.
+  // %는 각 줄의 출고가 기준으로 계산되므로 줄마다 금액이 다르게 들어갑니다.
+  window.applyBulkToOrderLines = function(){
+    const rows = Array.from(document.querySelectorAll("#order-lines-body tr"));
+    if(rows.length === 0){ alert("품목 줄이 없습니다."); return; }
+
+    const g = id => { const el = document.getElementById(id); return el ? el.value.trim() : ""; };
+    const preAmt = g("bulk-line-preamt"), prePct = g("bulk-line-prepct");
+    const othAmt = g("bulk-line-otheramt"), othPct = g("bulk-line-otherpct");
+    const dest = g("bulk-line-dest"), salePct = g("bulk-line-salepct");
+
+    const items = [];
+    if(preAmt !== "") items.push("선할인 " + Number(preAmt).toLocaleString());
+    if(prePct !== "") items.push("선할인% " + prePct);
+    if(othAmt !== "") items.push("타할인 " + Number(othAmt).toLocaleString());
+    if(othPct !== "") items.push("타할인% " + othPct);
+    if(dest !== "")   items.push("판매처 " + dest);
+    if(salePct !== "") items.push("판매할인% " + salePct);
+    if(items.length === 0){ alert("넣을 값을 하나 이상 입력해주세요."); return; }
+
+    if(!confirm(rows.length + "줄 전체에 아래 값을 넣습니다.\n\n" + items.map(x=>"· "+x).join("\n")
+      + "\n\n비워둔 칸은 건드리지 않습니다. 진행하시겠습니까?")) return;
+
+    let applied = 0;
+    rows.forEach(tr=>{
+      const L = Number((tr.querySelector(".ol-listprice")||{}).value) || 0;
+      const set = (cls, v)=>{ const el = tr.querySelector(cls); if(el){ el.value = v; } };
+
+      // 선할인 — 금액이 우선, 없으면 %로 계산
+      if(preAmt !== ""){
+        set(".ol-prediscountamt", preAmt);
+        set(".ol-prediscountpct", pctFromAmt(preAmt, L));
+      }else if(prePct !== "" && L){
+        const a = amtFromPct(prePct, L);
+        set(".ol-prediscountamt", a);
+        set(".ol-prediscountpct", prePct);
+      }
+      // 타할인
+      if(othAmt !== ""){
+        set(".ol-otherdiscountamt", othAmt);
+        set(".ol-otherdiscountpct", pctFromAmt(othAmt, L));
+      }else if(othPct !== "" && L){
+        const a = amtFromPct(othPct, L);
+        set(".ol-otherdiscountamt", a);
+        set(".ol-otherdiscountpct", othPct);
+      }
+      // 판매처
+      if(dest !== ""){
+        const ds = tr.querySelector(".ol-dest");
+        if(ds){
+          if(!Array.from(ds.options).some(o=>o.value === dest)){
+            const o = document.createElement("option"); o.value = dest; o.textContent = dest; ds.appendChild(o);
+          }
+          ds.value = dest;
+        }
+      }
+      // 판매할인% → 판매할인 금액·판매가
+      if(salePct !== "" && L){
+        const a = amtFromPct(salePct, L);
+        set(".ol-salediscountamt", a);
+        set(".ol-salediscountpct", salePct);
+        set(".ol-saleprice", L - Number(a));
+      }
+      if(typeof onOrderLineDiscountInput === "function") onOrderLineDiscountInput(tr);
+      if(typeof updateOrderLineSubtotal === "function") updateOrderLineSubtotal(tr);
+      applied++;
+    });
+    if(typeof recalcOrderTotal === "function") recalcOrderTotal();
+    alert(applied + "줄에 적용했습니다.");
   };
 
   window.addOrderLine = async function(){
@@ -13016,30 +13115,40 @@
       const showAnyWorkMenu = (showInvWork||showOrders||showSaleReq||showDataUpload);
       if(showUsers) updateUserAdminBadge();
 
-      document.getElementById("tabbtn-site").style.display = showSite ? "block":"none";
-      document.getElementById("tabbtn-notices").style.display = (showDashboard||showAnyWorkMenu) ? "block":"none";
-      document.getElementById("tabbtn-team").style.display = showTeam ? "block":"none";
-      document.getElementById("tabbtn-inv-admin").style.display = showInvAdmin ? "block":"none";
-      document.getElementById("tabbtn-users").style.display = showUsers ? "block":"none";
-      document.getElementById("tabbtn-settlement").style.display = showSettlement ? "block":"none";
-      document.getElementById("tabbtn-b2b").style.display = showSettlement ? "block":"none";
-      document.getElementById("tabbtn-ledger").style.display = showSettlement ? "block":"none";
-      document.getElementById("tabbtn-logs").style.display = showLogs ? "block":"none";
-      document.getElementById("tabbtn-dashboard").style.display = showDashboard ? "block":"none";
-      document.getElementById("tabbtn-inv-work").style.display = showInvWork ? "block":"none";
-      document.getElementById("tabbtn-data-upload").style.display = showDataUpload ? "block":"none";
-      document.getElementById("tabbtn-orders").style.display = showOrders ? "block":"none";
-      document.getElementById("tabbtn-salereq").style.display = showSaleReq ? "block":"none";
-      document.getElementById("tabbtn-reservation").style.display = showSaleReq ? "block":"none";
-      // 업체정보 — 작업 메뉴를 쓰는 사람이면 볼 수 있습니다. (추가는 누구나, 수정·삭제는 권한자만)
-      document.getElementById("tabbtn-company").style.display = showAnyWorkMenu ? "block":"none";
+      // 권한에 따라 메뉴를 보이거나 숨깁니다.
+      // 화면 커스터마이징이 나중에 다시 보이게 만들지 않도록 표시를 남겨둡니다.
+      const setMenu = (id, show)=>{
+        const el = document.getElementById(id);
+        if(!el) return;
+        el.style.display = show ? "block" : "none";
+        if(show) delete el.dataset.permHidden; else el.dataset.permHidden = "1";
+      };
+      setMenu("tabbtn-site", showSite);
+      setMenu("tabbtn-notices", (showDashboard||showAnyWorkMenu));
+      setMenu("tabbtn-team", showTeam);
+      setMenu("tabbtn-inv-admin", showInvAdmin);
+      setMenu("tabbtn-users", showUsers);
+      setMenu("tabbtn-settlement", showSettlement);
+      setMenu("tabbtn-b2b", showSettlement);
+      setMenu("tabbtn-ledger", showSettlement);
+      setMenu("tabbtn-logs", showLogs);
+      setMenu("tabbtn-dashboard", showDashboard);
+      setMenu("tabbtn-inv-work", showInvWork);
+      setMenu("tabbtn-data-upload", showDataUpload);
+      setMenu("tabbtn-orders", showOrders);
+      setMenu("tabbtn-salereq", showSaleReq);
+      setMenu("tabbtn-reservation", showSaleReq);
+      setMenu("tabbtn-company", showAnyWorkMenu);
 
       const hasAnyAdmin = (showSite||showTeam||showInvAdmin||showUsers||showSettlement||showLogs);
-      document.getElementById("admin-toggle-btn").style.display = hasAnyAdmin ? "block":"none";
+      const admBtn = document.getElementById("admin-toggle-btn");
+      admBtn.style.display = hasAnyAdmin ? "block":"none";
+      if(hasAnyAdmin) delete admBtn.dataset.permHidden; else admBtn.dataset.permHidden = "1";
       document.getElementById("admin-group").style.display = "none";
       document.getElementById("inv-admin-submenu").style.display = "none";
-      document.getElementById("work-group").style.display =
-        (showDashboard||showAnyWorkMenu) ? "block":"none";
+      const wg = document.getElementById("work-group");
+      wg.style.display = (showDashboard||showAnyWorkMenu) ? "block":"none";
+      if(showDashboard||showAnyWorkMenu) delete wg.dataset.permHidden; else wg.dataset.permHidden = "1";
 
       if(showSite){
         document.getElementById("site-name-input").value = currentSettings.siteName || DEFAULT_SITE_NAME;
