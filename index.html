@@ -249,7 +249,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-07-25 v47</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-07-25 v52</span>
       <span id="topbar-username">-</span>
       <button onclick="openPersonalSettingsModal()">개인설정</button>
       <button onclick="handleLogout()">로그아웃</button>
@@ -279,6 +279,7 @@
           <button class="tab-btn" data-tab="tab-orders" data-label-key="tab-orders" id="tabbtn-orders" onclick="switchTab('tab-orders')" style="display:none;"><span class="tab-label-text">주문 관리</span></button>
           <button class="tab-btn" data-tab="tab-salereq" data-label-key="tab-salereq" id="tabbtn-salereq" onclick="switchTab('tab-salereq')" style="display:none;"><span class="tab-label-text">판매 관리</span></button>
           <button class="tab-btn" data-tab="tab-reservation" data-label-key="tab-reservation" id="tabbtn-reservation" onclick="switchTab('tab-reservation')" style="display:none;"><span class="tab-label-text">예약 관리</span></button>
+          <button class="tab-btn" data-tab="tab-inv-company" data-label-key="tab-inv-company" id="tabbtn-company" onclick="switchTab('tab-inv-company')" style="display:none;"><span class="tab-label-text">업체정보</span></button>
           <button class="tab-btn" data-tab="tab-data-upload" data-label-key="tab-data-upload" id="tabbtn-data-upload" onclick="switchTab('tab-data-upload')" style="display:none;"><span class="tab-label-text">자료업로드</span></button>
         </div>
         <button id="admin-toggle-btn" data-label-key="admin-toggle" onclick="toggleAdminMenu()" style="display:none;"><span class="tab-label-text">⚙ 관리자</span></button>
@@ -300,7 +301,6 @@
         <button class="tab-btn" data-tab="tab-inv-manufacturer" data-label-key="tab-inv-manufacturer" onclick="switchTab('tab-inv-manufacturer')"><span class="tab-label-text">제조사</span></button>
         <button class="tab-btn" data-tab="tab-inv-location" data-label-key="tab-inv-location" onclick="switchTab('tab-inv-location')"><span class="tab-label-text">위치</span></button>
         <button class="tab-btn" data-tab="tab-inv-status" data-label-key="tab-inv-status" onclick="switchTab('tab-inv-status')"><span class="tab-label-text">현재상태</span></button>
-        <button class="tab-btn" data-tab="tab-inv-company" data-label-key="tab-inv-company" onclick="switchTab('tab-inv-company')"><span class="tab-label-text">업체정보</span></button>
         <button class="tab-btn" data-tab="tab-inv-carrier" data-label-key="tab-inv-carrier" onclick="switchTab('tab-inv-carrier')"><span class="tab-label-text">통신사</span></button>
       </div>
 
@@ -654,8 +654,11 @@
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
           <h3 style="margin:0;">업체정보 <span class="info-tip" title="매입처(입고처)와 판매처(출고처)를 한 곳에서 관리합니다. 구분을 체크한 업체만 해당 드롭다운에 나타납니다.">ⓘ</span></h3>
           <span>
-            <button class="btn small secondary" style="width:auto;margin-right:6px;" onclick="mergeDuplicateCompanies()">중복 업체 정리</button>
-            <button class="btn small secondary" style="width:auto;margin-right:6px;" onclick="importLegacyCompanies()">기존 입고처·출고처 가져오기</button>
+            <span id="company-admin-buttons">
+              <button class="btn small secondary" style="width:auto;margin-right:6px;" onclick="cleanupOrphanCompanyNames()">기록의 옛 업체명 정리</button>
+              <button class="btn small secondary" style="width:auto;margin-right:6px;" onclick="mergeDuplicateCompanies()">중복 업체 정리</button>
+              <button class="btn small secondary" style="width:auto;margin-right:6px;" onclick="importLegacyCompanies()">기존 입고처·출고처 가져오기</button>
+            </span>
             <button class="btn small" style="width:auto;" onclick="openCompanyModal()">+ 업체 등록</button>
           </span>
         </div>
@@ -665,6 +668,10 @@
           <button class="btn small" id="company-filter-all" style="width:auto;padding:0 12px;height:26px;border:1px solid var(--navy);" onclick="setCompanyFilter('all')">전체</button>
           <button class="btn small secondary" id="company-filter-source" style="width:auto;padding:0 12px;height:26px;border:1px solid var(--navy);margin-left:-1px;" onclick="setCompanyFilter('source')">매입처</button>
           <button class="btn small secondary" id="company-filter-dest" style="width:auto;padding:0 12px;height:26px;border:1px solid var(--navy);margin-left:-1px;" onclick="setCompanyFilter('dest')">판매처</button>
+        </div>
+        <div id="company-perm-notice" style="display:none;font-size:12.5px;padding:8px 11px;margin-bottom:8px;border:1px solid var(--line);background:#fafafa;line-height:1.7;">
+          업체 <b>추가</b>는 누구나 할 수 있습니다. <b>수정·삭제·순서 변경</b>은 권한이 필요합니다.
+          <span style="color:var(--gray);">필요하시면 개인설정 → 권한 요청에서 <b>업체 정보 수정·삭제</b>를 신청해주세요.</span>
         </div>
         <div id="company-pagination"></div>
         <div style="overflow-x:auto;">
@@ -1634,7 +1641,7 @@
   // 권한을 성격별로 묶어서 보여줍니다 (화면에서 찾기 쉽게)
   const PERMISSION_GROUPS = [
     { title:"화면 메뉴", keys:["dashboard","menuInvWork","menuInvUpload","menuOrders","menuSaleReq","menuDataUpload"] },
-    { title:"기능", keys:["excelExport","bulkEdit","bulkModelApply","uiCustomize"] },
+    { title:"기능", keys:["excelExport","bulkEdit","bulkModelApply","companyEdit","uiCustomize"] },
     { title:"관리자", keys:["userApproval","permissionManage","teamManage","inventorySettings","settlementSettings","siteSettings","dataReset"] }
   ];
   const PERMISSION_SUB_KEYS = ["menuInvUpload"];   // 상위 항목 아래에 들여쓰기할 항목
@@ -2344,7 +2351,7 @@
     closePersonalSettingsModal();
   };
 
-  const ALL_PERM_KEYS = ["dashboard","menuInvWork","menuInvUpload","menuOrders","menuSaleReq","menuDataUpload","excelExport","bulkEdit","bulkModelApply","uiCustomize","userApproval","permissionManage","teamManage","inventorySettings","settlementSettings","siteSettings","dataReset"];
+  const ALL_PERM_KEYS = ["dashboard","menuInvWork","menuInvUpload","menuOrders","menuSaleReq","menuDataUpload","excelExport","bulkEdit","bulkModelApply","companyEdit","uiCustomize","userApproval","permissionManage","teamManage","inventorySettings","settlementSettings","siteSettings","dataReset"];
 
   async function loadUserAdminList(){
     const listEl = document.getElementById("user-admin-list");
@@ -4341,6 +4348,12 @@
   };
 
   async function loadCompanyList(){
+    // 추가는 누구나, 수정·삭제·순서변경은 권한자만
+    const canEditCompany = hasPerm(currentUserPerms, "companyEdit");
+    const coBtnBar = document.getElementById("company-admin-buttons");
+    if(coBtnBar) coBtnBar.style.display = canEditCompany ? "" : "none";
+    const coNotice = document.getElementById("company-perm-notice");
+    if(coNotice) coNotice.style.display = canEditCompany ? "none" : "block";
     const bodyEl = document.getElementById("company-table-body");
     if(!bodyEl) return;
     bodyEl.innerHTML = '<tr><td colspan="14" class="list-empty">불러오는 중...</td></tr>';
@@ -4366,8 +4379,9 @@
       tr.innerHTML =
         '<td style="color:var(--gray);">'+(startIndex+i+1)+'</td>' +
         '<td style="white-space:nowrap;">' +
+          (!canEditCompany ? '<span style="color:var(--gray);">' + (Number(c.sortOrder)||"-") + '</span>' :
           '<button class="btn small secondary" style="width:auto;padding:1px 6px;font-size:10.5px;margin-right:2px;" title="위로 옮기기" data-co-up="'+(startIndex+i)+'"'+((startIndex+i)===0?' disabled style="opacity:.35;width:auto;padding:1px 6px;font-size:10.5px;margin-right:2px;"':'')+'>▲</button>' +
-          '<button class="btn small secondary" style="width:auto;padding:1px 6px;font-size:10.5px;" title="아래로 옮기기" data-co-down="'+(startIndex+i)+'"'+((startIndex+i)===arr.length-1?' disabled':'')+'>▼</button>' +
+          '<button class="btn small secondary" style="width:auto;padding:1px 6px;font-size:10.5px;" title="아래로 옮기기" data-co-down="'+(startIndex+i)+'"'+((startIndex+i)===arr.length-1?' disabled':'')+'>▼</button>') +
         '</td>' +
         '<td>'+(c.needsReview
             ? '<input type="checkbox" data-review-co="'+c.id+'" style="accent-color:var(--danger);width:16px;height:16px;cursor:pointer;" title="확인했으면 체크하세요 (파일 업로드로 자동 등록된 항목)">'
@@ -4383,8 +4397,10 @@
         '<td>'+comboEsc(c.accountHolder||"-")+'</td>' +
         '<td style="max-width:220px;overflow:hidden;text-overflow:ellipsis;" title="'+comboEsc(c.note||"")+'">'+comboEsc(c.note||"-")+'</td>' +
         '<td class="ta-right">' +
-          '<button class="btn small secondary" style="width:auto;margin-right:4px;" data-edit-co="'+c.id+'">수정</button>' +
-          '<button class="btn small danger" style="width:auto;" data-del-co="'+c.id+'">삭제</button>' +
+          (canEditCompany
+            ? '<button class="btn small secondary" style="width:auto;margin-right:4px;" data-edit-co="'+c.id+'">수정</button>' +
+              '<button class="btn small danger" style="width:auto;" data-del-co="'+c.id+'">삭제</button>'
+            : '<button class="btn small secondary" style="width:auto;" data-view-co="'+c.id+'">보기</button>') +
         '</td>';
       if(c.needsReview) tr.style.background = "#fff8f8";
       bodyEl.appendChild(tr);
@@ -4399,8 +4415,12 @@
       if(upB) upB.onclick = ()=> moveListOrder("companies", arr, Number(upB.dataset.coUp), -1, loadCompanyList);
       const dnB = tr.querySelector('[data-co-down]');
       if(dnB) dnB.onclick = ()=> moveListOrder("companies", arr, Number(dnB.dataset.coDown), 1, loadCompanyList);
-      tr.querySelector('[data-edit-co]').onclick = ()=> openCompanyModal(c.id);
-      tr.querySelector('[data-del-co]').onclick = async ()=>{
+      const viewB = tr.querySelector('[data-view-co]');
+      if(viewB) viewB.onclick = ()=> openCompanyModal(c.id, true);   // 읽기 전용
+      const editB = tr.querySelector('[data-edit-co]');
+      if(editB) editB.onclick = ()=> openCompanyModal(c.id);
+      const delB = tr.querySelector('[data-del-co]');
+      if(delB) delB.onclick = async ()=>{
         if(!confirm((c.name||"")+" 업체를 삭제하시겠습니까?\n이미 등록된 재고·주문의 업체명은 그대로 남습니다.")) return;
         await deleteDoc(doc(db,"companies", c.id));
         logAction("업체 삭제", c.name||"-");
@@ -4419,14 +4439,24 @@
     ["co-holder-input","accountHolder"], ["co-note-input","note"]
   ];
 
-  window.openCompanyModal = function(companyId){
+  window.openCompanyModal = function(companyId, readOnly){
     editingCompanyId = companyId || null;
     const c = companyId ? (companiesCache.find(x=>x.id===companyId) || {}) : {};
-    CO_FIELDS.forEach(([elId, key])=>{ document.getElementById(elId).value = c[key] || ""; });
+    CO_FIELDS.forEach(([elId, key])=>{
+      const el = document.getElementById(elId);
+      el.value = c[key] || "";
+      el.disabled = !!readOnly;
+      el.style.background = readOnly ? "#f2f2f2" : "";
+    });
+    ["co-is-source","co-is-dest"].forEach(id=>{ document.getElementById(id).disabled = !!readOnly; });
     document.getElementById("co-is-source").checked = c.isSource === true;
     document.getElementById("co-is-dest").checked = c.isDest === true;
-    document.getElementById("company-modal-title").textContent = companyId ? "업체 수정" : "업체 등록";
+    document.getElementById("company-modal-title").textContent = readOnly ? "업체 보기" : (companyId ? "업체 수정" : "업체 등록");
+    // 읽기 전용이면 저장 버튼을 감춥니다.
+    const saveBtn = document.querySelector('#company-modal-overlay button[onclick="submitCompany()"]');
+    if(saveBtn) saveBtn.style.display = readOnly ? "none" : "";
     document.getElementById("co-result-msg").style.display = "none";
+    if(readOnly) showModelMsg("co-result-msg", "보기 전용입니다. 수정하려면 <b>업체 정보 수정·삭제</b> 권한이 필요합니다.", false);
     document.getElementById("company-modal-overlay").style.display = "flex";
   };
   window.closeCompanyModal = function(){
@@ -4435,6 +4465,9 @@
   };
 
   window.submitCompany = async function(){
+    if(editingCompanyId && !hasPerm(currentUserPerms, "companyEdit")){
+      showModelMsg("co-result-msg", "업체 정보를 수정할 권한이 없습니다. 추가는 가능합니다.", true); return;
+    }
     const payload = {};
     CO_FIELDS.forEach(([elId, key])=>{ payload[key] = document.getElementById(elId).value.trim(); });
     payload.isSource = document.getElementById("co-is-source").checked;
@@ -4470,6 +4503,84 @@
     showModelMsg("co-result-msg", "저장되었습니다.", false);
     await loadCompanyList();
     setTimeout(closeCompanyModal, 700);
+  };
+
+  // 기록에만 남아 있는 옛 업체명을 찾아 현재 업체명으로 한 번에 바꿉니다.
+  // 예: 기록에는 "㈜더퓨처랩", 업체정보에는 "더퓨처랩" 인 경우
+  const COMPANY_NAME_TARGETS = [
+    ["inventoryItems", ["source","destination"]],
+    ["orders",         ["source","destination"]],
+    ["orderBatches",   ["source"]],
+    ["saleRequests",   ["destination"]],
+    ["saleRequestBatches", ["destination"]],
+    ["reservations",   ["destination"]],
+    ["paymentRequests",["source","destination"]],
+    ["saleDepositRequests", ["destination"]],
+    ["b2bLedger",      ["destination"]],
+    ["quotations",     ["destination"]]
+  ];
+
+  window.cleanupOrphanCompanyNames = async function(){
+    await fetchCompanies();
+    const known = new Set(companiesCache.map(c=> String(c.name||"").trim()).filter(Boolean));
+
+    // 기록에 쓰인 업체명을 모읍니다.
+    const used = {};   // 이름 → 건수
+    for(const [col, fields] of COMPANY_NAME_TARGETS){
+      let snap;
+      try{ snap = await getDocs(collection(db, col)); }catch(e){ continue; }
+      snap.forEach(d=>{
+        const o = d.data();
+        fields.forEach(f=>{
+          const v = String(o[f]||"").trim();
+          if(v && !known.has(v)) used[v] = (used[v]||0) + 1;
+        });
+      });
+    }
+    const orphans = Object.keys(used).sort((a,b)=> used[b]-used[a]);
+    if(orphans.length === 0){ alert("업체정보에 없는 업체명이 기록에 남아 있지 않습니다. 정리할 것이 없습니다."); return; }
+
+    const list = orphans.map((n,i)=> (i+1)+". "+n+" ("+used[n]+"건)").join("\n");
+    const pick = prompt(
+      "업체정보에 없는 업체명이 기록에 남아 있습니다.\n바꿀 항목의 번호를 입력하세요.\n\n" + list, "1");
+    if(pick === null) return;
+    const idx = Number(pick) - 1;
+    if(!(idx >= 0 && idx < orphans.length)){ alert("번호를 다시 확인해주세요."); return; }
+    const oldName = orphans[idx];
+
+    const target = prompt(
+      '"' + oldName + '" (' + used[oldName] + '건) 을 어떤 업체명으로 바꿀까요?\n\n' +
+      "업체정보에 등록된 이름 중에서 골라 그대로 입력해주세요.\n\n" +
+      companiesCache.map(c=>c.name).filter(Boolean).sort().join(" / "), "");
+    if(target === null) return;
+    const newName = String(target).trim();
+    if(!newName){ alert("바꿀 이름을 입력해주세요."); return; }
+    if(!known.has(newName) && !confirm('"'+newName+'" 은 업체정보에 없는 이름입니다.\n그래도 진행하시겠습니까?')) return;
+
+    if(!confirm('기록에 있는 "'+oldName+'" 을 모두 "'+newName+'" 으로 바꿉니다.\n\n대상 '+used[oldName]+'건\n되돌릴 수 없습니다. 진행하시겠습니까?')) return;
+
+    let done = 0;
+    try{
+      for(const [col, fields] of COMPANY_NAME_TARGETS){
+        for(const f of fields){
+          let snap;
+          try{ snap = await getDocs(query(collection(db, col), where(f, "==", oldName))); }catch(e){ continue; }
+          const ids = snap.docs.map(d=>d.id);
+          for(let i=0; i<ids.length; i+=300){
+            const batch = writeBatch(db);
+            ids.slice(i, i+300).forEach(id=> batch.update(doc(db, col, id), { [f]: newName }));
+            await batch.commit();
+            done += Math.min(300, ids.length - i);
+          }
+        }
+      }
+    }catch(e){
+      alert("바꾸는 중 오류가 났습니다.\n" + ((e && e.message) ? e.message : String(e)));
+      return;
+    }
+    logAction("업체명 일괄 변경", oldName + " → " + newName + " (" + done + "건)");
+    alert(done + "건을 바꿨습니다.\n\n" + oldName + " → " + newName);
+    loadCompanyList();
   };
 
   // 같은 이름의 업체 문서가 여러 개면 하나로 합칩니다.
@@ -5377,10 +5488,23 @@
 
     const destSel = document.getElementById("ole-dest");
     destSel.innerHTML = '<option value="">해당없음</option>';
-    (await fetchNamesList("outboundDestinations")).forEach(n=>{
+    const destNames = await fetchNamesList("outboundDestinations");
+    destNames.forEach(n=>{
       const opt = document.createElement("option"); opt.value = n; opt.textContent = n; destSel.appendChild(opt);
     });
-    destSel.value = o.destination || "";
+    // 지금 저장된 판매처가 업체 목록에 없으면(이름이 바뀌었거나 정리된 경우)
+    // 그대로 유지되도록 항목을 추가합니다. 이게 없으면 저장할 때 판매처가 지워집니다.
+    const curDest = o.destination || "";
+    if(curDest && !destNames.includes(curDest)){
+      const opt = document.createElement("option");
+      opt.value = curDest;
+      opt.textContent = curDest + "  (업체정보에 없음)";
+      destSel.insertBefore(opt, destSel.children[1] || null);
+    }
+    destSel.value = curDest;
+    // 다른 화면처럼 타이핑으로 찾을 수 있게 합니다.
+    initSearchableSelect("ole-dest", "판매처를 입력하면 목록이 나옵니다");
+    syncSearchableSelect("ole-dest");
 
     oleSet("ole-qty", o.quantity || 1);
     oleSet("ole-listprice", o.listPrice);
@@ -5415,7 +5539,7 @@
       otherDiscountAmt: document.getElementById("ole-otheramt").value ? oleNum("ole-otheramt") : null,
       otherDiscountPct: document.getElementById("ole-otherpct").value ? Number(oleNum("ole-otherpct").toFixed(2)) : null,
       purchasePrice: L ? (L - oleNum("ole-preamt") - oleNum("ole-otheramt")) : null,
-      destination: document.getElementById("ole-dest").value,
+      destination: document.getElementById("ole-dest").value,   // 목록에 없던 값도 그대로 유지됩니다
       salePrice: document.getElementById("ole-saleprice").value ? oleNum("ole-saleprice") : null,
       saleDiscountAmt: document.getElementById("ole-saleamt").value ? oleNum("ole-saleamt") : null,
       saleDiscountPct: document.getElementById("ole-salepct").value ? Number(oleNum("ole-salepct").toFixed(2)) : null
@@ -5444,7 +5568,19 @@
       + (patch.purchasePrice ? " / 입고가 " + patch.purchasePrice.toLocaleString() : ""));
     msg("저장되었습니다. 주문금액 합계도 다시 계산했습니다.", false);
     loadOrderList();
-    setTimeout(()=>{ closeOrderLineEdit(); closeOrderDetailModal(); }, 900);
+    // 요청서를 닫지 않고 그 자리에서 다시 그립니다. (다음 품목을 이어서 수정하기 위함)
+    setTimeout(async ()=>{
+      closeOrderLineEdit();
+      if(batchId){
+        try{
+          const bSnap = await getDoc(doc(db,"orderBatches", batchId));
+          const lineSnap = await getDocs(query(collection(db,"orders"), where("batchId","==",batchId)));
+          const fresh = []; lineSnap.forEach(d=> fresh.push({ id:d.id, ...d.data() }));
+          orderBatchLinesCache[batchId] = fresh;
+          if(bSnap.exists()) openOrderBatchDetailModal(batchId, bSnap.data());
+        }catch(e){ console.error(e); }
+      }
+    }, 700);
   };
 
   function openOrderBatchDetailModal(batchId, b){
@@ -10854,7 +10990,7 @@
     document.getElementById("login-form").style.display="block";
   };
   const ADMIN_TAB_IDS = ["tab-site","tab-team","tab-users","tab-settlement","tab-b2b","tab-logs"];
-  const INV_ADMIN_TAB_IDS = ["tab-inv-model","tab-inv-color","tab-inv-manufacturer","tab-inv-location","tab-inv-status","tab-inv-company","tab-inv-carrier"];
+  const INV_ADMIN_TAB_IDS = ["tab-inv-model","tab-inv-color","tab-inv-manufacturer","tab-inv-location","tab-inv-status","tab-inv-carrier"];
 
   window.toggleAdminMenu = function(){
     const el = document.getElementById("admin-group");
@@ -11033,6 +11169,8 @@
       document.getElementById("tabbtn-orders").style.display = showOrders ? "block":"none";
       document.getElementById("tabbtn-salereq").style.display = showSaleReq ? "block":"none";
       document.getElementById("tabbtn-reservation").style.display = showSaleReq ? "block":"none";
+      // 업체정보 — 작업 메뉴를 쓰는 사람이면 볼 수 있습니다. (추가는 누구나, 수정·삭제는 권한자만)
+      document.getElementById("tabbtn-company").style.display = showAnyWorkMenu ? "block":"none";
 
       const hasAnyAdmin = (showSite||showTeam||showInvAdmin||showUsers||showSettlement||showLogs);
       document.getElementById("admin-toggle-btn").style.display = hasAnyAdmin ? "block":"none";
