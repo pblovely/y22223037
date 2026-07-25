@@ -288,6 +288,7 @@
             </div>
           </span>
         </div>
+        <p class="desc" style="margin-top:0;">사용법: ① 아래 주문 목록에서 아직 입금 안 한 건들의 체크박스를 선택 → ② 필요하면 기타 금액 입력 → ③ "체크한 주문 묶어서 출금요청" 클릭 → ④ 실제로 이체하면 정산 관리 탭에서 "이체완료" 체크 (그러면 해당 주문들이 자동으로 입금완료 처리됩니다).</p>
         <div style="margin-bottom:8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
           <button class="btn small secondary" style="width:auto;" onclick="createPaymentRequestFromSelected()">체크한 주문 묶어서 출금요청</button>
           <span class="info-tip" title="여러 업체(SK/KT/LG 등) 건을 한 번에 이체할 때, 아래에서 체크박스로 골라 묶으세요.">ⓘ</span>
@@ -303,11 +304,21 @@
       <div class="card">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
           <h3 style="margin:0;">판매 관리 <span class="info-tip" title="구매자가 먼저 입금하고, 실제로 어떤 일련번호를 보낼지는 나중에 정해지는 경우 여기 걸어두세요. 입금 체크 후, 재고 매칭으로 보유중인 실제 재고(일련번호)를 연결하면 그 재고가 판매 처리됩니다. 주문 관리에서 판매조건까지 미리 정한 주문은 여기에 자동으로 반영됩니다.">ⓘ</span></h3>
-          <span>
-            <button class="btn small secondary" style="width:auto;margin-right:6px;" onclick="openInstantSaleModal()">+ 즉시 판매 (보유중 재고)</button>
-            <button class="btn small secondary" style="width:auto;margin-right:6px;" onclick="openPasteSaleModal()">텍스트로 붙여넣기 판매처리</button>
-            <button class="btn small" style="width:auto;" onclick="openSaleRequestModal()">+ 새 판매요청 (예약)</button>
+          <span style="position:relative;">
+            <button class="btn small" style="width:auto;" onclick="toggleSaleAddMenu(event)">+ 판매 ▾</button>
+            <div id="sale-add-menu" style="display:none;position:absolute;top:36px;right:0;background:#fff;border:1px solid var(--navy);box-shadow:0 2px 10px rgba(0,0,0,0.15);z-index:100;min-width:220px;">
+              <div style="padding:10px 14px;cursor:pointer;border-bottom:1px solid var(--line);font-size:13px;" onclick="closeSaleAddMenu();openInstantSaleModal();">즉시 판매 (보유중 재고)</div>
+              <div style="padding:10px 14px;cursor:pointer;border-bottom:1px solid var(--line);font-size:13px;" onclick="closeSaleAddMenu();openPasteSaleModal();">텍스트로 붙여넣기 판매처리</div>
+              <div style="padding:10px 14px;cursor:pointer;font-size:13px;" onclick="closeSaleAddMenu();openSaleRequestModal();">새 판매요청 (예약)</div>
+            </div>
           </span>
+        </div>
+        <p class="desc" style="margin-top:0;">사용법: ① 아래 판매요청 목록에서 아직 입금 안 받은 건들의 체크박스를 선택 → ② 필요하면 기타 금액 입력 → ③ "체크한 판매요청 묶어서 입금요청" 클릭 → ④ 실제로 입금받으면 정산 관리 탭에서 "입금완료" 체크 (그러면 해당 판매요청들이 자동으로 입금완료 처리됩니다).</p>
+        <div style="margin-bottom:8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+          <button class="btn small secondary" style="width:auto;" onclick="createSaleDepositRequestFromSelected()">체크한 판매요청 묶어서 입금요청</button>
+          <span class="info-tip" title="여러 업체 건을 한 번에 입금받을 때, 아래에서 체크박스로 골라 묶으세요.">ⓘ</span>
+          <span style="color:var(--line);">|</span>
+          <label style="font-size:12.5px;">기타 금액(원)<input type="number" id="sale-payment-other-amount-input" placeholder="판매요청에 없는 입금분" style="margin-left:6px;width:130px;padding:5px 6px;border:1px solid #c7c7c7;font-size:12.5px;"></label>
         </div>
         <div id="sale-request-list"></div>
       </div>
@@ -682,7 +693,6 @@
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
           <h3 style="margin:0;">재고 목록 <button class="btn small secondary" style="width:auto;padding:6px 12px;margin-left:8px;" onclick="toggleViewPanel()">보기 설정</button></h3>
           <span>
-            <button class="btn small secondary" style="width:auto;margin-right:6px;" onclick="openPasteRegisterModal()">텍스트로 붙여넣기 등록</button>
             <button class="btn small" style="width:auto;" onclick="openItemModal()">+ 재고 등록</button>
           </span>
         </div>
@@ -694,14 +704,13 @@
 
         <div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px;border:1px solid var(--line);padding:8px 10px;margin-bottom:6px;">
           <input type="hidden" id="filter-date-type" value="inDate">
+          <input type="hidden" id="filter-date-from">
+          <input type="hidden" id="filter-date-to">
           <label style="display:flex;align-items:center;gap:5px;font-size:12.5px;white-space:nowrap;">
             <input type="checkbox" id="filter-date-all" onclick="onFilterDateAllToggle()"> 전체
           </label>
-          <label style="display:flex;align-items:center;gap:5px;font-size:12.5px;white-space:nowrap;">시작일
-            <input type="text" id="filter-date-from" placeholder="20260701" maxlength="8" inputmode="numeric" style="width:100px;height:28px;border:1px solid #c7c7c7;padding:0 8px;font-size:12.5px;box-sizing:border-box;">
-          </label>
-          <label style="display:flex;align-items:center;gap:5px;font-size:12.5px;white-space:nowrap;">종료일
-            <input type="text" id="filter-date-to" placeholder="20260731" maxlength="8" inputmode="numeric" style="width:100px;height:28px;border:1px solid #c7c7c7;padding:0 8px;font-size:12.5px;box-sizing:border-box;">
+          <label style="display:flex;align-items:center;gap:5px;font-size:12.5px;white-space:nowrap;">기간
+            <input type="text" id="filter-date-range" placeholder="20260101~20271231" oninput="onFilterDateRangeInput()" style="width:190px;height:28px;border:1px solid #c7c7c7;padding:0 8px;font-size:12.5px;box-sizing:border-box;">
           </label>
           <select id="primary-cond-field" style="height:28px;border:1px solid #c7c7c7;padding:0 6px;font-size:12.5px;box-sizing:border-box;"></select>
           <select id="primary-cond-match" style="height:28px;border:1px solid #c7c7c7;padding:0 6px;font-size:12.5px;box-sizing:border-box;">
@@ -720,8 +729,6 @@
           <button class="btn small secondary" style="width:auto;height:28px;box-sizing:border-box;padding:0 12px;" onclick="openBulkChangeModal()">변경</button>
           <button class="btn small secondary" id="inv-sort-toggle-btn" style="width:auto;height:28px;box-sizing:border-box;padding:0 12px;" onclick="toggleInventorySortField()">정렬: 판매일 ▾</button>
           <button class="btn small secondary" style="width:auto;height:28px;box-sizing:border-box;padding:0 12px;margin-left:auto;" onclick="downloadInventoryExcel()">엑셀다운</button>
-          <button class="btn small secondary" style="width:auto;height:28px;box-sizing:border-box;padding:0 12px;" onclick="downloadBulkEditExcel()">일괄수정용 다운로드</button>
-          <button class="btn small secondary" style="width:auto;height:28px;box-sizing:border-box;padding:0 12px;" onclick="openBulkEditUploadModal()">일괄수정 업로드</button>
           <select id="inv-page-size-select" onchange="onInvPageSizeChange()" style="padding:5px 6px;border:1px solid #c7c7c7;font-size:12px;height:28px;box-sizing:border-box;"></select>
         </div>
 
@@ -892,6 +899,12 @@
           <div class="stack-row"><label>도착예정일 (선택)</label><input type="text" id="order-expected-date-input" placeholder="예: 20260731" maxlength="8" inputmode="numeric"></div>
           <div class="stack-row"><label>입고처</label><select id="order-source-select"><option value="">선택</option></select></div>
           <div class="stack-row"><label>통신사</label><select id="order-carrier-select"></select></div>
+          <div class="stack-row"><label>결제방식</label>
+            <select id="order-payment-method-select">
+              <option value="normal">일반 (계좌이체 — 출금요청 필요)</option>
+              <option value="b2b_credit">삼성여신 사용 (미리 쌓아둔 여신에서 자동 차감, 출금요청 불필요)</option>
+            </select>
+          </div>
         </div>
 
         <p class="desc" style="margin-top:14px;margin-bottom:4px;font-weight:700;color:var(--navy);">주문 품목</p>
@@ -1012,7 +1025,9 @@
         <h3 id="item-modal-title" style="margin-top:0;margin-bottom:4px;">재고 입고 등록</h3>
         <p class="desc">모델·색상을 선택하면 출고가가 자동으로 채워집니다.</p>
         <button class="btn small secondary" id="item-modal-excel-btn" style="width:auto;margin-bottom:12px;margin-right:6px;" onclick="closeItemModal();openExcelUploadModal();">파일로 여러 건 업로드</button>
-        <button class="btn small secondary" id="item-modal-paste-btn" style="width:auto;margin-bottom:12px;" onclick="closeItemModal();openPasteRegisterModal();">텍스트로 붙여넣기 등록</button>
+        <button class="btn small secondary" id="item-modal-paste-btn" style="width:auto;margin-bottom:12px;margin-right:6px;" onclick="closeItemModal();openPasteRegisterModal();">텍스트로 붙여넣기 등록</button>
+        <button class="btn small secondary" id="item-modal-bulkdown-btn" style="width:auto;margin-bottom:12px;margin-right:6px;" onclick="downloadBulkEditExcel()">일괄수정용 다운로드</button>
+        <button class="btn small secondary" id="item-modal-bulkup-btn" style="width:auto;margin-bottom:12px;" onclick="closeItemModal();openBulkEditUploadModal();">일괄수정 업로드</button>
 
         <div class="stack-form">
           <div class="stack-row"><label>주문일</label><input type="text" id="item-orderdate-input" placeholder="예: 20260724" maxlength="8" inputmode="numeric"></div>
@@ -1307,6 +1322,22 @@
     }
   });
 
+  window.toggleSaleAddMenu = function(e){
+    e.stopPropagation();
+    const menu = document.getElementById("sale-add-menu");
+    menu.style.display = (menu.style.display==="none") ? "block" : "none";
+  };
+  window.closeSaleAddMenu = function(){
+    document.getElementById("sale-add-menu").style.display = "none";
+  };
+  document.addEventListener("click", function(e){
+    const menu = document.getElementById("sale-add-menu");
+    if(!menu) return;
+    if(!e.target.closest("#sale-add-menu")){
+      menu.style.display = "none";
+    }
+  });
+
   function closeCustomizeMenu(){
     const m = document.getElementById("customize-context-menu");
     if(m) m.remove();
@@ -1435,7 +1466,7 @@
       sizeSel.style.padding = "5px 6px"; sizeSel.style.border = "1px solid #c7c7c7"; sizeSel.style.fontSize = "12px"; sizeSel.style.height = "28px";
       [10,30,100,"all"].forEach(n=>{
         const opt = document.createElement("option");
-        opt.value = n; opt.textContent = (n==="all" ? "전체" : n+"줄씩 보기");
+        opt.value = n; opt.textContent = (n==="all" ? "전체" : String(n));
         if(st.size===n) opt.selected = true;
         sizeSel.appendChild(opt);
       });
@@ -2741,6 +2772,8 @@
     document.getElementById("item-cancelsale-btn").style.display = "none";
     document.getElementById("item-modal-excel-btn").style.display = "inline-block";
     document.getElementById("item-modal-paste-btn").style.display = "inline-block";
+    document.getElementById("item-modal-bulkdown-btn").style.display = "inline-block";
+    document.getElementById("item-modal-bulkup-btn").style.display = "inline-block";
     clearItemModalFields();
     document.getElementById("item-modal-overlay").style.display = "flex";
     if(!document.getElementById("item-indate-input").value){
@@ -2862,6 +2895,8 @@
     document.getElementById("item-cancelsale-btn").style.display = "inline-block";
     document.getElementById("item-modal-excel-btn").style.display = "none";
     document.getElementById("item-modal-paste-btn").style.display = "none";
+    document.getElementById("item-modal-bulkdown-btn").style.display = "none";
+    document.getElementById("item-modal-bulkup-btn").style.display = "none";
     document.getElementById("item-modal-overlay").style.display = "flex";
   };
 
@@ -3061,6 +3096,7 @@
     document.getElementById("order-date-input").value = todayStr();
     document.getElementById("order-expected-date-input").value = "";
     document.getElementById("order-deposit-input").value = "";
+    document.getElementById("order-payment-method-select").value = "normal";
     document.getElementById("order-lines-body").innerHTML = "";
     orderLineSeq = 0;
     await populateOrderTopSelects();
@@ -3290,15 +3326,30 @@
     const orderDate = document.getElementById("order-date-input").value || todayStr();
     const expectedArrivalDate = document.getElementById("order-expected-date-input").value || "";
     const depositRequired = Number(document.getElementById("order-deposit-input").value) || 0;
+    const paymentMethod = document.getElementById("order-payment-method-select").value;
+    const useB2BCredit = paymentMethod === "b2b_credit";
 
     const batchRef = await addDoc(collection(db,"orderBatches"), {
       source, carrier, orderDate, expectedArrivalDate,
-      depositRequired, depositPaid:false, depositPaidDate:"",
+      depositRequired,
+      depositPaid: useB2BCredit ? true : false,
+      depositPaidDate: useB2BCredit ? orderDate : "",
+      paymentMethod,
       lineCount: lines.length,
       status: "주문중",
       createdBy: currentUser.name, createdByUsername: currentUser.username,
       createdAt: serverTimestamp()
     });
+
+    // 삼성여신으로 결제한 주문은 B2B 여신 거래내역에 "주문사용"으로 자동 기록 (출금요청 불필요)
+    if(useB2BCredit && depositRequired>0){
+      await addDoc(collection(db,"b2bLedger"), {
+        date: orderDate, category:"order_use", amount: depositRequired,
+        memo: "주문 자동반영: "+source+" ("+lines.length+"개 품목)",
+        fromOrderBatchId: batchRef.id,
+        createdBy: currentUser.name, createdByUsername: currentUser.username, createdAt: serverTimestamp()
+      });
+    }
 
     const orderRefs = [];
     for(const l of lines){
@@ -3352,7 +3403,7 @@
       }
     }
 
-    logAction("주문 등록", source+" / 품목 "+lines.length+"개 / 총 "+depositRequired.toLocaleString()+"원"+(autoSaleReqCount>0?" (판매요청 "+autoSaleReqCount+"건 자동생성)":""));
+    logAction("주문 등록", source+" / 품목 "+lines.length+"개 / 총 "+depositRequired.toLocaleString()+"원"+(useB2BCredit?" (삼성여신 결제)":"")+(autoSaleReqCount>0?" (판매요청 "+autoSaleReqCount+"건 자동생성)":""));
     closeOrderModal();
     loadOrderList();
   };
@@ -3382,11 +3433,13 @@
       row.className = "list-row";
       row.style.flexWrap = "wrap";
 
-      const depositLabel = b.depositPaid
-        ? '<span style="color:var(--navy);font-weight:700;">입금완료('+(b.depositPaidDate||"-")+')</span>'
-        : (b.paymentRequestId
-          ? '<span style="color:var(--gray);font-weight:700;">출금요청됨</span>'
-          : '<span style="color:var(--danger);font-weight:700;">입금필요 '+(b.depositRequired||0).toLocaleString()+'원</span>');
+      const depositLabel = b.paymentMethod==="b2b_credit"
+        ? '<span style="color:#6a1b9a;font-weight:700;">삼성여신 결제('+(b.depositPaidDate||"-")+')</span>'
+        : (b.depositPaid
+          ? '<span style="color:var(--navy);font-weight:700;">입금완료('+(b.depositPaidDate||"-")+')</span>'
+          : (b.paymentRequestId
+            ? '<span style="color:var(--gray);font-weight:700;">출금요청됨</span>'
+            : '<span style="color:var(--danger);font-weight:700;">입금필요 '+(b.depositRequired||0).toLocaleString()+'원</span>'));
       const cbDisabled = (b.depositPaid || b.paymentRequestId) ? "disabled" : "";
       const remainTotal = lines.reduce((s,o)=> s + ((o.quantity||0)-(o.fulfilledCount||0)), 0);
 
@@ -3668,6 +3721,90 @@
     });
   }
 
+  // ---------- 판매요청 묶어서 입금요청 ----------
+  window.createSaleDepositRequestFromSelected = async function(){
+    const checked = Array.from(document.querySelectorAll(".sale-pay-cb:checked"));
+    const otherAmount = Number(document.getElementById("sale-payment-other-amount-input").value) || 0;
+    if(checked.length===0 && otherAmount===0){ alert("입금요청으로 묶을 판매요청을 체크하거나, 기타 금액을 입력해주세요."); return; }
+    const batchRefs = checked.map(cb=>({ id:cb.dataset.batchId, isLegacy: cb.dataset.legacy==="1" }));
+    let total = otherAmount;
+    checked.forEach(cb=> total += Number(cb.dataset.amount)||0);
+    const confirmMsg = batchRefs.length+"건"+(otherAmount>0?" + 기타 "+otherAmount.toLocaleString()+"원":"")+", 총 "+total.toLocaleString()+"원으로 입금요청을 만드시겠습니까?";
+    if(!confirm(confirmMsg)) return;
+
+    const reqRef = await addDoc(collection(db,"saleDepositRequests"), {
+      saleBatchRefs: batchRefs, otherAmount, totalAmount: total,
+      requestDate: todayStr(), depositCompleted:false, depositCompleteDate:"",
+      taxInvoiceIssued:false, taxInvoiceDate:"",
+      status:"요청중", createdBy: currentUser.name, createdByUsername: currentUser.username, createdAt: serverTimestamp()
+    });
+    for(const b of batchRefs){
+      const col = b.isLegacy ? "saleRequests" : "saleRequestBatches";
+      await updateDoc(doc(db, col, b.id), { depositRequestId: reqRef.id });
+    }
+    logAction("판매 입금요청 생성", batchRefs.length+"건 / 기타 "+otherAmount.toLocaleString()+"원 / 총 "+total.toLocaleString()+"원");
+    document.getElementById("sale-payment-other-amount-input").value = "";
+    loadSaleRequestList();
+    loadSettlementTab();
+  };
+
+  async function loadSaleDepositRequestList(){
+    const el = document.getElementById("settlement-sale-deposit-requests");
+    if(!el) return;
+    const snap = await getDocs(query(collection(db,"saleDepositRequests"), orderBy("createdAt","desc")));
+    if(snap.empty){ el.innerHTML = '<div class="list-empty">등록된 입금요청이 없습니다.</div>'; return; }
+    el.innerHTML = "";
+    snap.forEach(d=>{
+      const p = d.data();
+      const row = document.createElement("div");
+      row.className = "list-row";
+      row.style.alignItems = "flex-start"; row.style.flexWrap = "wrap";
+      row.innerHTML =
+        '<span style="font-size:12.5px;">' +
+        '<b>'+p.totalAmount.toLocaleString()+'원</b> · 판매요청 '+p.saleBatchRefs.length+'건'+(p.otherAmount?' + 기타 '+p.otherAmount.toLocaleString()+'원':'')+' · 요청일 '+p.requestDate+' · 상태 <b>'+p.status+'</b><br>' +
+        '<label style="margin-right:12px;"><input type="checkbox" class="sdr-deposit-cb" data-id="'+d.id+'" '+(p.depositCompleted?'checked':'')+' '+(p.status==='취소'?'disabled':'')+'> 입금완료</label>' +
+        '<label><input type="checkbox" class="sdr-tax-cb" data-id="'+d.id+'" '+(p.taxInvoiceIssued?'checked':'')+' '+(p.status==='취소'?'disabled':'')+'> 세금계산서 발행완료</label>' +
+        '</span>' +
+        (p.status!=='취소' ? '<button class="btn small danger" style="width:auto;" data-cancel-sdr="'+d.id+'">요청 취소</button>' : '<span style="color:var(--gray);">취소됨</span>');
+      el.appendChild(row);
+
+      const depositCb = row.querySelector(".sdr-deposit-cb");
+      depositCb.onchange = async ()=>{
+        const checked = depositCb.checked;
+        const dateStr = checked ? (prompt("입금일 (예: 20260724)", todayStr())||todayStr()) : "";
+        await updateDoc(doc(db,"saleDepositRequests", d.id), { depositCompleted:checked, depositCompleteDate:dateStr });
+        if(checked){
+          for(const b of p.saleBatchRefs){
+            const col = b.isLegacy ? "saleRequests" : "saleRequestBatches";
+            await updateDoc(doc(db, col, b.id), { depositReceived:true, depositReceivedDate: dateStr, status:"입금완료" });
+          }
+          logAction("판매 입금요청 입금완료 처리", p.totalAmount.toLocaleString()+"원 / "+p.saleBatchRefs.length+"건");
+        }
+        loadSaleDepositRequestList(); loadSaleRequestList(); loadSettlementTab();
+      };
+      const taxCb = row.querySelector(".sdr-tax-cb");
+      taxCb.onchange = async ()=>{
+        const checked = taxCb.checked;
+        const dateStr = checked ? todayStr() : "";
+        await updateDoc(doc(db,"saleDepositRequests", d.id), { taxInvoiceIssued:checked, taxInvoiceDate:dateStr });
+        loadSaleDepositRequestList();
+      };
+      const cancelBtn = row.querySelector('[data-cancel-sdr]');
+      if(cancelBtn){
+        cancelBtn.onclick = async ()=>{
+          if(!confirm("이 입금요청을 취소하시겠습니까? 포함된 판매요청들은 다시 개별 선택 가능해집니다.")) return;
+          await updateDoc(doc(db,"saleDepositRequests", d.id), { status:"취소" });
+          for(const b of p.saleBatchRefs){
+            const col = b.isLegacy ? "saleRequests" : "saleRequestBatches";
+            await updateDoc(doc(db, col, b.id), { depositRequestId: null });
+          }
+          logAction("판매 입금요청 취소", p.totalAmount.toLocaleString()+"원");
+          loadSaleDepositRequestList(); loadSaleRequestList(); loadSettlementTab();
+        };
+      }
+    });
+  }
+
   // ---------- 판매 요청 ----------
   let saleReqLineSeq = 0;
   async function populateSaleReqTopSelects(){
@@ -3940,8 +4077,10 @@
       const depositLabel = b.depositReceived
         ? '<span style="color:var(--navy);font-weight:700;">입금완료('+(b.depositReceivedDate||"-")+')</span>'
         : '<span style="color:var(--danger);font-weight:700;">입금필요 '+(b.depositRequired||0).toLocaleString()+'</span>';
+      const cbDisabled = (b.depositReceived || b.depositRequestId) ? "disabled" : "";
       row.innerHTML =
-        '<span style="font-size:12.5px;"><b>'+(b.destination||"-")+'</b> · 요청일 '+(b.requestDate||"-")+' · 품목 '+lines.length+'개 · '+depositLabel+(isLegacy?' <span style="color:var(--gray);">(기존건)</span>':'')+'</span>' +
+        '<span style="font-size:12.5px;"><label style="margin-right:8px;"><input type="checkbox" class="sale-pay-cb" data-batch-id="'+batchId+'" data-legacy="'+(isLegacy?'1':'0')+'" data-amount="'+(b.depositRequired||0)+'" '+cbDisabled+'></label>' +
+        '<b>'+(b.destination||"-")+'</b> · 요청일 '+(b.requestDate||"-")+' · 품목 '+lines.length+'개 · '+depositLabel+(isLegacy?' <span style="color:var(--gray);">(기존건)</span>':'')+(b.depositRequestId?' <span style="color:var(--gray);">(입금요청됨)</span>':'')+'</span>' +
         '<span>' +
         '<button class="btn small secondary" style="width:auto;margin-right:4px;" data-detail>상세보기</button>' +
         (!b.depositReceived ? '<button class="btn small secondary" style="width:auto;margin-right:4px;" data-pay>입금 완료 처리</button>' : '') +
@@ -4299,6 +4438,15 @@
       statEl.parentElement.appendChild(wrap);
     }
     await loadPaymentRequestList();
+
+    // 판매 입금요청 목록 (없으면 영역 자동 생성)
+    let sdrSection = document.getElementById("settlement-sale-deposit-requests");
+    if(!sdrSection){
+      const wrap2 = document.createElement("div");
+      wrap2.innerHTML = '<h3 style="font-size:13px;margin-top:16px;">판매 입금요청 목록</h3><div id="settlement-sale-deposit-requests"></div>';
+      statEl.parentElement.appendChild(wrap2);
+    }
+    await loadSaleDepositRequestList();
   }
 
   // ---------- 삼성 B2B 여신 관리 ----------
@@ -4412,12 +4560,18 @@
     }
   }
 
+  window.onFilterDateRangeInput = function(){
+    const raw = document.getElementById("filter-date-range").value.trim();
+    const parts = raw.split("~").map(s=>s.trim().replace(/-/g,""));
+    document.getElementById("filter-date-from").value = parts[0] || "";
+    document.getElementById("filter-date-to").value = parts[1] || "";
+  };
   window.clearDateFilter = function(){
+    document.getElementById("filter-date-range").value = "";
     document.getElementById("filter-date-from").value = "";
     document.getElementById("filter-date-to").value = "";
     document.getElementById("filter-date-all").checked = false;
-    document.getElementById("filter-date-from").disabled = false;
-    document.getElementById("filter-date-to").disabled = false;
+    document.getElementById("filter-date-range").disabled = false;
     document.getElementById("primary-cond-value").value = "";
     activeConditions = [];
     renderConditionChips();
@@ -4425,9 +4579,9 @@
   };
   window.onFilterDateAllToggle = function(){
     const all = document.getElementById("filter-date-all").checked;
-    document.getElementById("filter-date-from").disabled = all;
-    document.getElementById("filter-date-to").disabled = all;
+    document.getElementById("filter-date-range").disabled = all;
     if(all){
+      document.getElementById("filter-date-range").value = "";
       document.getElementById("filter-date-from").value = "";
       document.getElementById("filter-date-to").value = "";
     }
@@ -4506,7 +4660,7 @@
     if(sel.options.length===0){
       [10,30,100,"all"].forEach(n=>{
         const opt = document.createElement("option");
-        opt.value = n; opt.textContent = (n==="all" ? "전체" : n+"줄씩 보기");
+        opt.value = n; opt.textContent = (n==="all" ? "전체" : String(n));
         sel.appendChild(opt);
       });
     }
@@ -5049,8 +5203,8 @@
     statHtml += statCard("전체판매", allTimeSoldCount, null, "dash-sold");
     statHtml += statCard("전체보유", allTimeTotalCount - allTimeSoldCount, null, "dash-held");
     statHtml += statCard("보유재고 출고가 합계", heldListPriceSum.toLocaleString(), null, "dash-held-listprice");
-    statHtml += statCard("판매재고 수익 합계 (판매월 기준)", soldProfitSum.toLocaleString(), null, "dash-sold-profit");
     statHtml += statCard("수익 (판매가-입고가만, 공시지원금 별도)", profitSum.toLocaleString(), null, "dash-profit");
+    statHtml += '<div style="flex-basis:100%;height:0;"></div>';
     statHtml += statCardTriple("매입", "입고", purchaseSum.toLocaleString(), "미입고", pendingPurchaseAmount.toLocaleString(), null, "dash-purchase");
     statHtml += statCardTriple("매출", "출고", saleSum.toLocaleString(), "미출고", pendingSaleAmount.toLocaleString(), null, "dash-sale");
     statHtml += statCardTriple("공시지원금 (귀속월 기준)", "지급", subsidyReceivedSum.toLocaleString(), "환수", subsidyClawbackSum.toLocaleString(), null, "dash-subsidy");
