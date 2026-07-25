@@ -696,39 +696,37 @@
             <button class="btn small" style="width:auto;" onclick="openItemModal()">+ 재고 등록</button>
           </span>
         </div>
-        <p class="desc" style="margin-top:0;">번호 옆 <span style="color:var(--danger);">●</span> 표시는 최신 마스터재고 파일에서 해당 일련번호가 확인되지 않았다는 뜻입니다 — 이미 판매되었을 가능성이 있으니 확인해주세요.</p>
+        <p class="desc" data-label-key="desc-serial-warning" style="margin-top:0;"><span class="tab-label-text">번호 옆 <span style="color:var(--danger);">●</span> 표시는 최신 마스터재고 파일에서 해당 일련번호가 확인되지 않았다는 뜻입니다 — 이미 판매되었을 가능성이 있으니 확인해주세요.</span></p>
         <div class="check-panel" id="view-panel" style="display:none;">
           <div id="view-panel-checks"></div>
           <button class="btn small" style="width:auto;margin-top:6px;" onclick="saveViewSettings()">이 설정 저장 (내 계정에 유지)</button>
         </div>
 
-        <div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px;border:1px solid var(--line);padding:8px 10px;margin-bottom:6px;">
+        <div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px;border:1px solid var(--line);padding:5px 10px;margin-bottom:6px;">
           <input type="hidden" id="filter-date-type" value="inDate">
-          <input type="hidden" id="filter-date-from">
-          <input type="hidden" id="filter-date-to">
           <label style="display:flex;align-items:center;gap:5px;font-size:12.5px;white-space:nowrap;">
             <input type="checkbox" id="filter-date-all" onclick="onFilterDateAllToggle()"> 전체
           </label>
           <label style="display:flex;align-items:center;gap:5px;font-size:12.5px;white-space:nowrap;">기간
-            <input type="text" id="filter-date-range" placeholder="20260101~20271231" oninput="onFilterDateRangeInput()" style="width:190px;height:28px;border:1px solid #c7c7c7;padding:0 8px;font-size:12.5px;box-sizing:border-box;">
+            <input type="text" id="filter-date-range" placeholder="20260101~20271231" style="width:190px;height:28px;border:1px solid #c7c7c7;padding:0 8px;font-size:12.5px;box-sizing:border-box;">
           </label>
           <select id="primary-cond-field" style="height:28px;border:1px solid #c7c7c7;padding:0 6px;font-size:12.5px;box-sizing:border-box;"></select>
           <select id="primary-cond-match" style="height:28px;border:1px solid #c7c7c7;padding:0 6px;font-size:12.5px;box-sizing:border-box;">
             <option value="포함">포함</option><option value="일치">일치</option>
           </select>
           <input type="text" id="primary-cond-value" placeholder="검색어" style="width:130px;height:28px;border:1px solid #c7c7c7;padding:0 8px;font-size:12.5px;box-sizing:border-box;">
-          <button class="btn small secondary" style="width:auto;height:28px;box-sizing:border-box;padding:0 12px;" onclick="openAddConditionModal()">+ 조건 추가</button>
-          <button class="btn small" style="width:auto;height:28px;box-sizing:border-box;padding:0 16px;margin-left:auto;" onclick="loadInventoryList()">조회</button>
+          <button class="btn small secondary" style="width:auto;height:28px;box-sizing:border-box;border:1px solid var(--navy);padding:0 12px;" onclick="openAddConditionModal()">+ 조건 추가</button>
+          <button class="btn small" style="width:auto;height:28px;box-sizing:border-box;border:1px solid var(--navy);padding:0 16px;margin-left:auto;" onclick="loadInventoryList()">조회</button>
         </div>
         <div id="active-conditions-chips" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px;"></div>
 
-        <div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px;border:1px solid var(--line);padding:8px 10px;margin-bottom:0;">
+        <div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px;border:1px solid var(--line);padding:5px 10px;margin-bottom:0;">
           <label style="font-size:12.5px;display:flex;align-items:center;gap:5px;height:28px;">
             <input type="checkbox" id="bulk-select-all" onclick="toggleAllInventoryRows(this)"> 전체
           </label>
-          <button class="btn small secondary" style="width:auto;height:28px;box-sizing:border-box;padding:0 12px;" onclick="openBulkChangeModal()">변경</button>
-          <button class="btn small secondary" id="inv-sort-toggle-btn" style="width:auto;height:28px;box-sizing:border-box;padding:0 12px;" onclick="toggleInventorySortField()">정렬: 판매일 ▾</button>
-          <button class="btn small secondary" style="width:auto;height:28px;box-sizing:border-box;padding:0 12px;margin-left:auto;" onclick="downloadInventoryExcel()">엑셀다운</button>
+          <button class="btn small secondary" style="width:auto;height:28px;box-sizing:border-box;border:1px solid var(--navy);padding:0 12px;" onclick="openBulkChangeModal()">변경</button>
+          <button class="btn small secondary" id="inv-sort-toggle-btn" style="width:auto;height:28px;box-sizing:border-box;border:1px solid var(--navy);padding:0 12px;" onclick="toggleInventorySortField()">정렬: 판매일 ▾</button>
+          <button class="btn small secondary" style="width:auto;height:28px;box-sizing:border-box;border:1px solid var(--navy);padding:0 12px;margin-left:auto;" onclick="downloadInventoryExcel()">엑셀다운</button>
           <select id="inv-page-size-select" onchange="onInvPageSizeChange()" style="padding:5px 6px;border:1px solid #c7c7c7;font-size:12px;height:28px;box-sizing:border-box;"></select>
         </div>
 
@@ -1139,6 +1137,8 @@
 
   const PERMISSION_LABELS = {
     dashboard:"대시보드 조회", input:"작업페이지 입력 (재고등록·주문·판매·자료업로드)", excelExport:"엑셀 다운로드",
+    bulkEdit:"재고 일괄수정 (다운로드/업로드로 기존 재고 값 변경)",
+    uiCustomize:"화면 문구·버튼 이름 수정 (마우스 오른쪽 클릭)",
     userApproval:"사용자 승인·추방", permissionManage:"권한 설정 관리(전체 관리자)",
     teamManage:"팀 관리", inventorySettings:"재고 기초설정 관리",
     settlementSettings:"정산 관리", siteSettings:"사이트 설정 관리", dataReset:"데이터 초기화"
@@ -1155,6 +1155,7 @@
 
   let currentSettings = {};
   let currentUser = { name:"알수없음", username:"unknown", uid:null };
+  let currentUserPerms = {};
   // ---------- 보기 설정 ----------
   const INV_COLUMNS = [
     { key:"orderDate", label:"주문일", get:it=>it.orderDate||"-" },
@@ -1397,6 +1398,7 @@
   }
 
   document.addEventListener("contextmenu", function(e){
+    if(!hasPerm(currentUserPerms, "uiCustomize")) return; // 권한 없으면 기본 브라우저 메뉴만 사용
     const keyedEl = e.target.closest("[data-label-key]");
     const genericEl = keyedEl ? null : e.target.closest("button, h3");
     const targetEl = keyedEl || genericEl;
@@ -1703,7 +1705,7 @@
     closePersonalSettingsModal();
   };
 
-  const ALL_PERM_KEYS = ["dashboard","input","excelExport","userApproval","permissionManage","teamManage","inventorySettings","settlementSettings","siteSettings","dataReset"];
+  const ALL_PERM_KEYS = ["dashboard","input","excelExport","bulkEdit","uiCustomize","userApproval","permissionManage","teamManage","inventorySettings","settlementSettings","siteSettings","dataReset"];
 
   async function loadUserAdminList(){
     const listEl = document.getElementById("user-admin-list");
@@ -2772,8 +2774,9 @@
     document.getElementById("item-cancelsale-btn").style.display = "none";
     document.getElementById("item-modal-excel-btn").style.display = "inline-block";
     document.getElementById("item-modal-paste-btn").style.display = "inline-block";
-    document.getElementById("item-modal-bulkdown-btn").style.display = "inline-block";
-    document.getElementById("item-modal-bulkup-btn").style.display = "inline-block";
+    const canBulkEdit = hasPerm(currentUserPerms, "bulkEdit");
+    document.getElementById("item-modal-bulkdown-btn").style.display = canBulkEdit ? "inline-block" : "none";
+    document.getElementById("item-modal-bulkup-btn").style.display = canBulkEdit ? "inline-block" : "none";
     clearItemModalFields();
     document.getElementById("item-modal-overlay").style.display = "flex";
     if(!document.getElementById("item-indate-input").value){
@@ -4560,16 +4563,8 @@
     }
   }
 
-  window.onFilterDateRangeInput = function(){
-    const raw = document.getElementById("filter-date-range").value.trim();
-    const parts = raw.split("~").map(s=>s.trim().replace(/-/g,""));
-    document.getElementById("filter-date-from").value = parts[0] || "";
-    document.getElementById("filter-date-to").value = parts[1] || "";
-  };
   window.clearDateFilter = function(){
     document.getElementById("filter-date-range").value = "";
-    document.getElementById("filter-date-from").value = "";
-    document.getElementById("filter-date-to").value = "";
     document.getElementById("filter-date-all").checked = false;
     document.getElementById("filter-date-range").disabled = false;
     document.getElementById("primary-cond-value").value = "";
@@ -4582,8 +4577,6 @@
     document.getElementById("filter-date-range").disabled = all;
     if(all){
       document.getElementById("filter-date-range").value = "";
-      document.getElementById("filter-date-from").value = "";
-      document.getElementById("filter-date-to").value = "";
     }
   };
 
@@ -5294,8 +5287,10 @@
       return;
     }
 
-    const filterDateFrom = document.getElementById("filter-date-from").value.trim().replace(/-/g, "");
-    const filterDateTo = document.getElementById("filter-date-to").value.trim().replace(/-/g, "");
+    const rangeRaw = document.getElementById("filter-date-range").value.trim();
+    const rangeParts = rangeRaw.split("~").map(s=>s.trim().replace(/-/g,""));
+    const filterDateFrom = (rangeParts[0]||"").replace(/\D/g,"");
+    const filterDateTo = (rangeParts[1]||"").replace(/\D/g,"");
     const filterType = document.getElementById("filter-date-type").value;
     const normDate = (v)=> String(v||"").replace(/\D/g,"");
 
@@ -5488,6 +5483,7 @@
   ];
 
   window.downloadBulkEditExcel = function(){
+    if(!hasPerm(currentUserPerms, "bulkEdit")){ alert("이 기능을 사용할 권한이 없습니다. 관리자에게 요청해주세요."); return; }
     if(!lastRenderedItems || lastRenderedItems.length===0){ alert("다운로드할 재고가 없습니다. 재고 목록을 먼저 조회해주세요."); return; }
     const headers = ["일련번호", ...BULK_EDIT_DOWNLOAD_FIELDS.map(f=>f.header)];
     const numericColIndices = new Set();
@@ -5505,6 +5501,7 @@
   };
 
   window.openBulkEditUploadModal = function(){
+    if(!hasPerm(currentUserPerms, "bulkEdit")){ alert("이 기능을 사용할 권한이 없습니다. 관리자에게 요청해주세요."); return; }
     document.getElementById("bulk-edit-file-input").value = "";
     document.getElementById("bulk-edit-analysis").innerHTML = "";
     document.getElementById("bulk-edit-upload-modal-overlay").style.display = "flex";
@@ -5573,6 +5570,7 @@
   };
 
   window.submitBulkEditUpload = async function(){
+    if(!hasPerm(currentUserPerms, "bulkEdit")){ alert("이 기능을 사용할 권한이 없습니다. 관리자에게 요청해주세요."); return; }
     const data = JSON.parse(document.getElementById("bulk-edit-analysis").dataset.rows || "[]");
     const resultEl = document.getElementById("bulk-edit-result");
     if(data.length===0){ resultEl.innerHTML = '반영할 내용이 없습니다.'; return; }
@@ -6673,6 +6671,7 @@
       checkUnreadNotices();
 
       const perms = data.permissions || {};
+      currentUserPerms = perms;
       const permListEl = document.getElementById("perm-list");
       permListEl.innerHTML = "";
       const granted = Object.keys(perms).filter(k=>perms[k]);
