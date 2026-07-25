@@ -249,7 +249,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-07-25 v43</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-07-25 v45</span>
       <span id="topbar-username">-</span>
       <button onclick="openPersonalSettingsModal()">개인설정</button>
       <button onclick="handleLogout()">로그아웃</button>
@@ -468,7 +468,7 @@
         <p class="desc" style="margin-top:0;">거래처별 예약을 등록하고, 실물이 들어오면 <b>배정</b>을 눌러 판매요청으로 넘깁니다. 판매가를 비워두면 <b>미입력</b>으로 표시되고 배정할 때 넣으면 됩니다.</p>
         <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px;">
           <button class="btn small" style="width:auto;" onclick="createQuotationFromSelected()">체크한 예약으로 견적서 발행</button>
-          <span class="info-tip" title="같은 거래처의 예약을 체크하면 하나의 견적서로 합쳐 계산합니다. 발행하면 그 예약은 수정이 잠기고 목록에 자물쇠로 표시됩니다.">ⓘ</span>
+          <span class="info-tip" title="같은 거래처·같은 구분(구매 또는 판매)의 예약을 체크하면 하나로 합쳐 계산합니다. 구매 예약은 출고가·할인율·할인금액·입고가가 모두 표시되는 매입 견적서로 나옵니다. 발행하면 그 예약은 수정이 잠깁니다.">ⓘ</span>
           <button class="btn small secondary" style="width:auto;" onclick="toggleQuotationList()">발행한 견적서 보기</button>
           <span style="color:var(--line);">|</span>
           <span style="font-size:12px;color:var(--gray);">구분</span>
@@ -6822,14 +6822,14 @@
   window.createQuotationFromSelected = async function(){
     const checked = Array.from(document.querySelectorAll(".resv-row-cb:checked"));
     if(checked.length === 0){ alert("견적서에 담을 예약을 먼저 체크해주세요."); return; }
-    // 구매 예약은 견적서 대상이 아닙니다 (발주서를 씁니다)
+    // 구매 예약과 판매 예약은 서식이 달라 섞을 수 없습니다.
+    const kinds = new Set();
     for(const c of checked){
       const rr = await getDoc(doc(db,"reservations", c.dataset.id));
-      if(rr.exists() && rr.data().kind === "buy"){
-        alert("구매 예약이 포함되어 있습니다.\n견적서는 판매 예약만 발행합니다.\n구분 필터에서 <판매>만 골라 다시 시도해주세요.");
-        return;
-      }
+      if(rr.exists()) kinds.add(rr.data().kind === "buy" ? "buy" : "sale");
     }
+    if(kinds.size > 1){ alert("구매 예약과 판매 예약이 섞여 있습니다.\n구분 필터에서 하나만 골라 다시 시도해주세요."); return; }
+    const quoteKind = kinds.has("buy") ? "buy" : "sale";
     const dests = [...new Set(checked.map(c=>c.dataset.dest))];
     if(dests.length > 1){ alert("거래처가 여러 개입니다.\n견적서는 거래처 하나씩 발행합니다.\n\n선택된 거래처: " + dests.join(", ")); return; }
     const destination = dests[0];
@@ -6848,7 +6848,10 @@
         reservationId: c.dataset.id,
         systemModel: r.systemModel||"", baseModel: r.baseModel||"", capacity: r.capacity||"",
         petName: r.petName||"", color: r.systemColor || r.manufacturerColor || "",
+        carrier: r.carrier||"",
         qty, listPrice: Number(r.listPrice)||null, salePrice: sale,
+        discountAmt: (r.saleDiscountAmt!=null ? Number(r.saleDiscountAmt) : null),
+        discountPct: (r.saleDiscountPct!=null ? Number(r.saleDiscountPct) : null),
         amount: sale ? sale*qty : 0
       });
     }
@@ -6866,11 +6869,11 @@
     const qSnap = await getDocs(collection(db,"quotations"));
     let seq = 1;
     qSnap.forEach(d=>{ if(String(d.data().code||"").startsWith("Q-"+today)) seq++; });
-    const code = "Q-" + today + "-" + String(seq).padStart(2,"0");
+    const code = (quoteKind==="buy" ? "P-" : "Q-") + today + "-" + String(seq).padStart(2,"0");
 
     try{
       const ref = await withTimeout(addDoc(collection(db,"quotations"), {
-        code, destination, issueDate: today,
+        code, kind: quoteKind, destination, issueDate: today,
         validUntil: String(validUntil||"").replace(/\D/g,""),
         note, items, totalQty, totalAmount, status:"발행",
         createdBy: currentUser.name, createdByUsername: currentUser.username, createdAt: serverTimestamp()
@@ -7053,9 +7056,9 @@
     const box = (title, rows)=>
       '<div><div class="t">'+title+'</div><div class="v">' + rows.join("<br>") + '</div></div>';
 
-    let h = '<div class="quote-title">견 적 서</div>';
+    let h = '<div class="quote-title">' + (q.kind === "buy" ? "매 입 견 적 서" : "견 적 서") + '</div>';
     h += '<div class="quote-head">' +
-      box("공급받는 자 (수신)", [
+      box(q.kind === "buy" ? "매입처 (공급자)" : "공급받는 자 (수신)", [
         comboEsc(co.bizName || co.name || q.destination || "-"),
         '<span style="font-weight:400;font-size:11.5px;color:var(--gray);">사업자 ' + comboEsc(co.bizNumber||"-") + ' · 대표 ' + comboEsc(co.ceoName||"-") + '</span>'
       ]) +
@@ -7071,21 +7074,45 @@
       ]) +
       '</div>';
 
-    h += '<div style="overflow-x:auto;"><table class="data-table" style="min-width:700px;"><thead><tr>' +
-      '<th>#</th><th>모델 (전산모델명/펫네임)</th><th>색상</th>' +
-      '<th class="ta-right">수량</th><th class="ta-right">단가</th><th class="ta-right">금액</th>' +
+    const isBuy = q.kind === "buy";
+    // 구매 견적서(사올 때 승인용)는 출고가·할인율·할인금액·입고가를 모두 보여줍니다.
+    h += '<div style="overflow-x:auto;"><table class="data-table" style="min-width:'+(isBuy?"760px":"640px")+';"><thead><tr>' +
+      '<th>#</th><th>모델 (전산모델명/펫네임)</th><th>색상</th><th>통신사</th>' +
+      '<th class="ta-right">수량</th>' +
+      (isBuy
+        ? '<th class="ta-right">출고가</th><th class="ta-right">할인율</th><th class="ta-right">할인금액</th><th class="ta-right">입고가</th>'
+        : '<th class="ta-right">단가</th>') +
+      '<th class="ta-right">금액</th>' +
       '</tr></thead><tbody>';
     (q.items||[]).forEach((it,i)=>{
+      const lp = (it.listPrice!=null) ? Number(it.listPrice) : null;
+      const price = (it.salePrice!=null) ? Number(it.salePrice) : null;
+      // 저장된 할인이 없으면 출고가와 단가로 역산합니다.
+      const dAmt = (it.discountAmt!=null) ? Number(it.discountAmt) : ((lp!=null && price!=null) ? (lp-price) : null);
+      const dPct = (it.discountPct!=null) ? Number(it.discountPct) : ((lp && dAmt!=null) ? Number((dAmt/lp*100).toFixed(2)) : null);
       h += '<tr><td style="color:var(--gray);">'+(i+1)+'</td>' +
         '<td>'+comboEsc(docModelLabel(it))+'</td>' +
         '<td>'+comboEsc(it.color||"-")+'</td>' +
+        '<td>'+comboEsc(it.carrier||"-")+'</td>' +
         '<td class="ta-right">'+(it.qty||0)+'</td>' +
-        '<td class="ta-right">'+(it.salePrice!=null ? Number(it.salePrice).toLocaleString() : '<span style="color:var(--danger);">미입력</span>')+'</td>' +
+        (isBuy
+          ? '<td class="ta-right">'+(lp!=null ? lp.toLocaleString() : "-")+'</td>' +
+            '<td class="ta-right">'+(dPct!=null ? dPct.toFixed(2)+"%" : "-")+'</td>' +
+            '<td class="ta-right">'+(dAmt!=null ? dAmt.toLocaleString() : "-")+'</td>' +
+            '<td class="ta-right"><b>'+(price!=null ? price.toLocaleString() : '<span style="color:var(--danger);">미입력</span>')+'</b></td>'
+          : '<td class="ta-right">'+(price!=null ? price.toLocaleString() : '<span style="color:var(--danger);">미입력</span>')+'</td>') +
         '<td class="ta-right">'+(Number(it.amount)||0).toLocaleString()+'</td></tr>';
     });
     const vat = Math.round((Number(q.totalAmount)||0) / 11);
+    const totListAmt = (q.items||[]).reduce((n,x)=> n + ((Number(x.listPrice)||0) * (Number(x.qty)||0)), 0);
+    const avgPct = totListAmt ? ((totListAmt - (Number(q.totalAmount)||0)) / totListAmt * 100) : null;
     h += '<tr style="background:#fafafa;font-weight:700;border-top:2px solid var(--navy);">' +
-      '<td colspan="3">합계</td><td class="ta-right">'+(q.totalQty||0)+'</td><td></td>' +
+      '<td colspan="4">합계</td><td class="ta-right">'+(q.totalQty||0)+'</td>' +
+      (isBuy
+        ? '<td class="ta-right">'+totListAmt.toLocaleString()+'</td>' +
+          '<td class="ta-right">'+(avgPct!=null ? avgPct.toFixed(2)+"%" : "-")+'</td>' +
+          '<td class="ta-right">'+(totListAmt-(Number(q.totalAmount)||0)).toLocaleString()+'</td><td></td>'
+        : '<td></td>') +
       '<td class="ta-right">'+(Number(q.totalAmount)||0).toLocaleString()+'</td></tr>';
     h += '</tbody></table></div>';
     h += '<div style="margin-top:10px;font-size:12.5px;line-height:1.9;">' +
@@ -7402,6 +7429,13 @@
     }
 
     listEl.innerHTML = "";
+
+    // "최종완료" = 입금완료 + 매칭완료 (더 할 일이 없는 건). 기본은 숨깁니다.
+    const isSaleFinal = (b, lines)=>{
+      const paid = b.depositReceived === true;
+      const matched = lines.length>0 && lines.every(l=> (Number(l.fulfilledCount)||0) >= (Number(l.quantity)||0));
+      return paid && matched;
+    };
 
     // 배치 + 예전 개별건을 한 배열로 모아 페이지 단위로 그립니다.
     const saleRows = [];
