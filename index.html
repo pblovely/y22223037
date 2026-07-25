@@ -212,7 +212,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-07-25 v25</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-07-25 v26</span>
       <span id="topbar-username">-</span>
       <button onclick="openPersonalSettingsModal()">개인설정</button>
       <button onclick="handleLogout()">로그아웃</button>
@@ -421,6 +421,7 @@
           </span>
         </div>
         <p class="desc" style="margin-top:0;">거래처별 예약을 등록하고, 실물이 들어오면 <b>배정</b>을 눌러 판매요청으로 넘깁니다. 판매가를 비워두면 <b>미입력</b>으로 표시되고 배정할 때 넣으면 됩니다.</p>
+        <div id="resv-listprice-notice" style="display:none;font-size:12.5px;padding:9px 11px;margin-bottom:8px;border:1px solid var(--danger);background:#fdecea;line-height:1.7;"></div>
         <div id="reservation-list-area"></div>
       </div>
 
@@ -1200,7 +1201,10 @@
           <div class="stack-row"><label>색상</label><select id="resv-color-select"><option value="">모델을 먼저 선택하세요</option></select></div>
           <div class="stack-row"><label>거래처</label><select id="resv-dest-select"><option value="">선택</option></select></div>
           <div class="stack-row"><label>예약(주문) 수량</label><input type="number" id="resv-order-qty-input" value="1"></div>
-          <div class="stack-row"><label>판매가 (선택) <span class="info-tip" title="예약을 받을 때 판매가가 정해져 있으면 넣어주세요. 비우면 목록에 '미입력'으로 표시되고, 배정할 때 입력하면 됩니다.">ⓘ</span></label><input type="number" id="resv-saleprice-input" placeholder="비우면 미입력으로 표시됩니다"></div>
+          <div class="stack-row"><label>출고가 <span class="info-tip" title="모델을 고르면 모델 등록의 출고가(VAT포함)를 자동으로 가져옵니다. 필요하면 직접 고칠 수 있습니다.">ⓘ</span></label><input type="number" id="resv-listprice-input" oninput="onResvListPriceInput()" placeholder="모델을 고르면 자동으로 채워집니다"></div>
+          <div class="stack-row"><label>판매할인 <span class="info-tip" title="정액 또는 %를 넣으면 나머지와 판매가가 자동으로 계산됩니다.">ⓘ</span></label><input type="number" id="resv-salediscountamt-input" oninput="onResvSaleDiscountAmtInput()" placeholder="예: 100000"></div>
+          <div class="stack-row"><label>판매할인%</label><input type="number" step="0.01" id="resv-salediscountpct-input" oninput="onResvSaleDiscountPctInput()" placeholder="예: 4.00"></div>
+          <div class="stack-row"><label>판매가 (선택) <span class="info-tip" title="비우면 목록에 '미입력'으로 표시되고, 배정할 때 입력하면 됩니다.">ⓘ</span></label><input type="number" id="resv-saleprice-input" oninput="onResvSalePriceInput()" placeholder="비우면 미입력으로 표시됩니다"></div>
         </div>
         <button class="btn small" id="resv-submit-btn" style="width:auto;" onclick="submitReservation()">예약 등록</button>
         <div id="resv-result-msg" style="display:none;font-size:12.5px;margin-top:10px;padding:8px 10px;border-left:3px solid var(--navy);background:#f2f2f2;line-height:1.6;"></div>
@@ -5383,6 +5387,9 @@
     document.getElementById("resv-date-input").value = todayStr();
     document.getElementById("resv-order-qty-input").value = "1";
     document.getElementById("resv-saleprice-input").value = "";
+    document.getElementById("resv-listprice-input").value = "";
+    document.getElementById("resv-salediscountamt-input").value = "";
+    document.getElementById("resv-salediscountpct-input").value = "";
     document.getElementById("resv-result-msg").style.display = "none";
     editingReservationId = null;
     document.getElementById("resv-modal-title").textContent = "예약 추가";
@@ -5425,6 +5432,9 @@
     document.getElementById("resv-date-input").value = r.requestDate || todayStr();
     document.getElementById("resv-order-qty-input").value = Number(r.orderedQty)||1;
     document.getElementById("resv-saleprice-input").value = r.salePrice || "";
+    document.getElementById("resv-listprice-input").value = r.listPrice || "";
+    document.getElementById("resv-salediscountamt-input").value = r.saleDiscountAmt || "";
+    document.getElementById("resv-salediscountpct-input").value = r.saleDiscountPct || "";
     if(r.modelId){
       document.getElementById("resv-model-select").value = r.modelId;
       syncSearchableSelect("resv-model-select");
@@ -5451,10 +5461,53 @@
     }
   };
 
+  // ===== 예약 금액 연동 (재고·주문 화면과 같은 규칙) =====
+  //   판매가 = 출고가 − 판매할인
+  function resvListPrice(){ return Number(document.getElementById("resv-listprice-input").value) || 0; }
+  window.onResvSaleDiscountAmtInput = function(){
+    const L = resvListPrice();
+    const amtRaw = document.getElementById("resv-salediscountamt-input").value;
+    document.getElementById("resv-salediscountpct-input").value = pctFromAmt(amtRaw, L);
+    if(L && amtRaw !== "") document.getElementById("resv-saleprice-input").value = L - Number(amtRaw);
+  };
+  window.onResvSaleDiscountPctInput = function(){
+    const L = resvListPrice();
+    const amt = amtFromPct(document.getElementById("resv-salediscountpct-input").value, L);
+    document.getElementById("resv-salediscountamt-input").value = amt;
+    if(amt !== "") document.getElementById("resv-saleprice-input").value = L - Number(amt);
+  };
+  window.onResvSalePriceInput = function(){
+    const L = resvListPrice();
+    const priceRaw = document.getElementById("resv-saleprice-input").value;
+    if(L && priceRaw !== ""){
+      const amt = L - Number(priceRaw);
+      document.getElementById("resv-salediscountamt-input").value = amt;
+      document.getElementById("resv-salediscountpct-input").value = pctFromAmt(amt, L);
+    }
+  };
+  window.onResvListPriceInput = function(){
+    // 출고가가 바뀌면 판매가는 그대로 두고 할인만 다시 계산합니다.
+    const L = resvListPrice();
+    const priceRaw = document.getElementById("resv-saleprice-input").value;
+    if(L && priceRaw !== ""){
+      const amt = L - Number(priceRaw);
+      document.getElementById("resv-salediscountamt-input").value = amt;
+      document.getElementById("resv-salediscountpct-input").value = pctFromAmt(amt, L);
+    }
+  };
+
   window.onResvModelChange = function(){
     const modelId = document.getElementById("resv-model-select").value;
     const sel = document.getElementById("resv-color-select");
     const m = modelsCache.find(x=>x.id===modelId);
+
+    // 모델을 고르면 출고가를 가져옵니다. (이미 값이 있으면 건드리지 않음)
+    const lpEl = document.getElementById("resv-listprice-input");
+    if(m && lpEl && !lpEl.value && m.priceIncVat){
+      lpEl.value = m.priceIncVat;
+      onResvListPriceInput();
+    }
+
     if(!m){ sel.innerHTML = '<option value="">모델을 먼저 선택하세요</option>'; return; }
     const colors = m.colors || [];
     if(colors.length === 0){
@@ -5488,6 +5541,10 @@
 
     const salePriceRaw = document.getElementById("resv-saleprice-input").value;
     const salePrice = salePriceRaw ? Number(salePriceRaw) : null;   // 비워도 됩니다 (목록에 "미입력" 표시)
+    const listPriceRaw = document.getElementById("resv-listprice-input").value;
+    const listPriceVal = listPriceRaw ? Number(listPriceRaw) : (m.priceIncVat || null);
+    const saleDiscAmtRaw = document.getElementById("resv-salediscountamt-input").value;
+    const saleDiscPctRaw = document.getElementById("resv-salediscountpct-input").value;
 
     const colorIdx = document.getElementById("resv-color-select").value;
     const colorObj = (colorIdx !== "" && m.colors && m.colors[Number(colorIdx)]) ? m.colors[Number(colorIdx)] : null;
@@ -5495,7 +5552,9 @@
     const payload = {
       modelId, modelGroup:m.modelGroup, baseModel:m.baseModel, capacity:m.capacity,
       systemModel: m.systemModel||"", petName:m.petName||"",
-      listPrice: m.priceIncVat || null,
+      listPrice: listPriceVal,
+      saleDiscountAmt: saleDiscAmtRaw ? Number(saleDiscAmtRaw) : null,
+      saleDiscountPct: saleDiscPctRaw ? Number(Number(saleDiscPctRaw).toFixed(2)) : null,
       manufacturerColor: colorObj ? (colorObj.manufacturerColor||"") : "",
       systemColor: colorObj ? (colorObj.systemColor||"") : "",
       sku: colorObj ? (colorObj.sku||"") : "",
@@ -5756,7 +5815,10 @@
         manufacturerColor: r.manufacturerColor||"", systemColor: r.systemColor||"", sku: r.sku||"",
         carrier: r.carrier||"",
         quantity: qty, fulfilledCount: 0, matchedItemIds: [],
-        salePrice, saleDiscountAmt: null, saleDiscountPct: null,
+        salePrice,
+        saleDiscountAmt: (r.saleDiscountAmt != null ? r.saleDiscountAmt : null),
+        saleDiscountPct: (r.saleDiscountPct != null ? r.saleDiscountPct : null),
+        listPrice: r.listPrice || null,
         requestDate, status: "대기중",
         fromReservationId: r.id,
         createdBy: currentUser.name, createdByUsername: currentUser.username, createdAt: serverTimestamp()
@@ -5979,6 +6041,63 @@
     c.style.display = hide ? "none" : "flex";
   };
 
+  // 기존 예약의 출고가를 모델 기준으로 채웁니다. (판매가는 건드리지 않습니다)
+  window.fillReservationListPrice = async function(){
+    await fetchModelsCache();
+    const snap = await getDocs(collection(db,"reservations"));
+    const plan = [], noModel = [], noPrice = [];
+    snap.forEach(d=>{
+      const r = { id:d.id, ...d.data() };
+      if(r.listPrice) return;                                  // 이미 있으면 건너뜀
+      let m = r.modelId ? modelsCache.find(x=>x.id===r.modelId) : null;
+      if(!m && r.systemModel) m = modelsCache.find(x=> String(x.systemModel||"") === String(r.systemModel));
+      if(!m && r.baseModel)   m = modelsCache.find(x=> String(x.baseModel||"") === String(r.baseModel) && String(x.capacity||"") === String(r.capacity||""));
+      if(!m){ noModel.push(r); return; }
+      const price = Number(m.priceIncVat) || 0;
+      if(!price){ noPrice.push(r); return; }
+      plan.push({ id:r.id, r, price });
+    });
+
+    if(plan.length === 0){
+      alert("채울 대상이 없습니다.\n\n· 모델을 못 찾음: "+noModel.length+"건\n· 모델에 출고가가 없음: "+noPrice.length+"건");
+      return;
+    }
+    const preview = plan.slice(0,8).map(x=>
+      "· " + (x.r.destination||"-") + " / " + (x.r.systemModel||x.r.baseModel||"-") + "  → " + x.price.toLocaleString()).join("\n");
+    if(!confirm(
+      "모델 등록의 출고가를 기준으로 예약 " + plan.length + "건의 출고가를 채웁니다.\n\n" + preview +
+      (plan.length>8 ? "\n... 외 " + (plan.length-8) + "건" : "") +
+      "\n\n판매가와 예약 수량은 건드리지 않습니다." +
+      (noModel.length||noPrice.length ? "\n\n제외: 모델 못 찾음 "+noModel.length+"건 / 모델에 출고가 없음 "+noPrice.length+"건" : "") +
+      "\n\n진행하시겠습니까?")) return;
+
+    try{
+      for(let i=0; i<plan.length; i+=300){
+        const batch = writeBatch(db);
+        plan.slice(i, i+300).forEach(x=>{
+          const patch = { listPrice: x.price };
+          // 판매가가 있으면 그에 맞춰 할인 금액·비율도 계산해 둡니다.
+          const sale = Number(x.r.salePrice)||0;
+          if(sale){
+            const amt = x.price - sale;
+            patch.saleDiscountAmt = amt;
+            patch.saleDiscountPct = Number(((amt/x.price)*100).toFixed(2));
+          }
+          batch.update(doc(db,"reservations", x.id), patch);
+        });
+        await batch.commit();
+      }
+    }catch(e){
+      alert("채우는 중 오류가 났습니다.\n" + ((e && e.message) ? e.message : String(e)));
+      return;
+    }
+    logAction("예약 출고가 일괄 채움", plan.length+"건");
+    alert(plan.length + "건의 출고가를 채웠습니다."
+      + (noModel.length ? "\n\n모델을 못 찾은 "+noModel.length+"건은 예약을 수정해 모델을 다시 골라주세요." : "")
+      + (noPrice.length ? "\n모델에 출고가가 없는 "+noPrice.length+"건은 모델 등록에서 출고가를 먼저 넣어주세요." : ""));
+    loadReservationTable();
+  };
+
   // 예약 목록 — 한 줄씩 보여주고 수정·삭제·배정을 여기서 합니다.
   async function loadReservationList(){
     const el = document.getElementById("reservation-list-area");
@@ -5987,6 +6106,20 @@
     const snap = await getDocs(query(collection(db,"reservations"), orderBy("createdAt","desc")));
     if(snap.empty){ el.innerHTML = '<div class="list-empty">등록된 예약이 없습니다. 위 <b>+ 예약</b>에서 추가해주세요.</div>'; return; }
     const rows = []; snap.forEach(d=> rows.push({ id:d.id, ...d.data() }));
+
+    // 출고가가 비어 있는 예약이 있으면 위에 안내를 띄웁니다.
+    const noticeEl = document.getElementById("resv-listprice-notice");
+    if(noticeEl){
+      const empties = rows.filter(r=> !r.listPrice).length;
+      if(empties > 0){
+        noticeEl.style.display = "block";
+        noticeEl.innerHTML = '<b>출고가가 비어 있는 예약 ' + empties + '건</b>이 있습니다. 출고가가 없으면 지표의 <b>출고가 금액</b>과 <b>예상 차액</b>이 잡히지 않습니다.'
+          + '<br><span style="color:var(--gray);">모델 등록의 출고가를 기준으로 한 번에 채울 수 있습니다. 판매가는 건드리지 않습니다.</span>'
+          + '<br><button class="btn small" style="width:auto;margin-top:6px;" onclick="fillReservationListPrice()">출고가 채우기 (' + empties + '건)</button>';
+      }else{
+        noticeEl.style.display = "none"; noticeEl.innerHTML = "";
+      }
+    }
 
     const fmt = v => (v==null || v==="") ? '<span style="color:var(--danger);">미입력</span>' : Number(v).toLocaleString();
     let html = '<div style="overflow-x:auto;"><table class="data-table" style="min-width:1180px;"><thead><tr>' +
@@ -6097,19 +6230,8 @@
     let grandOrdered=0, grandAllocated=0;
 
     modelKeys.forEach(mk=>{
-      // 이 모델 줄에 속한 예약들의 수정·삭제 버튼 (거래처별로 하나씩)
-      let mkBtns = "";
-      destKeys.forEach(dk=>{
-        const c = grid[mk][dk];
-        if(!c) return;
-        c.entries.forEach(e=>{
-          mkBtns += '<button class="btn small secondary" style="width:auto;padding:1px 7px;font-size:10.5px;margin:1px 2px 1px 0;"'
-            + ' title="' + comboEsc(dk) + ' 예약 수정" data-resv-edit="'+e.id+'">'+comboEsc(dk)+' 수정</button>'
-            + '<button class="btn small danger" style="width:auto;padding:1px 6px;font-size:10.5px;margin:1px 6px 1px 0;"'
-            + ' title="' + comboEsc(dk) + ' 예약 삭제 (배정이 있으면 삭제 불가)" data-resv-del="'+e.id+'">✕</button>';
-        });
-      });
-      html += '<tr><td>'+mk+(mkBtns ? '<div style="margin-top:3px;">'+mkBtns+'</div>' : '')+'</td>';
+      // 수정·삭제는 위 "예약 목록"에서 합니다. 지표는 숫자만 깔끔하게 보여줍니다.
+      html += '<tr><td>'+mk+'</td>';
       let rowOrdered=0, rowAllocated=0;
       destKeys.forEach((dk, idx)=>{
         const cell = grid[mk][dk];
@@ -6142,17 +6264,10 @@
     const grandRemain = grandOrdered - grandAllocated;
     html += '<td class="ta-right">'+grandOrdered+'</td><td class="ta-right">'+grandAllocated+'</td><td class="ta-right">'+(grandRemain>0?grandRemain:'-')+'</td></tr>';
     html += '</tbody></table></div>';
-    html += '<p class="desc" style="margin-top:10px;"><b>배정 숫자를 클릭하면</b> 배정 창이 열립니다. 배정하면 그 조건으로 <b>판매요청</b>이 만들어지고, 같은 창에서 <b>배정 취소</b>도 할 수 있습니다. 모델 이름 아래 <b>수정</b> 버튼으로 예약 내용을 고칠 수 있습니다. 주문 수량에 마우스를 올리면 판매가가 보입니다.</p>';
+    html += '<p class="desc" style="margin-top:10px;">모델·색상 × 거래처 기준 집계입니다. 수정·배정은 위 <b>예약 목록</b>에서 하세요. 주문 수량에 마우스를 올리면 판매가가 보입니다.</p>';
 
     el.innerHTML = html;
     loadReservationList();
-    // 수정·삭제 버튼 연결
-    el.querySelectorAll('[data-resv-edit]').forEach(btn=>{
-      btn.onclick = ()=> editReservation(btn.dataset.resvEdit);
-    });
-    el.querySelectorAll('[data-resv-del]').forEach(btn=>{
-      btn.onclick = ()=> deleteReservation(btn.dataset.resvDel);
-    });
   }
 
   async function loadSaleRequestList(){
