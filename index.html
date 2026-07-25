@@ -212,7 +212,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-07-25 v26</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-07-25 v27</span>
       <span id="topbar-username">-</span>
       <button onclick="openPersonalSettingsModal()">개인설정</button>
       <button onclick="handleLogout()">로그아웃</button>
@@ -6183,9 +6183,13 @@
       if(!modelKeys.includes(modelKey)) modelKeys.push(modelKey);
       if(!destKeys.includes(r.destination)) destKeys.push(r.destination);
       if(!grid[modelKey]) grid[modelKey] = {};
-      if(!grid[modelKey][r.destination]) grid[modelKey][r.destination] = { orderedQty:0, allocatedQty:0, entries:[] };
-      grid[modelKey][r.destination].orderedQty += Number(r.orderedQty)||0;
+      if(!grid[modelKey][r.destination]) grid[modelKey][r.destination] = { orderedQty:0, allocatedQty:0, listAmt:0, saleAmt:0, noPrice:0, entries:[] };
+      const q0 = Number(r.orderedQty)||0;
+      grid[modelKey][r.destination].orderedQty += q0;
       grid[modelKey][r.destination].allocatedQty += Number(r.allocatedQty)||0;
+      grid[modelKey][r.destination].listAmt += (Number(r.listPrice)||0) * q0;
+      if(r.salePrice) grid[modelKey][r.destination].saleAmt += Number(r.salePrice) * q0;
+      else grid[modelKey][r.destination].noPrice += 1;
       grid[modelKey][r.destination].entries.push(r);
     });
 
@@ -6218,16 +6222,18 @@
 
     let html = '<div style="overflow-x:auto;"><table class="data-table" style="min-width:'+(300+destKeys.length*180)+'px;">';
     // 헤더 1행: 거래처명 (colspan 3)
+    // 업체 사이를 굵은 세로선으로 구분합니다.
+    const SEP = 'border-left:2px solid var(--navy);';
     html += '<thead><tr><th rowspan="2">모델</th>';
-    destKeys.forEach(dk=>{ html += '<th colspan="3" style="text-align:center;">'+dk+'</th>'; });
-    html += '<th colspan="3" style="text-align:center;">합계</th></tr>';
+    destKeys.forEach(dk=>{ html += '<th colspan="3" style="text-align:center;'+SEP+'">'+comboEsc(dk)+'</th>'; });
+    html += '<th colspan="3" style="text-align:center;'+SEP+'background:#eee;">전체 합계</th></tr>';
     // 헤더 2행: 주문/배정/잔여
     html += '<tr>';
-    destKeys.forEach(()=>{ html += '<th class="ta-right">주문</th><th class="ta-right">배정</th><th class="ta-right">잔여</th>'; });
-    html += '<th class="ta-right">주문</th><th class="ta-right">배정</th><th class="ta-right">잔여</th></tr></thead><tbody>';
+    destKeys.forEach(()=>{ html += '<th class="ta-right" style="'+SEP+'">주문</th><th class="ta-right">배정</th><th class="ta-right">잔여</th>'; });
+    html += '<th class="ta-right" style="'+SEP+'background:#eee;">주문</th><th class="ta-right" style="background:#eee;">배정</th><th class="ta-right" style="background:#eee;">잔여</th></tr></thead><tbody>';
 
-    let colTotals = destKeys.map(()=>({ordered:0, allocated:0}));
-    let grandOrdered=0, grandAllocated=0;
+    let colTotals = destKeys.map(()=>({ordered:0, allocated:0, listAmt:0, saleAmt:0, noPrice:0}));
+    let grandOrdered=0, grandAllocated=0, grandListAmt=0, grandSaleAmt=0, grandNoPrice=0;
 
     modelKeys.forEach(mk=>{
       // 수정·삭제는 위 "예약 목록"에서 합니다. 지표는 숫자만 깔끔하게 보여줍니다.
@@ -6239,32 +6245,61 @@
           const remain = cell.orderedQty - cell.allocatedQty;
           rowOrdered += cell.orderedQty; rowAllocated += cell.allocatedQty;
           colTotals[idx].ordered += cell.orderedQty; colTotals[idx].allocated += cell.allocatedQty;
+          colTotals[idx].listAmt += cell.listAmt; colTotals[idx].saleAmt += cell.saleAmt; colTotals[idx].noPrice += cell.noPrice;
           const firstEntryId = cell.entries[0].id;
           const cellPrice = cell.entries.map(e=>Number(e.salePrice)||0).filter(Boolean);
-          const priceTip = cellPrice.length ? "판매가 " + [...new Set(cellPrice)].map(v=>v.toLocaleString()).join(" / ") : "판매가 미입력";
-          html += '<td class="ta-right" title="'+priceTip+'">'+cell.orderedQty+
+          const priceTip = (cellPrice.length ? "판매가 " + [...new Set(cellPrice)].map(v=>v.toLocaleString()).join(" / ") : "판매가 미입력")
+            + " · 출고가금액 " + cell.listAmt.toLocaleString() + " · 판매가금액 " + cell.saleAmt.toLocaleString();
+          html += '<td class="ta-right" style="'+SEP+'" title="'+priceTip+'">'+cell.orderedQty+
             (cellPrice.length ? '' : ' <span style="color:var(--danger);" title="판매가가 없어 배정 시 직접 입력해야 합니다">!</span>')+'</td>' +
             '<td class="ta-right"><span style="cursor:pointer;color:var(--navy);text-decoration:underline;" title="클릭하면 배정하고 판매요청을 만듭니다" onclick="adjustReservationAllocation(\''+firstEntryId+'\')">'+cell.allocatedQty+'</span></td>' +
             '<td class="ta-right">'+(remain>0?remain:'-')+'</td>';
         }else{
-          html += '<td class="ta-right">-</td><td class="ta-right">-</td><td class="ta-right">-</td>';
+          html += '<td class="ta-right" style="'+SEP+'">-</td><td class="ta-right">-</td><td class="ta-right">-</td>';
         }
       });
       grandOrdered += rowOrdered; grandAllocated += rowAllocated;
       const rowRemain = rowOrdered - rowAllocated;
-      html += '<td class="ta-right" style="font-weight:700;">'+rowOrdered+'</td><td class="ta-right" style="font-weight:700;">'+rowAllocated+'</td><td class="ta-right" style="font-weight:700;">'+(rowRemain>0?rowRemain:'-')+'</td>';
+      html += '<td class="ta-right" style="font-weight:700;'+SEP+'background:#f7f7f7;">'+rowOrdered+'</td><td class="ta-right" style="font-weight:700;background:#f7f7f7;">'+rowAllocated+'</td><td class="ta-right" style="font-weight:700;">'+(rowRemain>0?rowRemain:'-')+'</td>';
       html += '</tr>';
     });
 
-    html += '<tr style="background:#fafafa;font-weight:700;"><td>합계</td>';
+    // ----- 수량 합계 -----
+    html += '<tr style="background:#fafafa;font-weight:700;border-top:2px solid var(--navy);"><td>수량 합계</td>';
     destKeys.forEach((dk, idx)=>{
       const remain = colTotals[idx].ordered - colTotals[idx].allocated;
-      html += '<td class="ta-right">'+colTotals[idx].ordered+'</td><td class="ta-right">'+colTotals[idx].allocated+'</td><td class="ta-right">'+(remain>0?remain:'-')+'</td>';
+      grandListAmt += colTotals[idx].listAmt;
+      grandSaleAmt += colTotals[idx].saleAmt;
+      grandNoPrice += colTotals[idx].noPrice;
+      html += '<td class="ta-right" style="'+SEP+'">'+colTotals[idx].ordered+'</td><td class="ta-right">'+colTotals[idx].allocated+'</td><td class="ta-right">'+(remain>0?remain:'-')+'</td>';
     });
     const grandRemain = grandOrdered - grandAllocated;
-    html += '<td class="ta-right">'+grandOrdered+'</td><td class="ta-right">'+grandAllocated+'</td><td class="ta-right">'+(grandRemain>0?grandRemain:'-')+'</td></tr>';
+    html += '<td class="ta-right" style="'+SEP+'background:#eee;">'+grandOrdered+'</td><td class="ta-right" style="background:#eee;">'+grandAllocated+'</td><td class="ta-right" style="background:#eee;">'+(grandRemain>0?grandRemain:'-')+'</td></tr>';
+
+    // ----- 업체별 금액 3줄 (출고가금액 / 판매가금액 / 차액) -----
+    const amtRow = (label, pick, note, colorize)=>{
+      let h = '<tr style="background:#fafafa;"><td style="font-weight:700;">'+label
+        + (note ? ' <span style="color:var(--gray);font-weight:400;font-size:11px;">'+note+'</span>' : '') + '</td>';
+      destKeys.forEach((dk, idx)=>{
+        const v = pick(colTotals[idx]);
+        const col = colorize ? (v>=0 ? '#2e7d32' : 'var(--danger)') : '';
+        h += '<td class="ta-right" colspan="3" style="'+SEP+'font-weight:700;'+(col?('color:'+col+';'):'')+'">'
+          + (v ? v.toLocaleString() : '-')
+          + (colTotals[idx].noPrice>0 && label==="판매가 금액" ? ' <span style="color:var(--danger);font-weight:400;" title="판매가 미입력 '+colTotals[idx].noPrice+'건 제외">!</span>' : '')
+          + '</td>';
+      });
+      const gv = pick({ listAmt:grandListAmt, saleAmt:grandSaleAmt, noPrice:grandNoPrice });
+      const gcol = colorize ? (gv>=0 ? '#2e7d32' : 'var(--danger)') : '';
+      h += '<td class="ta-right" colspan="3" style="'+SEP+'background:#eee;font-weight:700;'+(gcol?('color:'+gcol+';'):'')+'">'
+        + (gv ? gv.toLocaleString() : '-') + '</td></tr>';
+      return h;
+    };
+    html += amtRow("출고가 금액", c=>c.listAmt, "출고가 × 예약수량", false);
+    html += amtRow("판매가 금액", c=>c.saleAmt, "판매가 × 예약수량", false);
+    html += amtRow("차액", c=>(c.saleAmt - c.listAmt), "판매가 − 출고가", true);
+
     html += '</tbody></table></div>';
-    html += '<p class="desc" style="margin-top:10px;">모델·색상 × 거래처 기준 집계입니다. 수정·배정은 위 <b>예약 목록</b>에서 하세요. 주문 수량에 마우스를 올리면 판매가가 보입니다.</p>';
+    html += '<p class="desc" style="margin-top:10px;">모델·색상 × 거래처 기준 집계입니다. 업체마다 굵은 세로선으로 구분했고, 아래 세 줄에 <b>업체별 금액</b>이 나옵니다. 수정·배정은 위 <b>예약 목록</b>에서 하세요. 주문 수량에 마우스를 올리면 그 칸의 판매가와 금액이 보입니다. 판매가 미입력 건이 있으면 <b>!</b> 표시가 붙고 그 건은 금액에서 제외됩니다.</p>';
 
     el.innerHTML = html;
     loadReservationList();
