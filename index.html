@@ -98,6 +98,14 @@
   .combo-item:first-child{ border-top:none; }
   .combo-item:hover, .combo-item.active{ background:#e6e6e6; }
   .combo-empty{ padding:8px 10px; font-size:12.5px; color:var(--gray); }
+  /* 마스터재고 대조 결과줄 */
+  .master-hint{ font-size:12px; line-height:1.75; padding:0; }
+  .master-hint:not(:empty){ padding:7px 9px; border:1px solid var(--line); border-top:none; background:#fafafa; }
+  .master-hint b{ color:var(--navy); }
+  .master-hint .mh-ok{ color:#2e7d32; font-weight:700; }
+  .master-hint .mh-warn{ color:var(--danger); font-weight:700; }
+  .master-hint .mh-btn{ border:1px solid var(--navy); background:#fff; color:var(--navy); font-size:11.5px; padding:1px 7px; margin-left:5px; cursor:pointer; font-family:inherit; }
+  .master-hint .mh-btn:hover{ background:#eee; }
   /* 목록 상단 툴바 — 칸을 붙여서 한 줄로 */
   .tbar{ border:1px solid var(--line); background:#fff; padding:5px 7px; margin-bottom:8px; }
   .tbar-row{ display:flex; flex-wrap:wrap; align-items:center; row-gap:4px; }
@@ -570,7 +578,8 @@
         <div class="stack-form">
           <div class="stack-row"><label>펫네임</label><input type="text" id="ms-pet-input" placeholder="예: 갤럭시Z 폴드7"></div>
           <div class="stack-row"><label>전산모델명</label><input type="text" id="ms-system-input" placeholder="예: SM-F976N256"></div>
-          <div class="stack-row"><label>모델명</label><input type="text" id="ms-base-input" placeholder="예: SM-F976N"></div>
+          <div class="stack-row"><label>모델명 <span class="info-tip" title="마스터재고 파일의 '모델코드'와 같은 값입니다. 입력하면 아래에 파일 속 펫네임을 찾아 보여줍니다.">ⓘ</span></label><input type="text" id="ms-base-input" placeholder="예: SM-F976N" oninput="checkMasterPetName('ms')"></div>
+          <div class="master-hint" id="ms-master-hint"></div>
           <div class="stack-row"><label>용량</label><input type="text" id="ms-capacity-input" placeholder="예: 256GB"></div>
           <div class="stack-row"><label>출고가 (VAT포함)</label><input type="number" id="ms-price-input"></div>
           <div class="stack-row"><label>닉네임</label><input type="text" id="ms-nick-input"></div>
@@ -603,7 +612,8 @@
           <div class="stack-row"><label>모델군 (내부 식별용)</label><input type="text" id="me-group-input"></div>
           <div class="stack-row"><label>펫네임</label><input type="text" id="me-pet-input"></div>
           <div class="stack-row"><label>전산모델명</label><input type="text" id="me-system-input"></div>
-          <div class="stack-row"><label>모델명</label><input type="text" id="me-base-input"></div>
+          <div class="stack-row"><label>모델명 <span class="info-tip" title="마스터재고 파일의 '모델코드'와 같은 값입니다. 입력하면 아래에 파일 속 펫네임을 찾아 보여줍니다.">ⓘ</span></label><input type="text" id="me-base-input" oninput="checkMasterPetName('me')"></div>
+          <div class="master-hint" id="me-master-hint"></div>
           <div class="stack-row"><label>용량</label><input type="text" id="me-capacity-input"></div>
           <div class="stack-row"><label>출고가 (VAT포함)</label><input type="number" id="me-price-input"></div>
           <div class="stack-row"><label>닉네임</label><input type="text" id="me-nick-input"></div>
@@ -1263,10 +1273,12 @@
     if(pre === null && other === null) return null;   // 둘 다 없으면 0 대신 빈칸
     return (pre || 0) + (other || 0);
   }
-  const numFmt = v => (v === null || v === "") ? "-" : Number(v).toLocaleString();
-  const pctFmt = v => (v === null || v === "") ? "-" : Number(v).toFixed(2)+"%";
-  // 할인 항목은 "0" 과 "할인 없음"이 실무상 같은 뜻이라 0도 "-"로 표시하고 엑셀에는 빈칸으로 내보냅니다.
-  const isBlankDisc = v => (v === null || v === "" || Number(v) === 0);
+  // v == null 은 null 과 undefined 를 모두 걸러냅니다. 저장된 적 없는 필드는 undefined 이므로 반드시 필요합니다.
+  const isBlankNum = v => (v == null || v === "" || !isFinite(Number(v)));
+  const numFmt = v => isBlankNum(v) ? "-" : Number(v).toLocaleString();
+  const pctFmt = v => isBlankNum(v) ? "-" : Number(v).toFixed(2)+"%";
+  // 할인 항목은 "0"과 "할인 없음"이 실무상 같은 뜻이라 0도 "-"로 표시하고 엑셀에는 빈칸으로 내보냅니다.
+  const isBlankDisc = v => (isBlankNum(v) || Number(v) === 0);
   const discFmt    = v => isBlankDisc(v) ? "-" : Number(v).toLocaleString();
   const discPctFmt = v => isBlankDisc(v) ? "-" : Number(v).toFixed(2)+"%";
   const discRaw    = v => isBlankDisc(v) ? ""  : Number(v);
@@ -1289,7 +1301,7 @@
     { key:"systemColor", label:"전산색상", get:it=>it.systemColor||"-" },
     { key:"sku", label:"삼성모델명(SKU)", get:it=>it.sku||"-" },
     { key:"serialNumber", label:"일련번호", get:it=> it.entryType==="imei" ? (it.serialNumber||"-") : "-" },
-    { key:"quantity", label:"수량", get:it=> it.entryType==="imei" ? "1" : (it.quantity+"") },
+    { key:"quantity", label:"수량", get:it=> it.entryType==="imei" ? "1" : (it.quantity != null ? String(it.quantity) : "-") },
     { key:"imei", label:"IMEI", get:it=>it.imei||"-" },
     { key:"listPrice", label:"출고가", get:it=>it.listPrice?Number(it.listPrice).toLocaleString():"-", getRaw:it=>it.listPrice!=null?Number(it.listPrice):"" },
     { key:"purchasePrice", label:"입고가", get:it=>it.purchasePrice?Number(it.purchasePrice).toLocaleString():"-", getRaw:it=>it.purchasePrice!=null?Number(it.purchasePrice):"" },
@@ -2294,6 +2306,7 @@
     document.getElementById("me-price-input").value = m.priceIncVat || "";
     document.getElementById("me-nick-input").value = m.nickname || "";
     document.getElementById("model-edit-modal-overlay").style.display = "flex";
+    checkMasterPetName("me");   // 열자마자 기존 모델명으로 대조해서 검수
   };
   window.closeModelEditModal = function(){
     document.getElementById("model-edit-modal-overlay").style.display = "none";
@@ -2567,8 +2580,146 @@
   }
 
   // ---------- 모델 등록 팝업 (개별) ----------
+  // ---------- 마스터재고 파일과 모델명·펫네임 대조 ----------
+  // 파일 컬럼 대응: 파일의 "모델코드" = 이 시스템의 "모델명" / 파일의 "모델명" = 이 시스템의 "펫네임"
+  let masterModelIndex = null;      // { 모델코드: { pets:{펫네임:건수}, total } }
+  let masterHintCandidates = [];    // 버튼에서 참조할 후보 목록 (따옴표 escape 문제 방지용)
+  const MS_CODE_KEYS = ["모델코드","모델 코드"];
+  const MS_PET_KEYS  = ["모델명","모델 명"];
+
+  // 마스터재고 파일에는 "모델명" 컬럼이 두 개 있고 뒤쪽은 비어 있는 경우가 많습니다.
+  // 접미사가 붙은 키(모델명_1 등)까지 훑어서 값이 있는 것을 사용합니다.
+  function pickMasterVal(row, keys){
+    for(const base of keys){
+      for(const k of Object.keys(row)){
+        if(k === base || k.startsWith(base+"_")){
+          const v = String(row[k] == null ? "" : row[k]).trim();
+          if(v) return v;
+        }
+      }
+    }
+    return "";
+  }
+
+  async function buildMasterModelIndex(force){
+    if(masterModelIndex && !force) return masterModelIndex;
+    const batchSnap = await getDocs(query(collection(db,"masterStockBatches"), orderBy("uploadedAt","desc"), limit(1)));
+    if(batchSnap.empty){ masterModelIndex = {}; return masterModelIndex; }
+
+    // 업로드할 때 만들어 둔 대조표가 있으면 그대로 사용 (정확하고 빠름)
+    const saved = batchSnap.docs[0].data().modelIndex;
+    if(saved && Object.keys(saved).length > 0){ masterModelIndex = saved; return masterModelIndex; }
+
+    // 예전에 올린 파일은 대조표가 없으므로 저장된 행을 훑어서 만듦
+    const rows = await fetchMasterStockBatchRows(batchSnap.docs[0].id);
+    const idx = {};
+    rows.forEach(r=>{
+      const code = pickMasterVal(r, MS_CODE_KEYS);
+      const pet  = pickMasterVal(r, MS_PET_KEYS);
+      if(!code || code === "모델코드") return;   // 머리글이 한 번 더 들어간 행 제외
+      if(!idx[code]) idx[code] = { pets:{}, total:0 };
+      idx[code].total++;
+      if(pet && pet !== "모델명"){ idx[code].pets[pet] = (idx[code].pets[pet]||0) + 1; }
+    });
+    masterModelIndex = idx;
+    return idx;
+  }
+  window.refreshMasterModelIndex = function(){ masterModelIndex = null; };
+
+  window.applyMasterHint = function(prefix, i){
+    const c = masterHintCandidates[i];
+    if(!c) return;
+    if(c.code) document.getElementById(prefix+"-base-input").value = c.code;
+    if(c.pet)  document.getElementById(prefix+"-pet-input").value = c.pet;
+    checkMasterPetName(prefix);
+  };
+
+  window.clearMasterHint = function(prefix){
+    const el = document.getElementById(prefix+"-master-hint");
+    if(el) el.innerHTML = "";
+  };
+
+  window.checkMasterPetName = async function(prefix){
+    const baseEl = document.getElementById(prefix+"-base-input");
+    const hintEl = document.getElementById(prefix+"-master-hint");
+    if(!baseEl || !hintEl) return;
+    const term = baseEl.value.trim();
+    masterHintCandidates = [];
+    if(!term){ hintEl.innerHTML = ""; return; }
+
+    hintEl.innerHTML = '<span style="color:var(--gray);">마스터재고 대조 중...</span>';
+    const idx = await buildMasterModelIndex();
+    if(baseEl.value.trim() !== term) return;   // 그 사이 더 입력했으면 이 결과는 버림
+
+    const codes = Object.keys(idx);
+    if(codes.length === 0){
+      hintEl.innerHTML = '<span class="mh-warn">대조할 마스터재고 파일이 없습니다.</span> 자료업로드 탭에서 먼저 올려주세요.';
+      return;
+    }
+
+    const lower = term.toLowerCase();
+    const exactCode = codes.find(c => c.toLowerCase() === lower);
+    let html = "";
+
+    if(exactCode){
+      const info = idx[exactCode];
+      const pets = Object.entries(info.pets).sort((a,b)=>b[1]-a[1]);
+      html += '<span class="mh-ok">모델코드 일치</span> — 마스터재고 ' + info.total + '건';
+      if(pets.length === 0){
+        html += '<br><span class="mh-warn">파일에 펫네임(모델명)이 비어 있습니다.</span>';
+      }else{
+        pets.forEach(([pet, cnt])=>{
+          const i = masterHintCandidates.push({ code:exactCode, pet }) - 1;
+          html += '<br>펫네임 <b>' + comboEsc(pet) + '</b> <span style="color:var(--gray);">(' + cnt + '건)</span>'
+                + '<button type="button" class="mh-btn" onclick="applyMasterHint(\'' + prefix + '\',' + i + ')">펫네임 칸에 넣기</button>';
+        });
+        if(pets.length > 1){
+          html += '<br><span class="mh-warn">같은 모델코드에 펫네임이 ' + pets.length + '종류입니다 — 어느 것이 맞는지 확인해주세요.</span>';
+        }
+      }
+    }else{
+      // 모델코드 부분일치
+      const partial = codes.filter(c => c.toLowerCase().includes(lower)).slice(0, 8);
+      // 거꾸로, 입력값이 펫네임인 경우도 찾아줌 (모델명 칸에 펫네임을 넣은 실수 검수)
+      const asPet = [];
+      codes.forEach(c=>{
+        Object.keys(idx[c].pets).forEach(pet=>{
+          if(pet.toLowerCase().includes(lower)) asPet.push({ code:c, pet, cnt:idx[c].pets[pet] });
+        });
+      });
+
+      if(partial.length === 0 && asPet.length === 0){
+        html += '<span class="mh-warn">마스터재고에 없는 값입니다.</span> 오타이거나, 최신 파일을 아직 올리지 않았을 수 있습니다.';
+      }else{
+        if(partial.length > 0){
+          html += '<span style="color:var(--gray);">비슷한 모델코드 ' + partial.length + '개</span>';
+          partial.forEach(c=>{
+            const pets = Object.entries(idx[c].pets).sort((a,b)=>b[1]-a[1]);
+            const pet = pets.length ? pets[0][0] : "";
+            const i = masterHintCandidates.push({ code:c, pet }) - 1;
+            html += '<br><b>' + comboEsc(c) + '</b> → ' + (pet ? comboEsc(pet) : '<span style="color:var(--gray);">펫네임 없음</span>')
+                  + ' <span style="color:var(--gray);">(' + idx[c].total + '건)</span>'
+                  + '<button type="button" class="mh-btn" onclick="applyMasterHint(\'' + prefix + '\',' + i + ')">이걸로 채우기</button>';
+          });
+        }
+        if(asPet.length > 0){
+          html += (partial.length>0 ? '<br>' : '')
+                + '<span class="mh-warn">입력하신 값은 펫네임 쪽에서 발견됐습니다</span> <span style="color:var(--gray);">— 모델명 칸에는 모델코드를 넣어주세요</span>';
+          asPet.slice(0,5).forEach(x=>{
+            const i = masterHintCandidates.push({ code:x.code, pet:x.pet }) - 1;
+            html += '<br>모델코드 <b>' + comboEsc(x.code) + '</b> · 펫네임 ' + comboEsc(x.pet)
+                  + ' <span style="color:var(--gray);">(' + x.cnt + '건)</span>'
+                  + '<button type="button" class="mh-btn" onclick="applyMasterHint(\'' + prefix + '\',' + i + ')">두 칸 모두 채우기</button>';
+          });
+        }
+      }
+    }
+    hintEl.innerHTML = html;
+  };
+
   window.openModelSingleModal = function(){
     document.getElementById("model-single-modal-overlay").style.display = "flex";
+    clearMasterHint("ms");
   };
   window.closeModelSingleModal = function(){
     document.getElementById("model-single-modal-overlay").style.display = "none";
@@ -3804,7 +3955,7 @@
       row.style.alignItems = "flex-start"; row.style.flexWrap = "wrap";
       row.innerHTML =
         '<span style="font-size:12.5px;">' +
-        '<b>'+p.totalAmount.toLocaleString()+'</b> · 주문 '+p.orderBatchIds.length+'건'+(p.otherAmount?' + 기타 '+p.otherAmount.toLocaleString():'')+' · 요청일 '+p.requestDate+' · 상태 <b>'+p.status+'</b><br>' +
+        '<b>'+(p.totalAmount||0).toLocaleString()+'</b> · 주문 '+p.orderBatchIds.length+'건'+(p.otherAmount?' + 기타 '+p.otherAmount.toLocaleString():'')+' · 요청일 '+p.requestDate+' · 상태 <b>'+p.status+'</b><br>' +
         '<label style="margin-right:12px;"><input type="checkbox" class="pr-transfer-cb" data-id="'+d.id+'" '+(p.transferCompleted?'checked':'')+' '+(p.status==='취소'?'disabled':'')+'> 이체완료</label>' +
         '<label><input type="checkbox" class="pr-tax-cb" data-id="'+d.id+'" '+(p.taxInvoiceIssued?'checked':'')+' '+(p.status==='취소'?'disabled':'')+'> 세금계산서 발행완료</label>' +
         '</span>' +
@@ -3820,7 +3971,7 @@
           for(const bId of p.orderBatchIds){
             await updateDoc(doc(db,"orderBatches", bId), { depositPaid:true, depositPaidDate: dateStr });
           }
-          logAction("출금요청 이체완료 처리", p.totalAmount.toLocaleString()+" / "+p.orderBatchIds.length+"건");
+          logAction("출금요청 이체완료 처리", (p.totalAmount||0).toLocaleString()+" / "+p.orderBatchIds.length+"건");
         }
         loadPaymentRequestList(); loadOrderList(); loadSettlementTab();
       };
@@ -3839,7 +3990,7 @@
           for(const bId of p.orderBatchIds){
             await updateDoc(doc(db,"orderBatches", bId), { paymentRequestId: null });
           }
-          logAction("출금요청 취소", p.totalAmount.toLocaleString());
+          logAction("출금요청 취소", (p.totalAmount||0).toLocaleString());
           loadPaymentRequestList(); loadOrderList(); loadSettlementTab();
         };
       }
@@ -3886,7 +4037,7 @@
       row.style.alignItems = "flex-start"; row.style.flexWrap = "wrap";
       row.innerHTML =
         '<span style="font-size:12.5px;">' +
-        '<b>'+p.totalAmount.toLocaleString()+'</b> · 판매요청 '+p.saleBatchRefs.length+'건'+(p.otherAmount?' + 기타 '+p.otherAmount.toLocaleString():'')+' · 요청일 '+p.requestDate+' · 상태 <b>'+p.status+'</b><br>' +
+        '<b>'+(p.totalAmount||0).toLocaleString()+'</b> · 판매요청 '+p.saleBatchRefs.length+'건'+(p.otherAmount?' + 기타 '+p.otherAmount.toLocaleString():'')+' · 요청일 '+p.requestDate+' · 상태 <b>'+p.status+'</b><br>' +
         '<label style="margin-right:12px;"><input type="checkbox" class="sdr-deposit-cb" data-id="'+d.id+'" '+(p.depositCompleted?'checked':'')+' '+(p.status==='취소'?'disabled':'')+'> 입금완료</label>' +
         '<label><input type="checkbox" class="sdr-tax-cb" data-id="'+d.id+'" '+(p.taxInvoiceIssued?'checked':'')+' '+(p.status==='취소'?'disabled':'')+'> 세금계산서 발행완료</label>' +
         '</span>' +
@@ -3903,7 +4054,7 @@
             const col = b.isLegacy ? "saleRequests" : "saleRequestBatches";
             await updateDoc(doc(db, col, b.id), { depositReceived:true, depositReceivedDate: dateStr, status:"입금완료" });
           }
-          logAction("판매 입금요청 입금완료 처리", p.totalAmount.toLocaleString()+" / "+p.saleBatchRefs.length+"건");
+          logAction("판매 입금요청 입금완료 처리", (p.totalAmount||0).toLocaleString()+" / "+p.saleBatchRefs.length+"건");
         }
         loadSaleDepositRequestList(); loadSaleRequestList(); loadSettlementTab();
       };
@@ -3923,7 +4074,7 @@
             const col = b.isLegacy ? "saleRequests" : "saleRequestBatches";
             await updateDoc(doc(db, col, b.id), { depositRequestId: null });
           }
-          logAction("판매 입금요청 취소", p.totalAmount.toLocaleString());
+          logAction("판매 입금요청 취소", (p.totalAmount||0).toLocaleString());
           loadSaleDepositRequestList(); loadSaleRequestList(); loadSettlementTab();
         };
       }
@@ -5360,10 +5511,29 @@
     const ws = wb.Sheets[wb.SheetNames[0]];
     const rows = XLSX.utils.sheet_to_json(ws, { defval:"" });
     if(rows.length===0){ msgEl.style.color="var(--danger)"; msgEl.textContent = "읽을 데이터가 없습니다."; return; }
-    const headerRow = (XLSX.utils.sheet_to_json(ws, { header:1, defval:"" })[0]||[]).map(h=>String(h||"").trim()).filter(h=>h);
+    const aoa = XLSX.utils.sheet_to_json(ws, { header:1, defval:"" });
+    const headerRaw = (aoa[0]||[]).map(h=>String(h||"").trim());
+    const headerRow = headerRaw.filter(h=>h);
+
+    // 모델코드 ↔ 모델명(=이 시스템의 펫네임) 대조표를 "열 위치" 기준으로 미리 만들어 둡니다.
+    // 이 파일은 "모델명" 컬럼이 두 개라, 이름으로 찾으면 값이 빈 뒤쪽 컬럼에 덮여 사라질 수 있습니다.
+    const codeCols = headerRaw.map((h,i)=>[h,i]).filter(x=>x[0]==="모델코드").map(x=>x[1]);
+    const petCols  = headerRaw.map((h,i)=>[h,i]).filter(x=>x[0]==="모델명").map(x=>x[1]);
+    const modelIndex = {};
+    for(let r=1; r<aoa.length; r++){
+      const line = aoa[r] || [];
+      const cellVal = (i)=> String(line[i]==null ? "" : line[i]).trim();
+      let code = ""; for(const i of codeCols){ if(cellVal(i)){ code = cellVal(i); break; } }
+      let pet  = "";  for(const i of petCols){ if(cellVal(i)){ pet  = cellVal(i); break; } }
+      if(!code || code === "모델코드") continue;      // 머리글이 반복된 행은 제외
+      if(!modelIndex[code]) modelIndex[code] = { pets:{}, total:0 };
+      modelIndex[code].total++;
+      if(pet && pet !== "모델명") modelIndex[code].pets[pet] = (modelIndex[code].pets[pet]||0) + 1;
+    }
 
     const batchRef = await addDoc(collection(db,"masterStockBatches"), {
       fileName: file.name, rowCount: rows.length, columnOrder: headerRow,
+      modelIndex,
       uploadedBy: currentUser.name, uploadedByUsername: currentUser.username,
       uploadedAt: serverTimestamp()
     });
@@ -5371,6 +5541,7 @@
       await addDoc(collection(db,"masterStockRows"), { batchId: batchRef.id, ...row });
     }
     logAction("마스터재고 업로드", file.name + " ("+rows.length+"행)");
+    refreshMasterModelIndex();   // 새 파일 기준으로 다시 대조하도록 캐시 초기화
     msgEl.style.color = "var(--navy)"; msgEl.textContent = rows.length+"행이 그대로 업로드되었습니다.";
     fileInput.value = "";
     currentMasterStockBatchId = null;
