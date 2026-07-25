@@ -747,7 +747,7 @@
 
       <div class="card">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:7px;">
-          <h3 data-label-key="inv-list-title" style="margin:0;"><span class="tab-label-text">재고 목록</span> <span class="info-tip" data-label-key="desc-serial-warning" title="번호 옆 ● 표시는 최신 마스터재고 파일에서 해당 일련번호가 확인되지 않았다는 뜻입니다 — 이미 판매되었을 가능성이 있으니 확인해주세요.">ⓘ</span></h3>
+          <h3 data-label-key="inv-list-title" style="margin:0;"><span class="tab-label-text">재고 목록</span> <span class="info-tip" data-label-key="desc-serial-warning" title="번호 옆 ● 표시는 최신 마스터재고(LG 전산) 파일에서 해당 일련번호가 확인되지 않았다는 뜻입니다 — 이미 판매되었을 가능성이 있으니 확인해주세요. SK·KT향 재고는 LG 전산에 없으므로 대조하지 않습니다.">ⓘ</span></h3>
           <button class="btn small" style="width:auto;" onclick="openItemModal()">+ 재고 등록</button>
         </div>
 
@@ -2689,7 +2689,7 @@
       });
 
       if(partial.length === 0 && asPet.length === 0){
-        html += '<span class="mh-warn">마스터재고에 없는 값입니다.</span> 오타이거나, 최신 파일을 아직 올리지 않았을 수 있습니다.';
+        html += '<span class="mh-warn">LG 전산(마스터재고)에 없는 값입니다.</span> SK·KT 전용 모델이거나, 오타이거나, 최신 파일을 아직 올리지 않았을 수 있습니다.';
       }else{
         if(partial.length > 0){
           html += '<span style="color:var(--gray);">비슷한 모델코드 ' + partial.length + '개</span>';
@@ -5944,8 +5944,11 @@
       const rowNum = startIndex + i + 1;
       const tr = document.createElement("tr");
       const tdNum = document.createElement("td");
-      const possiblySold = masterStockSerials && it.entryType==="imei" && it.serialNumber && it.status!=="판매" && !masterStockSerials.has(String(it.serialNumber).trim());
-      tdNum.innerHTML = rowNum + (possiblySold ? ' <span title="마스터재고에서 확인되지 않음 — 판매되었을 가능성" style="color:var(--danger);">●</span>' : '');
+      // 마스터재고는 LG유플러스 대리점 전산 자료입니다.
+      // SK·KT향 단말기는 애초에 이 전산에 없으므로 대조 대상에서 제외합니다(상시 오경고 방지).
+      const isLgItem = String(it.carrier || "").toUpperCase().includes("LG");
+      const possiblySold = masterStockSerials && isLgItem && it.entryType==="imei" && it.serialNumber && it.status!=="판매" && !masterStockSerials.has(String(it.serialNumber).trim());
+      tdNum.innerHTML = rowNum + (possiblySold ? ' <span title="LG 전산(마스터재고)에서 확인되지 않음 — 판매되었을 가능성" style="color:var(--danger);">●</span>' : '');
       tdNum.style.color = "var(--gray)";
       tr.appendChild(tdNum);
       const tdCheck = document.createElement("td");
