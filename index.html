@@ -1138,7 +1138,10 @@
   function toEmail(u){ return u.trim().toLowerCase() + EMAIL_DOMAIN; }
 
   const PERMISSION_LABELS = {
-    dashboard:"대시보드 조회", input:"작업페이지 입력 (재고등록·주문·판매·자료업로드)", excelExport:"엑셀 다운로드",
+    dashboard:"대시보드 조회",
+    menuInvWork:"메뉴: 재고 등록", menuInvUpload:"　└ 재고 등록 내 업로드 (파일/텍스트 붙여넣기)",
+    menuOrders:"메뉴: 주문 관리", menuSaleReq:"메뉴: 판매 관리", menuDataUpload:"메뉴: 자료업로드",
+    excelExport:"엑셀 다운로드",
     bulkEdit:"재고 일괄수정 (다운로드/업로드로 기존 재고 값 변경)",
     uiCustomize:"화면 문구·버튼 이름 수정 (마우스 오른쪽 클릭)",
     userApproval:"사용자 승인·추방", permissionManage:"권한 설정 관리(전체 관리자)",
@@ -1707,7 +1710,7 @@
     closePersonalSettingsModal();
   };
 
-  const ALL_PERM_KEYS = ["dashboard","input","excelExport","bulkEdit","uiCustomize","userApproval","permissionManage","teamManage","inventorySettings","settlementSettings","siteSettings","dataReset"];
+  const ALL_PERM_KEYS = ["dashboard","menuInvWork","menuInvUpload","menuOrders","menuSaleReq","menuDataUpload","excelExport","bulkEdit","uiCustomize","userApproval","permissionManage","teamManage","inventorySettings","settlementSettings","siteSettings","dataReset"];
 
   async function loadUserAdminList(){
     const listEl = document.getElementById("user-admin-list");
@@ -2749,6 +2752,7 @@
 
   // ---------- 재고 엑셀 업로드 팝업 ----------
   window.openExcelUploadModal = function(){
+    if(!hasPerm(currentUserPerms, "menuInvUpload")){ alert("이 기능을 사용할 권한이 없습니다. 관리자에게 요청해주세요."); return; }
     document.getElementById("excel-result").innerHTML = "";
     document.getElementById("excel-file-input").value = "";
     excelMappingSheet = null;
@@ -2774,8 +2778,9 @@
     document.getElementById("item-modal-title").textContent = "재고 입고 등록";
     document.getElementById("item-submit-btn").textContent = "재고 등록";
     document.getElementById("item-cancelsale-btn").style.display = "none";
-    document.getElementById("item-modal-excel-btn").style.display = "inline-block";
-    document.getElementById("item-modal-paste-btn").style.display = "inline-block";
+    const canInvUpload = hasPerm(currentUserPerms, "menuInvUpload");
+    document.getElementById("item-modal-excel-btn").style.display = canInvUpload ? "inline-block" : "none";
+    document.getElementById("item-modal-paste-btn").style.display = canInvUpload ? "inline-block" : "none";
     const canBulkEdit = hasPerm(currentUserPerms, "bulkEdit");
     document.getElementById("item-modal-bulkdown-btn").style.display = canBulkEdit ? "inline-block" : "none";
     document.getElementById("item-modal-bulkup-btn").style.display = canBulkEdit ? "inline-block" : "none";
@@ -5625,6 +5630,7 @@
 
   // ---------- 텍스트 붙여넣기 등록 ----------
   window.openPasteRegisterModal = function(){
+    if(!hasPerm(currentUserPerms, "menuInvUpload")){ alert("이 기능을 사용할 권한이 없습니다. 관리자에게 요청해주세요."); return; }
     document.getElementById("paste-register-textarea").value = "";
     document.getElementById("paste-register-analysis").innerHTML = "";
     document.getElementById("paste-register-modal-overlay").style.display = "flex";
@@ -6696,11 +6702,15 @@
       const showSettlement = hasPerm(perms,"settlementSettings");
       const showLogs = (perms.permissionManage === true);
       const showDashboard = hasPerm(perms,"dashboard");
-      const showInvWork = hasPerm(perms,"input");
+      const showInvWork = hasPerm(perms,"menuInvWork");
+      const showOrders = hasPerm(perms,"menuOrders");
+      const showSaleReq = hasPerm(perms,"menuSaleReq");
+      const showDataUpload = hasPerm(perms,"menuDataUpload");
+      const showAnyWorkMenu = (showInvWork||showOrders||showSaleReq||showDataUpload);
       if(showUsers) updateUserAdminBadge();
 
       document.getElementById("tabbtn-site").style.display = showSite ? "block":"none";
-      document.getElementById("tabbtn-notices").style.display = (showDashboard||showInvWork) ? "block":"none";
+      document.getElementById("tabbtn-notices").style.display = (showDashboard||showAnyWorkMenu) ? "block":"none";
       document.getElementById("tabbtn-team").style.display = showTeam ? "block":"none";
       document.getElementById("tabbtn-inv-admin").style.display = showInvAdmin ? "block":"none";
       document.getElementById("tabbtn-users").style.display = showUsers ? "block":"none";
@@ -6709,16 +6719,16 @@
       document.getElementById("tabbtn-logs").style.display = showLogs ? "block":"none";
       document.getElementById("tabbtn-dashboard").style.display = showDashboard ? "block":"none";
       document.getElementById("tabbtn-inv-work").style.display = showInvWork ? "block":"none";
-      document.getElementById("tabbtn-data-upload").style.display = showInvWork ? "block":"none";
-      document.getElementById("tabbtn-orders").style.display = showInvWork ? "block":"none";
-      document.getElementById("tabbtn-salereq").style.display = showInvWork ? "block":"none";
+      document.getElementById("tabbtn-data-upload").style.display = showDataUpload ? "block":"none";
+      document.getElementById("tabbtn-orders").style.display = showOrders ? "block":"none";
+      document.getElementById("tabbtn-salereq").style.display = showSaleReq ? "block":"none";
 
       const hasAnyAdmin = (showSite||showTeam||showInvAdmin||showUsers||showSettlement||showLogs);
       document.getElementById("admin-toggle-btn").style.display = hasAnyAdmin ? "block":"none";
       document.getElementById("admin-group").style.display = "none";
       document.getElementById("inv-admin-submenu").style.display = "none";
       document.getElementById("work-group").style.display =
-        (showDashboard||showInvWork) ? "block":"none";
+        (showDashboard||showAnyWorkMenu) ? "block":"none";
 
       if(showSite){
         document.getElementById("site-name-input").value = currentSettings.siteName || DEFAULT_SITE_NAME;
