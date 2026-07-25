@@ -279,7 +279,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-07-25 v85</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-07-25 v86</span>
       <span id="topbar-username">-</span>
       <button onclick="openPersonalSettingsModal()">개인설정</button>
       <button onclick="handleLogout()">로그아웃</button>
@@ -1784,6 +1784,7 @@
     bulkModelApply:"⚠ 같은 모델 전체 일괄변경 (위험 — 승인자만)",
     companyEdit:"업체 정보 수정·삭제 (추가는 누구나 가능)",
     listPriceOverride:"출고가 직접 입력 (모델 등록값과 다르게 저장)",
+    cancelDelete:"⚠ 취소된 주문·판매요청 삭제 (되돌릴 수 없음)",
     uiCustomize:"화면 문구·버튼 이름 수정 (마우스 오른쪽 클릭)",
     userApproval:"사용자 승인·추방", permissionManage:"권한 설정 관리(전체 관리자)",
     teamManage:"팀 관리", inventorySettings:"재고 기초설정 관리",
@@ -1792,7 +1793,7 @@
   // 권한을 성격별로 묶어서 보여줍니다 (화면에서 찾기 쉽게)
   const PERMISSION_GROUPS = [
     { title:"화면 메뉴", keys:["dashboard","menuInvWork","menuInvUpload","menuOrders","menuSaleReq","menuDataUpload"] },
-    { title:"기능", keys:["excelExport","bulkEdit","bulkModelApply","companyEdit","listPriceOverride","uiCustomize"] },
+    { title:"기능", keys:["excelExport","bulkEdit","bulkModelApply","companyEdit","listPriceOverride","cancelDelete","uiCustomize"] },
     { title:"관리자", keys:["userApproval","permissionManage","teamManage","inventorySettings","settlementSettings","siteSettings","dataReset"] }
   ];
   const PERMISSION_SUB_KEYS = ["menuInvUpload"];   // 상위 항목 아래에 들여쓰기할 항목
@@ -2663,7 +2664,7 @@
     closePersonalSettingsModal();
   };
 
-  const ALL_PERM_KEYS = ["dashboard","menuInvWork","menuInvUpload","menuOrders","menuSaleReq","menuDataUpload","excelExport","bulkEdit","bulkModelApply","companyEdit","listPriceOverride","uiCustomize","userApproval","permissionManage","teamManage","inventorySettings","settlementSettings","siteSettings","dataReset"];
+  const ALL_PERM_KEYS = ["dashboard","menuInvWork","menuInvUpload","menuOrders","menuSaleReq","menuDataUpload","excelExport","bulkEdit","bulkModelApply","companyEdit","listPriceOverride","cancelDelete","uiCustomize","userApproval","permissionManage","teamManage","inventorySettings","settlementSettings","siteSettings","dataReset"];
 
   async function loadUserAdminList(){
     const listEl = document.getElementById("user-admin-list");
@@ -5484,11 +5485,13 @@
         '<span style="font-size:12.5px;"><label style="margin-right:8px;"><input type="checkbox" class="order-pay-cb" data-batch-id="'+bd.id+'" data-amount="'+(b.depositRequired||0)+'" '+cbDisabled+'></label>' +
         stateBadge +
         '<b>'+(b.source||"-")+'</b> · 주문일 '+(b.orderDate||"-")+' · 품목 '+lines.length+'개 (도착대기 '+remainTotal+') · '+depositLabel+
-        '<br>'+stampText(b)+'</span>' +
+        cancelText(b) + '<br>'+stampText(b)+'</span>' +
         '<span>' +
         '<button class="btn small secondary" style="width:auto;" data-detail="'+bd.id+'">상세보기</button>' +
         (!isCancelled ? '<button class="btn small secondary" style="width:auto;" data-edit-batch="'+bd.id+'">수정</button>' : '') +
         (!isCancelled ? '<button class="btn small danger" style="width:auto;" data-cancel-batch="'+bd.id+'">취소</button>' : '') +
+        (isCancelled && hasPerm(currentUserPerms,"cancelDelete")
+          ? '<button class="btn small danger" style="width:auto;" title="취소된 주문을 완전히 지웁니다" data-del-batch="'+bd.id+'">삭제</button>' : '') +
         '</span>';
       listEl.appendChild(row);
       shown++;
@@ -5497,12 +5500,18 @@
       const ebBtn = row.querySelector('[data-edit-batch]');
       if(ebBtn) ebBtn.onclick = ()=> openBatchEdit("order", bd.id);
       // 입금(이체) 처리는 정산 관리에서만 합니다.
+      const delBtn = row.querySelector('[data-del-batch]');
+      if(delBtn) delBtn.onclick = ()=> deleteCancelledBatch("order", bd.id, b, lines);
       const cancelBtn = row.querySelector('[data-cancel-batch]');
       if(cancelBtn) cancelBtn.onclick = async ()=>{
         if(!confirm("이 주문 전체를 취소하시겠습니까? (이미 도착 등록된 재고는 그대로 유지됩니다)")) return;
-        await updateDoc(doc(db,"orderBatches", bd.id), { status:"취소" });
+        const reason = prompt("취소 사유를 입력해주세요. (필수)", "");
+        if(reason === null) return;
+        if(!String(reason).trim()){ alert("취소 사유를 입력해주세요."); return; }
+        await updateDoc(doc(db,"orderBatches", bd.id), { status:"취소", cancelReason:String(reason).trim(),
+          cancelledAt: serverTimestamp(), cancelledBy: currentUser.name });
         for(const o of lines){ await updateDoc(doc(db,"orders", o.id), { status:"취소" }); }
-        logAction("주문 전체 취소", b.source);
+        logAction("주문 전체 취소", b.source + " / 사유: " + String(reason).trim());
         loadOrderList();
       };
     });
@@ -7622,6 +7631,56 @@
   };
 
   // 목록 줄에 공통으로 붙는 작성일·수정일 표기
+  // 취소된 주문·판매요청을 완전히 삭제합니다. (권한 필요, 되돌릴 수 없음)
+  window.deleteCancelledBatch = async function(kind, id, b, lines){
+    if(!hasPerm(currentUserPerms, "cancelDelete")){ alert("삭제 권한이 없습니다."); return; }
+    if(b.status !== "취소"){ alert("취소된 건만 삭제할 수 있습니다."); return; }
+    const label = (kind === "order") ? "주문" : "판매요청";
+    const party = (kind === "order") ? (b.source||"-") : (b.destination||"-");
+
+    // 도착·매칭된 재고가 있으면 알려줍니다.
+    let linked = 0;
+    (lines||[]).forEach(l=>{
+      linked += ((kind === "order") ? (l.linkedItemIds||[]) : (l.matchedItemIds||[])).length;
+    });
+
+    if(!confirm(label + "을(를) 완전히 삭제합니다.\n\n"
+      + "  " + party + " · 품목 " + (lines||[]).length + "개\n"
+      + "  취소 사유: " + (b.cancelReason || "(없음)") + "\n\n"
+      + (linked > 0 ? "※ 연결된 재고 " + linked + "건이 있습니다. 재고는 지워지지 않고 연결만 끊깁니다.\n\n" : "")
+      + "되돌릴 수 없습니다. 진행하시겠습니까?")) return;
+    if(!confirm("다시 확인합니다. 정말 지우시겠습니까?")) return;
+
+    try{
+      const lineCol = (kind === "order") ? "orders" : "saleRequests";
+      const batchCol = (kind === "order") ? "orderBatches" : "saleRequestBatches";
+      const ids = (lines||[]).map(l=>l.id);
+      for(let i=0; i<ids.length; i+=300){
+        const bt = writeBatch(db);
+        ids.slice(i, i+300).forEach(lid=> bt.delete(doc(db, lineCol, lid)));
+        await bt.commit();
+      }
+      await deleteDoc(doc(db, batchCol, id));
+    }catch(e){
+      alert("삭제에 실패했습니다.\n" + ((e && e.message) ? e.message : String(e)));
+      return;
+    }
+    logAction(label + " 삭제(취소건)", party + " / 품목 " + (lines||[]).length + "개 / 사유: " + (b.cancelReason||"-"));
+    alert("삭제했습니다.");
+    if(kind === "order") loadOrderList(); else loadSaleRequestList();
+  };
+
+  // 취소된 건은 사유를 함께 보여줍니다.
+  function cancelText(b){
+    if(b.status !== "취소") return "";
+    const d = (b.cancelledAt && b.cancelledAt.seconds) ? new Date(b.cancelledAt.seconds*1000) : null;
+    const dt = d ? (d.getFullYear()+"."+String(d.getMonth()+1).padStart(2,"0")+"."+String(d.getDate()).padStart(2,"0")) : "";
+    return '<br><span style="font-size:11.5px;color:var(--danger);">취소 사유: '
+      + comboEsc(b.cancelReason || "(입력 안 됨)")
+      + (dt ? ' <span style="color:var(--gray);">· ' + dt + (b.cancelledBy ? ' ' + comboEsc(b.cancelledBy) : '') + '</span>' : '')
+      + '</span>';
+  }
+
   function stampText(b){
     const d = v => (v && v.seconds) ? new Date(v.seconds*1000) : null;
     const fmt = dt => dt ? (dt.getFullYear() + "." + String(dt.getMonth()+1).padStart(2,"0") + "." + String(dt.getDate()).padStart(2,"0")) : "-";
@@ -9095,27 +9154,36 @@
         '<span style="font-size:12.5px;"><label style="margin-right:8px;"><input type="checkbox" class="sale-pay-cb" data-batch-id="'+batchId+'" data-legacy="'+(isLegacy?'1':'0')+'" data-amount="'+(b.depositRequired||0)+'" '+cbDisabled+'></label>' +
         '<b>'+(b.destination||"-")+'</b> · 요청일 '+(b.requestDate||"-")+' · 품목 '+lines.length+'개 (판매대기 '
           + lines.reduce((n,l)=> n + Math.max(0, (Number(l.quantity)||0) - (Number(l.fulfilledCount)||0)), 0) + ') · '+depositLabel
-          + '<br>'+stampText(b)+(isLegacy?' <span style="color:var(--gray);">(기존건)</span>':'')+'</span>' +
+          + cancelText(b) + '<br>'+stampText(b)+(isLegacy?' <span style="color:var(--gray);">(기존건)</span>':'')+'</span>' +
         '<span>' +
         '<button class="btn small secondary" style="width:auto;" data-detail>상세보기</button>' +
         (!isLegacy && b.status !== "취소" ? '<button class="btn small secondary" style="width:auto;" data-edit-batch>수정</button>' : '') +
         (b.status !== "취소" ? '<button class="btn small danger" style="width:auto;" data-cancel>취소</button>' : '') +
+        (b.status === "취소" && !isLegacy && hasPerm(currentUserPerms,"cancelDelete")
+          ? '<button class="btn small danger" style="width:auto;" title="취소된 판매요청을 완전히 지웁니다" data-del-sale>삭제</button>' : '') +
         '</span>';
       listEl.appendChild(row);
 
       row.querySelector('[data-detail]').onclick = ()=> openSaleReqBatchDetailModal(batchId, b, lines, isLegacy);
+      const delSaleBtn = row.querySelector('[data-del-sale]');
+      if(delSaleBtn) delSaleBtn.onclick = ()=> deleteCancelledBatch("sale", batchId, b, lines);
       const ebBtn2 = row.querySelector('[data-edit-batch]');
       if(ebBtn2) ebBtn2.onclick = ()=> openBatchEdit("sale", batchId);
       // 입금 처리는 정산 관리에서만 합니다.
       row.querySelector('[data-cancel]').onclick = async ()=>{
         if(!confirm("이 판매요청을 취소하시겠습니까?")) return;
+        const reason = prompt("취소 사유를 입력해주세요. (필수)", "");
+        if(reason === null) return;
+        if(!String(reason).trim()){ alert("취소 사유를 입력해주세요."); return; }
+        const meta = { status:"취소", cancelReason:String(reason).trim(),
+          cancelledAt: serverTimestamp(), cancelledBy: currentUser.name };
         if(isLegacy){
-          await updateDoc(doc(db,"saleRequests", batchId), { status:"취소" });
+          await updateDoc(doc(db,"saleRequests", batchId), meta);
         }else{
-          await updateDoc(doc(db,"saleRequestBatches", batchId), { status:"취소" });
+          await updateDoc(doc(db,"saleRequestBatches", batchId), meta);
           for(const l of lines){ await updateDoc(doc(db,"saleRequests", l.id), { status:"취소" }); }
         }
-        logAction("판매요청 취소", b.destination||"-");
+        logAction("판매요청 취소", (b.destination||"-") + " / 사유: " + String(reason).trim());
         loadSaleRequestList();
       };
     }
