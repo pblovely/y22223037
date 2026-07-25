@@ -279,7 +279,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-07-25 v109</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-07-25 v112</span>
       <span id="topbar-username">-</span>
       <button onclick="openPersonalSettingsModal()">개인설정</button>
       <button onclick="handleLogout()">로그아웃</button>
@@ -1063,6 +1063,8 @@
       <div class="card">
         <h3>삼성 B2B 여신 관리 <span class="info-tip" title="포피플에서 삼성에 직접입금하거나 B2B대출로 입금하면 여신이 쌓입니다. 그 여신에서 단말기를 할인된 가격으로 주문해서 차감됩니다. B2B대출 관련 수수료·이자는 여신과 별개의 비용입니다.">ⓘ</span></h3>
         <div id="b2b-stat-cards" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px;"></div>
+        <button class="btn small secondary" style="width:auto;" onclick="repairB2BOrderUse()">주문사용 금액 정리</button>
+        <p class="desc" style="margin-top:6px;">여신으로 결제한 주문의 실제 금액과 <b>주문사용</b> 기록이 다르면 맞춰줍니다. 수기로 넣은 기록은 건드리지 않습니다.</p>
       </div>
 
       <div class="card">
@@ -5837,7 +5839,7 @@
     orderBatchLinesCache = ordersByBatch;
 
     // 요약: 도착대기 · 이체대기 (필터와 무관하게 전체 기준)
-    let arriveWait = 0, payWaitCnt = 0, payWaitAmt = 0, confirmCnt = 0, confirmAmt = 0;
+    let arriveWait = 0, payWaitCnt = 0, payWaitAmt = 0, confirmCnt = 0, confirmAmt = 0, creditCnt = 0, creditAmt = 0;
     batchSnap.forEach(bd=>{
       const b = bd.data();
       if(b.status === "취소") return;
@@ -5846,6 +5848,8 @@
       if(b.depositPaid !== true){
         payWaitCnt++; payWaitAmt += Number(b.depositRequired)||0;
         if(b.paymentRequestId){ confirmCnt++; confirmAmt += Number(b.depositRequired)||0; }
+      }else if(b.paymentMethod === "b2b_credit"){
+        creditCnt++; creditAmt += Number(b.depositRequired)||0;
       }
     });
     const oSum = document.getElementById("order-wait-summary");
@@ -5854,7 +5858,9 @@
         '<span style="color:#b8860b;font-weight:700;">도착대기 ' + arriveWait + '건</span>' +
         ' · <span style="color:var(--danger);font-weight:700;">이체대기 ' + payWaitCnt + '건</span>' +
         ' <span style="color:var(--gray);">' + payWaitAmt.toLocaleString() + '</span>' +
-        ' · <span style="color:#b8860b;font-weight:700;">입금확인중 ' + confirmCnt + '건</span>';
+        ' · <span style="color:#b8860b;font-weight:700;">입금확인중 ' + confirmCnt + '건</span>' +
+        (creditCnt ? ' · <span style="color:#6a1b9a;font-weight:700;">삼성여신 ' + creditCnt + '건</span>'
+                     + ' <span style="color:var(--gray);">' + creditAmt.toLocaleString() + '</span>' : '');
     }
 
     // 필터를 먼저 적용해 배열로 모은 뒤 페이지 단위로 그립니다.
@@ -5885,9 +5891,11 @@
       row.style.flexWrap = "wrap";
 
       const depositLabel = b.paymentMethod==="b2b_credit"
-        ? '<span style="color:#6a1b9a;font-weight:700;">삼성여신 결제('+(b.depositPaidDate||"-")+')</span>'
+        ? '<span style="color:#6a1b9a;font-weight:700;">삼성여신 결제 '+(b.depositRequired||0).toLocaleString()+'</span>'
+          + '<span style="color:var(--gray);"> ('+(b.depositPaidDate||"-")+')</span>'
         : (b.depositPaid
-          ? '<span style="color:#2e7d32;font-weight:700;">입금완료('+(b.depositPaidDate||"-")+')</span>'
+          ? '<span style="color:#2e7d32;font-weight:700;">입금완료 '+(b.depositRequired||0).toLocaleString()+'</span>'
+            + '<span style="color:var(--gray);"> ('+(b.depositPaidDate||"-")+')</span>'
           : (b.paymentRequestId
             ? '<span style="color:#b8860b;font-weight:700;">입금확인중 '+(b.depositRequired||0).toLocaleString()+'</span>'
             : '<span style="color:var(--danger);font-weight:700;">입금필요 '+(b.depositRequired||0).toLocaleString()+'</span>'));
@@ -6790,6 +6798,95 @@
     document.getElementById("payment-other-amount-input").value = "";
     loadOrderList();
     loadSettlementTab();
+  };
+
+  // 이 주문의 여신 차감 기록을 지우고 새 금액으로 다시 넣습니다. (중복 방지)
+  async function replaceB2BOrderUse(orderBatchId, amount, date, sourceName){
+    try{
+      const led = await getDocs(query(collection(db,"b2bLedger"), where("fromOrderBatchId","==",orderBatchId)));
+      for(const dd of led.docs) await deleteDoc(doc(db,"b2bLedger", dd.id));
+    }catch(e){}
+    if(Number(amount) > 0){
+      await addDoc(collection(db,"b2bLedger"), {
+        date: date || todayStr(), category:"order_use", amount: Number(amount),
+        memo: "주문 여신결제: " + (sourceName||"-"),
+        fromOrderBatchId: orderBatchId,
+        createdBy: currentUser.name, createdByUsername: currentUser.username, createdAt: serverTimestamp()
+      });
+    }
+  }
+
+  // 여신 주문사용 기록을 실제 주문금액과 맞춥니다.
+  // 중복·금액 불일치·삭제된 주문의 기록을 한 번에 바로잡습니다.
+  window.repairB2BOrderUse = async function(){
+    const obSnap = await getDocs(collection(db,"orderBatches"));
+    const orders = {};
+    obSnap.forEach(d=>{
+      const b = d.data();
+      orders[d.id] = {
+        isCredit: b.paymentMethod === "b2b_credit" && b.status !== "취소",
+        amount: Number(b.depositRequired)||0,
+        source: b.source||"-", date: b.depositPaidDate || b.orderDate || ""
+      };
+    });
+
+    const ledSnap = await getDocs(query(collection(db,"b2bLedger"), where("category","==","order_use")));
+    const byBatch = {};      // 주문묶음별 기록
+    const orphans = [];      // 주문이 없어진 기록
+    ledSnap.forEach(d=>{
+      const e = { id:d.id, ...d.data() };
+      const bid = e.fromOrderBatchId;
+      if(!bid){ return; }                       // 수기 입력분은 건드리지 않습니다
+      if(!orders[bid]){ orphans.push(e); return; }
+      if(!byBatch[bid]) byBatch[bid] = [];
+      byBatch[bid].push(e);
+    });
+
+    const toDelete = [...orphans];
+    const toFix = [];        // { bid, cur, should }
+    const toAdd = [];        // 여신인데 기록이 없는 주문
+
+    Object.keys(orders).forEach(bid=>{
+      const o = orders[bid];
+      const recs = byBatch[bid] || [];
+      const sum = recs.reduce((n,r)=> n + (Number(r.amount)||0), 0);
+      if(!o.isCredit){
+        recs.forEach(r=> toDelete.push(r));      // 여신 아닌데 기록이 있음
+      }else if(recs.length === 0){
+        toAdd.push({ bid, o });
+      }else if(recs.length > 1 || sum !== o.amount){
+        toFix.push({ bid, o, recs, sum });
+      }
+    });
+
+    if(toDelete.length===0 && toFix.length===0 && toAdd.length===0){
+      alert("여신 주문사용 기록이 모두 정확합니다."); return;
+    }
+    const preview = [
+      toDelete.length ? "· 지울 기록 " + toDelete.length + "건 (여신 아님·주문 없음)" : "",
+      toFix.length    ? "· 금액을 맞출 주문 " + toFix.length + "건" : "",
+      toAdd.length    ? "· 기록이 빠진 주문 " + toAdd.length + "건 추가" : ""
+    ].filter(Boolean).join("\n");
+    const detail = toFix.slice(0,5).map(x=>
+      "   " + x.o.source + " : " + x.sum.toLocaleString() + " → " + x.o.amount.toLocaleString()).join("\n");
+
+    if(!confirm("여신 주문사용 기록을 실제 주문금액과 맞춥니다.\n\n" + preview
+      + (detail ? "\n\n" + detail + (toFix.length>5 ? "\n   ... 외 " + (toFix.length-5) + "건" : "") : "")
+      + "\n\n수기로 넣은 기록(주문 연결 없음)은 건드리지 않습니다.\n진행하시겠습니까?")) return;
+
+    try{
+      for(const r of toDelete) await deleteDoc(doc(db,"b2bLedger", r.id));
+      for(const x of toFix)   await replaceB2BOrderUse(x.bid, x.o.amount, x.o.date, x.o.source);
+      for(const x of toAdd)   await replaceB2BOrderUse(x.bid, x.o.amount, x.o.date, x.o.source);
+    }catch(e){
+      alert("정리에 실패했습니다.\n" + ((e && e.message) ? e.message : String(e)));
+      return;
+    }
+    const bal = await getB2BBalance();
+    logAction("여신 주문사용 정리", "삭제 "+toDelete.length+" / 수정 "+toFix.length+" / 추가 "+toAdd.length);
+    alert("정리했습니다.\n\n잔여 여신 " + bal.toLocaleString());
+    if(typeof loadB2BTab === "function") loadB2BTab();
+    loadOrderList();
   };
 
   // 잔여 여신 = 충전·클럽인센티브 − 주문사용
@@ -8509,49 +8606,6 @@
       const d3El = document.getElementById("be-date3");
       if(d3El) batchPatch.payDueDate = (d3El.value||"").replace(/\D/g,"");
 
-      // 결제방식 전환 — 여신 차감 기록을 함께 맞춥니다.
-      const pmEl = document.getElementById("be-paymethod");
-      if(pmEl){
-        const newPm = pmEl.value;
-        const oldPm = (b.paymentMethod === "b2b_credit") ? "b2b_credit" : "normal";
-        if(newPm !== oldPm){
-          if(b.paymentRequestId){
-            msg("이 주문은 출금요청에 묶여 있습니다. 결제방식을 바꾸려면 <b>출금요청을 먼저 취소</b>해주세요.", true);
-            return;
-          }
-          const amt = Number(b.depositRequired)||0;
-          if(newPm === "b2b_credit"){
-            // 잔여 여신 확인
-            let bal = null;
-            try{ bal = await getB2BBalance(); }catch(e){}
-            if(bal !== null && amt > bal && !confirm(
-              "잔여 여신이 부족합니다.\n\n  필요 " + amt.toLocaleString() + "\n  잔여 " + bal.toLocaleString()
-              + "\n  부족 " + (amt - bal).toLocaleString() + "\n\n그래도 여신 사용으로 바꾸시겠습니까?")) return;
-            if(!confirm("여신 사용으로 바꿉니다.\n\n· 여신에서 " + amt.toLocaleString() + " 이 차감됩니다.\n· 출금요청 대상에서 빠지고 결제완료로 처리됩니다.\n\n진행하시겠습니까?")) return;
-            await addDoc(collection(db,"b2bLedger"), {
-              date: d1 || todayStr(), category:"order_use", amount: amt,
-              memo: "주문 결제방식 변경: " + party,
-              fromOrderBatchId: id,
-              createdBy: currentUser.name, createdByUsername: currentUser.username, createdAt: serverTimestamp()
-            });
-            batchPatch.paymentMethod = "b2b_credit";
-            batchPatch.depositPaid = true;
-            batchPatch.depositPaidDate = d1 || todayStr();
-          }else{
-            if(!confirm("일반 결제로 되돌립니다.\n\n· 여신 차감 기록이 지워집니다.\n· 다시 출금요청 대상이 되고 미결제로 바뀝니다.\n\n진행하시겠습니까?")) return;
-            try{
-              const led = await getDocs(query(collection(db,"b2bLedger"), where("fromOrderBatchId","==",id)));
-              for(const dd of led.docs) await deleteDoc(doc(db,"b2bLedger", dd.id));
-            }catch(e){}
-            batchPatch.paymentMethod = "normal";
-            batchPatch.depositPaid = false;
-            batchPatch.depositPaidDate = "";
-          }
-          logAction("주문 결제방식 변경", party + " / " + oldPm + " → " + newPm + " / " + amt.toLocaleString());
-        }
-      }
-      batchPatch.updatedAt = serverTimestamp(); batchPatch.updatedBy = currentUser.name;
-      linePatch.source = party;  linePatch.orderDate = d1;  linePatch.expectedArrivalDate = d2;
     }else{
       batchPatch.destination = party; batchPatch.requestDate = d1;
       batchPatch.updatedAt = serverTimestamp(); batchPatch.updatedBy = currentUser.name;
@@ -8592,6 +8646,46 @@
       }
     });
     if(Object.keys(perLine).length > 0) batchPatch.depositRequired = newTotal;
+
+    // 결제방식 전환 — 여신 차감 기록을 함께 맞춥니다.
+    // 금액을 다시 계산한 뒤에 처리해야 차감액이 정확합니다.
+    const pmEl = document.getElementById("be-paymethod");
+    if(pmEl && kind === "order"){
+      const newPm = pmEl.value;
+      const oldPm = (b.paymentMethod === "b2b_credit") ? "b2b_credit" : "normal";
+      // 실제 차감할 금액 = 이번에 저장될 최종 주문금액
+      const amt = (batchPatch.depositRequired != null) ? Number(batchPatch.depositRequired) : (Number(b.depositRequired)||0);
+
+      if(newPm !== oldPm){
+        if(b.paymentRequestId){
+          msg("이 주문은 출금요청에 묶여 있습니다. 결제방식을 바꾸려면 <b>출금요청을 먼저 취소</b>해주세요.", true);
+          return;
+        }
+        if(newPm === "b2b_credit"){
+          let bal = null;
+          try{ bal = await getB2BBalance(); }catch(e){}
+          if(bal !== null && amt > bal && !confirm(
+            "잔여 여신이 부족합니다.\n\n  필요 " + amt.toLocaleString() + "\n  잔여 " + bal.toLocaleString()
+            + "\n  부족 " + (amt - bal).toLocaleString() + "\n\n그래도 여신 사용으로 바꾸시겠습니까?")) return;
+          if(!confirm("여신 사용으로 바꿉니다.\n\n· 여신에서 " + amt.toLocaleString() + " 이 차감됩니다.\n· 출금요청 대상에서 빠지고 결제완료로 처리됩니다.\n\n진행하시겠습니까?")) return;
+          await replaceB2BOrderUse(id, amt, d1 || todayStr(), party);
+          batchPatch.paymentMethod = "b2b_credit";
+          batchPatch.depositPaid = true;
+          batchPatch.depositPaidDate = d1 || todayStr();
+        }else{
+          if(!confirm("일반 결제로 되돌립니다.\n\n· 여신 차감 기록이 지워집니다.\n· 다시 출금요청 대상이 되고 미결제로 바뀝니다.\n\n진행하시겠습니까?")) return;
+          await replaceB2BOrderUse(id, 0, d1 || todayStr(), party);
+          batchPatch.paymentMethod = "normal";
+          batchPatch.depositPaid = false;
+          batchPatch.depositPaidDate = "";
+        }
+        logAction("주문 결제방식 변경", party + " / " + oldPm + " → " + newPm + " / " + amt.toLocaleString());
+      }else if(newPm === "b2b_credit" && batchPatch.depositRequired != null){
+        // 여신 주문의 금액이 바뀌면 차감 기록도 새 금액으로 맞춥니다.
+        await replaceB2BOrderUse(id, amt, b.depositPaidDate || d1 || todayStr(), party);
+        logAction("여신 차감액 갱신", party + " / " + amt.toLocaleString());
+      }
+    }
 
     try{
       msg("저장 중...", false);
@@ -10050,7 +10144,8 @@
       row.className = "list-row"; row.style.flexWrap = "wrap";
       // 입금 상태 3단계: 입금필요 → 입금확인중(요청 보냄) → 입금완료
       const depositLabel = b.depositReceived
-        ? '<span style="color:#2e7d32;font-weight:700;">입금완료('+(b.depositReceivedDate||"-")+')</span>'
+        ? '<span style="color:#2e7d32;font-weight:700;">입금완료 '+(b.depositRequired||0).toLocaleString()+'</span>'
+          + '<span style="color:var(--gray);"> ('+(b.depositReceivedDate||"-")+')</span>'
         : (b.depositRequestId
           ? '<span style="color:#b8860b;font-weight:700;">입금확인중 '+(b.depositRequired||0).toLocaleString()+'</span>'
           : '<span style="color:var(--danger);font-weight:700;">입금필요 '+(b.depositRequired||0).toLocaleString()+'</span>');
