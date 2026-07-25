@@ -144,6 +144,23 @@
     @page { size: A4 portrait; margin: 12mm; }
   }
   /* 견적서 */
+  /* 삼성전자 유통직판 발주서 */
+  .po-page{ padding-bottom:10px; }
+  .po-title{ text-align:center; font-size:22px; font-weight:800; letter-spacing:8px; margin:0 0 6px 0; color:#1a1a1a; }
+  .po-carrier{ text-align:center; font-size:13px; margin-bottom:12px; }
+  .po-info{ width:100%; border-collapse:collapse; margin-bottom:14px; }
+  .po-info td{ border:1px solid #333; padding:5px 8px; font-size:12px; }
+  .po-info .po-lbl{ background:#f2f2f2; font-weight:700; width:90px; white-space:nowrap; }
+  .po-info .po-val{ min-width:110px; }
+  .po-info .po-sec{ background:#e8e8e8; font-weight:700; text-align:center; }
+  .po-items{ width:100%; border-collapse:collapse; }
+  .po-items th, .po-items td{ border:1px solid #333; padding:5px 7px; font-size:12px; }
+  .po-items th{ background:#f2f2f2; font-weight:700; text-align:center; }
+  .po-items .po-total td{ background:#f2f2f2; font-weight:700; }
+  .ta-center{ text-align:center; }
+  .po-foot{ margin-top:20px; font-size:13px; line-height:2; }
+  .po-sign{ margin-top:24px; display:flex; justify-content:flex-end; align-items:flex-end; gap:14px; }
+  .po-signbox{ display:inline-block; width:150px; height:70px; border:1px solid #333; }
   /* 견적서 — 세로(A4 인쇄용) */
   .quote-head{ border:1px solid var(--navy); margin-bottom:12px; }
   .quote-head > div{ display:flex; align-items:flex-start; gap:0; border-bottom:1px solid var(--line); }
@@ -232,7 +249,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-07-25 v40</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-07-25 v43</span>
       <span id="topbar-username">-</span>
       <button onclick="openPersonalSettingsModal()">개인설정</button>
       <button onclick="handleLogout()">로그아웃</button>
@@ -453,6 +470,11 @@
           <button class="btn small" style="width:auto;" onclick="createQuotationFromSelected()">체크한 예약으로 견적서 발행</button>
           <span class="info-tip" title="같은 거래처의 예약을 체크하면 하나의 견적서로 합쳐 계산합니다. 발행하면 그 예약은 수정이 잠기고 목록에 자물쇠로 표시됩니다.">ⓘ</span>
           <button class="btn small secondary" style="width:auto;" onclick="toggleQuotationList()">발행한 견적서 보기</button>
+          <span style="color:var(--line);">|</span>
+          <span style="font-size:12px;color:var(--gray);">구분</span>
+          <button class="btn small" id="resvf-all" style="width:auto;padding:0 12px;height:26px;border:1px solid var(--navy);" onclick="setResvListFilter('all')">전체</button>
+          <button class="btn small secondary" id="resvf-sale" style="width:auto;padding:0 12px;height:26px;border:1px solid var(--navy);margin-left:-1px;" onclick="setResvListFilter('sale')">판매</button>
+          <button class="btn small secondary" id="resvf-buy" style="width:auto;padding:0 12px;height:26px;border:1px solid var(--navy);margin-left:-1px;" onclick="setResvListFilter('buy')">구매</button>
         </div>
         <div id="quotation-list-area" style="display:none;margin-bottom:10px;"></div>
         <div id="resv-listprice-notice" style="display:none;font-size:12.5px;padding:9px 11px;margin-bottom:8px;border:1px solid var(--danger);background:#fdecea;line-height:1.7;"></div>
@@ -1269,10 +1291,23 @@
         <h3 id="resv-modal-title" style="margin-top:0;margin-bottom:4px;">예약 추가</h3>
         <p class="desc">모델·용량 단위로, 거래처별 예약(주문) 수량을 등록합니다. 같은 모델을 여러 거래처가 각각 예약하면 줄을 나눠서 추가하세요.</p>
         <div class="stack-form">
+          <div class="stack-row"><label>구분 <span class="info-tip" title="구매 = 삼성전자 등에서 사올 예약 / 판매 = 거래처가 우리에게 요청한 예약">ⓘ</span></label>
+            <span style="flex:1;display:flex;align-items:center;gap:0;padding:4px 8px;">
+              <button type="button" class="btn small" id="resv-kind-sale" style="width:auto;padding:0 14px;height:26px;border:1px solid var(--navy);" onclick="setResvKind('sale')">판매</button>
+              <button type="button" class="btn small secondary" id="resv-kind-buy" style="width:auto;padding:0 14px;height:26px;border:1px solid var(--navy);margin-left:-1px;" onclick="setResvKind('buy')">구매</button>
+            </span>
+          </div>
+          <div class="stack-row"><label>통신사 <span class="info-tip" title="나중에 재고 매칭에 쓰이므로 반드시 골라주세요.">ⓘ</span></label>
+            <span style="flex:1;display:flex;align-items:center;gap:0;padding:4px 8px;">
+              <button type="button" class="btn small" id="resv-carrier-LG" style="width:auto;padding:0 14px;height:26px;border:1px solid var(--navy);" onclick="setResvCarrier('LG')">LG</button>
+              <button type="button" class="btn small secondary" id="resv-carrier-SK" style="width:auto;padding:0 14px;height:26px;border:1px solid var(--navy);margin-left:-1px;" onclick="setResvCarrier('SK')">SK</button>
+              <button type="button" class="btn small secondary" id="resv-carrier-KT" style="width:auto;padding:0 14px;height:26px;border:1px solid var(--navy);margin-left:-1px;" onclick="setResvCarrier('KT')">KT</button>
+            </span>
+          </div>
           <div class="stack-row"><label>요청일</label><input type="text" id="resv-date-input" placeholder="예: 20260724" maxlength="8" inputmode="numeric"></div>
           <div class="stack-row"><label>모델 (전산모델명)</label><select id="resv-model-select" onchange="onResvModelChange()"><option value="">모델을 선택하세요</option></select></div>
           <div class="stack-row"><label>색상</label><select id="resv-color-select"><option value="">모델을 먼저 선택하세요</option></select></div>
-          <div class="stack-row"><label>거래처</label><select id="resv-dest-select"><option value="">선택</option></select></div>
+          <div class="stack-row"><label id="resv-dest-label">거래처 (판매처)</label><select id="resv-dest-select"><option value="">선택</option></select></div>
           <div class="stack-row"><label>예약(주문) 수량</label><input type="number" id="resv-order-qty-input" value="1"></div>
           <div class="stack-row"><label>출고가 <span class="info-tip" title="모델을 고르면 모델 등록의 출고가(VAT포함)를 자동으로 가져옵니다. 필요하면 직접 고칠 수 있습니다.">ⓘ</span></label><input type="number" id="resv-listprice-input" oninput="onResvListPriceInput()" placeholder="모델을 고르면 자동으로 채워집니다"></div>
           <div class="stack-row"><label>판매할인 <span class="info-tip" title="정액 또는 %를 넣으면 나머지와 판매가가 자동으로 계산됩니다.">ⓘ</span></label><input type="number" id="resv-salediscountamt-input" oninput="onResvSaleDiscountAmtInput()" placeholder="예: 100000"></div>
@@ -6007,6 +6042,8 @@
     editingReservationId = null;
     document.getElementById("resv-modal-title").textContent = "예약 추가";
     document.getElementById("resv-submit-btn").textContent = "예약 등록";
+    await setResvKind("sale");      // 기본 판매
+    setResvCarrier("LG");           // 기본 LG
 
     await fetchModelsCache();
     const modelSel = document.getElementById("resv-model-select");
@@ -6032,6 +6069,53 @@
   };
   // 예약: 모델을 고르면 그 모델에 등록된 색상만 보여줍니다.
   let editingReservationId = null;
+  let resvKind = "sale";        // sale = 판매 예약 / buy = 구매 예약
+  let resvCarrier = "LG";       // 기본 LG
+
+  let resvListFilter = "all";   // all | sale | buy
+  window.setResvListFilter = function(f){
+    resvListFilter = f;
+    ["all","sale","buy"].forEach(k=>{
+      const b = document.getElementById("resvf-"+k);
+      if(b) b.className = "btn small" + (k===f ? "" : " secondary");
+    });
+    getPageState("reservations").page = 1;
+    loadReservationTable();
+  };
+  const kindLabel = k => (k === "buy")
+    ? '<span style="background:#6a1b9a;color:#fff;font-size:10.5px;padding:1px 6px;">구매</span>'
+    : '<span style="background:var(--navy);color:#fff;font-size:10.5px;padding:1px 6px;">판매</span>';
+
+  window.setResvKind = async function(k){
+    resvKind = k;
+    ["sale","buy"].forEach(x=>{
+      const b = document.getElementById("resv-kind-"+x);
+      if(b) b.className = "btn small" + (x===k ? "" : " secondary");
+    });
+    // 구분에 따라 거래처 목록을 바꿉니다. (구매=매입처 / 판매=판매처)
+    const lbl = document.getElementById("resv-dest-label");
+    if(lbl) lbl.textContent = (k==="buy") ? "거래처 (매입처)" : "거래처 (판매처)";
+    const sel = document.getElementById("resv-dest-select");
+    if(sel){
+      const cur = sel.value;
+      sel.innerHTML = '<option value="">선택</option>';
+      (await fetchNamesList(k==="buy" ? "inboundSources" : "outboundDestinations")).forEach(n=>{
+        const o = document.createElement("option"); o.value = n; o.textContent = n; sel.appendChild(o);
+      });
+      if(cur && sel.querySelector('option[value="'+cur+'"]')) sel.value = cur;
+      if(sel.dataset.combo === "1"){ syncSearchableSelect("resv-dest-select"); }
+    }
+    // 금액 라벨도 구분에 맞춰 안내
+    const pl = document.getElementById("resv-price-label");
+    if(pl) pl.textContent = (k==="buy") ? "입고가 (선택)" : "판매가 (선택)";
+  };
+  window.setResvCarrier = function(c){
+    resvCarrier = c;
+    ["LG","SK","KT"].forEach(x=>{
+      const b = document.getElementById("resv-carrier-"+x);
+      if(b) b.className = "btn small" + (x===c ? "" : " secondary");
+    });
+  };
 
   // 예약 수정: 기존 값을 채워서 같은 창을 재사용합니다.
   window.editReservation = async function(id){
@@ -6049,6 +6133,8 @@
     document.getElementById("resv-listprice-input").value = r.listPrice || "";
     document.getElementById("resv-salediscountamt-input").value = r.saleDiscountAmt || "";
     document.getElementById("resv-salediscountpct-input").value = r.saleDiscountPct || "";
+    await setResvKind(r.kind === "buy" ? "buy" : "sale");
+    setResvCarrier(r.carrier || "LG");
     if(r.modelId){
       document.getElementById("resv-model-select").value = r.modelId;
       syncSearchableSelect("resv-model-select");
@@ -6166,6 +6252,7 @@
     const payload = {
       modelId, modelGroup:m.modelGroup, baseModel:m.baseModel, capacity:m.capacity,
       systemModel: m.systemModel||"", petName:m.petName||"",
+      kind: resvKind, carrier: resvCarrier,
       listPrice: listPriceVal,
       saleDiscountAmt: saleDiscAmtRaw ? Number(saleDiscAmtRaw) : null,
       saleDiscountPct: saleDiscPctRaw ? Number(Number(saleDiscPctRaw).toFixed(2)) : null,
@@ -6735,6 +6822,14 @@
   window.createQuotationFromSelected = async function(){
     const checked = Array.from(document.querySelectorAll(".resv-row-cb:checked"));
     if(checked.length === 0){ alert("견적서에 담을 예약을 먼저 체크해주세요."); return; }
+    // 구매 예약은 견적서 대상이 아닙니다 (발주서를 씁니다)
+    for(const c of checked){
+      const rr = await getDoc(doc(db,"reservations", c.dataset.id));
+      if(rr.exists() && rr.data().kind === "buy"){
+        alert("구매 예약이 포함되어 있습니다.\n견적서는 판매 예약만 발행합니다.\n구분 필터에서 <판매>만 골라 다시 시도해주세요.");
+        return;
+      }
+    }
     const dests = [...new Set(checked.map(c=>c.dataset.dest))];
     if(dests.length > 1){ alert("거래처가 여러 개입니다.\n견적서는 거래처 하나씩 발행합니다.\n\n선택된 거래처: " + dests.join(", ")); return; }
     const destination = dests[0];
@@ -6854,55 +6949,87 @@
     window.print();
   };
 
-  // 주문 묶음으로 발주서를 만듭니다. (삼성전자 양식)
+  // 삼성전자 유통직판 발주서 — HWP 양식 그대로
+  // 파트너 정보는 고정값입니다. 납품처 정보는 원래 빈칸으로 둡니다.
+  const SAMSUNG_PO_PARTNER = {
+    name: "포피플",
+    ceo: "김용래",
+    bizNumber: "316-81-22077",
+    phone: "010-2222-3037"
+  };
+
   window.openPoSheet = async function(batchId, b){
-    const lines = orderBatchLinesCache[batchId] || [];
-    const st = currentSettings || {};
-    await fetchCompanies();
-    // 납품처(계약처) = 매입처 업체정보
-    const co = companiesCache.find(c=> String(c.name||"").trim() === String(b.source||"").trim()) || {};
+    const lines = (orderBatchLinesCache[batchId] || []).filter(o=> o.status !== "취소");
+    if(lines.length === 0){ alert("발주할 품목이 없습니다."); return; }
 
-    const row = (t, v)=> '<div><div class="t">'+t+'</div><div class="v">'+v+'</div></div>';
-    let h = '<div class="quote-title">유통직판 발주서</div>';
-    h += '<div class="quote-head">' +
-      row("발주일자", comboEsc(b.orderDate||todayStr())) +
-      row("파트너", comboEsc(st.issuerName || "포피플")) +
-      row("사업자번호", comboEsc(st.issuerBizNumber||"-") + " · 대표자 " + comboEsc(st.issuerCeo||"-")) +
-      row("전화/팩스", comboEsc(st.issuerContact||"-")) +
-      row("납품처(계약처)", comboEsc(co.bizName || co.name || b.source || "-")
-        + (co.bizNumber ? ' <span style="color:var(--gray);font-size:11.5px;">사업자 '+comboEsc(co.bizNumber)+'</span>' : '')) +
-      '</div>';
-
-    h += '<table class="data-table" style="width:100%;"><thead><tr>' +
-      '<th>품목명</th><th>모델명</th><th>색상</th>' +
-      '<th class="ta-right">출고가</th><th class="ta-right">수량</th><th class="ta-right">합계</th>' +
-      '</tr></thead><tbody>';
-    let totQty=0, totAmt=0;
+    // 통신사별로 한 장씩 만듭니다. (인쇄할 때 섞이지 않게)
+    const byCarrier = {};
     lines.forEach(o=>{
-      if(o.status === "취소") return;
-      const q = Number(o.quantity)||0;
-      const lp = Number(o.listPrice)||0;
-      totQty += q; totAmt += lp*q;
-      h += '<tr>' +
-        '<td>'+comboEsc(o.petName||o.modelGroup||"-")+'</td>' +
-        '<td>'+comboEsc(o.systemModel||o.baseModel||"-")+'</td>' +
-        '<td>'+comboEsc(o.systemColor||o.manufacturerColor||"-")+'</td>' +
-        '<td class="ta-right">'+(lp?lp.toLocaleString():"-")+'</td>' +
-        '<td class="ta-right">'+q+'</td>' +
-        '<td class="ta-right">'+(lp*q).toLocaleString()+'</td></tr>';
+      const c = String(o.carrier||"미지정").trim() || "미지정";
+      if(!byCarrier[c]) byCarrier[c] = [];
+      byCarrier[c].push(o);
     });
-    h += '<tr style="background:#fafafa;font-weight:700;border-top:2px solid var(--navy);">' +
-      '<td colspan="4">합계</td><td class="ta-right">'+totQty+'</td><td class="ta-right">'+totAmt.toLocaleString()+'</td></tr>';
-    h += '</tbody></table>';
+    const carriers = Object.keys(byCarrier).sort();
 
-    h += '<div style="margin-top:18px;font-size:13px;line-height:2;">' +
-      '상기 내역의 제품을 삼성전자에 발주하오니 납품하여주시기 바랍니다.' +
-      '<div style="margin-top:26px;display:flex;justify-content:flex-end;align-items:flex-end;gap:14px;">' +
-        '<span style="color:var(--gray);font-size:12px;">명판 / 날인</span>' +
-        '<span style="display:inline-block;width:150px;height:70px;border:1px solid var(--line);"></span>' +
-      '</div></div>';
+    const P = SAMSUNG_PO_PARTNER;
+    const esc = comboEsc;
+    let html = "";
 
-    document.getElementById("po-body").innerHTML = h;
+    carriers.forEach((carrier, idx)=>{
+      const rows = byCarrier[carrier];
+      let totQty = 0, totAmt = 0;
+
+      let page = '<div class="po-page"'+(idx>0 ? ' style="page-break-before:always;"' : '')+'>';
+      page += '<div class="po-title">유통직판 발주서</div>';
+      page += '<div class="po-carrier">통신사 <b>' + esc(carrier) + '</b>'
+            + ' <span style="font-weight:400;color:var(--gray);font-size:11.5px;">(' + (idx+1) + ' / ' + carriers.length + ' 장)</span></div>';
+
+      page += '<table class="po-info"><tr>' +
+        '<td class="po-lbl">발주일자</td><td class="po-val" colspan="5">' + esc(b.orderDate || todayStr()) + '</td></tr>' +
+        '<tr><td class="po-sec" colspan="3">B2B파트너정보</td><td class="po-sec" colspan="3">납품처 정보</td></tr>' +
+        '<tr><td class="po-lbl">파트너</td><td class="po-val" colspan="2">' + esc(P.name) + '</td>' +
+            '<td class="po-lbl">납품처(계약처)</td><td class="po-val" colspan="2"></td></tr>' +
+        '<tr><td class="po-lbl">대표자</td><td class="po-val" colspan="2">' + esc(P.ceo) + '</td>' +
+            '<td class="po-lbl">대표자</td><td class="po-val" colspan="2"></td></tr>' +
+        '<tr><td class="po-lbl">사업자번호</td><td class="po-val" colspan="2">' + esc(P.bizNumber) + '</td>' +
+            '<td class="po-lbl">사업자번호</td><td class="po-val" colspan="2"></td></tr>' +
+        '<tr><td class="po-lbl">전화/팩스</td><td class="po-val" colspan="2">' + esc(P.phone) + '</td>' +
+            '<td class="po-lbl">전화/팩스</td><td class="po-val" colspan="2"></td></tr>' +
+        '</table>';
+
+      page += '<table class="po-items"><thead><tr>' +
+        '<th style="width:38px;">NO.</th><th>품목명</th><th>모델명</th><th style="width:90px;">색상</th>' +
+        '<th style="width:60px;">수량</th><th style="width:100px;">출고가</th><th style="width:110px;">합계</th>' +
+        '</tr></thead><tbody>';
+      rows.forEach((o,i)=>{
+        const q = Number(o.quantity)||0;
+        const lp = Number(o.listPrice)||0;
+        totQty += q; totAmt += lp*q;
+        const color = o.systemColor || o.manufacturerColor || "";
+        page += '<tr>' +
+          '<td class="ta-center">'+(i+1)+'</td>' +
+          '<td>'+esc(o.petName || o.modelGroup || "-")+'</td>' +
+          '<td>'+esc(o.systemModel || o.baseModel || "-")+'</td>' +
+          '<td>'+(color ? esc(color) : '<span style="color:var(--danger);">색상 미입력</span>')+'</td>' +
+          '<td class="ta-right">'+q+'</td>' +
+          '<td class="ta-right">'+(lp?lp.toLocaleString():"-")+'</td>' +
+          '<td class="ta-right">'+(lp*q).toLocaleString()+'</td></tr>';
+      });
+      // 양식처럼 빈 줄을 채워 칸을 맞춥니다.
+      for(let k=rows.length; k<10; k++){
+        page += '<tr><td class="ta-center" style="color:#ccc;">'+(k+1)+'</td><td></td><td></td><td></td><td></td><td></td><td></td></tr>';
+      }
+      page += '<tr class="po-total"><td colspan="4">합계</td>' +
+        '<td class="ta-right">'+totQty+'</td><td></td><td class="ta-right">'+totAmt.toLocaleString()+'</td></tr>';
+      page += '</tbody></table>';
+
+      page += '<div class="po-foot">상기 내역의 제품을 삼성전자에 발주하오니 납품하여주시기 바랍니다.' +
+        '<div class="po-sign"><span>명판 / 날인</span><span class="po-signbox"></span></div></div>';
+      page += '</div>';
+      html += page;
+    });
+
+    document.getElementById("po-body").innerHTML = html;
     document.getElementById("po-view-modal-overlay").style.display = "flex";
   };
 
@@ -6981,7 +7108,9 @@
     el.innerHTML = '<div class="list-empty">불러오는 중...</div>';
     const snap = await getDocs(query(collection(db,"reservations"), orderBy("createdAt","desc")));
     if(snap.empty){ el.innerHTML = '<div class="list-empty">등록된 예약이 없습니다. 위 <b>+ 예약</b>에서 추가해주세요.</div>'; return; }
-    const rows = []; snap.forEach(d=> rows.push({ id:d.id, ...d.data() }));
+    let rows = []; snap.forEach(d=> rows.push({ id:d.id, ...d.data() }));
+    if(resvListFilter === "sale") rows = rows.filter(r=> r.kind !== "buy");
+    if(resvListFilter === "buy")  rows = rows.filter(r=> r.kind === "buy");
 
     // 출고가가 비어 있는 예약이 있으면 위에 안내를 띄웁니다.
     const noticeEl = document.getElementById("resv-listprice-notice");
@@ -7000,7 +7129,7 @@
     const fmt = v => (v==null || v==="") ? '<span style="color:var(--danger);">미입력</span>' : Number(v).toLocaleString();
     let html = '<div style="overflow-x:auto;"><table class="data-table" data-label-key="resv-list-table" style="min-width:1180px;"><thead><tr>' +
       '<th><input type="checkbox" id="resv-check-all" onclick="toggleAllResvRows(this)" title="전체 선택"></th>' +
-      '<th>#</th><th>요청일</th><th>거래처</th><th>모델 (전산모델명/펫네임)</th><th>색상</th>' +
+      '<th>#</th><th>구분</th><th>통신사</th><th>요청일</th><th>거래처</th><th>모델 (전산모델명/펫네임)</th><th>색상</th>' +
       '<th class="ta-right">예약</th><th class="ta-right">배정</th><th class="ta-right">잔여</th>' +
       '<th class="ta-right">출고가</th><th class="ta-right">판매가</th><th class="ta-right">예약금액</th>' +
       '<th class="ta-right">관리</th></tr></thead><tbody>';
@@ -7018,6 +7147,8 @@
           ? '<span title="견적서 발행됨" style="color:var(--navy);">🔒</span>'
           : '<input type="checkbox" class="resv-row-cb" data-id="'+r.id+'" data-dest="'+comboEsc(r.destination||"")+'">')+'</td>' +
         '<td style="color:var(--gray);">'+(startIndex+i+1)+'</td>' +
+        '<td>'+kindLabel(r.kind)+'</td>' +
+        '<td>'+comboEsc(r.carrier||"-")+'</td>' +
         '<td>'+comboEsc(r.requestDate||"-")+'</td>' +
         '<td><b>'+comboEsc(r.destination||"-")+'</b></td>' +
         '<td>'+comboEsc(docModelLabel(r))+'</td>' +
@@ -7053,7 +7184,9 @@
     const snap = await getDocs(query(collection(db,"reservations"), orderBy("createdAt","desc")));
     if(snap.empty){ el.innerHTML = '<div class="list-empty">등록된 예약이 없습니다.</div>'; return; }
 
-    const rows = []; snap.forEach(d=> rows.push({ id:d.id, ...d.data() }));
+    let rows = []; snap.forEach(d=> rows.push({ id:d.id, ...d.data() }));
+    if(resvListFilter === "sale") rows = rows.filter(r=> r.kind !== "buy");
+    if(resvListFilter === "buy")  rows = rows.filter(r=> r.kind === "buy");
 
     // 모델(펫네임/모델명/용량) × 거래처 로 묶기
     const modelKeys = []; // 순서 유지
@@ -7064,7 +7197,7 @@
       // 전산모델명 기준으로 묶고, 색상이 있으면 색상까지 구분합니다.
       const head = r.systemModel || ((r.baseModel||"-") + (r.capacity ? " "+r.capacity : ""));
       const colorPart = r.systemColor || r.manufacturerColor || "";
-      const modelKey = head + (r.petName ? " · "+r.petName : "") + (colorPart ? " / "+colorPart : "");
+      const modelKey = head + (r.petName ? " · "+r.petName : "") + (colorPart ? " / "+colorPart : "") + (r.carrier ? " [" + r.carrier + "]" : "");
       if(!modelKeys.includes(modelKey)) modelKeys.push(modelKey);
       if(!destKeys.includes(r.destination)) destKeys.push(r.destination);
       if(!grid[modelKey]) grid[modelKey] = {};
