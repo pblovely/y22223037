@@ -285,7 +285,7 @@
           <div id="dash-carrier-list"></div>
         </div>
         <div style="margin-top:18px;">
-          <h3 style="font-size:13px;">모델/펫네임별</h3>
+          <h3 style="font-size:13px;">펫네임/모델명별</h3>
           <div id="dash-model-list"></div>
         </div>
         <div style="margin-top:18px;">
@@ -1158,7 +1158,8 @@
         <p class="desc">모델·용량 단위로, 거래처별 예약(주문) 수량을 등록합니다. 같은 모델을 여러 거래처가 각각 예약하면 줄을 나눠서 추가하세요.</p>
         <div class="stack-form">
           <div class="stack-row"><label>요청일</label><input type="text" id="resv-date-input" placeholder="예: 20260724" maxlength="8" inputmode="numeric"></div>
-          <div class="stack-row"><label>모델 (모델명+용량)</label><select id="resv-model-select"><option value="">모델을 선택하세요</option></select></div>
+          <div class="stack-row"><label>모델 (전산모델명)</label><select id="resv-model-select" onchange="onResvModelChange()"><option value="">모델을 선택하세요</option></select></div>
+          <div class="stack-row"><label>색상</label><select id="resv-color-select"><option value="">모델을 먼저 선택하세요</option></select></div>
           <div class="stack-row"><label>거래처</label><select id="resv-dest-select"><option value="">선택</option></select></div>
           <div class="stack-row"><label>예약(주문) 수량</label><input type="number" id="resv-order-qty-input" value="1"></div>
         </div>
@@ -1238,7 +1239,7 @@
           <div class="stack-row"><label>제조사</label><select id="item-manufacturer-select"><option value="">선택</option></select></div>
           <div class="stack-row"><label>통신사</label><select id="item-carrier-select"></select></div>
           <div class="stack-row"><label>위치</label><select id="item-location-select"><option value="">선택</option></select></div>
-          <div class="stack-row"><label>모델 (모델명+기가수)</label><select id="item-model-select" onchange="onItemModelChange()"><option value="">모델을 선택하세요</option></select></div>
+          <div class="stack-row"><label>모델 (전산모델명)</label><select id="item-model-select" onchange="onItemModelChange()"><option value="">모델을 선택하세요</option></select></div>
           <div class="stack-row"><label>전산색상</label><select id="item-syscolor-select" onchange="onSysColorChange()"><option value="">모델을 먼저 선택하세요</option></select></div>
           <div class="stack-row"><label>제조사색상</label><select id="item-manucolor-select" onchange="onManuColorChange()"><option value="">모델을 먼저 선택하세요</option></select></div>
           <div class="stack-row"><label>현재상태</label><select id="item-status-select"></select></div>
@@ -1278,6 +1279,7 @@
         </div>
         <button class="btn small" id="item-submit-btn" onclick="addInventoryItem()">재고 등록</button>
         <button class="btn small danger" id="item-cancelsale-btn" style="width:auto;margin-left:6px;display:none;" onclick="cancelSaleInEditModal()">판매 취소</button>
+        <div id="item-result-msg" style="display:none;font-size:12.5px;margin-top:10px;padding:8px 10px;border-left:3px solid var(--navy);background:#f2f2f2;line-height:1.6;"></div>
       </div>
     </div>
 
@@ -2442,6 +2444,18 @@
     });
   }
 
+  // 모델 드롭다운·목록 표시는 전산모델명을 기준으로 합니다. (모든 대조 기준이 전산모델명)
+  // 형식: "SM-F976N512 · 갤럭시Z 폴드8"  — 전산모델명이 없으면 모델명+용량으로 대체
+  function modelOptionLabel(m){
+    if(!m) return "-";
+    const sys  = String(m.systemModel||"").trim();
+    const base = String(m.baseModel||"").trim();
+    const cap  = String(m.capacity||"").trim();
+    const pet  = String(m.petName||"").trim();
+    const head = sys || (base ? (base + (cap ? " " + cap : "")) : (String(m.modelGroup||"").trim() || pet || "모델"));
+    return head + (pet ? " · " + pet : "");
+  }
+
   async function fetchModelsCache(){
     const snap = await getDocs(query(collection(db, "inventoryModels"), orderBy("modelGroup")));
     modelsCache = [];
@@ -2560,14 +2574,55 @@
     const changed = newFields.modelGroup!==m.modelGroup || newFields.baseModel!==m.baseModel ||
       newFields.capacity!==m.capacity || newFields.systemModel!==m.systemModel || newFields.petName!==m.petName;
     if(changed){
-      const skus = (m.colors||[]).map(c=>c.sku).filter(Boolean);
-      for(const sku of skus){
-        const snap = await getDocs(query(collection(db,"inventoryItems"), where("sku","==",sku)));
-        for(const dd of snap.docs){
-          await updateDoc(doc(db,"inventoryItems", dd.id), {
-            modelGroup:newFields.modelGroup, baseModel:newFields.baseModel,
-            capacity:newFields.capacity, systemModel:newFields.systemModel, petName:newFields.petName
+      // 기존 재고에도 반영합니다.
+      // 예전에는 SKU로만 찾아서, SKU가 비어 있으면 아무것도 바뀌지 않았습니다.
+      // 이제 SKU · 전산모델명 · 모델명+용량 세 가지 기준으로 모두 찾습니다. (수정 전 값 기준)
+      const targetIds = new Set();
+      try{
+        const skus = (m.colors||[]).map(c=>c.sku).filter(Boolean);
+        for(const sku of skus){
+          const snapS = await getDocs(query(collection(db,"inventoryItems"), where("sku","==",sku)));
+          snapS.forEach(dd=> targetIds.add(dd.id));
+        }
+        if(m.systemModel){
+          const snapY = await getDocs(query(collection(db,"inventoryItems"), where("systemModel","==",m.systemModel)));
+          snapY.forEach(dd=> targetIds.add(dd.id));
+        }
+        if(m.baseModel){
+          const snapB = await getDocs(query(collection(db,"inventoryItems"), where("baseModel","==",m.baseModel)));
+          snapB.forEach(dd=>{
+            const it = dd.data();
+            // 용량이 지정된 모델이면 용량까지 같은 재고만 대상으로 합니다.
+            if(!m.capacity || String(it.capacity||"") === String(m.capacity)) targetIds.add(dd.id);
           });
+        }
+      }catch(e){
+        showModelMsg("me-result-msg", "기존 재고를 찾는 중 오류가 났습니다.<br>" + comboEsc((e && e.message) ? e.message : String(e)), true);
+      }
+
+      if(targetIds.size > 0){
+        const ok = confirm(
+          "이 모델로 등록된 기존 재고 " + targetIds.size + "건이 있습니다.\n" +
+          "그 재고들의 모델명·펫네임도 새 값으로 함께 바꾸시겠습니까?\n\n" +
+          "[확인] 재고까지 함께 변경   /   [취소] 모델 정보만 변경");
+        if(ok){
+          try{
+            const ids = Array.from(targetIds);
+            const patch = {
+              modelGroup:newFields.modelGroup, baseModel:newFields.baseModel,
+              capacity:newFields.capacity, systemModel:newFields.systemModel, petName:newFields.petName
+            };
+            for(let i=0; i<ids.length; i+=400){
+              const batch = writeBatch(db);
+              ids.slice(i, i+400).forEach(id=> batch.update(doc(db,"inventoryItems", id), patch));
+              await batch.commit();
+            }
+            logAction("모델 수정 재고반영", newFields.modelGroup + " → 재고 " + ids.length + "건");
+            alert("재고 " + ids.length + "건에 반영했습니다.");
+          }catch(e){
+            showModelMsg("me-result-msg", "재고 반영에 실패했습니다.<br>" + comboEsc((e && e.message) ? e.message : String(e)), true);
+            return;
+          }
         }
       }
     }
@@ -2665,7 +2720,7 @@
     modelsCache.forEach(m=>{
       const opt = document.createElement("option");
       opt.value = m.id;
-      opt.textContent = m.petName || m.modelGroup || m.systemModel || m.id;
+      opt.textContent = modelOptionLabel(m);
       sel.appendChild(opt);
     });
     document.getElementById("csa-manu-input").value = "";
@@ -3150,10 +3205,10 @@
     sel.innerHTML = '<option value="">모델을 선택하세요</option>';
     modelsCache.forEach(m=>{
       const opt = document.createElement("option");
-      opt.value = m.id; opt.textContent = m.modelGroup + " (" + m.baseModel + " " + m.capacity + ")";
+      opt.value = m.id; opt.textContent = modelOptionLabel(m);
       sel.appendChild(opt);
     });
-    initSearchableSelect("item-model-select", "모델명을 입력하면 목록이 나옵니다");
+    initSearchableSelect("item-model-select", "전산모델명을 입력하면 목록이 나옵니다");
     syncSearchableSelect("item-model-select");
     onItemModelChange();
   }
@@ -3373,6 +3428,8 @@
     document.getElementById("item-status-select").selectedIndex = 0;
     document.getElementById("item-entry-type").value = "qty";
     currentOrderLinkId = null;
+    const irm = document.getElementById("item-result-msg");
+    if(irm) irm.style.display = "none";
     syncSearchableSelect("item-model-select");
     onItemModelChange();
     toggleEntryType();
@@ -3467,6 +3524,7 @@
     currentOrderLinkId = it.orderId || null;
     updateProfitDisplay();
 
+    document.getElementById("item-result-msg").style.display = "none";
     document.getElementById("item-modal-title").textContent = "재고 수정";
     document.getElementById("item-submit-btn").textContent = "수정 저장";
     document.getElementById("item-cancelsale-btn").style.display = "inline-block";
@@ -3560,9 +3618,10 @@
     const otherDiscountPct = document.getElementById("item-otherdiscountpct-input").value;
 
     const m = modelsCache.find(x=>x.id===modelId);
-    if(!m || colorIdx===""){ alert("모델과 색상을 선택해주세요."); return; }
-    if(!source){ alert("입고처를 선택해주세요."); return; }
-    if(!status){ alert("현재상태를 선택해주세요."); return; }
+    if(!m){ showModelMsg("item-result-msg", "모델을 선택해주세요. (모델 칸에 글자를 쓰고 <b>목록에서 골라야</b> 선택됩니다)", true); return; }
+    if(colorIdx===""){ showModelMsg("item-result-msg", "색상을 선택해주세요. 이 모델에 등록된 색상이 없으면 먼저 <b>모델 등록 → 색상</b>에서 추가해주세요.", true); return; }
+    if(!source){ showModelMsg("item-result-msg", "입고처를 선택해주세요.", true); return; }
+    if(!status){ showModelMsg("item-result-msg", "현재상태를 선택해주세요.", true); return; }
 
     const colorObj = m.colors[Number(colorIdx)];
     const manufacturerColor = colorObj.manufacturerColor || "";
@@ -3602,10 +3661,19 @@
         const conflict = dupSnap.docs.find(d=>d.id !== editingItemId);
         if(conflict){ alert("이미 등록된 일련번호입니다 (" + serialNumber + ")."); return; }
       }
-      await updateDoc(doc(db,"inventoryItems", editingItemId), { ...base, entryType, quantity:qty, serialNumber });
-      logAction("재고 수정", m.modelGroup+" "+colorLabel+" / "+carrier);
-      closeItemModal();
+      try{
+        showModelMsg("item-result-msg", "저장 중...", false);
+        await withTimeout(
+          updateDoc(doc(db,"inventoryItems", editingItemId), { ...base, entryType, quantity:qty, serialNumber }),
+          12000, "재고 수정 저장");
+      }catch(e){
+        showModelMsg("item-result-msg", "<b>저장에 실패했습니다.</b><br>" + comboEsc((e && e.message) ? e.message : String(e)), true);
+        return;
+      }
+      logAction("재고 수정", (m.petName||m.modelGroup||m.systemModel||"-")+" "+colorLabel+" / "+carrier);
+      showModelMsg("item-result-msg", "저장되었습니다.", false);
       loadInventoryList();
+      setTimeout(closeItemModal, 600);
       return;
     }
 
@@ -3917,7 +3985,7 @@
     modelsCache.forEach(m=>{
       const opt = document.createElement("option");
       opt.value = m.id;
-      opt.textContent = (m.baseModel||m.systemModel||m.petName||"모델") + (m.capacity?(" "+m.capacity):"");
+      opt.textContent = modelOptionLabel(m);
       modelSel.appendChild(opt);
     });
     modelSel.onchange = ()=> onOrderLineModelChange(tr);
@@ -4799,7 +4867,7 @@
     modelsCache.forEach(m=>{
       const opt = document.createElement("option");
       opt.value = m.id;
-      opt.textContent = (m.baseModel||m.systemModel||m.petName||"모델") + (m.capacity?(" "+m.capacity):"");
+      opt.textContent = modelOptionLabel(m);
       modelSel.appendChild(opt);
     });
     modelSel.onchange = ()=> onSaleReqLineModelChange(tr);
@@ -4990,11 +5058,12 @@
     modelsCache.forEach(m=>{
       const opt = document.createElement("option");
       opt.value = m.id;
-      opt.textContent = (m.baseModel||m.systemModel||m.petName||"모델") + (m.capacity?(" "+m.capacity):"");
+      opt.textContent = modelOptionLabel(m);
       modelSel.appendChild(opt);
     });
-    initSearchableSelect("resv-model-select", "모델명을 입력하면 목록이 나옵니다");
+    initSearchableSelect("resv-model-select", "전산모델명을 입력하면 목록이 나옵니다");
     syncSearchableSelect("resv-model-select");
+    onResvModelChange();
 
     const destSel = document.getElementById("resv-dest-select");
     destSel.innerHTML = '<option value="">선택</option>';
@@ -5003,6 +5072,25 @@
 
     document.getElementById("reservation-modal-overlay").style.display = "flex";
   };
+  // 예약: 모델을 고르면 그 모델에 등록된 색상만 보여줍니다.
+  window.onResvModelChange = function(){
+    const modelId = document.getElementById("resv-model-select").value;
+    const sel = document.getElementById("resv-color-select");
+    const m = modelsCache.find(x=>x.id===modelId);
+    if(!m){ sel.innerHTML = '<option value="">모델을 먼저 선택하세요</option>'; return; }
+    const colors = m.colors || [];
+    if(colors.length === 0){
+      sel.innerHTML = '<option value="">이 모델에 등록된 색상이 없습니다</option>';
+      return;
+    }
+    sel.innerHTML = '<option value="">색상 미지정</option>' + colors.map((c,i)=>{
+      const label = (c.systemColor || c.manufacturerColor || "-") +
+        (c.manufacturerColor && c.systemColor && c.manufacturerColor !== c.systemColor ? " ("+c.manufacturerColor+")" : "") +
+        (c.sku ? "" : " · SKU 미입력");
+      return '<option value="'+i+'">'+comboEsc(label)+'</option>';
+    }).join("");
+  };
+
   window.closeReservationModal = function(){
     document.getElementById("reservation-modal-overlay").style.display = "none";
   };
@@ -5016,12 +5104,20 @@
     if(!orderedQty){ alert("예약 수량을 입력해주세요."); return; }
     const requestDate = document.getElementById("resv-date-input").value || todayStr();
 
+    const colorIdx = document.getElementById("resv-color-select").value;
+    const colorObj = (colorIdx !== "" && m.colors && m.colors[Number(colorIdx)]) ? m.colors[Number(colorIdx)] : null;
+
     await addDoc(collection(db,"reservations"), {
-      modelId, modelGroup:m.modelGroup, baseModel:m.baseModel, capacity:m.capacity, petName:m.petName||"",
+      modelId, modelGroup:m.modelGroup, baseModel:m.baseModel, capacity:m.capacity,
+      systemModel: m.systemModel||"", petName:m.petName||"",
+      manufacturerColor: colorObj ? (colorObj.manufacturerColor||"") : "",
+      systemColor: colorObj ? (colorObj.systemColor||"") : "",
+      sku: colorObj ? (colorObj.sku||"") : "",
       destination, orderedQty, allocatedQty:0, requestDate,
       createdBy: currentUser.name, createdByUsername: currentUser.username, createdAt: serverTimestamp()
     });
-    logAction("예약 추가", destination+" / "+(m.petName||m.baseModel)+" "+orderedQty+"개");
+    logAction("예약 추가", destination+" / "+(m.systemModel||m.baseModel||m.petName)
+      + (colorObj ? " "+(colorObj.systemColor||colorObj.manufacturerColor||"") : "") + " "+orderedQty+"개");
     closeReservationModal();
     loadReservationTable();
   };
@@ -5060,7 +5156,10 @@
     const grid = {}; // grid[modelKey][destKey] = { orderedQty, allocatedQty, ids:[] }
 
     rows.forEach(r=>{
-      const modelKey = (r.petName||r.modelGroup||"모델")+"/"+(r.baseModel||"-")+" "+(r.capacity||"");
+      // 전산모델명 기준으로 묶고, 색상이 있으면 색상까지 구분합니다.
+      const head = r.systemModel || ((r.baseModel||"-") + (r.capacity ? " "+r.capacity : ""));
+      const colorPart = r.systemColor || r.manufacturerColor || "";
+      const modelKey = head + (r.petName ? " · "+r.petName : "") + (colorPart ? " / "+colorPart : "");
       if(!modelKeys.includes(modelKey)) modelKeys.push(modelKey);
       if(!destKeys.includes(r.destination)) destKeys.push(r.destination);
       if(!grid[modelKey]) grid[modelKey] = {};
@@ -6510,7 +6609,7 @@
       el.innerHTML = html;
     }
     renderFullList(carrierEl, carrierAgg, "통신사");
-    renderFullList(modelEl, modelAgg, "모델/펫네임");
+    renderFullList(modelEl, modelAgg, "펫네임/모델명");
     renderFullList(destEl, destAgg, "판매처");
 
     const discountItems = allItems.filter(it => (it.purchaseDiscountAmt!=null || it.otherDiscountAmt!=null) && (dashboardScope==="all" || inScope(it.inDate)));
@@ -6587,12 +6686,20 @@
 
     let items = [];
     snap.forEach(d=> items.push({ id:d.id, ...d.data() }));
+    const lastAllItems = items.slice();   // 조건 적용 전 원본 (예시 값 안내용)
+
+    // 어느 조건에서 몇 건이 걸러졌는지 기록해서, 0건일 때 이유를 보여줍니다.
+    const totalItemCount = items.length;
+    const filterSteps = [];
+    const dateTypeLabel = { inDate:"입고일", outDate:"출고일(판매일)", orderDate:"주문일", expectedSaleDate:"판매예정일" }[filterType] || filterType;
 
     if(filterDateFrom){
       items = items.filter(it => normDate(it[filterType]) >= filterDateFrom);
+      filterSteps.push({ label: dateTypeLabel+" "+filterDateFrom+" 이후", left: items.length });
     }
     if(filterDateTo){
       items = items.filter(it => normDate(it[filterType]) && normDate(it[filterType]) <= filterDateTo);
+      filterSteps.push({ label: dateTypeLabel+" "+filterDateTo+" 이전", left: items.length });
     }
 
     // 기본 조건 (필터줄에 항상 보이는 1개)
@@ -6607,6 +6714,7 @@
         }else{
           items = items.filter(it => String(fieldDef.get(it)||"").toLowerCase().includes(primaryVal));
         }
+        filterSteps.push({ label: fieldDef.label+" "+primaryMatch+' "'+document.getElementById("primary-cond-value").value.trim()+'"', left: items.length, field: fieldDef });
       }
     }
 
@@ -6621,6 +6729,7 @@
       }else{
         items = items.filter(it => String(fieldDef.get(it)||"").toLowerCase().includes(val));
       }
+      filterSteps.push({ label: fieldDef.label+" "+cond.matchType+' "'+cond.value.trim()+'"', left: items.length, field: fieldDef });
     });
 
     // 정렬: 기본 판매일(출고일) 내림차순, 버튼으로 주문일로 전환 가능
@@ -6635,7 +6744,36 @@
     const statusOptions = []; statusSnap.forEach(d=>statusOptions.push(d.data().name));
 
     if(items.length === 0){
-      listEl.innerHTML = '<div class="list-empty">해당 조건의 재고가 없습니다.</div>';
+      // 왜 0건인지 단계별로 보여줍니다. 어느 조건에서 걸러졌는지 바로 알 수 있습니다.
+      let why = '<div class="list-empty" style="text-align:left;line-height:1.9;">' +
+        '<b>해당 조건의 재고가 없습니다.</b><br>' +
+        '<span style="color:var(--gray);">전체 재고 <b>'+totalItemCount+'</b>건에서 조건을 차례로 적용한 결과입니다.</span>';
+      if(filterSteps.length === 0){
+        why += '<br>조건이 하나도 걸려 있지 않은데 0건입니다 — 등록된 재고 자체가 없습니다.';
+      }else{
+        let prev = totalItemCount;
+        filterSteps.forEach(st=>{
+          const cut = prev - st.left;
+          why += '<br>· ' + comboEsc(st.label) + ' → 남은 건수 <b>' + st.left + '</b>'
+               + (cut>0 ? ' <span style="color:var(--gray);">(' + cut + '건 제외)</span>' : '');
+          prev = st.left;
+        });
+        // 0건으로 만든 조건에 대해 실제로 존재하는 값을 예시로 보여줍니다.
+        const killer = filterSteps.find(st=> st.left === 0);
+        if(killer && killer.field){
+          const samples = [];
+          const seen = new Set();
+          for(const it of lastAllItems){
+            const v = String(killer.field.get(it)||"").trim();
+            if(v && v !== "-" && !seen.has(v)){ seen.add(v); samples.push(v); }
+            if(samples.length >= 6) break;
+          }
+          why += '<br><br><b>' + comboEsc(killer.field.label) + '</b> 칸에 실제로 들어있는 값 예시: '
+               + (samples.length ? '<b>' + samples.map(comboEsc).join('</b> · <b>') + '</b>' : '<span style="color:var(--gray);">(값이 있는 재고가 없습니다)</span>');
+        }
+      }
+      why += '</div>';
+      listEl.innerHTML = why;
       return;
     }
 
