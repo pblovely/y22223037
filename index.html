@@ -279,7 +279,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-07-25 v98</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-07-25 v100</span>
       <span id="topbar-username">-</span>
       <button onclick="openPersonalSettingsModal()">개인설정</button>
       <button onclick="handleLogout()">로그아웃</button>
@@ -449,6 +449,7 @@
           <span style="font-size:12px;color:var(--gray);margin-right:8px;">보기</span>
           <button class="btn small" id="order-filter-ing" style="width:auto;padding:0 12px;height:26px;border:1px solid var(--navy);" onclick="setOrderListFilter('ing')">진행중</button>
           <button class="btn small secondary" id="order-filter-done" style="width:auto;padding:0 12px;height:26px;border:1px solid var(--navy);margin-left:-1px;" onclick="setOrderListFilter('done')">최종완료</button>
+          <button class="btn small secondary" id="order-filter-waiting" style="width:auto;padding:0 12px;height:26px;border:1px solid var(--navy);margin-left:-1px;" onclick="setOrderListFilter('waiting')">입금확인중</button>
           <button class="btn small secondary" id="order-filter-cancel" style="width:auto;padding:0 12px;height:26px;border:1px solid var(--navy);margin-left:-1px;" onclick="setOrderListFilter('cancel')">취소</button>
           <button class="btn small secondary" id="order-filter-all" style="width:auto;padding:0 12px;height:26px;border:1px solid var(--navy);margin-left:-1px;" onclick="setOrderListFilter('all')">전체</button>
           <span id="order-wait-summary" style="margin-left:12px;font-size:12.5px;"></span>
@@ -1420,7 +1421,7 @@
           </div>
         </div>
         <div style="overflow-x:auto;border:1px solid var(--line);margin-bottom:8px;">
-          <table style="border-collapse:collapse;font-size:12px;white-space:nowrap;min-width:1180px;">
+          <table style="border-collapse:collapse;font-size:12px;white-space:nowrap;min-width:1400px;">
             <thead>
               <tr style="background:#fafafa;">
                 <th style="padding:6px;border:1px solid var(--line);">모델</th>
@@ -1674,7 +1675,7 @@
 
         <p class="desc" style="margin-top:14px;margin-bottom:4px;font-weight:700;color:var(--navy);">판매 품목</p>
         <div style="overflow-x:auto;border:1px solid var(--line);margin-bottom:8px;">
-          <table style="border-collapse:collapse;font-size:12px;white-space:nowrap;min-width:1180px;">
+          <table style="border-collapse:collapse;font-size:12px;white-space:nowrap;min-width:1400px;">
             <thead>
               <tr style="background:#fafafa;">
                 <th style="padding:6px;border:1px solid var(--line);">모델</th>
@@ -5393,7 +5394,8 @@
     const modelSel = document.createElement("select");
     modelSel.className = "ol-model";
     modelSel.id = "ol-model-" + (++lineSelectSeq);   // 줄마다 고유 id (검색형 전환에 필요)
-    modelSel.style.fontSize = "11.5px"; modelSel.style.padding = "4px"; modelSel.style.width = "170px";
+    modelSel.style.fontSize = "11.5px"; modelSel.style.padding = "4px";
+    modelSel.style.width = "180px"; modelSel.style.minWidth = "180px";
     modelSel.innerHTML = '<option value="">모델 선택</option>';
     modelsCache.forEach(m=>{
       const opt = document.createElement("option");
@@ -5402,12 +5404,13 @@
       modelSel.appendChild(opt);
     });
     modelSel.onchange = ()=> onOrderLineModelChange(tr);
-    td(modelSel);
+    const modelCell = td(modelSel);
+    modelCell.style.minWidth = "190px";   // 모델 칸이 눌리지 않도록
 
     // 색상 (모델을 고르면 그 모델 색상만 나옵니다)
     const colorSel = document.createElement("select");
     colorSel.className = "ol-color";
-    colorSel.style.fontSize = "11.5px"; colorSel.style.padding = "4px"; colorSel.style.width = "120px";
+    colorSel.style.fontSize = "11.5px"; colorSel.style.padding = "4px"; colorSel.style.width = "150px";
     colorSel.innerHTML = '<option value="">색상 선택</option>';
     td(colorSel);
 
@@ -5726,7 +5729,7 @@
   let orderListFilter = "ing";   // all | ing | done | cancel  (기본: 진행중만 — 완료건은 숨김)
   window.setOrderListFilter = function(f){
     orderListFilter = f;
-    ["all","ing","done","cancel"].forEach(k=>{
+    ["all","ing","done","waiting","cancel"].forEach(k=>{
       const btn = document.getElementById("order-filter-"+k);
       if(btn) btn.className = "btn small" + (k===f ? "" : " secondary");
     });
@@ -5776,20 +5779,24 @@
     orderBatchLinesCache = ordersByBatch;
 
     // 요약: 도착대기 · 이체대기 (필터와 무관하게 전체 기준)
-    let arriveWait = 0, payWaitCnt = 0, payWaitAmt = 0;
+    let arriveWait = 0, payWaitCnt = 0, payWaitAmt = 0, confirmCnt = 0, confirmAmt = 0;
     batchSnap.forEach(bd=>{
       const b = bd.data();
       if(b.status === "취소") return;
       const ls = (ordersByBatch[bd.id]||[]).filter(o=>o.status!=="취소");
       if(ls.some(o=> (Number(o.fulfilledCount)||0) < (Number(o.quantity)||0))) arriveWait++;
-      if(b.depositPaid !== true){ payWaitCnt++; payWaitAmt += Number(b.depositRequired)||0; }
+      if(b.depositPaid !== true){
+        payWaitCnt++; payWaitAmt += Number(b.depositRequired)||0;
+        if(b.paymentRequestId){ confirmCnt++; confirmAmt += Number(b.depositRequired)||0; }
+      }
     });
     const oSum = document.getElementById("order-wait-summary");
     if(oSum){
       oSum.innerHTML =
         '<span style="color:#b8860b;font-weight:700;">도착대기 ' + arriveWait + '건</span>' +
         ' · <span style="color:var(--danger);font-weight:700;">이체대기 ' + payWaitCnt + '건</span>' +
-        ' <span style="color:var(--gray);">' + payWaitAmt.toLocaleString() + '</span>';
+        ' <span style="color:var(--gray);">' + payWaitAmt.toLocaleString() + '</span>' +
+        ' · <span style="color:#b8860b;font-weight:700;">입금확인중 ' + confirmCnt + '건</span>';
     }
 
     // 필터를 먼저 적용해 배열로 모은 뒤 페이지 단위로 그립니다.
@@ -5801,9 +5808,10 @@
       const remainT = activeL.reduce((sum,o)=> sum + ((o.quantity||0)-(o.fulfilledCount||0)), 0);
       const cancelled = b.status==="취소";
       const done = !cancelled && activeL.length>0 && remainT===0;
-      if(orderListFilter==="ing"    && (cancelled || done)) return;
-      if(orderListFilter==="done"   && !done) return;
-      if(orderListFilter==="cancel" && !cancelled) return;
+      if(orderListFilter==="ing"     && (cancelled || done)) return;
+      if(orderListFilter==="done"    && !done) return;
+      if(orderListFilter==="waiting" && !(!cancelled && b.paymentRequestId && b.depositPaid !== true)) return;
+      if(orderListFilter==="cancel"  && !cancelled) return;
       visibleBatches.push({ id:bd.id, b, lines });
     });
 
@@ -5821,9 +5829,9 @@
       const depositLabel = b.paymentMethod==="b2b_credit"
         ? '<span style="color:#6a1b9a;font-weight:700;">삼성여신 결제('+(b.depositPaidDate||"-")+')</span>'
         : (b.depositPaid
-          ? '<span style="color:var(--navy);font-weight:700;">입금완료('+(b.depositPaidDate||"-")+')</span>'
+          ? '<span style="color:#2e7d32;font-weight:700;">입금완료('+(b.depositPaidDate||"-")+')</span>'
           : (b.paymentRequestId
-            ? '<span style="color:var(--gray);font-weight:700;">출금요청됨</span>'
+            ? '<span style="color:#b8860b;font-weight:700;">입금확인중 '+(b.depositRequired||0).toLocaleString()+'</span>'
             : '<span style="color:var(--danger);font-weight:700;">입금필요 '+(b.depositRequired||0).toLocaleString()+'</span>'));
       // 취소된 주문은 출금요청으로 묶이지 않도록 체크박스를 잠급니다.
       const cbDisabled = (b.depositPaid || b.paymentRequestId || b.status==="취소") ? "disabled" : "";
@@ -6888,7 +6896,8 @@
     const modelSel = document.createElement("select");
     modelSel.className = "sl-model";
     modelSel.id = "sl-model-" + (++lineSelectSeq);
-    modelSel.style.fontSize = "11.5px"; modelSel.style.padding = "4px"; modelSel.style.width = "170px";
+    modelSel.style.fontSize = "11.5px"; modelSel.style.padding = "4px";
+    modelSel.style.width = "180px"; modelSel.style.minWidth = "180px";
     modelSel.innerHTML = '<option value="">모델 선택</option>';
     modelsCache.forEach(m=>{
       const opt = document.createElement("option");
