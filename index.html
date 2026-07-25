@@ -49,6 +49,9 @@
   .btn-group{ display:inline-flex; align-items:center; }
   .btn-group .btn{ margin:0 0 0 -1px; }
   .btn-group .btn:first-child{ margin-left:0; }
+  /* 옆으로 이어지는 작은 버튼은 자동으로 붙여서 한 덩어리로 보이게 합니다. */
+  .btn.small + .btn.small{ margin-left:-1px !important; }
+  .btn.small:hover, .btn.small:focus{ position:relative; z-index:2; }
   .switch-link{ margin-top:16px; text-align:center; font-size:12.5px; color:var(--gray); }
   .switch-link a{ color:var(--accent); cursor:pointer; font-weight:700; text-decoration:none; }
   .msg{ font-size:12.5px; padding:8px 10px; margin-bottom:14px; border-left:3px solid var(--danger); background:#fdecea; color:var(--danger); display:none; }
@@ -222,7 +225,7 @@
   .list-row{ display:flex; justify-content:space-between; align-items:center; gap:10px;
     padding:7px 10px; border:1px solid var(--line); border-top:none; font-size:13px; }
   .list-row > span:first-child{ flex:1; min-width:0; line-height:1.7; }
-  .list-row > span:last-child{ flex-shrink:0; display:flex; align-items:center; gap:4px; }
+  .list-row > span:last-child{ flex-shrink:0; display:inline-flex; align-items:center; gap:0; }
   .list-row.compact{ padding:0 10px; height:36px; box-sizing:border-box; }
   .list-row.compact .btn.small{ padding:4px 10px; }
   .data-table{ width:100%; border-collapse:collapse; font-size:12.5px; }
@@ -276,7 +279,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-07-25 v82</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-07-25 v85</span>
       <span id="topbar-username">-</span>
       <button onclick="openPersonalSettingsModal()">개인설정</button>
       <button onclick="handleLogout()">로그아웃</button>
@@ -428,9 +431,9 @@
           <span style="position:relative;">
             <button class="btn small" style="width:auto;" onclick="toggleOrderAddMenu(event)">+ 주문 ▾</button>
             <div id="order-add-menu" style="display:none;position:absolute;top:36px;right:0;background:#fff;border:1px solid var(--navy);box-shadow:0 2px 10px rgba(0,0,0,0.15);z-index:100;min-width:180px;">
-              <div class="menu-item" data-label-key="menu-order-instant" onclick="closeOrderAddMenu();openItemModal();"><span class="tab-label-text">즉시 주문 (바로 등록)</span></div>
+              <div class="menu-item" data-label-key="menu-order-instant" onclick="closeOrderAddMenu();openOrderModal();"><span class="tab-label-text">건별 주문 등록</span></div>
               <div class="menu-item" data-label-key="menu-order-paste" onclick="closeOrderAddMenu();openOrderPasteModal();"><span class="tab-label-text">텍스트로 붙여넣기 등록</span></div>
-              <div class="menu-item" data-label-key="menu-order-new" onclick="closeOrderAddMenu();openOrderModal();"><span class="tab-label-text">새 주문 (예약)</span></div>
+              <div class="menu-item" data-label-key="menu-order-excel" onclick="closeOrderAddMenu();openOrderModal();"><span class="tab-label-text">여러 품목 한 번에 등록</span></div>
             </div>
           </span>
         </div>
@@ -3059,7 +3062,7 @@
         '<br><span style="color:var(--gray);font-size:11.5px;">'+t+' · '+(n.authorName||"-")+'</span>'+
         (n.content ? '<br>'+n.content : '') + '</span>' +
         '<span style="flex-shrink:0;">' +
-        '<button class="btn small secondary" style="width:auto;margin-right:4px;" data-edit-notice="'+d.id+'">수정</button>' +
+        '<button class="btn small secondary" style="width:auto;" data-edit-notice="'+d.id+'">수정</button>' +
         '<button class="btn small danger" style="width:auto;" data-del-notice="'+d.id+'">삭제</button>' +
         '</span>';
       listEl.appendChild(row);
@@ -3372,7 +3375,7 @@
           '<button class="btn small secondary" style="width:auto;" data-open-color="'+m.id+'">색상 ('+colors.length+')'+(missingSkuCount>0?' <span style="color:var(--danger);">!</span>':'')+'</button>' +
         '</td>' +
         '<td class="ta-right">' +
-          '<button class="btn small secondary" style="width:auto;margin-right:4px;" data-edit-model="'+m.id+'">수정</button>' +
+          '<button class="btn small secondary" style="width:auto;" data-edit-model="'+m.id+'">수정</button>' +
           '<button class="btn small danger" style="width:auto;" data-del-model="'+m.id+'">삭제</button>' +
         '</td>';
       if(m.needsReview) tr.style.background = "#fff8f8";
@@ -3570,7 +3573,7 @@
         '<td>'+(c.systemColor||"-")+'</td>' +
         '<td>'+(c.sku||"(미입력)")+'</td>' +
         '<td class="ta-right">' +
-          '<button class="btn small secondary" style="width:auto;margin-right:4px;" data-color-row-edit="'+m.id+'">수정</button>' +
+          '<button class="btn small secondary" style="width:auto;" data-color-row-edit="'+m.id+'">수정</button>' +
           '<button class="btn small danger" style="width:auto;" data-color-row-del="'+m.id+'" data-idx="'+idx+'">삭제</button>' +
         '</td>';
       bodyEl.appendChild(tr);
@@ -3664,7 +3667,7 @@
         '<td>'+(c.systemColor||"-")+'</td>' +
         '<td>'+(c.sku||"(미입력)")+'</td>' +
         '<td class="ta-right">' +
-        '<button class="btn small secondary" style="width:auto;margin-right:4px;" data-color-edit="'+idx+'">수정</button>' +
+        '<button class="btn small secondary" style="width:auto;" data-color-edit="'+idx+'">수정</button>' +
         '<button class="btn small danger" style="width:auto;" data-color-del="'+idx+'">삭제</button>' +
         '</td></tr>';
     });
@@ -4711,7 +4714,7 @@
         '<td style="max-width:220px;overflow:hidden;text-overflow:ellipsis;" title="'+comboEsc(c.note||"")+'">'+comboEsc(c.note||"-")+'</td>' +
         '<td class="ta-right">' +
           (canEditCompany
-            ? '<button class="btn small secondary" style="width:auto;margin-right:4px;" data-edit-co="'+c.id+'">수정</button>' +
+            ? '<button class="btn small secondary" style="width:auto;" data-edit-co="'+c.id+'">수정</button>' +
               '<button class="btn small danger" style="width:auto;" data-del-co="'+c.id+'">삭제</button>'
             : '<button class="btn small secondary" style="width:auto;" data-view-co="'+c.id+'">보기</button>') +
         '</td>';
@@ -5483,8 +5486,8 @@
         '<b>'+(b.source||"-")+'</b> · 주문일 '+(b.orderDate||"-")+' · 품목 '+lines.length+'개 (도착대기 '+remainTotal+') · '+depositLabel+
         '<br>'+stampText(b)+'</span>' +
         '<span>' +
-        '<button class="btn small secondary" style="width:auto;margin-right:4px;" data-detail="'+bd.id+'">상세보기</button>' +
-        (!isCancelled ? '<button class="btn small secondary" style="width:auto;margin-right:4px;" data-edit-batch="'+bd.id+'">수정</button>' : '') +
+        '<button class="btn small secondary" style="width:auto;" data-detail="'+bd.id+'">상세보기</button>' +
+        (!isCancelled ? '<button class="btn small secondary" style="width:auto;" data-edit-batch="'+bd.id+'">수정</button>' : '') +
         (!isCancelled ? '<button class="btn small danger" style="width:auto;" data-cancel-batch="'+bd.id+'">취소</button>' : '') +
         '</span>';
       listEl.appendChild(row);
@@ -6065,7 +6068,7 @@
         '<td class="ta-right">'+(o.fulfilledCount||0)+'/'+qty+'</td>' +
         '<td>'+comboEsc(o.status||"-")+'</td>' +
         '<td class="ta-right no-print">' +
-          '<button class="btn small secondary" style="width:auto;margin-right:3px;" data-edit-line="'+o.id+'">수정</button>' +
+          '<button class="btn small secondary" style="width:auto;" data-edit-line="'+o.id+'">수정</button>' +
           (remain>0 && o.status!=="취소"
             ? '<button class="btn small" style="width:auto;" data-arrive="'+o.id+'">도착 등록 ('+remain+')</button>'
             : (o.destination && (o.linkedItemIds||[]).length>0
@@ -7593,7 +7596,7 @@
         '<td>'+comboEsc(q.validUntil||"-")+'</td>' +
         '<td>'+comboEsc(q.status||"-")+'</td>' +
         '<td class="ta-right">' +
-          '<button class="btn small secondary" style="width:auto;margin-right:3px;" data-q-view="'+d.id+'">보기</button>' +
+          '<button class="btn small secondary" style="width:auto;" data-q-view="'+d.id+'">보기</button>' +
           (cancelled ? '' : '<button class="btn small danger" style="width:auto;" data-q-cancel="'+d.id+'">취소</button>') +
         '</td></tr>';
     });
@@ -7875,9 +7878,61 @@
             + '<td class="ta-right">'+r.qty+'</td>'
             + '<td class="ta-right">'+(r.model.priceIncVat ? Number(r.model.priceIncVat).toLocaleString() : '<span style="color:var(--danger);">미입력</span>')+'</td></tr>').join("")
         + '</tbody></table></div>'
-        + '<button class="btn small" style="width:auto;" onclick="submitOrderPaste()">이 내용으로 주문 등록 ('+ok.reduce((n,r)=>n+r.qty,0)+'대)</button>';
+        + '<button class="btn small" style="width:auto;" onclick="fillOrderModalFromPaste()">주문 등록창에 넣기 ('+ok.reduce((n,r)=>n+r.qty,0)+'대)</button>'
+        + '<button class="btn small secondary" style="width:auto;" onclick="submitOrderPaste()">바로 등록 (할인 없이)</button>'
+        + '<div style="font-size:11.5px;color:var(--gray);margin-top:6px;line-height:1.6;">'
+        + '<b>주문 등록창에 넣기</b>를 누르면 품목이 채워진 채로 주문 창이 열립니다. 거기서 할인·판매조건을 넣고 한 번에 등록하세요.</div>';
     }
     el.innerHTML = h;
+  };
+
+  // 분석한 내용을 주문 등록창에 그대로 채워 넣습니다. 거기서 할인·판매조건을 넣고 한 번에 등록합니다.
+  window.fillOrderModalFromPaste = async function(){
+    if(orderPasteRows.length === 0){ alert("먼저 분석하기를 눌러주세요."); return; }
+    const source = document.getElementById("order-paste-source").value;
+    const orderDate = (document.getElementById("order-paste-date").value||"").replace(/\D/g,"") || todayStr();
+    const rows = orderPasteRows.slice();
+
+    closeOrderPasteModal();
+    await openOrderModal();
+
+    // 머리부 채우기
+    if(source){
+      const ss = document.getElementById("order-source-select");
+      if(ss){ ss.value = source; syncSearchableSelect("order-source-select"); }
+    }
+    document.getElementById("order-date-input").value = orderDate;
+
+    // 기본 1줄은 지우고 분석 결과만큼 줄을 만듭니다.
+    document.getElementById("order-lines-body").innerHTML = "";
+    for(const r of rows){
+      await addOrderLine();
+      const trs = document.querySelectorAll("#order-lines-body tr");
+      const tr = trs[trs.length-1];
+      if(!tr) continue;
+      const ms = tr.querySelector(".ol-model");
+      if(ms){
+        ms.value = r.model.id;
+        if(ms.id) syncSearchableSelect(ms.id);
+        await onOrderLineModelChange(tr);   // 색상 목록·출고가 채우기
+      }
+      // 색상 고르기 (있으면)
+      const cs = tr.querySelector(".ol-color, .ol-syscolor");
+      if(cs && r.colorObj){
+        const idx = (r.model.colors||[]).findIndex(x=>
+          x.sku === r.colorObj.sku ||
+          (x.systemColor === r.colorObj.systemColor && x.manufacturerColor === r.colorObj.manufacturerColor));
+        if(idx >= 0) cs.value = String(idx);
+      }
+      // 통신사 (줄에 있으면)
+      const cr = tr.querySelector(".ol-carrier");
+      if(cr && r.carrier) cr.value = r.carrier;
+      // 수량
+      const q = tr.querySelector(".ol-qty");
+      if(q){ q.value = r.qty; if(typeof updateOrderLineSubtotal === "function") updateOrderLineSubtotal(tr); }
+    }
+    if(typeof recalcOrderTotal === "function") recalcOrderTotal();
+    alert(rows.length + "줄을 주문 등록창에 넣었습니다.\n할인·판매조건을 넣고 등록해주세요.");
   };
 
   window.submitOrderPaste = async function(){
@@ -8761,7 +8816,7 @@
         '<td class="ta-right">' +
           (quoted
             ? '<button class="btn small secondary" style="width:auto;" data-resv-quote="'+r.quotationId+'">견적서 보기</button>'
-            : '<button class="btn small secondary" style="width:auto;margin-right:3px;" data-resv-edit2="'+r.id+'">수정</button>' +
+            : '<button class="btn small secondary" style="width:auto;" data-resv-edit2="'+r.id+'">수정</button>' +
               '<button class="btn small danger" style="width:auto;" data-resv-del2="'+r.id+'">삭제</button>') +
         '</td></tr>';
     });
@@ -9042,8 +9097,8 @@
           + lines.reduce((n,l)=> n + Math.max(0, (Number(l.quantity)||0) - (Number(l.fulfilledCount)||0)), 0) + ') · '+depositLabel
           + '<br>'+stampText(b)+(isLegacy?' <span style="color:var(--gray);">(기존건)</span>':'')+'</span>' +
         '<span>' +
-        '<button class="btn small secondary" style="width:auto;margin-right:4px;" data-detail>상세보기</button>' +
-        (!isLegacy && b.status !== "취소" ? '<button class="btn small secondary" style="width:auto;margin-right:4px;" data-edit-batch>수정</button>' : '') +
+        '<button class="btn small secondary" style="width:auto;" data-detail>상세보기</button>' +
+        (!isLegacy && b.status !== "취소" ? '<button class="btn small secondary" style="width:auto;" data-edit-batch>수정</button>' : '') +
         (b.status !== "취소" ? '<button class="btn small danger" style="width:auto;" data-cancel>취소</button>' : '') +
         '</span>';
       listEl.appendChild(row);
@@ -10534,8 +10589,8 @@
       row.className = "list-row compact";
       row.innerHTML = '<span style="color:var(--gray);width:32px;flex-shrink:0;font-size:12px;">'+(i+1)+'</span>' +
         '<span style="flex:1;">'+(b.fileName||"-")+' · '+t+' · '+(b.uploadedBy||"-")+'('+(b.uploadedByUsername||"-")+') · '+(b.rowCount||0)+'행</span>' +
-        '<button class="btn small secondary" style="width:auto;margin-right:4px;" data-view-batch="'+d.id+'">조회</button>' +
-        '<button class="btn small secondary" style="width:auto;margin-right:4px;" data-download-batch="'+d.id+'">다운로드</button>' +
+        '<button class="btn small secondary" style="width:auto;" data-view-batch="'+d.id+'">조회</button>' +
+        '<button class="btn small secondary" style="width:auto;" data-download-batch="'+d.id+'">다운로드</button>' +
         '<button class="btn small danger" style="width:auto;" data-delete-batch="'+d.id+'">삭제</button>';
       listEl.appendChild(row);
       row.querySelector('[data-view-batch]').onclick = ()=> viewMasterStockBatch(d.id, b.fileName);
