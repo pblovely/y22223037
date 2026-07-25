@@ -212,7 +212,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-07-25 v17</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-07-25 v18</span>
       <span id="topbar-username">-</span>
       <button onclick="openPersonalSettingsModal()">개인설정</button>
       <button onclick="handleLogout()">로그아웃</button>
@@ -1019,6 +1019,13 @@
         <div class="stack-form">
           <div class="stack-row"><label>필드</label><select id="bulk-edit-field" onchange="onBulkEditFieldChange()"></select></div>
           <div class="stack-row"><label>값</label><span id="bulk-edit-value-wrap"><input type="text" id="bulk-edit-value"></span></div>
+        </div>
+        <div id="bulk-link-box" style="display:none;border:1px solid var(--navy);background:#fafafa;padding:9px 11px;margin-bottom:12px;font-size:12.5px;line-height:1.7;">
+          <label style="display:flex;align-items:flex-start;gap:6px;font-weight:700;color:var(--navy);cursor:pointer;">
+            <input type="checkbox" id="bulk-edit-link" checked style="margin-top:2px;">
+            <span>연결된 금액도 함께 계산해서 바꾸기</span>
+          </label>
+          <div id="bulk-link-desc" style="color:var(--gray);margin-top:4px;padding-left:22px;"></div>
         </div>
         <button class="btn small" style="width:auto;margin-bottom:16px;" onclick="applyBulkEdit()">이 값으로 변경</button>
         <div style="border-top:1px solid var(--line);padding-top:14px;">
@@ -5935,6 +5942,18 @@
     const fieldDef = BULK_EDIT_FIELDS.find(f=>f.key===key);
     const wrap = document.getElementById("bulk-edit-value-wrap");
     if(!fieldDef) return;
+
+    // 연동 계산이 있는 칸이면 선택 영역을 보여줍니다.
+    const linkBox = document.getElementById("bulk-link-box");
+    const linkDesc = document.getElementById("bulk-link-desc");
+    if(BULK_LINK_RULES[key]){
+      linkBox.style.display = "block";
+      linkDesc.innerHTML = BULK_LINK_RULES[key] + "<br>체크를 풀면 <b>" + fieldDef.label + " 칸만</b> 바뀝니다.";
+      document.getElementById("bulk-edit-link").checked = true;
+    }else{
+      linkBox.style.display = "none";
+      linkDesc.innerHTML = "";
+    }
     if(fieldDef.type === "select"){
       const snap = await getDocs(query(collection(db, fieldDef.collection), orderBy("name")));
       let html = '<select id="bulk-edit-value" style="padding:5px 8px;border:1px solid #c7c7c7;font-size:12.5px;height:28px;box-sizing:border-box;">';
@@ -5995,6 +6014,75 @@
     loadInventoryList();
   };
 
+  // ===== 일괄변경 연동 계산 =====
+  // 출고가를 기준으로 서로 맞물린 값을 다시 계산합니다.
+  //   입고가 = 출고가 − 선할인 − 타할인
+  //   판매가 = 출고가 − 판매할인
+  //   수익   = 판매가 − 입고가
+  const BULK_LINK_RULES = {
+    purchaseDiscount:    "선할인 금액과 입고가를 다시 계산합니다. (입고가 = 출고가 − 선할인 − 타할인)",
+    purchaseDiscountAmt: "선할인%와 입고가를 다시 계산합니다. (입고가 = 출고가 − 선할인 − 타할인)",
+    otherDiscountPct:    "타할인 금액과 입고가를 다시 계산합니다. (입고가 = 출고가 − 선할인 − 타할인)",
+    otherDiscountAmt:    "타할인%와 입고가를 다시 계산합니다. (입고가 = 출고가 − 선할인 − 타할인)",
+    purchasePrice:       "선할인 금액·선할인%를 다시 계산합니다. (타할인은 그대로 유지)",
+    saleDiscount:        "판매할인 금액과 판매가를 다시 계산합니다. (판매가 = 출고가 − 판매할인)",
+    saleDiscountAmt:     "판매할인%와 판매가를 다시 계산합니다. (판매가 = 출고가 − 판매할인)",
+    salePrice:           "판매할인 금액과 판매할인%를 다시 계산합니다.",
+    listPrice:           "출고가가 바뀌므로 선할인·타할인·판매할인 금액과 비율을 다시 계산합니다. (입고가·판매가는 그대로 유지)"
+  };
+  const BULK_FIELD_LABELS = {
+    listPrice:"출고가", purchasePrice:"입고가", purchaseDiscountAmt:"선할인", purchaseDiscount:"선할인%",
+    otherDiscountAmt:"타할인", otherDiscountPct:"타할인%", salePrice:"판매가",
+    saleDiscountAmt:"판매할인", saleDiscount:"판매할인%", profit:"수익"
+  };
+
+  // it: 기존 재고, key: 바꾼 칸, val: 새 값 → 함께 바꿀 값들을 돌려줍니다.
+  function computeLinkedPatch(it, key, val){
+    if(!it) return {};
+    const num = v => (v==null || v==="" || !isFinite(Number(v))) ? 0 : Number(v);
+    const L0 = num(it.listPrice);
+    const L  = (key === "listPrice") ? num(val) : L0;
+    const pct = (amt) => L ? Number(((amt/L)*100).toFixed(2)) : null;
+    const amt = (r)   => L ? Math.round(L * num(r) / 100) : null;
+
+    let pre   = num(it.purchaseDiscountAmt);
+    let other = num(it.otherDiscountAmt);
+    let saleA = num(it.saleDiscountAmt);
+    let buy   = num(it.purchasePrice);
+    let sale  = num(it.salePrice);
+    const p = {};
+
+    if(key === "purchaseDiscount"){    pre = amt(val) || 0;  p.purchaseDiscountAmt = pre; }
+    if(key === "purchaseDiscountAmt"){ pre = num(val);       p.purchaseDiscount = pct(pre); }
+    if(key === "otherDiscountPct"){    other = amt(val) || 0; p.otherDiscountAmt = other; }
+    if(key === "otherDiscountAmt"){    other = num(val);      p.otherDiscountPct = pct(other); }
+
+    if(["purchaseDiscount","purchaseDiscountAmt","otherDiscountPct","otherDiscountAmt"].includes(key)){
+      if(L){ buy = L - pre - other; p.purchasePrice = buy; }
+    }
+    if(key === "purchasePrice"){
+      buy = num(val);
+      if(L){ pre = L - buy - other; p.purchaseDiscountAmt = pre; p.purchaseDiscount = pct(pre); }
+    }
+
+    if(key === "saleDiscount"){    saleA = amt(val) || 0; p.saleDiscountAmt = saleA; if(L){ sale = L - saleA; p.salePrice = sale; } }
+    if(key === "saleDiscountAmt"){ saleA = num(val);      p.saleDiscount = pct(saleA); if(L){ sale = L - saleA; p.salePrice = sale; } }
+    if(key === "salePrice"){       sale = num(val);       if(L){ saleA = L - sale; p.saleDiscountAmt = saleA; p.saleDiscount = pct(saleA); } }
+
+    if(key === "listPrice"){
+      // 출고가 인하 등: 실제 오간 금액(입고가·판매가)은 그대로 두고 할인만 다시 계산
+      if(L){
+        pre = L - buy - other;
+        p.purchaseDiscountAmt = pre; p.purchaseDiscount = pct(pre);
+        p.otherDiscountPct = pct(other);
+        if(it.salePrice != null){ saleA = L - sale; p.saleDiscountAmt = saleA; p.saleDiscount = pct(saleA); }
+      }
+    }
+
+    if(sale && buy) p.profit = sale - buy;
+    return p;
+  }
+
   window.applyBulkEdit = async function(){
     const ids = getSelectedInventoryIds();
     if(ids.length===0){ alert("적용할 재고를 먼저 선택해주세요."); return; }
@@ -6003,23 +6091,52 @@
     const valEl = document.getElementById("bulk-edit-value");
     let newVal = valEl.value;
     if(newVal === ""){ alert("적용할 값을 입력해주세요."); return; }
-    if(!confirm(fieldDef.label+" 값을 선택한 "+ids.length+"건에 일괄 적용하시겠습니까?")) return;
 
     const isNumberField = fieldDef.type === "number";
     const parsedVal = isNumberField ? Number(newVal) : newVal;
 
+    const linkEl = document.getElementById("bulk-edit-link");
+    const useLink = !!(BULK_LINK_RULES[key] && linkEl && linkEl.checked);
+
+    // 확인창: 첫 건을 예로 들어 무엇이 어떻게 바뀌는지 보여줍니다.
+    let msg = fieldDef.label + " → " + newVal + "\n선택한 " + ids.length + "건에 적용합니다.\n";
+    if(useLink){
+      const sample = lastRenderedItems.find(x=>x.id===ids[0]);
+      const preview = computeLinkedPatch(sample, key, parsedVal);
+      const keys = Object.keys(preview);
+      msg += "\n[함께 바뀌는 값] " + BULK_LINK_RULES[key] + "\n";
+      if(keys.length === 0){
+        msg += "\n※ 첫 건은 출고가가 없어 함께 계산할 값이 없습니다.\n";
+      }else{
+        msg += "\n첫 번째 건 기준 미리보기\n";
+        const fmt = v => (v==null || v==="") ? "-" : (typeof v==="number" ? v.toLocaleString() : String(v));
+        keys.forEach(k=>{
+          msg += "  · " + (BULK_FIELD_LABELS[k]||k) + " : " + fmt(sample ? sample[k] : null) + "  →  " + fmt(preview[k]) + "\n";
+        });
+        msg += "\n(건마다 출고가가 다르면 결과 금액도 건마다 다릅니다)\n";
+      }
+    }else if(BULK_LINK_RULES[key]){
+      msg += "\n[연동 계산 없음] " + fieldDef.label + " 칸만 바뀝니다. 다른 금액과 맞지 않을 수 있습니다.\n";
+    }
+    msg += "\n진행하시겠습니까?";
+    if(!confirm(msg)) return;
+
+    let linkedCount = 0;
     for(const id of ids){
       const it = lastRenderedItems.find(x=>x.id===id);
       const patch = { [key]: parsedVal };
-      if(key === "purchasePrice" && it && it.salePrice){
-        patch.profit = Number(it.salePrice) - parsedVal;
-      }
-      if(key === "salePrice" && it && it.purchasePrice){
-        patch.profit = parsedVal - Number(it.purchasePrice);
+      if(useLink){
+        const linked = computeLinkedPatch(it, key, parsedVal);
+        if(Object.keys(linked).length>0) linkedCount++;
+        Object.assign(patch, linked);
+      }else{
+        // 연동을 끄더라도 수익은 앞뒤가 맞아야 하므로 계산해 둡니다.
+        if(key === "purchasePrice" && it && it.salePrice) patch.profit = Number(it.salePrice) - parsedVal;
+        if(key === "salePrice" && it && it.purchasePrice) patch.profit = parsedVal - Number(it.purchasePrice);
       }
       await updateDoc(doc(db,"inventoryItems", id), patch);
     }
-    logAction("재고 일괄 변경", fieldDef.label+" → "+newVal+" ("+ids.length+"건)");
+    logAction("재고 일괄 변경", fieldDef.label+" → "+newVal+" ("+ids.length+"건"+(useLink?" / 연동계산 "+linkedCount+"건":" / 연동 없음")+")");
     document.getElementById("bulk-select-all").checked = false;
     closeBulkChangeModal();
     loadInventoryList();
