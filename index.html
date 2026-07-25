@@ -245,8 +245,7 @@
         <button class="tab-btn" data-tab="tab-inv-manufacturer" data-label-key="tab-inv-manufacturer" onclick="switchTab('tab-inv-manufacturer')"><span class="tab-label-text">제조사</span></button>
         <button class="tab-btn" data-tab="tab-inv-location" data-label-key="tab-inv-location" onclick="switchTab('tab-inv-location')"><span class="tab-label-text">위치</span></button>
         <button class="tab-btn" data-tab="tab-inv-status" data-label-key="tab-inv-status" onclick="switchTab('tab-inv-status')"><span class="tab-label-text">현재상태</span></button>
-        <button class="tab-btn" data-tab="tab-inv-source" data-label-key="tab-inv-source" onclick="switchTab('tab-inv-source')"><span class="tab-label-text">입고처</span></button>
-        <button class="tab-btn" data-tab="tab-inv-dest" data-label-key="tab-inv-dest" onclick="switchTab('tab-inv-dest')"><span class="tab-label-text">출고처</span></button>
+        <button class="tab-btn" data-tab="tab-inv-company" data-label-key="tab-inv-company" onclick="switchTab('tab-inv-company')"><span class="tab-label-text">업체정보</span></button>
         <button class="tab-btn" data-tab="tab-inv-carrier" data-label-key="tab-inv-carrier" onclick="switchTab('tab-inv-carrier')"><span class="tab-label-text">통신사</span></button>
       </div>
 
@@ -521,27 +520,82 @@
       </div>
     </div>
 
-    <div id="tab-inv-source" class="tab-panel">
-      <div class="card">
-        <h3>입고처 종류</h3>
-        <p class="desc">단말기를 사오는 곳(매입처) 목록입니다. 재고 등록 시 여기서 선택합니다.</p>
-        <div class="inline-form">
-          <input type="text" id="new-source-input" placeholder="예: 포피플">
-          <button class="btn small" onclick="addSource()">추가</button>
+    <div id="tab-inv-company" class="tab-panel">
+      <div class="card" style="max-width:1400px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+          <h3 style="margin:0;">업체정보 <span class="info-tip" title="매입처(입고처)와 판매처(출고처)를 한 곳에서 관리합니다. 구분을 체크한 업체만 해당 드롭다운에 나타납니다.">ⓘ</span></h3>
+          <span>
+            <button class="btn small secondary" style="width:auto;margin-right:6px;" onclick="importLegacyCompanies()">기존 입고처·출고처 가져오기</button>
+            <button class="btn small" style="width:auto;" onclick="openCompanyModal()">+ 업체 등록</button>
+          </span>
         </div>
-        <div id="source-list"></div>
+        <p class="desc">사업자정보·계좌정보·비고를 함께 관리합니다. 최근에 등록·수정한 업체가 맨 위에 표시됩니다.</p>
+        <div style="display:flex;align-items:center;gap:0;flex-wrap:wrap;margin-bottom:8px;">
+          <span style="font-size:12px;color:var(--gray);margin-right:8px;">보기</span>
+          <button class="btn small" id="company-filter-all" style="width:auto;padding:0 12px;height:26px;border:1px solid var(--navy);" onclick="setCompanyFilter('all')">전체</button>
+          <button class="btn small secondary" id="company-filter-source" style="width:auto;padding:0 12px;height:26px;border:1px solid var(--navy);margin-left:-1px;" onclick="setCompanyFilter('source')">매입처</button>
+          <button class="btn small secondary" id="company-filter-dest" style="width:auto;padding:0 12px;height:26px;border:1px solid var(--navy);margin-left:-1px;" onclick="setCompanyFilter('dest')">판매처</button>
+        </div>
+        <div style="overflow-x:auto;">
+        <table class="data-table" style="min-width:1180px;">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>업체명</th>
+              <th>구분</th>
+              <th>사업자번호</th>
+              <th>대표자</th>
+              <th>업태/종목</th>
+              <th>은행</th>
+              <th>계좌번호</th>
+              <th>예금주</th>
+              <th>비고</th>
+              <th class="ta-right">관리</th>
+            </tr>
+          </thead>
+          <tbody id="company-table-body"></tbody>
+        </table>
+        </div>
+        <div id="company-pagination"></div>
       </div>
     </div>
 
-    <div id="tab-inv-dest" class="tab-panel">
-      <div class="card">
-        <h3>출고처 종류</h3>
-        <p class="desc">단말기가 나가는 곳(판매처·개통처) 목록입니다.</p>
-        <div class="inline-form">
-          <input type="text" id="new-dest-input" placeholder="예: 타 LG대리점">
-          <button class="btn small" onclick="addDestination()">추가</button>
+    <!-- 업체 등록·수정 팝업 -->
+    <div id="company-modal-overlay" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.55);z-index:1000;align-items:center;justify-content:center;">
+      <div style="background:#fff;border:2px solid var(--navy);max-width:620px;width:95%;max-height:90vh;overflow-y:auto;padding:22px;position:relative;">
+        <button onclick="closeCompanyModal()" style="position:absolute;top:12px;right:12px;background:none;border:1px solid var(--navy);width:26px;height:26px;cursor:pointer;font-size:13px;">✕</button>
+        <h3 id="company-modal-title" style="margin-top:0;margin-bottom:4px;">업체 등록</h3>
+        <p class="desc">업체명만 있어도 저장됩니다. 나머지는 확인되는 대로 채워주세요.</p>
+        <div class="stack-form">
+          <div class="stack-row"><label>업체명 <span style="color:var(--danger);">*</span></label><input type="text" id="co-name-input" placeholder="예: (주)포피플"></div>
+          <div class="stack-row"><label>구분</label>
+            <span style="flex:1;display:flex;align-items:center;gap:14px;padding:5px 8px;font-size:12.5px;">
+              <label style="display:flex;align-items:center;gap:5px;"><input type="checkbox" id="co-is-source"> 매입처 (입고처)</label>
+              <label style="display:flex;align-items:center;gap:5px;"><input type="checkbox" id="co-is-dest"> 판매처 (출고처)</label>
+            </span>
+          </div>
         </div>
-        <div id="dest-list"></div>
+        <div style="font-size:11px;font-weight:700;color:var(--gray);margin:12px 0 4px 0;">사업자정보</div>
+        <div class="stack-form">
+          <div class="stack-row"><label>사업자등록번호</label><input type="text" id="co-biznum-input" placeholder="000-00-00000" maxlength="14"></div>
+          <div class="stack-row"><label>대표자명</label><input type="text" id="co-ceo-input"></div>
+          <div class="stack-row"><label>업태</label><input type="text" id="co-biztype-input" placeholder="예: 도매및소매업"></div>
+          <div class="stack-row"><label>종목</label><input type="text" id="co-bizitem-input" placeholder="예: 이동통신단말기"></div>
+          <div class="stack-row"><label>사업장 주소</label><input type="text" id="co-address-input"></div>
+          <div class="stack-row"><label>담당자 / 연락처</label><input type="text" id="co-contact-input" placeholder="예: 김담당 / 041-000-0000"></div>
+        </div>
+        <div style="font-size:11px;font-weight:700;color:var(--gray);margin:12px 0 4px 0;">계좌정보</div>
+        <div class="stack-form">
+          <div class="stack-row"><label>은행</label><input type="text" id="co-bank-input" placeholder="예: 국민은행"></div>
+          <div class="stack-row"><label>계좌번호</label><input type="text" id="co-account-input"></div>
+          <div class="stack-row"><label>예금주</label><input type="text" id="co-holder-input"></div>
+        </div>
+        <div style="font-size:11px;font-weight:700;color:var(--gray);margin:12px 0 4px 0;">비고</div>
+        <div class="stack-form">
+          <div class="stack-row" style="align-items:stretch;"><label>비고</label><textarea id="co-note-input" rows="3" style="flex:1;border:none;padding:6px 8px;font-size:12.5px;font-family:inherit;resize:vertical;"></textarea></div>
+        </div>
+        <button class="btn small" style="width:auto;margin-top:12px;" onclick="submitCompany()">저장</button>
+        <div id="co-result-msg" style="display:none;font-size:12.5px;margin-top:10px;padding:8px 10px;border-left:3px solid var(--navy);background:#f2f2f2;line-height:1.6;"></div>
       </div>
     </div>
 
@@ -601,14 +655,15 @@
         <div class="stack-form">
           <div class="stack-row"><label>제조사</label><select id="ms-manufacturer-select"></select></div>
           <div class="stack-row"><label>펫네임</label><input type="text" id="ms-pet-input" placeholder="예: 갤럭시Z 폴드7"></div>
-          <div class="stack-row"><label>전산모델명</label><input type="text" id="ms-system-input" placeholder="예: SM-F976N256"></div>
-          <div class="stack-row"><label>모델명 <span class="info-tip" title="마스터재고 파일의 '모델코드'와 같은 값입니다. 입력하면 아래에 파일 속 펫네임을 찾아 보여줍니다.">ⓘ</span></label><input type="text" id="ms-base-input" placeholder="예: SM-F976N" oninput="checkMasterPetName('ms')"></div>
+          <div class="stack-row"><label>전산모델명 <span class="info-tip" title="LG 마스터재고 파일의 '모델코드'와 맞춰야 하는 값입니다. 입력하면 아래에 파일 속 펫네임을 찾아 보여줍니다.">ⓘ</span></label><input type="text" id="ms-system-input" placeholder="예: SM-F976N256" oninput="checkMasterPetName('ms')"></div>
           <div class="master-hint" id="ms-master-hint"></div>
+          <div class="stack-row"><label>모델명</label><input type="text" id="ms-base-input" placeholder="예: SM-F976N"></div>
           <div class="stack-row"><label>용량</label><input type="text" id="ms-capacity-input" placeholder="예: 256GB"></div>
           <div class="stack-row"><label>출고가 (VAT포함)</label><input type="number" id="ms-price-input"></div>
           <div class="stack-row"><label>닉네임</label><input type="text" id="ms-nick-input"></div>
         </div>
         <button class="btn small" onclick="submitModelSingle()">모델 등록</button>
+        <div id="ms-result-msg" style="display:none;font-size:12.5px;margin-top:10px;padding:8px 10px;border-left:3px solid var(--navy);background:#f2f2f2;line-height:1.6;"></div>
       </div>
     </div>
 
@@ -636,14 +691,15 @@
           <div class="stack-row"><label>모델군 (내부 식별용)</label><input type="text" id="me-group-input"></div>
           <div class="stack-row"><label>제조사</label><select id="me-manufacturer-select"></select></div>
           <div class="stack-row"><label>펫네임</label><input type="text" id="me-pet-input"></div>
-          <div class="stack-row"><label>전산모델명</label><input type="text" id="me-system-input"></div>
-          <div class="stack-row"><label>모델명 <span class="info-tip" title="마스터재고 파일의 '모델코드'와 같은 값입니다. 입력하면 아래에 파일 속 펫네임을 찾아 보여줍니다.">ⓘ</span></label><input type="text" id="me-base-input" oninput="checkMasterPetName('me')"></div>
+          <div class="stack-row"><label>전산모델명 <span class="info-tip" title="LG 마스터재고 파일의 '모델코드'와 맞춰야 하는 값입니다. 입력하면 아래에 파일 속 펫네임을 찾아 보여줍니다.">ⓘ</span></label><input type="text" id="me-system-input" oninput="checkMasterPetName('me')"></div>
           <div class="master-hint" id="me-master-hint"></div>
+          <div class="stack-row"><label>모델명</label><input type="text" id="me-base-input"></div>
           <div class="stack-row"><label>용량</label><input type="text" id="me-capacity-input"></div>
           <div class="stack-row"><label>출고가 (VAT포함)</label><input type="number" id="me-price-input"></div>
           <div class="stack-row"><label>닉네임</label><input type="text" id="me-nick-input"></div>
         </div>
         <button class="btn small" onclick="submitModelEdit()">저장</button>
+        <div id="me-result-msg" style="display:none;font-size:12.5px;margin-top:10px;padding:8px 10px;border-left:3px solid var(--danger);background:#fdecea;color:var(--danger);line-height:1.6;"></div>
       </div>
     </div>
 
@@ -2264,6 +2320,16 @@
   };
 
   // ---------- 모델(용량 단위) + 색상별 SKU ----------
+  // 모델 목록도 최근 등록·수정한 것이 맨 위로 오게 정렬합니다.
+  function sortModelsRecentFirst(arr){
+    const ts = m => (m.updatedAt && m.updatedAt.seconds) || (m.createdAt && m.createdAt.seconds) || 0;
+    return arr.slice().sort((a,b)=>{
+      const d = ts(b) - ts(a);
+      if(d !== 0) return d;
+      return String(a.modelGroup||"").localeCompare(String(b.modelGroup||""));
+    });
+  }
+
   async function fetchModelsCache(){
     const snap = await getDocs(query(collection(db, "inventoryModels"), orderBy("modelGroup")));
     modelsCache = [];
@@ -2278,7 +2344,7 @@
       return;
     }
     bodyEl.innerHTML = "";
-    const { pageItems, startIndex } = paginateSlice(modelsCache, "models");
+    const { pageItems, startIndex } = paginateSlice(sortModelsRecentFirst(modelsCache), "models");
     pageItems.forEach((m, i)=>{
       const rowNum = startIndex + i + 1;
       const colors = m.colors || [];
@@ -2347,6 +2413,7 @@
     document.getElementById("me-price-input").value = m.priceIncVat || "";
     document.getElementById("me-nick-input").value = m.nickname || "";
     document.getElementById("model-edit-modal-overlay").style.display = "flex";
+    document.getElementById("me-result-msg").style.display = "none";
     fillManufacturerSelect("me-manufacturer-select", m.manufacturer||"");
     checkMasterPetName("me");   // 열자마자 기존 모델명으로 대조해서 검수
   };
@@ -2368,9 +2435,15 @@
       capacity: document.getElementById("me-capacity-input").value.trim(),
       priceIncVat, priceExVat: priceIncVat ? Math.round(priceIncVat/1.1) : null,
       nickname: document.getElementById("me-nick-input").value.trim(),
-      manufacturer: document.getElementById("me-manufacturer-select").value
+      manufacturer: document.getElementById("me-manufacturer-select").value,
+      updatedAt: serverTimestamp()
     };
-    await updateDoc(doc(db, "inventoryModels", m.id), newFields);
+    try{
+      await updateDoc(doc(db, "inventoryModels", m.id), newFields);
+    }catch(e){
+      showModelMsg("me-result-msg", "<b>저장에 실패했습니다.</b><br>" + comboEsc((e && e.message) ? e.message : String(e)), true);
+      return;
+    }
 
     const changed = newFields.modelGroup!==m.modelGroup || newFields.baseModel!==m.baseModel ||
       newFields.capacity!==m.capacity || newFields.systemModel!==m.systemModel || newFields.petName!==m.petName;
@@ -2624,7 +2697,8 @@
 
   // ---------- 모델 등록 팝업 (개별) ----------
   // ---------- 마스터재고 파일과 모델명·펫네임 대조 ----------
-  // 파일 컬럼 대응: 파일의 "모델코드" = 이 시스템의 "모델명" / 파일의 "모델명" = 이 시스템의 "펫네임"
+  // 파일 컬럼 대응: 파일의 "모델코드" = 이 시스템의 "전산모델명" / 파일의 "모델명" = 이 시스템의 "펫네임"
+  // (마스터재고 모델코드는 SM-F936N512 처럼 용량까지 붙은 형식이라 전산모델명과 대응됩니다)
   let masterModelIndex = null;      // { 모델코드: { pets:{펫네임:건수}, total } }
   let masterHintCandidates = [];    // 버튼에서 참조할 후보 목록 (따옴표 escape 문제 방지용)
   const MS_CODE_KEYS = ["모델코드","모델 코드"];
@@ -2672,7 +2746,7 @@
   window.applyMasterHint = function(prefix, i){
     const c = masterHintCandidates[i];
     if(!c) return;
-    if(c.code) document.getElementById(prefix+"-base-input").value = c.code;
+    if(c.code) document.getElementById(prefix+"-system-input").value = c.code;   // 모델코드 → 전산모델명
     if(c.pet)  document.getElementById(prefix+"-pet-input").value = c.pet;
     checkMasterPetName(prefix);
   };
@@ -2683,7 +2757,7 @@
   };
 
   window.checkMasterPetName = async function(prefix){
-    const baseEl = document.getElementById(prefix+"-base-input");
+    const baseEl = document.getElementById(prefix+"-system-input");   // 전산모델명 기준으로 대조
     const hintEl = document.getElementById(prefix+"-master-hint");
     if(!baseEl || !hintEl) return;
     const term = baseEl.value.trim();
@@ -2747,7 +2821,7 @@
         }
         if(asPet.length > 0){
           html += (partial.length>0 ? '<br>' : '')
-                + '<span class="mh-warn">입력하신 값은 펫네임 쪽에서 발견됐습니다</span> <span style="color:var(--gray);">— 모델명 칸에는 모델코드를 넣어주세요</span>';
+                + '<span class="mh-warn">입력하신 값은 펫네임 쪽에서 발견됐습니다</span> <span style="color:var(--gray);">— 전산모델명 칸에는 모델코드를 넣어주세요</span>';
           asPet.slice(0,5).forEach(x=>{
             const i = masterHintCandidates.push({ code:x.code, pet:x.pet }) - 1;
             html += '<br>모델코드 <b>' + comboEsc(x.code) + '</b> · 펫네임 ' + comboEsc(x.pet)
@@ -2773,6 +2847,7 @@
   window.openModelSingleModal = async function(){
     document.getElementById("model-single-modal-overlay").style.display = "flex";
     clearMasterHint("ms");
+    document.getElementById("ms-result-msg").style.display = "none";
     await fillManufacturerSelect("ms-manufacturer-select", "");
   };
   window.closeModelSingleModal = function(){
@@ -2796,7 +2871,7 @@
         if(!existing[k] && fields[k]) patch[k] = fields[k];
       });
       if(!existing.priceIncVat && fields.priceIncVat){ patch.priceIncVat = fields.priceIncVat; patch.priceExVat = fields.priceExVat; }
-      if(Object.keys(patch).length>0){ await updateDoc(doc(db,"inventoryModels", existing.id), patch); }
+      if(Object.keys(patch).length>0){ patch.updatedAt = serverTimestamp(); await updateDoc(doc(db,"inventoryModels", existing.id), patch); }
       logAction("모델 누적 업데이트", (fields.modelGroup||existing.modelGroup));
       return { created:false };
     }else{
@@ -2804,11 +2879,33 @@
         modelGroup: fields.modelGroup || fields.baseModel || fields.systemModel || fields.petName,
         baseModel: fields.baseModel||"", capacity: fields.capacity||"", systemModel: fields.systemModel||"",
         priceExVat: fields.priceExVat||null, priceIncVat: fields.priceIncVat||null,
-        petName: fields.petName||"", nickname: fields.nickname||"", manufacturer: fields.manufacturer||"", colors: []
+        petName: fields.petName||"", nickname: fields.nickname||"", manufacturer: fields.manufacturer||"", colors: [],
+        createdAt: serverTimestamp(), updatedAt: serverTimestamp()
       });
       logAction("모델 등록", (fields.modelGroup || fields.baseModel || fields.systemModel || fields.petName));
       return { created:true };
     }
+  }
+
+  // Firestore 저장은 서버 응답을 기다립니다. 응답이 오지 않으면 오류도 없이 멈추므로
+  // 시간제한을 걸어 "멈춤"을 화면에 보이는 메시지로 바꿉니다.
+  function withTimeout(promise, ms, label){
+    return Promise.race([
+      promise,
+      new Promise((_, reject)=> setTimeout(()=>
+        reject(new Error(label + " 응답이 " + Math.round(ms/1000) + "초 안에 오지 않았습니다. 인터넷 연결 또는 Firestore 권한(보안규칙)을 확인해주세요.")), ms))
+    ]);
+  }
+
+  // 등록 결과(성공/기존모델 누적/실패)를 화면에 보여줍니다.
+  function showModelMsg(elId, text, isError){
+    const el = document.getElementById(elId);
+    if(!el) return;
+    el.style.display = "block";
+    el.style.borderLeftColor = isError ? "var(--danger)" : "var(--navy)";
+    el.style.background = isError ? "#fdecea" : "#f2f2f2";
+    el.style.color = isError ? "var(--danger)" : "var(--navy)";
+    el.innerHTML = text;
   }
 
   window.submitModelSingle = async function(){
@@ -2821,21 +2918,46 @@
     const manufacturer = document.getElementById("ms-manufacturer-select").value;
 
     if(!petName && !systemModel && !baseModel){
-      alert("펫네임, 전산모델명, 모델명 중 최소 하나는 입력해주세요.");
+      showModelMsg("ms-result-msg", "펫네임 · 전산모델명 · 모델명 중 최소 하나는 입력해주세요.", true);
       return;
     }
     const priceIncVat = priceInput?Number(priceInput):null;
     const priceExVat = priceIncVat ? Math.round(priceIncVat/1.1) : null;
 
-    await fetchModelsCache();
-    await upsertModel({ petName, systemModel, baseModel, capacity, priceIncVat, priceExVat, nickname, manufacturer, modelGroup: petName||baseModel||systemModel });
+    let result;
+    try{
+      showModelMsg("ms-result-msg", "① 기존 모델 목록을 읽는 중...", false);
+      await withTimeout(fetchModelsCache(), 12000, "모델 목록 조회");
+      showModelMsg("ms-result-msg", "② 저장 중...", false);
+      result = await withTimeout(
+        upsertModel({ petName, systemModel, baseModel, capacity, priceIncVat, priceExVat, nickname, manufacturer, modelGroup: petName||baseModel||systemModel }),
+        12000, "모델 저장");
+    }catch(e){
+      // 저장 자체가 거부된 경우 (권한·보안규칙·네트워크 등) — 예전에는 아무 표시 없이 멈췄습니다.
+      showModelMsg("ms-result-msg", "<b>저장에 실패했습니다.</b><br>" + comboEsc((e && e.message) ? e.message : String(e)), true);
+      return;
+    }
+
+    if(result && result.created === false){
+      // 전산모델명(또는 모델명+용량)이 같은 모델이 이미 있으면 새 줄이 아니라 기존 줄에 누적됩니다.
+      showModelMsg("ms-result-msg",
+        "<b>이미 등록된 모델입니다.</b> 목록에 새 줄이 생기지 않고, 기존 줄에서 <b>비어 있던 항목만</b> 채워졌습니다."
+        + "<br>같은 기준: 전산모델명" + (systemModel ? " <b>"+comboEsc(systemModel)+"</b>" : "")
+        + (baseModel && capacity ? " 또는 모델명+용량 <b>"+comboEsc(baseModel)+" "+comboEsc(capacity)+"</b>" : "")
+        + "<br>기존 값을 바꾸시려면 목록에서 해당 모델의 <b>수정</b>을 눌러주세요.", true);
+      loadModelAdminList();
+      loadColorAdminList();
+      return;
+    }
 
     ["ms-pet-input","ms-system-input","ms-base-input","ms-capacity-input","ms-price-input","ms-nick-input"]
       .forEach(id=> document.getElementById(id).value = "");
     document.getElementById("ms-manufacturer-select").value = "";
-    closeModelSingleModal();
+    clearMasterHint("ms");
+    showModelMsg("ms-result-msg", "등록되었습니다.", false);
     loadModelAdminList();
     loadColorAdminList();
+    setTimeout(closeModelSingleModal, 900);
   };
 
   // ---------- 모델 엑셀 업로드 팝업 ----------
@@ -3412,7 +3534,200 @@
   // ---------- 주문 관리 (한 업체에 여러 품목을 한 번에 주문) ----------
   let orderLineSeq = 0;
 
+  // ================= 업체정보 (입고처 + 출고처 통합) =================
+  // 재고·주문에 저장되는 값은 예전과 같이 "업체명 문자열"입니다. 기존 데이터를 고치지 않아도 그대로 동작합니다.
+  let companiesCache = [];
+  let companyFilter = "all";      // all | source | dest
+  let editingCompanyId = null;
+
+  async function fetchCompanies(){
+    const snap = await getDocs(collection(db,"companies"));
+    const arr = [];
+    snap.forEach(d=> arr.push({ id:d.id, ...d.data() }));
+    // 최근에 등록·수정한 업체가 맨 위 (updatedAt → createdAt → 이름 순)
+    const ts = c => (c.updatedAt && c.updatedAt.seconds) || (c.createdAt && c.createdAt.seconds) || 0;
+    arr.sort((a,b)=>{
+      const d = ts(b) - ts(a);
+      if(d !== 0) return d;
+      return String(a.name||"").localeCompare(String(b.name||""));
+    });
+    companiesCache = arr;
+    return arr;
+  }
+
+  async function fetchCompanyNames(roleKey){
+    const arr = await fetchCompanies();
+    return arr.filter(c => c[roleKey] === true)
+              .map(c => c.name)
+              .filter(Boolean)
+              .sort((a,b)=> a.localeCompare(b));
+  }
+
+  window.setCompanyFilter = function(f){
+    companyFilter = f;
+    ["all","source","dest"].forEach(k=>{
+      const btn = document.getElementById("company-filter-"+k);
+      if(btn) btn.className = "btn small" + (k===f ? "" : " secondary");
+    });
+    loadCompanyList();
+  };
+
+  async function loadCompanyList(){
+    const bodyEl = document.getElementById("company-table-body");
+    if(!bodyEl) return;
+    bodyEl.innerHTML = '<tr><td colspan="11" class="list-empty">불러오는 중...</td></tr>';
+    let arr = await fetchCompanies();
+    if(companyFilter === "source") arr = arr.filter(c=>c.isSource===true);
+    if(companyFilter === "dest")   arr = arr.filter(c=>c.isDest===true);
+    if(arr.length === 0){
+      bodyEl.innerHTML = '<tr><td colspan="11" class="list-empty">'
+        + (companyFilter==="all"
+            ? '등록된 업체가 없습니다. <b>기존 입고처·출고처 가져오기</b>를 먼저 눌러주세요.'
+            : '해당 구분의 업체가 없습니다.')
+        + '</td></tr>';
+      document.getElementById("company-pagination").innerHTML = "";
+      return;
+    }
+    bodyEl.innerHTML = "";
+    const { pageItems, startIndex } = paginateSlice(arr, "companies");
+    pageItems.forEach((c, i)=>{
+      const roles = [];
+      if(c.isSource) roles.push('<span style="background:var(--navy);color:#fff;font-size:10.5px;padding:1px 6px;">매입처</span>');
+      if(c.isDest)   roles.push('<span style="background:#1565c0;color:#fff;font-size:10.5px;padding:1px 6px;">판매처</span>');
+      const tr = document.createElement("tr");
+      tr.innerHTML =
+        '<td style="color:var(--gray);">'+(startIndex+i+1)+'</td>' +
+        '<td><b>'+comboEsc(c.name||"-")+'</b></td>' +
+        '<td>'+(roles.length ? roles.join(" ") : '<span style="color:var(--danger);">미지정</span>')+'</td>' +
+        '<td>'+(c.bizNumber ? comboEsc(c.bizNumber) : '<span style="color:var(--danger);">미입력</span>')+'</td>' +
+        '<td>'+comboEsc(c.ceoName||"-")+'</td>' +
+        '<td>'+comboEsc([c.bizType,c.bizItem].filter(Boolean).join(" / ")||"-")+'</td>' +
+        '<td>'+comboEsc(c.bankName||"-")+'</td>' +
+        '<td>'+comboEsc(c.accountNumber||"-")+'</td>' +
+        '<td>'+comboEsc(c.accountHolder||"-")+'</td>' +
+        '<td style="max-width:220px;overflow:hidden;text-overflow:ellipsis;" title="'+comboEsc(c.note||"")+'">'+comboEsc(c.note||"-")+'</td>' +
+        '<td class="ta-right">' +
+          '<button class="btn small secondary" style="width:auto;margin-right:4px;" data-edit-co="'+c.id+'">수정</button>' +
+          '<button class="btn small danger" style="width:auto;" data-del-co="'+c.id+'">삭제</button>' +
+        '</td>';
+      bodyEl.appendChild(tr);
+      tr.querySelector('[data-edit-co]').onclick = ()=> openCompanyModal(c.id);
+      tr.querySelector('[data-del-co]').onclick = async ()=>{
+        if(!confirm((c.name||"")+" 업체를 삭제하시겠습니까?\n이미 등록된 재고·주문의 업체명은 그대로 남습니다.")) return;
+        await deleteDoc(doc(db,"companies", c.id));
+        logAction("업체 삭제", c.name||"-");
+        loadCompanyList();
+      };
+    });
+    const pagEl = document.getElementById("company-pagination");
+    pagEl.innerHTML = "";
+    pagEl.appendChild(renderPaginationBar("companies", arr.length, loadCompanyList, false));
+  }
+
+  const CO_FIELDS = [
+    ["co-name-input","name"], ["co-biznum-input","bizNumber"], ["co-ceo-input","ceoName"],
+    ["co-biztype-input","bizType"], ["co-bizitem-input","bizItem"], ["co-address-input","address"],
+    ["co-contact-input","contact"], ["co-bank-input","bankName"], ["co-account-input","accountNumber"],
+    ["co-holder-input","accountHolder"], ["co-note-input","note"]
+  ];
+
+  window.openCompanyModal = function(companyId){
+    editingCompanyId = companyId || null;
+    const c = companyId ? (companiesCache.find(x=>x.id===companyId) || {}) : {};
+    CO_FIELDS.forEach(([elId, key])=>{ document.getElementById(elId).value = c[key] || ""; });
+    document.getElementById("co-is-source").checked = c.isSource === true;
+    document.getElementById("co-is-dest").checked = c.isDest === true;
+    document.getElementById("company-modal-title").textContent = companyId ? "업체 수정" : "업체 등록";
+    document.getElementById("co-result-msg").style.display = "none";
+    document.getElementById("company-modal-overlay").style.display = "flex";
+  };
+  window.closeCompanyModal = function(){
+    document.getElementById("company-modal-overlay").style.display = "none";
+    editingCompanyId = null;
+  };
+
+  window.submitCompany = async function(){
+    const payload = {};
+    CO_FIELDS.forEach(([elId, key])=>{ payload[key] = document.getElementById(elId).value.trim(); });
+    payload.isSource = document.getElementById("co-is-source").checked;
+    payload.isDest = document.getElementById("co-is-dest").checked;
+
+    if(!payload.name){
+      showModelMsg("co-result-msg", "업체명은 반드시 입력해주세요.", true);
+      return;
+    }
+    // 같은 이름이 이미 있으면 막습니다 (재고·주문이 업체명으로 연결되므로 중복이면 집계가 갈라집니다)
+    const dup = companiesCache.find(c => c.name === payload.name && c.id !== editingCompanyId);
+    if(dup){
+      showModelMsg("co-result-msg", "같은 이름의 업체가 이미 있습니다. 목록에서 <b>수정</b>을 눌러주세요.", true);
+      return;
+    }
+
+    try{
+      showModelMsg("co-result-msg", "저장 중...", false);
+      if(editingCompanyId){
+        payload.updatedAt = serverTimestamp();
+        await withTimeout(updateDoc(doc(db,"companies", editingCompanyId), payload), 12000, "업체 저장");
+        logAction("업체 수정", payload.name);
+      }else{
+        payload.createdAt = serverTimestamp();
+        payload.updatedAt = serverTimestamp();
+        await withTimeout(addDoc(collection(db,"companies"), payload), 12000, "업체 저장");
+        logAction("업체 등록", payload.name);
+      }
+    }catch(e){
+      showModelMsg("co-result-msg", "<b>저장에 실패했습니다.</b><br>" + comboEsc((e && e.message) ? e.message : String(e)), true);
+      return;
+    }
+    showModelMsg("co-result-msg", "저장되었습니다.", false);
+    await loadCompanyList();
+    setTimeout(closeCompanyModal, 700);
+  };
+
+  // 기존 입고처·출고처 목록을 업체정보로 옮겨옵니다 (이름만 가져오고, 상세는 직접 채우면 됩니다)
+  window.importLegacyCompanies = async function(){
+    if(!confirm("기존 입고처·출고처 이름을 업체정보로 가져옵니다.\n이미 있는 업체명은 건너뛰고, 구분(매입처/판매처)만 보완합니다.\n진행하시겠습니까?")) return;
+    const [srcSnap, dstSnap] = await Promise.all([
+      getDocs(collection(db,"inboundSources")),
+      getDocs(collection(db,"outboundDestinations"))
+    ]);
+    const roleByName = {};
+    srcSnap.forEach(d=>{ const n=(d.data().name||"").trim(); if(n){ roleByName[n] = roleByName[n]||{}; roleByName[n].isSource = true; } });
+    dstSnap.forEach(d=>{ const n=(d.data().name||"").trim(); if(n){ roleByName[n] = roleByName[n]||{}; roleByName[n].isDest = true; } });
+
+    await fetchCompanies();
+    let created = 0, updated = 0;
+    for(const name of Object.keys(roleByName)){
+      const role = roleByName[name];
+      const exist = companiesCache.find(c=>c.name === name);
+      if(exist){
+        const patch = {};
+        if(role.isSource && exist.isSource !== true) patch.isSource = true;
+        if(role.isDest && exist.isDest !== true) patch.isDest = true;
+        if(Object.keys(patch).length>0){
+          patch.updatedAt = serverTimestamp();
+          await updateDoc(doc(db,"companies", exist.id), patch);
+          updated++;
+        }
+      }else{
+        await addDoc(collection(db,"companies"), {
+          name, isSource: role.isSource===true, isDest: role.isDest===true,
+          bizNumber:"", ceoName:"", bizType:"", bizItem:"", address:"", contact:"",
+          bankName:"", accountNumber:"", accountHolder:"", note:"",
+          createdAt: serverTimestamp(), updatedAt: serverTimestamp()
+        });
+        created++;
+      }
+    }
+    logAction("업체정보 가져오기", "신규 "+created+" / 보완 "+updated);
+    alert("가져오기 완료 — 신규 "+created+"건, 구분 보완 "+updated+"건\n사업자번호·계좌는 각 업체의 수정에서 채워주세요.");
+    loadCompanyList();
+  };
+
   async function fetchNamesList(col){
+    // 입고처·출고처는 업체정보(companies) 하나로 통합되었습니다.
+    if(col === "inboundSources")       return await fetchCompanyNames("isSource");
+    if(col === "outboundDestinations") return await fetchCompanyNames("isDest");
     const s = await getDocs(query(collection(db,col), orderBy("name")));
     const arr=[]; s.forEach(d=>arr.push(d.data().name)); return arr;
   }
@@ -5194,12 +5509,12 @@
   // 재고 목록 컬럼 순서와 같게 배치했습니다.
   // 모델명·펫네임·색상·SKU·일련번호·수량은 일부러 제외했습니다 (아래 주석 참고).
   const BULK_EDIT_FIELDS = [
-    { key:"source", label:"입고처", type:"select", collection:"inboundSources" },
+    { key:"source", label:"입고처", type:"names", collection:"inboundSources" },
     { key:"manufacturer", label:"제조사", type:"select", collection:"manufacturers" },
     { key:"carrier", label:"통신사", type:"select", collection:"carriers" },
     { key:"location", label:"위치", type:"select", collection:"locations" },
     { key:"status", label:"현재상태", type:"select", collection:"statusOptions" },
-    { key:"destination", label:"판매처", type:"select", collection:"outboundDestinations" },
+    { key:"destination", label:"판매처", type:"names", collection:"outboundDestinations" },
     { key:"imei", label:"IMEI", type:"text" },
     { key:"listPrice", label:"출고가", type:"number" },
     { key:"purchasePrice", label:"입고가", type:"number" },
@@ -5258,6 +5573,12 @@
       snap.forEach(d=>{ html += '<option value="'+d.data().name+'">'+d.data().name+'</option>'; });
       html += '</select>';
       wrap.innerHTML = html;
+    }else if(fieldDef.type === "names"){
+      // 업체정보에서 구분에 맞는 업체명만 가져옵니다.
+      const names = await fetchNamesList(fieldDef.collection);
+      wrap.innerHTML = '<select id="bulk-edit-value" style="padding:5px 8px;border:1px solid #c7c7c7;font-size:12.5px;height:28px;box-sizing:border-box;">'
+        + names.map(n=>'<option value="'+comboEsc(n)+'">'+comboEsc(n)+'</option>').join("")
+        + '</select>';
     }else if(fieldDef.type === "options"){
       // 기초설정에 없는 고정 선택지 (공시지원금 상태 등)
       let html = '<select id="bulk-edit-value" style="padding:5px 8px;border:1px solid #c7c7c7;font-size:12.5px;height:28px;box-sizing:border-box;">';
@@ -6825,7 +7146,10 @@
     const pendingMasterCreates = []; // {collectionName, name}
     const pendingColorCreates = []; // {modelId, colorName}
 
-    const fetchNames = async (col)=>{ const s = await getDocs(collection(db,col)); const arr=[]; s.forEach(d=>arr.push(d.data().name)); return arr; };
+    const fetchNames = async (col)=>{
+      if(col === "inboundSources" || col === "outboundDestinations") return await fetchNamesList(col);
+      const s = await getDocs(collection(db,col)); const arr=[]; s.forEach(d=>arr.push(d.data().name)); return arr;
+    };
     const sourceNames = await fetchNames("inboundSources");
     const destNames = await fetchNames("outboundDestinations");
     const carrierNames = await fetchNames("carriers");
@@ -7170,7 +7494,14 @@
             const key = item.collectionName+"|"+item.name;
             if(doneKeys.has(key)) return;
             doneKeys.add(key);
-            ops.push(batch=> batch.set(doc(collection(db, item.collectionName)), { name:item.name, needsReview:true }));
+            // 입고처·출고처는 업체정보(companies)로 생성합니다.
+            if(item.collectionName === "inboundSources"){
+              ops.push(batch=> batch.set(doc(collection(db,"companies")), { name:item.name, isSource:true, isDest:false, needsReview:true, createdAt: serverTimestamp(), updatedAt: serverTimestamp() }));
+            }else if(item.collectionName === "outboundDestinations"){
+              ops.push(batch=> batch.set(doc(collection(db,"companies")), { name:item.name, isSource:false, isDest:true, needsReview:true, createdAt: serverTimestamp(), updatedAt: serverTimestamp() }));
+            }else{
+              ops.push(batch=> batch.set(doc(collection(db, item.collectionName)), { name:item.name, needsReview:true }));
+            }
           });
           await commitInChunks(ops, 450, "필요한 항목 등록");
         }
@@ -7351,7 +7682,7 @@
     document.getElementById("login-form").style.display="block";
   };
   const ADMIN_TAB_IDS = ["tab-site","tab-team","tab-users","tab-settlement","tab-b2b","tab-logs"];
-  const INV_ADMIN_TAB_IDS = ["tab-inv-model","tab-inv-color","tab-inv-manufacturer","tab-inv-location","tab-inv-status","tab-inv-source","tab-inv-dest","tab-inv-carrier"];
+  const INV_ADMIN_TAB_IDS = ["tab-inv-model","tab-inv-color","tab-inv-manufacturer","tab-inv-location","tab-inv-status","tab-inv-company","tab-inv-carrier"];
 
   window.toggleAdminMenu = function(){
     const el = document.getElementById("admin-group");
@@ -7394,8 +7725,7 @@
     if(tabId==="tab-logs") loadLogs();
     if(tabId==="tab-inv-model") loadModelAdminList();
     if(tabId==="tab-inv-color") loadColorAdminList();
-    if(tabId==="tab-inv-source") loadSourceList();
-    if(tabId==="tab-inv-dest") loadDestList();
+    if(tabId==="tab-inv-company") loadCompanyList();
     if(tabId==="tab-inv-carrier") loadCarrierList();
     if(tabId==="tab-inv-manufacturer") loadManufacturerList();
     if(tabId==="tab-inv-location") loadLocationList();
