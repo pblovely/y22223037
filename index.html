@@ -249,7 +249,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-07-25 v64</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-07-25 v65</span>
       <span id="topbar-username">-</span>
       <button onclick="openPersonalSettingsModal()">개인설정</button>
       <button onclick="handleLogout()">로그아웃</button>
@@ -1410,6 +1410,7 @@
           <br>칸에는 <b>체크한 건들의 현재 값</b>이 미리 들어 있습니다. 값이 서로 다르면 <span style="color:var(--danger);">건별 다름</span>으로 표시되고, 아래 <b>값 버튼</b>을 누르면 그 값으로 채워집니다. (숫자는 그 값을 쓰는 건수입니다)
           <br><b>일련번호·IMEI·수량·모델·색상은 바꿀 수 없습니다.</b> 건별로 다른 값이라 일괄 변경 대상이 아닙니다.
         </div>
+        <div id="me-price-warn" style="display:none;font-size:12.5px;padding:9px 11px;margin-bottom:10px;border:1px solid var(--danger);background:#fdecea;line-height:1.7;"></div>
         <div class="stack-form" id="multi-edit-form"></div>
         <button class="btn small" style="width:auto;margin-top:12px;" onclick="submitMultiEdit()">체크한 항목만 일괄 적용</button>
         <div id="multi-edit-msg" style="display:none;font-size:12.5px;margin-top:10px;padding:8px 10px;border-left:3px solid var(--navy);background:#f2f2f2;line-height:1.6;"></div>
@@ -1706,6 +1707,8 @@
     excelExport:"엑셀 다운로드",
     bulkEdit:"재고 일괄수정 (다운로드/업로드로 기존 재고 값 변경)",
     bulkModelApply:"⚠ 같은 모델 전체 일괄변경 (위험 — 승인자만)",
+    companyEdit:"업체 정보 수정·삭제 (추가는 누구나 가능)",
+    listPriceOverride:"출고가 직접 입력 (모델 등록값과 다르게 저장)",
     uiCustomize:"화면 문구·버튼 이름 수정 (마우스 오른쪽 클릭)",
     userApproval:"사용자 승인·추방", permissionManage:"권한 설정 관리(전체 관리자)",
     teamManage:"팀 관리", inventorySettings:"재고 기초설정 관리",
@@ -1714,7 +1717,7 @@
   // 권한을 성격별로 묶어서 보여줍니다 (화면에서 찾기 쉽게)
   const PERMISSION_GROUPS = [
     { title:"화면 메뉴", keys:["dashboard","menuInvWork","menuInvUpload","menuOrders","menuSaleReq","menuDataUpload"] },
-    { title:"기능", keys:["excelExport","bulkEdit","bulkModelApply","companyEdit","uiCustomize"] },
+    { title:"기능", keys:["excelExport","bulkEdit","bulkModelApply","companyEdit","listPriceOverride","uiCustomize"] },
     { title:"관리자", keys:["userApproval","permissionManage","teamManage","inventorySettings","settlementSettings","siteSettings","dataReset"] }
   ];
   const PERMISSION_SUB_KEYS = ["menuInvUpload"];   // 상위 항목 아래에 들여쓰기할 항목
@@ -2424,7 +2427,7 @@
     closePersonalSettingsModal();
   };
 
-  const ALL_PERM_KEYS = ["dashboard","menuInvWork","menuInvUpload","menuOrders","menuSaleReq","menuDataUpload","excelExport","bulkEdit","bulkModelApply","companyEdit","uiCustomize","userApproval","permissionManage","teamManage","inventorySettings","settlementSettings","siteSettings","dataReset"];
+  const ALL_PERM_KEYS = ["dashboard","menuInvWork","menuInvUpload","menuOrders","menuSaleReq","menuDataUpload","excelExport","bulkEdit","bulkModelApply","companyEdit","listPriceOverride","uiCustomize","userApproval","permissionManage","teamManage","inventorySettings","settlementSettings","siteSettings","dataReset"];
 
   async function loadUserAdminList(){
     const listEl = document.getElementById("user-admin-list");
@@ -9342,6 +9345,16 @@
       + (items.length ? '<br><span style="color:var(--gray);font-size:12px;">' +
           [...new Set(items.map(it=>docModelLabel(it)))].slice(0,3).map(comboEsc).join(" · ") +
           (new Set(items.map(it=>docModelLabel(it))).size > 3 ? " 외" : "") + '</span>' : '');
+    const warnEl = document.getElementById("me-price-warn");
+    if(warnEl){
+      if(noPriceModels.length > 0){
+        warnEl.style.display = "block";
+        warnEl.innerHTML = '<b>모델 등록에 출고가가 없습니다.</b>'
+          + '<br>' + noPriceModels.slice(0,5).map(comboEsc).join("<br>")
+          + (noPriceModels.length>5 ? '<br>... 외 ' + (noPriceModels.length-5) + '개' : '')
+          + '<br><span style="color:var(--gray);">재고 기초설정 → 모델 등록에서 출고가를 먼저 넣어주세요. 그래야 출고가·할인이 정확히 계산됩니다.</span>';
+      }else{ warnEl.style.display = "none"; }
+    }
 
     // 폼 만들기
     const form = document.getElementById("multi-edit-form");
@@ -9350,6 +9363,23 @@
     for(const f of MULTI_EDIT_FIELDS){
       if(f.type === "names" && !nameCache[f.col]) nameCache[f.col] = await fetchNamesList(f.col);
     }
+    // 모델 등록의 출고가를 확인합니다. 비어 있으면 먼저 채우도록 안내합니다.
+    await fetchModelsCache();
+    const canOverridePrice = hasPerm(currentUserPerms, "listPriceOverride");
+    const modelPrices = [];
+    const noPriceModels = [];
+    const seenModel = new Set();
+    items.forEach(it=>{
+      const m = findModelForItem(it);
+      const key = m ? m.id : ("?" + docModelLabel(it));
+      if(seenModel.has(key)) return;
+      seenModel.add(key);
+      if(!m){ noPriceModels.push(docModelLabel(it) + " (모델 못 찾음)"); return; }
+      const p = Number(m.priceIncVat)||0;
+      if(!p) noPriceModels.push((m.systemModel||m.baseModel||"-") + " (출고가 미입력)");
+      else if(!modelPrices.includes(p)) modelPrices.push(p);
+    });
+
     // 체크한 건들의 현재 값을 미리 보여줍니다.
     //  · 모두 같으면 그 값을 채우고, 다르면 "건별 다름"으로 알려줍니다.
     const curOf = (key)=>{
@@ -9372,7 +9402,8 @@
         : "건별 다름 (" + cur.kinds + "가지: " + cur.sample + ")";
       if(f.key === "listPrice" && !cur.same) hint = "건별 다름 — 오타일 수 있습니다. 모델 등록값으로 맞추세요.";
       const oninput = f.link ? ' oninput="multiRecalc(\''+f.link+'\')"' : '';
-      const preset = cur.same ? comboEsc(cur.value) : "";
+      let preset = cur.same ? comboEsc(cur.value) : "";
+      if(f.key === "listPrice" && modelPrices.length === 1) preset = String(modelPrices[0]);
       if(f.type === "names"){
         input = '<select id="'+meId(f.key)+'" style="flex:1;border:none;padding:5px 8px;font-size:12.5px;">'
           + '<option value="">(선택)</option>'
@@ -9384,25 +9415,25 @@
           + f.options.map(n=>'<option value="'+n+'"'+(preset===n?' selected':'')+'>'+n+'</option>').join("")
           + '</select>';
       }else{
+        const lockPrice = (f.key === "listPrice" && modelPrices.length === 1 && !canOverridePrice);
         input = '<input type="'+(f.type==="number"?"number":"text")+'" id="'+meId(f.key)+'"'+oninput
           + ' value="'+preset+'"'
+          + (lockPrice ? ' readonly title="모델 등록값입니다. 고치려면 권한이 필요합니다."' : '')
           + ' placeholder="'+(cur.same ? (f.ph||"") : "건별 다름 — 넣으면 전부 같은 값이 됩니다")+'"'
-          + ' style="flex:1;border:none;padding:5px 8px;font-size:12.5px;">';
+          + ' style="flex:1;border:none;padding:5px 8px;font-size:12.5px;'+(lockPrice?'background:#f2f2f2;color:var(--gray);':'')+'">';
       }
-      // 출고가는 모델 등록에 정해진 값이 정답입니다. 그 값을 먼저 제시합니다.
+      // 출고가는 모델 등록값이 정답입니다. 자동으로 채우고 잠급니다.
       let chips = "";
       if(f.key === "listPrice"){
-        const prices = [...new Set(items.map(it=>{
-          const m = findModelForItem(it);
-          return m && m.priceIncVat ? Number(m.priceIncVat) : null;
-        }).filter(v=>v))];
-        if(prices.length > 0){
+        if(modelPrices.length === 1){
+          chips += '<div style="font-size:10.5px;color:var(--navy);margin-top:4px;">모델 등록값이 자동으로 들어갑니다.'
+            + (canOverridePrice ? ' <b>권한이 있어 직접 고칠 수 있습니다.</b>' : ' 고치려면 모델 등록에서 바꿔주세요.') + '</div>';
+        }else if(modelPrices.length > 1){
           chips += '<div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:4px;align-items:center;">' +
-            '<span style="font-size:10.5px;color:var(--navy);font-weight:700;">모델 등록값</span>' +
-            prices.map(v=>
+            '<span style="font-size:10.5px;color:var(--danger);font-weight:700;">모델이 여러 개입니다 — 골라주세요</span>' +
+            modelPrices.map(v=>
               '<button type="button" class="btn small" style="width:auto;padding:1px 8px;font-size:10.5px;"' +
-              ' data-mpick-key="listPrice" data-mpick-val="'+v+'" title="모델 등록의 출고가로 채우기">' + v.toLocaleString() + '</button>').join("") +
-            (prices.length > 1 ? '<span style="font-size:10.5px;color:var(--danger);">모델이 여러 개라 값도 여러 개입니다</span>' : '') +
+              ' data-mpick-key="listPrice" data-mpick-val="'+v+'">' + v.toLocaleString() + '</button>').join("") +
             '</div>';
         }
       }
