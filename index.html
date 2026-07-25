@@ -212,7 +212,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-07-25 v30</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-07-25 v31</span>
       <span id="topbar-username">-</span>
       <button onclick="openPersonalSettingsModal()">개인설정</button>
       <button onclick="handleLogout()">로그아웃</button>
@@ -590,6 +590,7 @@
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
           <h3 style="margin:0;">업체정보 <span class="info-tip" title="매입처(입고처)와 판매처(출고처)를 한 곳에서 관리합니다. 구분을 체크한 업체만 해당 드롭다운에 나타납니다.">ⓘ</span></h3>
           <span>
+            <button class="btn small secondary" style="width:auto;margin-right:6px;" onclick="mergeDuplicateCompanies()">중복 업체 정리</button>
             <button class="btn small secondary" style="width:auto;margin-right:6px;" onclick="importLegacyCompanies()">기존 입고처·출고처 가져오기</button>
             <button class="btn small" style="width:auto;" onclick="openCompanyModal()">+ 업체 등록</button>
           </span>
@@ -4184,10 +4185,14 @@
 
   async function fetchCompanyNames(roleKey){
     const arr = await fetchCompanies();
-    return arr.filter(c => c[roleKey] === true)
-              .sort(bySortOrder)
-              .map(c => c.name)
-              .filter(Boolean);
+    const seen = new Set();
+    const out = [];
+    arr.filter(c => c[roleKey] === true).sort(bySortOrder).forEach(c=>{
+      const nm = String(c.name||"").trim();
+      if(!nm || seen.has(nm)) return;   // 같은 이름은 한 번만 (중복 문서가 있어도 하나로 보임)
+      seen.add(nm); out.push(nm);
+    });
+    return out;
   }
 
   window.setCompanyFilter = function(f){
@@ -4331,6 +4336,65 @@
     setTimeout(closeCompanyModal, 700);
   };
 
+  // 같은 이름의 업체 문서가 여러 개면 하나로 합칩니다.
+  // 구분(매입처/판매처)과 채워진 정보는 살리고, 나머지 문서는 삭제합니다.
+  window.mergeDuplicateCompanies = async function(){
+    await fetchCompanies();
+    const groups = {};
+    companiesCache.forEach(c=>{
+      const nm = String(c.name||"").trim();
+      if(!nm) return;
+      if(!groups[nm]) groups[nm] = [];
+      groups[nm].push(c);
+    });
+    const dups = Object.keys(groups).filter(nm=> groups[nm].length > 1);
+    if(dups.length === 0){ alert("같은 이름의 업체가 없습니다. 정리할 것이 없습니다."); return; }
+
+    const preview = dups.slice(0,10).map(nm=> "· " + nm + " (" + groups[nm].length + "개)").join("\n");
+    if(!confirm(
+      "같은 이름의 업체 " + dups.length + "종류를 하나로 합칩니다.\n\n" + preview +
+      (dups.length>10 ? "\n... 외 " + (dups.length-10) + "종류" : "") +
+      "\n\n· 구분(매입처/판매처)은 합쳐집니다.\n" +
+      "· 사업자번호·계좌 등은 채워진 값이 있는 쪽을 남깁니다.\n" +
+      "· 남은 문서는 삭제됩니다. (재고·주문의 업체명은 그대로라 영향 없습니다)\n\n" +
+      "진행하시겠습니까?")) return;
+
+    const FIELDS = ["bizName","bizNumber","ceoName","bizType","bizItem","address","contact","bankName","accountNumber","accountHolder","note"];
+    let merged = 0, removed = 0;
+    try{
+      for(const nm of dups){
+        const list = groups[nm];
+        // 정보가 가장 많이 채워진 문서를 기준으로 삼습니다.
+        const score = c => FIELDS.reduce((n,f)=> n + (String(c[f]||"").trim() ? 1 : 0), 0);
+        list.sort((a,b)=> score(b) - score(a));
+        const keep = list[0];
+        const rest = list.slice(1);
+
+        const patch = { name: nm };
+        FIELDS.forEach(f=>{
+          if(String(keep[f]||"").trim()) return;
+          const donor = rest.find(r=> String(r[f]||"").trim());
+          if(donor) patch[f] = donor[f];
+        });
+        if(list.some(c=>c.isSource === true)) patch.isSource = true;
+        if(list.some(c=>c.isDest === true))   patch.isDest = true;
+        const so = list.map(c=>Number(c.sortOrder)).filter(v=>Number.isFinite(v));
+        if(so.length) patch.sortOrder = Math.min(...so);
+        patch.updatedAt = serverTimestamp();
+
+        await updateDoc(doc(db,"companies", keep.id), patch);
+        for(const r of rest){ await deleteDoc(doc(db,"companies", r.id)); removed++; }
+        merged++;
+      }
+    }catch(e){
+      alert("정리 중 오류가 났습니다.\n" + ((e && e.message) ? e.message : String(e)));
+      return;
+    }
+    logAction("중복 업체 정리", merged+"종류 / 문서 "+removed+"개 삭제");
+    alert(merged + "종류를 합쳤습니다. 문서 " + removed + "개를 삭제했습니다.");
+    loadCompanyList();
+  };
+
   // 기존 입고처·출고처 목록을 업체정보로 옮겨옵니다 (이름만 가져오고, 상세는 직접 채우면 됩니다)
   window.importLegacyCompanies = async function(){
     if(!confirm("기존 입고처·출고처 이름을 업체정보로 가져옵니다.\n이미 있는 업체명은 건너뛰고, 구분(매입처/판매처)만 보완합니다.\n진행하시겠습니까?")) return;
@@ -4388,7 +4452,13 @@
   async function fetchNamesOrdered(col){
     const snap = await getDocs(collection(db, col));
     const arr = []; snap.forEach(d=> arr.push(d.data()));
-    return arr.sort(bySortOrder).map(x=>x.name).filter(Boolean);
+    const seen = new Set(); const out = [];
+    arr.sort(bySortOrder).forEach(x=>{
+      const nm = String(x.name||"").trim();
+      if(!nm || seen.has(nm)) return;   // 같은 이름은 한 번만
+      seen.add(nm); out.push(nm);
+    });
+    return out;
   }
 
   async function fetchNamesList(col){
@@ -4834,6 +4904,85 @@
 
   window.printOrderDetail = function(){ window.print(); };
 
+  // 주문 ↔ 판매요청 연결 현황
+  // 주문 등록 시 판매조건(판매처+판매가)이 있으면 판매요청이 자동으로 만들어지고
+  // fromOrderId / fromOrderBatchId 로 연결됩니다. 도착 등록하면 그 판매요청이 매칭완료가 됩니다.
+  async function renderOrderSaleLink(batchId, lines){
+    const holder = document.getElementById("order-sale-link");
+    if(!holder) return;
+    holder.innerHTML = '<span style="color:var(--gray);">연결된 판매요청을 불러오는 중...</span>';
+    const ids = lines.map(l=>l.id);
+    const found = [];
+    for(const id of ids){
+      const srSnap = await getDocs(query(collection(db,"saleRequests"), where("fromOrderId","==",id)));
+      srSnap.forEach(d=> found.push({ id:d.id, ...d.data() }));
+    }
+    if(found.length === 0){
+      holder.innerHTML = '<span style="color:var(--gray);">이 주문에서 만들어진 판매요청이 없습니다. (주문에 판매처·판매가를 넣으면 자동으로 생깁니다)</span>';
+      return;
+    }
+    const totQ = found.reduce((n,x)=> n + (Number(x.quantity)||0), 0);
+    const totF = found.reduce((n,x)=> n + (Number(x.fulfilledCount)||0), 0);
+    const allDone = totQ>0 && totF >= totQ;
+    let h = '<div style="border:1px solid '+(allDone ? '#2e7d32' : 'var(--line)')+';background:'+(allDone ? '#f4f9f4' : '#fafafa')+';padding:8px 11px;font-size:12.5px;line-height:1.8;">' +
+      (allDone ? '<span style="background:#2e7d32;color:#fff;font-size:10.5px;padding:1px 6px;margin-right:6px;">판매 완료</span>' : '') +
+      '<b>연결된 판매요청 ' + found.length + '건</b> · 매칭 ' + totF + '/' + totQ +
+      ' <span style="color:var(--gray);">(단말기를 도착 등록하면 자동으로 채워집니다)</span>';
+    found.forEach(sr=>{
+      const done = (Number(sr.fulfilledCount)||0) >= (Number(sr.quantity)||0);
+      h += '<br>· ' + comboEsc(sr.destination||"-") + ' · ' + comboEsc(docModelLabel(sr))
+        + ' · ' + (Number(sr.quantity)||0) + '개 · 판매가 ' + (Number(sr.salePrice)||0).toLocaleString()
+        + ' · <b style="color:'+(done ? '#2e7d32' : 'var(--danger)')+';">' + comboEsc(sr.status||"-")
+        + ' ' + (Number(sr.fulfilledCount)||0) + '/' + (Number(sr.quantity)||0) + '</b>';
+    });
+    h += '<br><button class="btn small secondary no-print" style="width:auto;margin-top:6px;" onclick="goToSaleTab()">판매 관리에서 보기</button>';
+    h += '</div>';
+    holder.innerHTML = h;
+  }
+
+  // 판매요청의 출처를 보여줍니다.
+  async function renderSaleReqOrigin(b, lines){
+    const holder = document.getElementById("order-sale-link");
+    if(!holder) return;
+    const fromOrder = lines.find(l=> l.fromOrderId);
+    const fromResv  = lines.find(l=> l.fromReservationId);
+    let h = "";
+    if(fromOrder){
+      let ordLabel = "-";
+      try{
+        const oSnap = await getDoc(doc(db,"orders", fromOrder.fromOrderId));
+        if(oSnap.exists()){
+          const o = oSnap.data();
+          ordLabel = (o.source||"-") + " · 주문일 " + (o.orderDate||"-") + " · 도착 " + (o.fulfilledCount||0) + "/" + (o.quantity||0);
+        }
+      }catch(e){}
+      h = '<div style="border:1px solid var(--navy);background:#fafafa;padding:8px 11px;font-size:12.5px;line-height:1.8;">' +
+          '<b>주문에서 자동 생성된 판매요청입니다.</b>' +
+          '<br>연결된 주문: ' + comboEsc(ordLabel) +
+          '<br><span style="color:var(--gray);">주문 관리에서 단말기를 도착 등록하면 이 판매요청이 자동으로 매칭완료됩니다.</span>' +
+          '<br><button class="btn small secondary no-print" style="width:auto;margin-top:6px;" onclick="goToOrderTab()">주문 관리에서 보기</button>' +
+          '</div>';
+    }else if(fromResv){
+      h = '<div style="border:1px solid var(--line);background:#fafafa;padding:8px 11px;font-size:12.5px;">' +
+          '<b>예약 배정으로 만들어진 판매요청입니다.</b>' +
+          '<br><span style="color:var(--gray);">예약 관리에서 배정을 취소하면 이 판매요청도 취소됩니다.</span></div>';
+    }else{
+      h = '<div style="color:var(--gray);font-size:12.5px;">직접 등록한 판매요청입니다.</div>';
+    }
+    holder.innerHTML = h;
+  }
+  window.goToOrderTab = function(){
+    closeOrderDetailModal();
+    if(typeof setOrderListFilter === "function") setOrderListFilter("all");
+    switchTab("tab-orders");
+  };
+
+  window.goToSaleTab = function(){
+    closeOrderDetailModal();
+    if(typeof setSaleFilter === "function") setSaleFilter("all");
+    switchTab("tab-salereq");
+  };
+
   // 도착 등록은 했지만 판매처리가 안 된 재고를, 연결된 판매요청에 한 번에 매칭합니다.
   // (v22 이전에 도착 등록한 건이나, 자동 판매처리 체크를 끄고 등록한 건 정리용)
   window.settleArrivedForOrder = async function(orderId){
@@ -5053,7 +5202,8 @@
       cell("주문상태", (batchStatus==="취소" ? '<span style="color:var(--danger);">취소</span>' : comboEsc(batchStatus))) +
       cell("주문금액 합계", (b.depositRequired||0).toLocaleString()) +
       cell("등록자", comboEsc(b.createdBy||"-")) +
-      '</div>';
+      '</div>' +
+      '<div id="order-sale-link" style="margin-bottom:10px;"></div>';
 
     let html = head + '<div style="overflow-x:auto;"><table class="data-table" style="min-width:1260px;"><thead><tr>' +
       '<th>모델 (전산모델명)</th><th>기가수</th><th>통신사</th>' +
@@ -5068,6 +5218,9 @@
       '</tr></thead><tbody id="order-detail-tbody"></tbody><tfoot id="order-detail-tfoot"></tfoot></table></div>';
     document.getElementById("order-detail-body").innerHTML = html;
     const tbody = document.getElementById("order-detail-tbody");
+
+    // 이 주문에서 자동생성된 판매요청 현황을 머리부 아래에 보여줍니다.
+    renderOrderSaleLink(batchId, lines);
 
     let sumQty = 0, sumPurchase = 0, sumSale = 0;
     lines.forEach(o=>{
@@ -6785,8 +6938,11 @@
 
   function openSaleReqBatchDetailModal(batchId, b, lines, isLegacy){
     document.getElementById("order-detail-heading").textContent = "판매 요청서";
+    // 이 판매요청이 어디서 왔는지 표시 (주문에서 자동생성 / 예약 배정 / 직접 등록)
+    setTimeout(()=> renderSaleReqOrigin(b, lines), 0);
     document.getElementById("order-detail-title").textContent = (b.destination||"-") + " · 요청일 " + (b.requestDate||"-");
-    let html = '<div style="overflow-x:auto;"><table class="data-table" style="min-width:850px;"><thead><tr>' +
+    let html = '<div id="order-sale-link" style="margin-bottom:10px;"></div>' +
+      '<div style="overflow-x:auto;"><table class="data-table" style="min-width:850px;"><thead><tr>' +
       '<th>모델 (전산모델명/펫네임)</th><th>기가수</th><th>통신사</th><th class="ta-right">요청수량</th><th class="ta-right">판매가</th><th class="ta-right">판매할인</th><th class="ta-right">매칭</th><th>상태</th><th class="ta-right">관리</th>' +
       '</tr></thead><tbody id="order-detail-tbody"></tbody></table></div>';
     document.getElementById("order-detail-body").innerHTML = html;
@@ -9542,17 +9698,45 @@
         if(pendingMasterCreates && pendingMasterCreates.length>0){
           const doneKeys = new Set();
           const ops = [];
+          // 업체(입고처·출고처)는 이름 하나당 문서 하나로 만듭니다.
+          // 예전에는 입고처·출고처를 따로 만들어 같은 이름이 두 개 생겼습니다.
+          const coRoles = {};   // 이름 → {isSource, isDest}
           pendingMasterCreates.forEach(item=>{
+            if(item.collectionName === "inboundSources" || item.collectionName === "outboundDestinations"){
+              const nm = String(item.name||"").trim();
+              if(!nm) return;
+              if(!coRoles[nm]) coRoles[nm] = { isSource:false, isDest:false };
+              if(item.collectionName === "inboundSources") coRoles[nm].isSource = true;
+              else coRoles[nm].isDest = true;
+              return;
+            }
             const key = item.collectionName+"|"+item.name;
             if(doneKeys.has(key)) return;
             doneKeys.add(key);
-            // 입고처·출고처는 업체정보(companies)로 생성합니다.
-            if(item.collectionName === "inboundSources"){
-              ops.push(batch=> batch.set(doc(collection(db,"companies")), { name:item.name, isSource:true, isDest:false, needsReview:true, createdAt: serverTimestamp(), updatedAt: serverTimestamp() }));
-            }else if(item.collectionName === "outboundDestinations"){
-              ops.push(batch=> batch.set(doc(collection(db,"companies")), { name:item.name, isSource:false, isDest:true, needsReview:true, createdAt: serverTimestamp(), updatedAt: serverTimestamp() }));
+            ops.push(batch=> batch.set(doc(collection(db, item.collectionName)), { name:item.name, needsReview:true }));
+          });
+          // 이미 등록된 업체는 만들지 않고 구분만 보완합니다.
+          const existingCos = await getDocs(collection(db,"companies"));
+          const coByName = {};
+          existingCos.forEach(d=>{ coByName[String(d.data().name||"").trim()] = { id:d.id, ...d.data() }; });
+          Object.keys(coRoles).forEach(nm=>{
+            const want = coRoles[nm];
+            const exist = coByName[nm];
+            if(exist){
+              const patch = {};
+              if(want.isSource && exist.isSource !== true) patch.isSource = true;
+              if(want.isDest && exist.isDest !== true) patch.isDest = true;
+              if(Object.keys(patch).length>0){
+                patch.updatedAt = serverTimestamp();
+                ops.push(batch=> batch.update(doc(db,"companies", exist.id), patch));
+              }
             }else{
-              ops.push(batch=> batch.set(doc(collection(db, item.collectionName)), { name:item.name, needsReview:true }));
+              ops.push(batch=> batch.set(doc(collection(db,"companies")), {
+                name:nm, isSource:want.isSource, isDest:want.isDest, needsReview:true,
+                bizName:"", bizNumber:"", ceoName:"", bizType:"", bizItem:"", address:"", contact:"",
+                bankName:"", accountNumber:"", accountHolder:"", note:"",
+                createdAt: serverTimestamp(), updatedAt: serverTimestamp()
+              }));
             }
           });
           await commitInChunks(ops, 450, "필요한 항목 등록");
