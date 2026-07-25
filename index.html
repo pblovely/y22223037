@@ -279,7 +279,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-07-25 v91</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-07-25 v92</span>
       <span id="topbar-username">-</span>
       <button onclick="openPersonalSettingsModal()">개인설정</button>
       <button onclick="handleLogout()">로그아웃</button>
@@ -5354,7 +5354,9 @@
         set(".ol-salediscountpct", salePct);
         set(".ol-saleprice", L - Number(a));
       }
-      if(typeof onOrderLineDiscountInput === "function") onOrderLineDiscountInput(tr);
+      // 입고가·입고할인·소계를 다시 계산합니다.
+      if(typeof recalcOrderLinePurchasePrice === "function") recalcOrderLinePurchasePrice(tr);
+      if(typeof updateOrderLineTotalDiscount === "function") updateOrderLineTotalDiscount(tr);
       if(typeof updateOrderLineSubtotal === "function") updateOrderLineSubtotal(tr);
       applied++;
     });
@@ -5473,10 +5475,18 @@
     const m = modelsCache.find(x=>x.id===modelId);
     if(m){
       tr.querySelector(".ol-listprice").value = m.priceIncVat || "";
+      // 출고가가 바뀌면 비율도 다시 맞춰야 합니다.
+      const L = Number(m.priceIncVat)||0;
+      const pre = tr.querySelector(".ol-prediscountamt");
+      const oth = tr.querySelector(".ol-otherdiscountamt");
+      if(pre && pre.value !== "") tr.querySelector(".ol-prediscountpct").value = pctFromAmt(pre.value, L);
+      if(oth && oth.value !== "") tr.querySelector(".ol-otherdiscountpct").value = pctFromAmt(oth.value, L);
       recalcOrderLinePurchasePrice(tr);
     }
+    updateOrderLineTotalDiscount(tr);
     updateOrderLineSubtotal(tr);
   }
+  window.updateOrderLineTotalDiscount = updateOrderLineTotalDiscount;
   function updateOrderLineTotalDiscount(tr){
     const preAmt = Number(tr.querySelector(".ol-prediscountamt").value) || 0;
     const otherAmt = Number(tr.querySelector(".ol-otherdiscountamt").value) || 0;
@@ -8340,7 +8350,10 @@
       if(cr && r.carrier) cr.value = r.carrier;
       // 수량
       const q = tr.querySelector(".ol-qty");
-      if(q){ q.value = r.qty; if(typeof updateOrderLineSubtotal === "function") updateOrderLineSubtotal(tr); }
+      if(q) q.value = r.qty;
+      if(typeof recalcOrderLinePurchasePrice === "function") recalcOrderLinePurchasePrice(tr);
+      if(typeof updateOrderLineTotalDiscount === "function") updateOrderLineTotalDiscount(tr);
+      if(typeof updateOrderLineSubtotal === "function") updateOrderLineSubtotal(tr);
     }
     if(typeof recalcOrderTotal === "function") recalcOrderTotal();
     alert(rows.length + "줄을 주문 등록창에 넣었습니다."
