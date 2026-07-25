@@ -279,7 +279,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-07-25 v96</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-07-25 v98</span>
       <span id="topbar-username">-</span>
       <button onclick="openPersonalSettingsModal()">개인설정</button>
       <button onclick="handleLogout()">로그아웃</button>
@@ -1424,6 +1424,8 @@
             <thead>
               <tr style="background:#fafafa;">
                 <th style="padding:6px;border:1px solid var(--line);">모델</th>
+                <th style="padding:6px;border:1px solid var(--line);">색상</th>
+                <th style="padding:6px;border:1px solid var(--line);">통신사</th>
                 <th style="padding:6px;border:1px solid var(--line);">수량</th>
                 <th style="padding:6px;border:1px solid var(--line);">출고가</th>
                 <th style="padding:6px;border:1px solid var(--line);">입고가(계산됨)</th>
@@ -5365,9 +5367,11 @@
     alert(applied + "줄에 적용했습니다.");
   };
 
+  let orderCarrierNames = [];
   window.addOrderLine = async function(){
     const lineId = "ol" + (orderLineSeq++);
     const destNames = await fetchNamesList("outboundDestinations");
+    if(orderCarrierNames.length === 0) orderCarrierNames = await fetchNamesList("carriers");
 
     const tr = document.createElement("tr");
     tr.dataset.lineId = lineId;
@@ -5399,6 +5403,21 @@
     });
     modelSel.onchange = ()=> onOrderLineModelChange(tr);
     td(modelSel);
+
+    // 색상 (모델을 고르면 그 모델 색상만 나옵니다)
+    const colorSel = document.createElement("select");
+    colorSel.className = "ol-color";
+    colorSel.style.fontSize = "11.5px"; colorSel.style.padding = "4px"; colorSel.style.width = "120px";
+    colorSel.innerHTML = '<option value="">색상 선택</option>';
+    td(colorSel);
+
+    // 통신사 (줄마다 다를 수 있어 따로 둡니다)
+    const carrierSel = document.createElement("select");
+    carrierSel.className = "ol-carrier";
+    carrierSel.style.fontSize = "11.5px"; carrierSel.style.padding = "4px"; carrierSel.style.width = "70px";
+    carrierSel.innerHTML = '<option value="">-</option>' +
+      (orderCarrierNames||[]).map(n=>'<option value="'+comboEsc(n)+'">'+comboEsc(n)+'</option>').join("");
+    td(carrierSel);
 
     const qtyInput = smallInput("ol-qty","number","50px"); qtyInput.value = "1";
     qtyInput.oninput = ()=> updateOrderLineSubtotal(tr);
@@ -5474,6 +5493,15 @@
   function onOrderLineModelChange(tr){
     const modelId = tr.querySelector(".ol-model").value;
     const m = modelsCache.find(x=>x.id===modelId);
+    // 색상 목록을 그 모델 것으로 바꿉니다.
+    const cs = tr.querySelector(".ol-color");
+    if(cs){
+      const colors = m ? (m.colors||[]) : [];
+      cs.innerHTML = colors.length === 0
+        ? '<option value="">색상 없음</option>'
+        : '<option value="">색상 선택</option>' + colors.map((c,i)=>
+            '<option value="'+i+'">'+comboEsc((c.systemColor||c.manufacturerColor||"-") + (c.sku ? "" : " · SKU없음"))+'</option>').join("");
+    }
     if(m){
       tr.querySelector(".ol-listprice").value = m.priceIncVat || "";
       // 출고가가 바뀌면 비율도 다시 맞춰야 합니다.
@@ -5574,8 +5602,18 @@
       const modelId = tr.querySelector(".ol-model").value;
       const m = modelsCache.find(x=>x.id===modelId);
       if(!m){ alert("모델을 선택하지 않은 품목이 있습니다."); return; }
+      const ci = tr.querySelector(".ol-color") ? tr.querySelector(".ol-color").value : "";
+      let cObj = null;
+      if(String(ci).startsWith("txt:")){
+        const nm = String(ci).slice(4);
+        cObj = { manufacturerColor: nm, systemColor: nm, sku: "" };   // 등록 안 된 색상 이름 그대로
+      }else if(ci !== "" && m.colors && m.colors[Number(ci)]){
+        cObj = m.colors[Number(ci)];
+      }
       lines.push({
         modelId, m,
+        colorObj: cObj,
+        lineCarrier: tr.querySelector(".ol-carrier") ? tr.querySelector(".ol-carrier").value : "",
         quantity: Number(tr.querySelector(".ol-qty").value) || 1,
         listPrice: Number(tr.querySelector(".ol-listprice").value) || null,
         purchasePrice: Number(tr.querySelector(".ol-purchaseprice").value) || null,
@@ -5624,8 +5662,12 @@
         batchId: batchRef.id,
         modelId: l.modelId, modelGroup: l.m.modelGroup, baseModel: l.m.baseModel, capacity: l.m.capacity,
         systemModel: l.m.systemModel, petName: l.m.petName||"",
+        // 색상은 줄마다 다르므로 줄에서 고른 값을 저장합니다.
+        manufacturerColor: l.colorObj ? (l.colorObj.manufacturerColor||"") : "",
+        systemColor: l.colorObj ? (l.colorObj.systemColor||"") : "",
+        sku: l.colorObj ? (l.colorObj.sku||"") : "",
         quantity: l.quantity, fulfilledCount: 0, linkedItemIds: [],
-        source, carrier, destination: l.destination,
+        source, carrier: (l.lineCarrier || carrier || ""), destination: l.destination,
         listPrice: l.listPrice, purchasePrice: l.purchasePrice,
         preDiscountAmt: l.preDiscountAmt, preDiscountPct: l.preDiscountPct,
         otherDiscountAmt: l.otherDiscountAmt, otherDiscountPct: l.otherDiscountPct,
@@ -5659,7 +5701,11 @@
         await addDoc(collection(db,"saleRequests"), {
           batchId: srBatchRef.id,
           destination: dest, modelId: l.modelId, modelGroup:l.m.modelGroup, baseModel:l.m.baseModel, capacity:l.m.capacity,
-          systemModel:l.m.systemModel, petName:l.m.petName||"", carrier,
+          systemModel:l.m.systemModel, petName:l.m.petName||"",
+          manufacturerColor: l.colorObj ? (l.colorObj.manufacturerColor||"") : "",
+          systemColor: l.colorObj ? (l.colorObj.systemColor||"") : "",
+          sku: l.colorObj ? (l.colorObj.sku||"") : "",
+          carrier: (l.lineCarrier || carrier || ""),
           quantity: l.quantity, fulfilledCount:0, matchedItemIds:[],
           salePrice: l.salePrice, saleDiscountAmt: l.saleDiscountAmt, saleDiscountPct: l.saleDiscountPct,
           requestDate: orderDate, status:"대기중",
@@ -8339,13 +8385,20 @@
         if(ms.id) syncSearchableSelect(ms.id);
         await onOrderLineModelChange(tr);   // 색상 목록·출고가 채우기
       }
-      // 색상 고르기 (있으면)
-      const cs = tr.querySelector(".ol-color, .ol-syscolor");
-      if(cs && r.colorObj){
-        const idx = (r.model.colors||[]).findIndex(x=>
-          x.sku === r.colorObj.sku ||
-          (x.systemColor === r.colorObj.systemColor && x.manufacturerColor === r.colorObj.manufacturerColor));
-        if(idx >= 0) cs.value = String(idx);
+      // 색상 고르기
+      const cs = tr.querySelector(".ol-color");
+      if(cs){
+        if(r.colorObj){
+          const idx = (r.model.colors||[]).findIndex(x=>
+            x.sku === r.colorObj.sku ||
+            (x.systemColor === r.colorObj.systemColor && x.manufacturerColor === r.colorObj.manufacturerColor));
+          if(idx >= 0) cs.value = String(idx);
+        }else if(r.colorText){
+          // 등록되지 않은 색상이면 그 이름으로 항목을 만들어 유지합니다.
+          const opt = document.createElement("option");
+          opt.value = "txt:" + r.colorText; opt.textContent = r.colorText + " (미등록)";
+          cs.appendChild(opt); cs.value = opt.value;
+        }
       }
       // 통신사 (줄에 있으면)
       const cr = tr.querySelector(".ol-carrier");
