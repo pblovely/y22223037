@@ -249,7 +249,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-07-25 v65</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-07-25 v67</span>
       <span id="topbar-username">-</span>
       <button onclick="openPersonalSettingsModal()">개인설정</button>
       <button onclick="handleLogout()">로그아웃</button>
@@ -314,9 +314,17 @@
           <h3 style="margin:0;">대시보드</h3>
           <span>
             <button class="btn small" id="dash-scope-month-btn" style="width:auto;" onclick="setDashboardScope('month')">당월</button>
+            <button class="btn small secondary" id="dash-scope-year-btn" style="width:auto;" onclick="setDashboardScope('year')">당해년</button>
             <button class="btn small secondary" id="dash-scope-all-btn" style="width:auto;" onclick="setDashboardScope('all')">전체</button>
             <select id="dash-month-picker" onchange="setDashboardCustomMonth(this.value)" style="padding:5px 6px;border:1px solid #c7c7c7;font-size:12.5px;height:28px;"><option value="">월 선택</option></select>
+            <select id="dash-year-picker" onchange="setDashboardCustomYear(this.value)" style="padding:5px 6px;border:1px solid #c7c7c7;font-size:12.5px;height:28px;"><option value="">년 선택</option></select>
           </span>
+        </div>
+        <div style="display:flex;align-items:center;gap:0;flex-wrap:wrap;margin-bottom:8px;">
+          <span style="font-size:12px;color:var(--gray);margin-right:8px;">공시지원금 집계 기준</span>
+          <button class="btn small" id="subsidy-basis-accrual" style="width:auto;padding:0 12px;height:26px;border:1px solid var(--navy);" onclick="setSubsidyBasis('accrual')">귀속월</button>
+          <button class="btn small secondary" id="subsidy-basis-sale" style="width:auto;padding:0 12px;height:26px;border:1px solid var(--navy);margin-left:-1px;" onclick="setSubsidyBasis('sale')">판매월</button>
+          <span class="info-tip" style="margin-left:6px;" title="귀속월 = 공시지원금 귀속월 칸 기준 / 판매월 = 출고일 기준. 포피플 직영채널 판매분처럼 환수가 판매한 달에 잡혀야 하면 판매월을 쓰세요.">ⓘ</span>
         </div>
         <div id="dash-scope-note" style="font-size:12px;color:var(--gray);margin-bottom:8px;"></div>
         <div id="dash-stat-cards" style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-start;margin-bottom:16px;"></div>
@@ -526,6 +534,21 @@
           </div>
         </div>
         <div id="ledger-offset-box" style="display:none;border:1px solid var(--navy);background:#f4f7fb;padding:11px 13px;margin-top:14px;font-size:12.5px;line-height:1.9;"></div>
+      </div>
+    </div>
+
+    <!-- 주문·판매요청 묶음 수정 (날짜·거래처 등) -->
+    <div id="batch-edit-modal-overlay" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.55);z-index:1090;align-items:center;justify-content:center;">
+      <div style="background:#fff;border:2px solid var(--navy);max-width:520px;width:95%;max-height:90vh;overflow-y:auto;padding:22px;position:relative;">
+        <button onclick="closeBatchEdit()" style="position:absolute;top:12px;right:12px;background:none;border:1px solid var(--navy);width:26px;height:26px;cursor:pointer;font-size:13px;">✕</button>
+        <h3 id="be-title" style="margin-top:0;margin-bottom:4px;">주문 수정</h3>
+        <p class="desc" id="be-desc"></p>
+        <div class="stack-form" id="be-form"></div>
+        <div style="border:1px solid var(--line);background:#fafafa;padding:8px 10px;margin-top:10px;font-size:12px;line-height:1.7;color:var(--gray);">
+          날짜를 바꾸면 <b>묶음에 속한 품목들의 날짜도 함께</b> 바뀝니다. 이미 도착·매칭된 재고의 날짜는 그대로입니다.
+        </div>
+        <button class="btn small" style="width:auto;margin-top:12px;" onclick="submitBatchEdit()">수정 저장</button>
+        <div id="be-msg" style="display:none;font-size:12.5px;margin-top:10px;padding:8px 10px;border-left:3px solid var(--navy);background:#f2f2f2;line-height:1.6;"></div>
       </div>
     </div>
 
@@ -5241,6 +5264,7 @@
         '<b>'+(b.source||"-")+'</b> · 주문일 '+(b.orderDate||"-")+' · 품목 '+lines.length+'개 (도착대기 '+remainTotal+') · '+depositLabel+'</span>' +
         '<span>' +
         '<button class="btn small secondary" style="width:auto;margin-right:4px;" data-detail="'+bd.id+'">상세보기</button>' +
+        (!isCancelled ? '<button class="btn small secondary" style="width:auto;margin-right:4px;" data-edit-batch="'+bd.id+'">수정</button>' : '') +
         (!b.depositPaid ? '<button class="btn small secondary" style="width:auto;margin-right:4px;" data-pay="'+bd.id+'">입금 완료 처리</button>' : '') +
         (!isCancelled ? '<button class="btn small danger" style="width:auto;" data-cancel-batch="'+bd.id+'">주문 전체 취소</button>' : '') +
         '</span>';
@@ -5248,6 +5272,8 @@
       shown++;
 
       row.querySelector('[data-detail]').onclick = ()=> openOrderBatchDetailModal(bd.id, b);
+      const ebBtn = row.querySelector('[data-edit-batch]');
+      if(ebBtn) ebBtn.onclick = ()=> openBatchEdit("order", bd.id);
       const payBtn = row.querySelector('[data-pay]');
       if(payBtn) payBtn.onclick = ()=> markOrderDepositPaid(bd.id, b);
       const cancelBtn = row.querySelector('[data-cancel-batch]');
@@ -7370,6 +7396,89 @@
     loadQuotationList(); loadReservationTable();
   };
 
+  // ================= 주문·판매요청 묶음 수정 =================
+  let editingBatch = null;   // { kind:"order"|"sale", id, b, lines }
+
+  window.closeBatchEdit = function(){
+    document.getElementById("batch-edit-modal-overlay").style.display = "none";
+    editingBatch = null;
+  };
+
+  window.openBatchEdit = async function(kind, id){
+    const col = (kind === "order") ? "orderBatches" : "saleRequestBatches";
+    const snap = await getDoc(doc(db, col, id));
+    if(!snap.exists()){ alert("이미 삭제된 건입니다."); return; }
+    const b = snap.data();
+    const lineCol = (kind === "order") ? "orders" : "saleRequests";
+    const lineSnap = await getDocs(query(collection(db, lineCol), where("batchId","==",id)));
+    const lines = []; lineSnap.forEach(d=> lines.push({ id:d.id, ...d.data() }));
+    editingBatch = { kind, id, b, lines, col, lineCol };
+
+    document.getElementById("be-title").textContent = (kind === "order") ? "주문 수정" : "판매요청 수정";
+    document.getElementById("be-desc").innerHTML =
+      '<b>' + comboEsc((kind==="order" ? b.source : b.destination) || "-") + '</b> · 품목 ' + lines.length + '개'
+      + '<br><span style="color:var(--gray);font-size:12px;">묶음 정보를 고칩니다. 품목별 금액은 요청서에서 <b>수정</b>으로 바꿔주세요.</span>';
+
+    const destNames = await fetchNamesList(kind === "order" ? "inboundSources" : "outboundDestinations");
+    const opts = (cur)=> '<option value="">선택</option>' +
+      destNames.map(n=>'<option value="'+comboEsc(n)+'"'+(String(cur||"")===n?' selected':'')+'>'+comboEsc(n)+'</option>').join("") +
+      ((cur && !destNames.includes(String(cur))) ? '<option value="'+comboEsc(cur)+'" selected>'+comboEsc(cur)+'  (업체정보에 없음)</option>' : '');
+
+    let h = "";
+    if(kind === "order"){
+      h += '<div class="stack-row"><label>매입처</label><select id="be-party">'+opts(b.source)+'</select></div>';
+      h += '<div class="stack-row"><label>주문일</label><input type="text" id="be-date1" maxlength="8" inputmode="numeric" value="'+comboEsc(b.orderDate||"")+'"></div>';
+      h += '<div class="stack-row"><label>도착예정일</label><input type="text" id="be-date2" maxlength="8" inputmode="numeric" value="'+comboEsc(b.expectedArrivalDate||"")+'"></div>';
+    }else{
+      h += '<div class="stack-row"><label>판매처</label><select id="be-party">'+opts(b.destination)+'</select></div>';
+      h += '<div class="stack-row"><label>요청일</label><input type="text" id="be-date1" maxlength="8" inputmode="numeric" value="'+comboEsc(b.requestDate||"")+'"></div>';
+    }
+    document.getElementById("be-form").innerHTML = h;
+    initSearchableSelect("be-party", (kind==="order" ? "매입처" : "판매처") + "를 입력하면 목록이 나옵니다");
+    syncSearchableSelect("be-party");
+    document.getElementById("be-msg").style.display = "none";
+    document.getElementById("batch-edit-modal-overlay").style.display = "flex";
+  };
+
+  window.submitBatchEdit = async function(){
+    if(!editingBatch) return;
+    const { kind, id, b, lines, col, lineCol } = editingBatch;
+    const msg = (t, err)=> showModelMsg("be-msg", t, err);
+    const party = document.getElementById("be-party").value;
+    const d1 = (document.getElementById("be-date1").value||"").replace(/\D/g,"");
+    const d2El = document.getElementById("be-date2");
+    const d2 = d2El ? (d2El.value||"").replace(/\D/g,"") : "";
+    if(!party){ msg((kind==="order"?"매입처":"판매처")+"를 선택해주세요.", true); return; }
+    if(!d1){ msg((kind==="order"?"주문일":"요청일")+"을 입력해주세요.", true); return; }
+
+    const batchPatch = {};
+    const linePatch = {};
+    if(kind === "order"){
+      batchPatch.source = party; batchPatch.orderDate = d1; batchPatch.expectedArrivalDate = d2;
+      linePatch.source = party;  linePatch.orderDate = d1;  linePatch.expectedArrivalDate = d2;
+    }else{
+      batchPatch.destination = party; batchPatch.requestDate = d1;
+      linePatch.destination = party;  linePatch.requestDate = d1;
+    }
+
+    try{
+      msg("저장 중...", false);
+      await withTimeout(updateDoc(doc(db, col, id), batchPatch), 12000, "묶음 수정");
+      for(let i=0; i<lines.length; i+=300){
+        const bt = writeBatch(db);
+        lines.slice(i, i+300).forEach(l=> bt.update(doc(db, lineCol, l.id), linePatch));
+        await bt.commit();
+      }
+    }catch(e){
+      msg("<b>저장에 실패했습니다.</b><br>" + comboEsc((e && e.message) ? e.message : String(e)), true);
+      return;
+    }
+    logAction((kind==="order"?"주문":"판매요청")+" 묶음 수정", party + " / " + d1 + " / 품목 " + lines.length + "개");
+    msg("저장되었습니다.", false);
+    if(kind === "order") loadOrderList(); else loadSaleRequestList();
+    setTimeout(closeBatchEdit, 700);
+  };
+
   // ================= 재고에서 판매요청 만들기 =================
   // 판매요청 없이 재고만 등록된 건(급하게 나간 단말기 등)을 골라 판매요청으로 만듭니다.
   let i2sRows = [];
@@ -8477,12 +8586,15 @@
           + lines.reduce((n,l)=> n + Math.max(0, (Number(l.quantity)||0) - (Number(l.fulfilledCount)||0)), 0) + ') · '+depositLabel+(isLegacy?' <span style="color:var(--gray);">(기존건)</span>':'')+'</span>' +
         '<span>' +
         '<button class="btn small secondary" style="width:auto;margin-right:4px;" data-detail>상세보기</button>' +
+        (!isLegacy && b.status !== "취소" ? '<button class="btn small secondary" style="width:auto;margin-right:4px;" data-edit-batch>수정</button>' : '') +
         (!b.depositReceived ? '<button class="btn small secondary" style="width:auto;margin-right:4px;" data-pay>입금 완료 처리</button>' : '') +
         '<button class="btn small danger" style="width:auto;" data-cancel>취소</button>' +
         '</span>';
       listEl.appendChild(row);
 
       row.querySelector('[data-detail]').onclick = ()=> openSaleReqBatchDetailModal(batchId, b, lines, isLegacy);
+      const ebBtn2 = row.querySelector('[data-edit-batch]');
+      if(ebBtn2) ebBtn2.onclick = ()=> openBatchEdit("sale", batchId);
       const payBtn = row.querySelector('[data-pay]');
       if(payBtn) payBtn.onclick = async ()=>{
         const dateInput = prompt("입금일 (예: 20260724)", todayStr());
@@ -10156,21 +10268,48 @@
   };
 
   let dashboardScope = "month"; // "month" | "all"
-  let dashboardCustomMonth = ""; // "" 이면 당월, 아니면 YYYYMM
+  let dashboardCustomMonth = "";
+  let dashboardCustomYear = "";
+  let subsidyBasis = "accrual";   // accrual = 귀속월 기준 / sale = 판매월(출고일) 기준
+  window.setDashboardCustomYear = function(y){
+    if(!y) return;
+    dashboardScope = "year";
+    dashboardCustomYear = y;
+    dashboardCustomMonth = "";
+    const mp = document.getElementById("dash-month-picker"); if(mp) mp.value = "";
+    if(typeof paintScopeButtons === "function") paintScopeButtons("");
+    loadDashboard();
+  };
+  window.setSubsidyBasis = function(b){
+    subsidyBasis = b;
+    ["accrual","sale"].forEach(k=>{
+      const el = document.getElementById("subsidy-basis-"+k);
+      if(el) el.className = "btn small" + (k===b ? "" : " secondary");
+    });
+    loadDashboard();
+  }; // "" 이면 당월, 아니면 YYYYMM
+  function paintScopeButtons(scope){
+    [["month","dash-scope-month-btn"],["year","dash-scope-year-btn"],["all","dash-scope-all-btn"]].forEach(([k,id])=>{
+      const el = document.getElementById(id);
+      if(el) el.className = "btn small" + (scope===k ? "" : " secondary");
+    });
+  }
   window.setDashboardScope = function(scope){
     dashboardScope = scope;
     dashboardCustomMonth = "";
-    document.getElementById("dash-month-picker").value = "";
-    document.getElementById("dash-scope-month-btn").className = "btn small" + (scope==="month" ? "" : " secondary");
-    document.getElementById("dash-scope-all-btn").className = "btn small" + (scope==="all" ? "" : " secondary");
+    dashboardCustomYear = "";
+    const mp = document.getElementById("dash-month-picker"); if(mp) mp.value = "";
+    const yp = document.getElementById("dash-year-picker");  if(yp) yp.value = "";
+    paintScopeButtons(scope);
     loadDashboard();
   };
   window.setDashboardCustomMonth = function(month){
     if(!month) return;
     dashboardScope = "month";
     dashboardCustomMonth = month;
-    document.getElementById("dash-scope-month-btn").className = "btn small secondary";
-    document.getElementById("dash-scope-all-btn").className = "btn small secondary";
+    dashboardCustomYear = "";
+    const yp = document.getElementById("dash-year-picker"); if(yp) yp.value = "";
+    paintScopeButtons("");
     loadDashboard();
   };
 
@@ -10189,9 +10328,13 @@
 
     const normDate = v=> String(v||"").replace(/\D/g,"");
     const thisMonth = dashboardCustomMonth || todayStr().slice(0,6); // YYYYMM
+    const thisYear  = dashboardCustomYear  || todayStr().slice(0,4); // YYYY
     const inScope = (dateStr)=> {
-      if(!normDate(dateStr)) return false; // 날짜 자체가 없으면 (아직 입고/출고 안됨) 해당 안 됨
-      return dashboardScope==="all" ? true : (normDate(dateStr).slice(0,6) === thisMonth);
+      const d = normDate(dateStr);
+      if(!d) return false; // 날짜 자체가 없으면 (아직 입고/출고 안됨) 해당 안 됨
+      if(dashboardScope === "all")  return true;
+      if(dashboardScope === "year") return d.slice(0,4) === thisYear;
+      return d.slice(0,6) === thisMonth;
     };
 
     // 월 선택 드롭다운 채우기 (데이터에 있는 월들만)
@@ -10205,12 +10348,21 @@
     monthPicker.innerHTML = '<option value="">월 선택</option>' + sortedMonths.map(m=>
       '<option value="'+m+'"'+(m===dashboardCustomMonth?' selected':'')+'>'+m.slice(0,4)+'년 '+m.slice(4,6)+'월</option>'
     ).join("");
+    // 연도 드롭다운 (데이터에 있는 연도만)
+    const yearPicker = document.getElementById("dash-year-picker");
+    if(yearPicker){
+      const years = [...new Set(sortedMonths.map(m=>m.slice(0,4)))].sort().reverse();
+      yearPicker.innerHTML = '<option value="">년 선택</option>' + years.map(y=>
+        '<option value="'+y+'"'+(y===dashboardCustomYear?' selected':'')+'>'+y+'년</option>').join("");
+    }
 
     // 대시보드가 왜 비었는지 화면에서 바로 알 수 있도록 진단값을 미리 계산
     const scopeLabel = dashboardScope==="all"
       ? "전체 기간"
-      : (thisMonth.slice(0,4)+"년 "+thisMonth.slice(4,6)+"월");
+      : (dashboardScope==="year" ? (thisYear+"년 전체")
+        : (thisMonth.slice(0,4)+"년 "+thisMonth.slice(4,6)+"월"));
     const noDateCount = allItems.filter(it=> !normDate(it.inDate) && !normDate(it.outDate)).length;
+    const subsidyLabel = (subsidyBasis === "sale") ? "판매월(출고일)" : "귀속월";
     const noteEl = document.getElementById("dash-scope-note");
     if(noteEl){
       noteEl.textContent = "표시 기간: " + scopeLabel + " (입고일·출고일 기준) · 전체 재고 "
@@ -10254,8 +10406,12 @@
         if(it.salePrice) saleSum += Number(it.salePrice)*qty;
         if(it.profit!=null){ profitSum += Number(it.profit)*qty; soldProfitSum += Number(it.profit)*qty; }
       }
-      // 공시지원금은 입고일/출고일이 아니라 "귀속월" 기준으로 집계
-      const inSubsidyScope = dashboardScope==="all" || (normDate(it.subsidyAccrualMonth).slice(0,6) === thisMonth);
+      // 공시지원금 집계 기준 — 귀속월 / 판매월(출고일) 중에서 고를 수 있습니다.
+      // 포피플 직영채널 판매분처럼 환수가 판매월에 잡혀야 하는 경우에 씁니다.
+      const subsidyBase = (subsidyBasis === "sale") ? normDate(it.outDate) : normDate(it.subsidyAccrualMonth);
+      const inSubsidyScope = dashboardScope==="all" ? true
+        : (dashboardScope==="year" ? (subsidyBase.slice(0,4) === thisYear)
+          : (subsidyBase.slice(0,6) === thisMonth));
       if(it.subsidyStatus && inSubsidyScope){
         subsidyCount += qty;
         if(it.subsidyStatus==="지급완료" && it.subsidyAmount) subsidyReceivedSum += Number(it.subsidyAmount)*qty;
