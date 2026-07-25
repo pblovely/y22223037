@@ -279,7 +279,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-07-25 v94</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-07-25 v95</span>
       <span id="topbar-username">-</span>
       <button onclick="openPersonalSettingsModal()">개인설정</button>
       <button onclick="handleLogout()">로그아웃</button>
@@ -2029,10 +2029,11 @@
   function getElKey(el){
     if(el.dataset.labelKey) return el.dataset.labelKey;
     if(!el.dataset.origText){
-      if(el.children.length>0) return null; // 배지·아이콘 있는 요소는 건드리지 않음
-      const t = el.textContent.trim();
+      // 배지·아이콘이 들어 있어도 글자만 뽑아 키를 만듭니다.
+      // (예전에는 자식 요소가 있으면 아예 숨길 수 없었습니다)
+      const t = (el.textContent||"").replace(/\s+/g," ").trim();
       if(!t) return null;
-      el.dataset.origText = t;
+      el.dataset.origText = t.slice(0, 40);
     }
     return "btn:" + el.dataset.origText;
   }
@@ -2054,18 +2055,23 @@
         el.style.display = customHiddenKeys[key] ? "none" : "";
       }
     });
-    document.querySelectorAll("button:not([data-label-key]), h3:not([data-label-key]), p:not([data-label-key]), label:not([data-label-key])").forEach(el=>{
+    document.querySelectorAll("button:not([data-label-key]), h3:not([data-label-key]), p:not([data-label-key]), label:not([data-label-key]), .menu-item:not([data-label-key])").forEach(el=>{
       if(!el.dataset.origText){
-        if(el.children.length>0) return;
-        const t = el.textContent.trim();
+        const t = (el.textContent||"").replace(/\s+/g," ").trim();
         if(!t) return;
-        el.dataset.origText = t;
+        el.dataset.origText = t.slice(0, 40);
       }
       const key = "btn:" + el.dataset.origText;
-      if(customTabLabels[key]) el.textContent = customTabLabels[key];
+      // 글자만 바꿀 때는 자식 요소를 지우지 않도록 주의합니다.
+      if(customTabLabels[key]){
+        const sp = el.querySelector(".tab-label-text");
+        if(sp) sp.textContent = customTabLabels[key];
+        else if(el.children.length === 0) el.textContent = customTabLabels[key];
+      }
       if(customTabColors[key]) el.style.setProperty("color", customTabColors[key], "important");
       if(customTabFontSizes[key]) el.style.setProperty("font-size", customTabFontSizes[key]+"px", "important");
-      if(customHiddenKeys[key]) el.style.display = "none";
+      // 숨김은 항상 다시 적용합니다. (목록을 새로 그려도 유지되도록)
+      if(customHiddenKeys[key]) el.style.setProperty("display", "none", "important");
     });
   }
 
@@ -2077,10 +2083,15 @@
       customHiddenKeys[key] = value;
       // 무엇을 숨겼는지 나중에 알아볼 수 있게 이름을 함께 남깁니다.
       if(value === true){
-        const el = document.querySelector('[data-label-key="'+key+'"]');
-        const span = el ? el.querySelector(".tab-label-text") : null;
-        let nm = span ? span.textContent : (el ? (el.textContent||"").trim() : "");
-        nm = nm.replace(/\s+/g," ").slice(0, 40);
+        let nm = "";
+        if(key.startsWith("btn:")){
+          nm = key.slice(4);
+        }else{
+          const el = document.querySelector('[data-label-key="'+key+'"]');
+          const span = el ? el.querySelector(".tab-label-text") : null;
+          nm = span ? span.textContent : (el ? (el.textContent||"").trim() : "");
+        }
+        nm = String(nm).replace(/\s+/g," ").slice(0, 40);
         hiddenLabels[key] = nm || key;
       }else{
         delete hiddenLabels[key];
@@ -5820,6 +5831,7 @@
       return;
     }
     listEl.prepend(renderPaginationBar("orders", visibleBatches.length, loadOrderList));
+    applyCustomTabLabels();
   }
 
   // 어떤 컬렉션이든 모델 정보(펫네임·모델명·기가수·전산모델명·모델군)를 모델 등록 기준으로 맞춥니다.
@@ -9595,6 +9607,7 @@
       renderBatchRow(r.id, r.b, r.lines, r.kind === "legacy", isSaleFinal(r.b, r.lines));
     });
     listEl.prepend(renderPaginationBar("saleRequests", visibleSale.length, loadSaleRequestList));
+    applyCustomTabLabels();
   }
 
   function openSaleReqBatchDetailModal(batchId, b, lines, isLegacy){
