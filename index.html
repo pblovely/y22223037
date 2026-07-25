@@ -279,7 +279,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-07-25 v100</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-07-25 v108</span>
       <span id="topbar-username">-</span>
       <button onclick="openPersonalSettingsModal()">개인설정</button>
       <button onclick="handleLogout()">로그아웃</button>
@@ -569,7 +569,7 @@
 
     <!-- 주문·판매요청 묶음 수정 (날짜·거래처 등) -->
     <div id="batch-edit-modal-overlay" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.55);z-index:1090;align-items:center;justify-content:center;">
-      <div style="background:#fff;border:2px solid var(--navy);max-width:520px;width:95%;max-height:90vh;overflow-y:auto;padding:22px;position:relative;">
+      <div style="background:#fff;border:2px solid var(--navy);max-width:1240px;width:97%;max-height:92vh;overflow-y:auto;padding:22px;position:relative;">
         <button onclick="closeBatchEdit()" style="position:absolute;top:12px;right:12px;background:none;border:1px solid var(--navy);width:26px;height:26px;cursor:pointer;font-size:13px;">✕</button>
         <h3 id="be-title" style="margin-top:0;margin-bottom:4px;">주문 수정</h3>
         <p class="desc" id="be-desc"></p>
@@ -577,6 +577,30 @@
         <div style="border:1px solid var(--line);background:#fafafa;padding:8px 10px;margin-top:10px;font-size:12px;line-height:1.7;color:var(--gray);">
           날짜를 바꾸면 <b>묶음에 속한 품목들의 날짜도 함께</b> 바뀝니다. 이미 도착·매칭된 재고의 날짜는 그대로입니다.
         </div>
+
+        <div id="be-lines-area" style="margin-top:16px;">
+          <p class="desc" style="margin-bottom:4px;font-weight:700;color:var(--navy);">품목</p>
+          <div style="border:1px solid var(--navy);background:#f4f7fb;padding:9px 11px;margin-bottom:8px;font-size:12.5px;">
+            <b>모든 줄에 한 번에 넣기</b>
+            <div style="display:flex;gap:0;flex-wrap:wrap;align-items:center;margin-top:6px;">
+              <input type="number" id="be-bulk-preamt" placeholder="선할인" style="width:100px;height:28px;border:1px solid var(--line);padding:0 6px;font-size:12.5px;box-sizing:border-box;">
+              <input type="number" step="0.01" id="be-bulk-prepct" placeholder="선할인%" style="width:90px;height:28px;border:1px solid var(--line);padding:0 6px;font-size:12.5px;margin-left:-1px;box-sizing:border-box;">
+              <input type="number" id="be-bulk-otheramt" placeholder="타할인" style="width:100px;height:28px;border:1px solid var(--line);padding:0 6px;font-size:12.5px;margin-left:-1px;box-sizing:border-box;">
+              <input type="number" step="0.01" id="be-bulk-otherpct" placeholder="타할인%" style="width:90px;height:28px;border:1px solid var(--line);padding:0 6px;font-size:12.5px;margin-left:-1px;box-sizing:border-box;">
+              <select id="be-bulk-dest" style="width:150px;height:28px;border:1px solid var(--line);padding:0 6px;font-size:12.5px;margin-left:-1px;box-sizing:border-box;"><option value="">판매처 (선택)</option></select>
+              <input type="number" step="0.01" id="be-bulk-salepct" placeholder="판매할인%" style="width:100px;height:28px;border:1px solid var(--line);padding:0 6px;font-size:12.5px;margin-left:-1px;box-sizing:border-box;">
+              <button class="btn small" style="width:auto;height:28px;margin-left:6px;" onclick="applyBulkToBatchLines()">모든 줄에 적용</button>
+            </div>
+          </div>
+          <div style="overflow-x:auto;border:1px solid var(--line);">
+            <table style="border-collapse:collapse;font-size:12px;white-space:nowrap;min-width:1180px;">
+              <thead><tr style="background:#fafafa;" id="be-lines-head"></tr></thead>
+              <tbody id="be-lines-body"></tbody>
+            </table>
+          </div>
+          <div id="be-lock-note" style="font-size:11.5px;color:var(--danger);margin-top:6px;"></div>
+        </div>
+
         <button class="btn small" style="width:auto;margin-top:12px;" onclick="submitBatchEdit()">수정 저장</button>
         <div id="be-msg" style="display:none;font-size:12.5px;margin-top:10px;padding:8px 10px;border-left:3px solid var(--navy);background:#f2f2f2;line-height:1.6;"></div>
       </div>
@@ -1353,6 +1377,7 @@
         <div class="stack-form">
           <div class="stack-row"><label>주문일</label><input type="text" id="os-date" maxlength="8" inputmode="numeric" placeholder="예: 20260726"></div>
           <div class="stack-row"><label>도착예정일 (선택)</label><input type="text" id="os-expected" maxlength="8" inputmode="numeric" placeholder="예: 20260731"></div>
+          <div class="stack-row"><label>입금예정일 <span class="info-tip" title="이 주문 대금을 언제까지 보내기로 했는지 적어주세요.">ⓘ</span></label><input type="text" id="os-paydue" maxlength="8" inputmode="numeric" placeholder="예: 20260731"></div>
           <div class="stack-row"><label>매입처</label><select id="os-source"><option value="">선택</option></select></div>
           <div class="stack-row"><label>통신사</label><select id="os-carrier"></select></div>
           <div class="stack-row"><label>결제방식</label>
@@ -1393,6 +1418,7 @@
         <div class="stack-form">
           <div class="stack-row"><label>주문일</label><input type="text" id="order-date-input" placeholder="예: 20260724" maxlength="8" inputmode="numeric"></div>
           <div class="stack-row"><label>도착예정일 (선택)</label><input type="text" id="order-expected-date-input" placeholder="예: 20260731" maxlength="8" inputmode="numeric"></div>
+          <div class="stack-row"><label>입금예정일 <span class="info-tip" title="이 주문 대금을 언제까지 보내기로 했는지 적어주세요. 출금요청에 그대로 따라갑니다.">ⓘ</span></label><input type="text" id="order-paydue-input" placeholder="예: 20260731" maxlength="8" inputmode="numeric"></div>
           <div class="stack-row"><label>입고처</label><select id="order-source-select"><option value="">선택</option></select></div>
           <div class="stack-row"><label>통신사</label><select id="order-carrier-select"></select></div>
           <div class="stack-row"><label>결제방식</label>
@@ -1852,7 +1878,7 @@
   // 권한을 성격별로 묶어서 보여줍니다 (화면에서 찾기 쉽게)
   const PERMISSION_GROUPS = [
     { title:"화면 메뉴", keys:["dashboard","menuInvWork","menuInvUpload","menuOrders","menuSaleReq","menuDataUpload"] },
-    { title:"기능", keys:["excelExport","bulkEdit","bulkModelApply","companyEdit","listPriceOverride","cancelDelete","uiCustomize"] },
+    { title:"기능", keys:["excelExport","bulkEdit","bulkModelApply","companyEdit","listPriceOverride","cancelDelete","accountView","uiCustomize"] },
     { title:"관리자", keys:["userApproval","permissionManage","teamManage","inventorySettings","settlementSettings","siteSettings","dataReset"] }
   ];
   const PERMISSION_SUB_KEYS = ["menuInvUpload"];   // 상위 항목 아래에 들여쓰기할 항목
@@ -2740,7 +2766,7 @@
     closePersonalSettingsModal();
   };
 
-  const ALL_PERM_KEYS = ["dashboard","menuInvWork","menuInvUpload","menuOrders","menuSaleReq","menuDataUpload","excelExport","bulkEdit","bulkModelApply","companyEdit","listPriceOverride","cancelDelete","uiCustomize","userApproval","permissionManage","teamManage","inventorySettings","settlementSettings","siteSettings","dataReset"];
+  const ALL_PERM_KEYS = ["dashboard","menuInvWork","menuInvUpload","menuOrders","menuSaleReq","menuDataUpload","excelExport","bulkEdit","bulkModelApply","companyEdit","listPriceOverride","cancelDelete","accountView","uiCustomize","userApproval","permissionManage","teamManage","inventorySettings","settlementSettings","siteSettings","dataReset"];
 
   async function loadUserAdminList(){
     const listEl = document.getElementById("user-admin-list");
@@ -5110,6 +5136,7 @@
   window.openOrderModal = async function(){
     document.getElementById("order-date-input").value = todayStr();
     document.getElementById("order-expected-date-input").value = "";
+    document.getElementById("order-paydue-input").value = "";
     document.getElementById("order-deposit-input").value = "";
     document.getElementById("order-payment-method-select").value = "normal";
     document.getElementById("order-lines-body").innerHTML = "";
@@ -5139,7 +5166,7 @@
   window.openOrderSingle = async function(){
     await fetchModelsCache();
     document.getElementById("os-date").value = todayStr();
-    ["os-expected","os-listprice","os-preamt","os-prepct","os-otheramt","os-otherpct",
+    ["os-expected","os-paydue","os-listprice","os-preamt","os-prepct","os-otheramt","os-otherpct",
      "os-purchase","os-saleprice","os-saleamt","os-salepct"].forEach(id=> document.getElementById(id).value = "");
     document.getElementById("os-qty").value = "1";
     document.getElementById("os-payment").value = "normal";
@@ -5223,6 +5250,7 @@
     const c = (colorIdx !== "" && m.colors && m.colors[Number(colorIdx)]) ? m.colors[Number(colorIdx)] : null;
     const orderDate = (document.getElementById("os-date").value||"").replace(/\D/g,"") || todayStr();
     const expected = (document.getElementById("os-expected").value||"").replace(/\D/g,"");
+    const payDue = (document.getElementById("os-paydue").value||"").replace(/\D/g,"");
     const carrier = document.getElementById("os-carrier").value;
     const dest = document.getElementById("os-dest").value;
     const useB2B = document.getElementById("os-payment").value === "b2b_credit";
@@ -5233,7 +5261,7 @@
     try{
       msg("저장 중...", false);
       const batchRef = await withTimeout(addDoc(collection(db,"orderBatches"), {
-        source, carrier, orderDate, expectedArrivalDate: expected,
+        source, carrier, orderDate, expectedArrivalDate: expected, payDueDate: payDue,
         depositRequired: buy * qty,
         depositPaid: useB2B, depositPaidDate: useB2B ? orderDate : "",
         paymentMethod: useB2B ? "b2b_credit" : "normal",
@@ -5633,12 +5661,13 @@
 
     const orderDate = document.getElementById("order-date-input").value || todayStr();
     const expectedArrivalDate = document.getElementById("order-expected-date-input").value || "";
+    const payDueDate = (document.getElementById("order-paydue-input").value||"").replace(/\D/g,"");
     const depositRequired = Number(document.getElementById("order-deposit-input").value) || 0;
     const paymentMethod = document.getElementById("order-payment-method-select").value;
     const useB2BCredit = paymentMethod === "b2b_credit";
 
     const batchRef = await addDoc(collection(db,"orderBatches"), {
-      source, carrier, orderDate, expectedArrivalDate,
+      source, carrier, orderDate, expectedArrivalDate, payDueDate,
       depositRequired,
       depositPaid: useB2BCredit ? true : false,
       depositPaidDate: useB2BCredit ? orderDate : "",
@@ -5851,11 +5880,14 @@
         '<span style="font-size:12.5px;"><label style="margin-right:8px;"><input type="checkbox" class="order-pay-cb" data-batch-id="'+bd.id+'" data-amount="'+(b.depositRequired||0)+'" '+cbDisabled+'></label>' +
         stateBadge +
         '<b>'+(b.source||"-")+'</b> · 주문일 '+(b.orderDate||"-")+' · 품목 '+lines.length+'개 (도착대기 '+remainTotal+') · '+depositLabel+
+        (b.payDueDate && !b.depositPaid ? ' <span style="color:var(--gray);">· 입금예정 '+comboEsc(b.payDueDate)+'</span>' : '')+
         cancelText(b) + '<br>'+stampText(b)+'</span>' +
         '<span>' +
         '<button class="btn small secondary" style="width:auto;" data-detail="'+bd.id+'">상세보기</button>' +
         (!isCancelled ? '<button class="btn small secondary" style="width:auto;" data-edit-batch="'+bd.id+'">수정</button>' : '') +
         (!isCancelled ? '<button class="btn small danger" style="width:auto;" data-cancel-batch="'+bd.id+'">취소</button>' : '') +
+        (b.paymentRequestId && !isCancelled
+          ? '<button class="btn small secondary" style="width:auto;" title="이 주문이 묶인 출금요청을 취소합니다" data-cancel-pr-order="'+comboEsc(b.paymentRequestId)+'">출금요청 취소</button>' : '') +
         (isCancelled && hasPerm(currentUserPerms,"cancelDelete")
           ? '<button class="btn small danger" style="width:auto;" title="취소된 주문을 완전히 지웁니다" data-del-batch="'+bd.id+'">삭제</button>' : '') +
         '</span>';
@@ -5866,6 +5898,8 @@
       const ebBtn = row.querySelector('[data-edit-batch]');
       if(ebBtn) ebBtn.onclick = ()=> openBatchEdit("order", bd.id);
       // 입금(이체) 처리는 정산 관리에서만 합니다.
+      const prCancelBtn = row.querySelector('[data-cancel-pr-order]');
+      if(prCancelBtn) prCancelBtn.onclick = ()=> cancelPaymentRequest(prCancelBtn.dataset.cancelPrOrder);
       const delBtn = row.querySelector('[data-del-batch]');
       if(delBtn) delBtn.onclick = ()=> deleteCancelledBatch("order", bd.id, b, lines);
       const cancelBtn = row.querySelector('[data-cancel-batch]');
@@ -6689,8 +6723,33 @@
     const confirmMsg = batchIds.length+"건"+(otherAmount>0?" + 기타 "+otherAmount.toLocaleString():"")+" / 총 "+total.toLocaleString()+" — 출금요청을 만드시겠습니까?"+(otherAmount>0?"\n(기타 금액분은 재고를 따로 등록해주셔야 합니다)":"");
     if(!confirm(confirmMsg)) return;
 
+    // 어느 매입처에 얼마를 보내는지, 계좌는 어디인지 함께 저장합니다.
+    await fetchCompanies();
+    const srcSet = new Set();
+    for(const bId of batchIds){
+      try{
+        const bs = await getDoc(doc(db,"orderBatches", bId));
+        if(bs.exists() && bs.data().source) srcSet.add(String(bs.data().source).trim());
+      }catch(e){}
+    }
+    const sources = Array.from(srcSet);
+    const dueDates = [];
+    for(const bId of batchIds){
+      try{
+        const bs = await getDoc(doc(db,"orderBatches", bId));
+        if(bs.exists() && bs.data().payDueDate) dueDates.push(String(bs.data().payDueDate));
+      }catch(e){}
+    }
+    const accounts = sources.map(nm=>{
+      const c = companiesCache.find(x=> String(x.name||"").trim() === nm) || {};
+      return { source: nm, bankName: c.bankName||"", accountNumber: c.accountNumber||"", accountHolder: c.accountHolder||"" };
+    });
+
     const reqRef = await addDoc(collection(db,"paymentRequests"), {
       orderBatchIds: batchIds, otherAmount, totalAmount: total,
+      sources, accounts,
+      payDueDate: dueDates.length ? dueDates.sort()[0] : "",   // 가장 빠른 예정일
+      paidAmount: 0, payments: [],                              // 부분이체 누적
       requestDate: todayStr(), transferCompleted:false, transferCompleteDate:"",
       taxInvoiceIssued:false, taxInvoiceDate:"",
       status:"요청중", createdBy: currentUser.name, createdByUsername: currentUser.username, createdAt: serverTimestamp()
@@ -6702,6 +6761,99 @@
     document.getElementById("payment-other-amount-input").value = "";
     loadOrderList();
     loadSettlementTab();
+  };
+
+  // 출금요청을 취소합니다. 주문 관리·정산 관리 어느 쪽에서든 부를 수 있습니다.
+  window.cancelPaymentRequest = async function(reqId){
+    const snap = await getDoc(doc(db,"paymentRequests", reqId));
+    if(!snap.exists()){ alert("이미 삭제된 요청입니다."); return; }
+    const p = snap.data();
+    if(p.status === "취소"){ alert("이미 취소된 요청입니다."); return; }
+
+    const paid = Number(p.paidAmount)||0;
+    if(paid > 0 && !confirm(
+      "이 요청에는 이미 이체 기록이 있습니다.\n\n"
+      + "  누적 이체 " + paid.toLocaleString() + "\n\n"
+      + "취소하면 이체 기록도 함께 지워지고, 포함된 주문은 다시 미결제 상태가 됩니다.\n계속하시겠습니까?")) return;
+    if(paid === 0 && !confirm("이 출금요청을 취소하시겠습니까?\n포함된 주문들은 다시 개별 선택할 수 있게 됩니다.")) return;
+
+    const reason = prompt("취소 사유를 입력해주세요. (필수)", "");
+    if(reason === null) return;
+    if(!String(reason).trim()){ alert("취소 사유를 입력해주세요."); return; }
+
+    try{
+      await updateDoc(doc(db,"paymentRequests", reqId), {
+        status:"취소", cancelReason:String(reason).trim(),
+        cancelledAt: serverTimestamp(), cancelledBy: currentUser.name,
+        transferCompleted:false, transferCompleteDate:"", paidAmount:0, payments:[]
+      });
+      for(const bId of (p.orderBatchIds||[])){
+        await updateDoc(doc(db,"orderBatches", bId), { paymentRequestId: null, depositPaid:false, depositPaidDate:"" });
+      }
+    }catch(e){
+      alert("취소에 실패했습니다.\n" + ((e && e.message) ? e.message : String(e)));
+      return;
+    }
+    logAction("출금요청 취소", (p.totalAmount||0).toLocaleString() + " / 사유: " + String(reason).trim());
+    alert("취소했습니다.");
+    if(typeof loadPaymentRequestList === "function") loadPaymentRequestList();
+    loadOrderList();
+    if(typeof loadSettlementTab === "function") loadSettlementTab();
+  };
+
+  // 이체 내역을 한 건 추가합니다. (부분이체 지원)
+  window.addTransferRecord = async function(reqId, p){
+    const already = Number(p.paidAmount)||0;
+    const total = Number(p.totalAmount)||0;
+    const remain = Math.max(0, total - already);
+
+    const amtIn = prompt(
+      "이번에 보낸 금액을 입력하세요.\n\n" +
+      "  요청액 " + total.toLocaleString() + "\n" +
+      (already ? "  기이체 " + already.toLocaleString() + "\n" : "") +
+      "  남은 금액 " + remain.toLocaleString(),
+      String(remain));
+    if(amtIn === null) return;
+    const amt = Number(String(amtIn).replace(/[^0-9]/g,"")) || 0;
+    if(amt <= 0){ alert("금액을 입력해주세요."); return; }
+
+    const dateIn = prompt("입금완료일 (예: 20260728)", todayStr());
+    if(dateIn === null) return;
+    const date = String(dateIn).replace(/\D/g,"") || todayStr();
+
+    const nameIn = prompt("입금자명 (통장에 찍히는 이름)", (currentSettings && currentSettings.issuerName) || "");
+    if(nameIn === null) return;
+    const payer = String(nameIn).trim();
+
+    const newPaid = already + amt;
+    const full = newPaid >= total;
+    if(!full && !confirm(
+      "부분이체로 기록합니다.\n\n"
+      + "  이번 " + amt.toLocaleString() + "\n"
+      + "  누적 " + newPaid.toLocaleString() + " / " + total.toLocaleString() + "\n"
+      + "  남은 금액 " + (total - newPaid).toLocaleString() + "\n\n"
+      + "남은 금액은 미지급으로 유지됩니다. 진행하시겠습니까?")) return;
+
+    try{
+      const payments = [...(p.payments||[]), { amount: amt, date, payer, by: currentUser.name }];
+      await updateDoc(doc(db,"paymentRequests", reqId), {
+        paidAmount: newPaid, payments,
+        transferCompleted: full,
+        transferCompleteDate: full ? date : "",
+        status: full ? "이체완료" : "부분이체"
+      });
+      if(full){
+        for(const bId of p.orderBatchIds){
+          await updateDoc(doc(db,"orderBatches", bId), { depositPaid:true, depositPaidDate: date });
+        }
+      }
+    }catch(e){
+      alert("저장에 실패했습니다.\n" + ((e && e.message) ? e.message : String(e)));
+      return;
+    }
+    logAction(full ? "출금요청 이체완료" : "출금요청 부분이체",
+      amt.toLocaleString() + " / " + date + (payer ? " / " + payer : "") + " / 누적 " + newPaid.toLocaleString());
+    loadPaymentRequestList(); loadOrderList(); loadSettlementTab();
   };
 
   async function loadPaymentRequestList(){
@@ -6721,42 +6873,62 @@
         '<span style="font-size:12.5px;">' +
         '<b>'+(p.totalAmount||0).toLocaleString()+'</b> · 주문 '+p.orderBatchIds.length+'건'+(p.otherAmount?' + 기타 '+p.otherAmount.toLocaleString():'')+' · 요청일 '+p.requestDate+' · 상태 <b>'+p.status+'</b><br>' +
         '<label style="margin-right:12px;"><input type="checkbox" class="pr-transfer-cb" data-id="'+d.id+'" '+(p.transferCompleted?'checked':'')+' '+(p.status==='취소'?'disabled':'')+'> 이체완료</label>' +
+        // 송금할 계좌와 처리 날짜를 함께 보여줍니다.
+        ((p.accounts && p.accounts.length)
+          ? '<br><span style="color:var(--navy);">송금처: ' +
+              p.accounts.map(a=> comboEsc(a.source||"-") + ' — ' +
+                (a.bankName || a.accountNumber
+                  ? comboEsc(a.bankName||"") + ' ' + comboEsc(maskAccount(a.accountNumber)) + ' ' + comboEsc(a.accountHolder||"")
+                  : '<span style="color:var(--danger);">계좌 미등록</span>')).join(' / ') + '</span>'
+          : '') +
+        (p.transferCompleted && p.transferCompleteDate
+          ? '<br><span style="color:#2e7d32;">이체완료 ' + comboEsc(p.transferCompleteDate) + '</span>' : '') +
+        (p.taxInvoiceIssued && p.taxInvoiceDate
+          ? ' <span style="color:var(--gray);">· 세금계산서 ' + comboEsc(p.taxInvoiceDate) + '</span>' : '') +
+        '<br>' +
         '<label><input type="checkbox" class="pr-tax-cb" data-id="'+d.id+'" '+(p.taxInvoiceIssued?'checked':'')+' '+(p.status==='취소'?'disabled':'')+'> 세금계산서 발행완료</label>' +
         '</span>' +
+        (p.status!=='취소' && !p.transferCompleted
+          ? '<button class="btn small secondary" style="width:auto;" data-add-pay="'+d.id+'">이체 기록 추가</button>' : '') +
         (p.status!=='취소' ? '<button class="btn small danger" style="width:auto;" data-cancel-pr="'+d.id+'">요청 취소</button>' : '<span style="color:var(--gray);">취소됨</span>');
       el.appendChild(row);
 
       const transferCb = row.querySelector(".pr-transfer-cb");
       transferCb.onchange = async ()=>{
-        const checked = transferCb.checked;
-        const dateStr = checked ? (prompt("이체일 (예: 20260724)", todayStr())||todayStr()) : "";
-        await updateDoc(doc(db,"paymentRequests", d.id), { transferCompleted:checked, transferCompleteDate:dateStr });
-        if(checked){
+        if(!transferCb.checked){
+          // 해제: 이체 기록을 모두 지웁니다.
+          if(!confirm("이체 기록을 지우고 미이체 상태로 되돌리시겠습니까?")){ transferCb.checked = true; return; }
+          await updateDoc(doc(db,"paymentRequests", d.id), {
+            transferCompleted:false, transferCompleteDate:"", paidAmount:0, payments:[] });
           for(const bId of p.orderBatchIds){
-            await updateDoc(doc(db,"orderBatches", bId), { depositPaid:true, depositPaidDate: dateStr });
+            await updateDoc(doc(db,"orderBatches", bId), { depositPaid:false, depositPaidDate:"" });
           }
-          logAction("출금요청 이체완료 처리", (p.totalAmount||0).toLocaleString()+" / "+p.orderBatchIds.length+"건");
+          logAction("출금요청 이체 해제", (p.totalAmount||0).toLocaleString());
+          loadPaymentRequestList(); loadOrderList(); loadSettlementTab();
+          return;
         }
-        loadPaymentRequestList(); loadOrderList(); loadSettlementTab();
+        transferCb.checked = false;   // 실제 처리는 아래 입력을 마쳐야 반영
+        await addTransferRecord(d.id, p);
       };
       const taxCb = row.querySelector(".pr-tax-cb");
       taxCb.onchange = async ()=>{
         const checked = taxCb.checked;
-        const dateStr = checked ? todayStr() : "";
+        // 삼성처럼 나중에 발행되는 경우가 있어 날짜를 직접 입력받습니다.
+        let dateStr = "";
+        if(checked){
+          const v = prompt("세금계산서 발행일 (예: 20260731)", todayStr());
+          if(v === null){ taxCb.checked = false; return; }
+          dateStr = String(v).replace(/\D/g,"") || todayStr();
+        }
         await updateDoc(doc(db,"paymentRequests", d.id), { taxInvoiceIssued:checked, taxInvoiceDate:dateStr });
+        logAction("세금계산서 " + (checked ? "발행완료" : "해제"), (p.totalAmount||0).toLocaleString() + (dateStr ? " / " + dateStr : ""));
         loadPaymentRequestList();
       };
+      const addPayBtn = row.querySelector('[data-add-pay]');
+      if(addPayBtn) addPayBtn.onclick = ()=> addTransferRecord(d.id, p);
       const cancelBtn = row.querySelector('[data-cancel-pr]');
       if(cancelBtn){
-        cancelBtn.onclick = async ()=>{
-          if(!confirm("이 출금요청을 취소하시겠습니까? 포함된 주문들은 다시 개별 선택 가능해집니다.")) return;
-          await updateDoc(doc(db,"paymentRequests", d.id), { status:"취소" });
-          for(const bId of p.orderBatchIds){
-            await updateDoc(doc(db,"orderBatches", bId), { paymentRequestId: null });
-          }
-          logAction("출금요청 취소", (p.totalAmount||0).toLocaleString());
-          loadPaymentRequestList(); loadOrderList(); loadSettlementTab();
-        };
+        cancelBtn.onclick = ()=> cancelPaymentRequest(d.id);
       }
     });
     el.prepend(renderPaginationBar("paymentRequests", prDocs.length, loadPaymentRequestList));
@@ -6836,12 +7008,16 @@
       if(cancelBtn){
         cancelBtn.onclick = async ()=>{
           if(!confirm("이 입금요청을 취소하시겠습니까? 포함된 판매요청들은 다시 개별 선택 가능해집니다.")) return;
-          await updateDoc(doc(db,"saleDepositRequests", d.id), { status:"취소" });
+          const reason = prompt("취소 사유를 입력해주세요. (필수)", "");
+          if(reason === null) return;
+          if(!String(reason).trim()){ alert("취소 사유를 입력해주세요."); return; }
+          await updateDoc(doc(db,"saleDepositRequests", d.id), { status:"취소",
+            cancelReason:String(reason).trim(), cancelledAt: serverTimestamp(), cancelledBy: currentUser.name });
           for(const b of p.saleBatchRefs){
             const col = b.isLegacy ? "saleRequests" : "saleRequestBatches";
             await updateDoc(doc(db, col, b.id), { depositRequestId: null });
           }
-          logAction("판매 입금요청 취소", (p.totalAmount||0).toLocaleString());
+          logAction("판매 입금요청 취소", (p.totalAmount||0).toLocaleString() + " / 사유: " + String(reason).trim());
           loadSaleDepositRequestList(); loadSaleRequestList(); loadSettlementTab();
         };
       }
@@ -7365,9 +7541,13 @@
       alert("이 예약은 "+allocated+"개가 배정되어 있어 삭제할 수 없습니다.\n배정 숫자를 눌러 배정을 먼저 취소해주세요.");
       return;
     }
+    if(!hasPerm(currentUserPerms, "cancelDelete")){ alert("삭제 권한이 없습니다.\n관리자에게 요청해주세요."); return; }
     if(!confirm((r.destination||"-")+" / "+docModelLabel(r)+" 예약을 삭제하시겠습니까?")) return;
+    const reason = prompt("삭제 사유를 입력해주세요. (필수)", "");
+    if(reason === null) return;
+    if(!String(reason).trim()){ alert("삭제 사유를 입력해주세요."); return; }
     await deleteDoc(doc(db,"reservations", id));
-    logAction("예약 삭제", (r.destination||"-")+" / "+docModelLabel(r));
+    logAction("예약 삭제", (r.destination||"-")+" / "+docModelLabel(r)+" / 사유: "+String(reason).trim());
     loadReservationTable();
   };
 
@@ -7467,6 +7647,10 @@
       "· 예약의 배정 수량이 " + (Number(sr.quantity)||0) + "개 줄어듭니다.\n\n" +
       "진행하시겠습니까?")) return;
 
+    const reason = prompt("취소 사유를 입력해주세요. (필수)", "");
+    if(reason === null) return;
+    if(!String(reason).trim()){ alert("취소 사유를 입력해주세요."); return; }
+
     try{
       // 1) 매칭된 재고를 보유중으로 되돌립니다.
       if(matched > 0){
@@ -7484,7 +7668,8 @@
         }
       }
       // 2) 판매요청과 묶음을 취소 처리
-      await updateDoc(doc(db,"saleRequests", saleRequestId), { status:"취소" });
+      await updateDoc(doc(db,"saleRequests", saleRequestId), { status:"취소",
+        cancelReason:String(reason).trim(), cancelledAt: serverTimestamp(), cancelledBy: currentUser.name });
       if(sr.batchId){
         try{ await updateDoc(doc(db,"saleRequestBatches", sr.batchId), { status:"취소" }); }catch(e){}
       }
@@ -7503,7 +7688,7 @@
     }
 
     logAction("예약 배정 취소", (sr.destination||"-")+" / "+(Number(sr.quantity)||0)+"개"
-      + (matched ? " / 재고 "+matched+"건 보유중 복구" : ""));
+      + (matched ? " / 재고 "+matched+"건 보유중 복구" : "") + " / 사유: " + String(reason).trim());
     alert("배정을 취소했습니다." + (matched ? "\n재고 "+matched+"건을 보유중으로 되돌렸습니다." : ""));
     if(currentResvAlloc) await renderResvAllocHistory(currentResvAlloc.id);
     loadReservationTable();
@@ -7618,13 +7803,6 @@
     loadInventoryList();
     renderResvAllocHistory(r.id);
     setTimeout(closeResvAllocModal, 1800);
-  };
-
-  window.deleteReservation = async function(id){
-    if(!confirm("이 예약을 삭제하시겠습니까?")) return;
-    await deleteDoc(doc(db,"reservations", id));
-    logAction("예약 삭제", id);
-    loadReservationTable();
   };
 
   // ================= 예약 일괄등록 (엑셀 / 텍스트) =================
@@ -7989,11 +8167,15 @@
     if(!snap.exists()) return;
     const q = snap.data();
     if(!confirm("견적서 " + (q.code||"") + " 를 취소하시겠습니까?\n\n담긴 예약 " + (q.items||[]).length + "건의 잠금이 풀려 다시 수정·발행할 수 있습니다.")) return;
-    await updateDoc(doc(db,"quotations", id), { status:"취소" });
+    const reason = prompt("취소 사유를 입력해주세요. (필수)", "");
+    if(reason === null) return;
+    if(!String(reason).trim()){ alert("취소 사유를 입력해주세요."); return; }
+    await updateDoc(doc(db,"quotations", id), { status:"취소",
+      cancelReason:String(reason).trim(), cancelledAt: serverTimestamp(), cancelledBy: currentUser.name });
     const batch = writeBatch(db);
     (q.items||[]).forEach(it=> batch.update(doc(db,"reservations", it.reservationId), { quotationId:null, quotationCode:null }));
     await batch.commit();
-    logAction("견적서 취소", q.code||"-");
+    logAction("견적서 취소", (q.code||"-") + " / 사유: " + String(reason).trim());
     alert("취소했습니다.");
     loadQuotationList(); loadReservationTable();
   };
@@ -8049,6 +8231,26 @@
       + '</span>';
   }
 
+  // 계좌번호는 권한이 없으면 가립니다. (개인정보 보호)
+  function maskAccount(v){
+    const t = String(v||"").trim();
+    if(!t) return "";
+    if(hasPerm(currentUserPerms, "accountView")) return t;
+    const digits = t.replace(/\D/g,"");
+    const tail = digits.slice(-4);
+    return "****-****-" + (tail || "****");
+  }
+  // 출금요청에 넣을 매입처 계좌 정보를 만듭니다.
+  function accountLineOf(companyName){
+    const c = companiesCache.find(x=> String(x.name||"").trim() === String(companyName||"").trim());
+    if(!c) return "";
+    const parts = [];
+    if(c.bankName) parts.push(c.bankName);
+    if(c.accountNumber) parts.push(maskAccount(c.accountNumber));
+    if(c.accountHolder) parts.push(c.accountHolder);
+    return parts.join(" ");
+  }
+
   function stampText(b){
     const d = v => (v && v.seconds) ? new Date(v.seconds*1000) : null;
     const fmt = dt => dt ? (dt.getFullYear() + "." + String(dt.getMonth()+1).padStart(2,"0") + "." + String(dt.getDate()).padStart(2,"0")) : "-";
@@ -8091,6 +8293,7 @@
       h += '<div class="stack-row"><label>매입처</label><select id="be-party">'+opts(b.source)+'</select></div>';
       h += '<div class="stack-row"><label>주문일</label><input type="text" id="be-date1" maxlength="8" inputmode="numeric" value="'+comboEsc(b.orderDate||"")+'"></div>';
       h += '<div class="stack-row"><label>도착예정일</label><input type="text" id="be-date2" maxlength="8" inputmode="numeric" value="'+comboEsc(b.expectedArrivalDate||"")+'"></div>';
+      h += '<div class="stack-row"><label>입금예정일</label><input type="text" id="be-date3" maxlength="8" inputmode="numeric" value="'+comboEsc(b.payDueDate||"")+'"></div>';
     }else{
       h += '<div class="stack-row"><label>판매처</label><select id="be-party">'+opts(b.destination)+'</select></div>';
       h += '<div class="stack-row"><label>요청일</label><input type="text" id="be-date1" maxlength="8" inputmode="numeric" value="'+comboEsc(b.requestDate||"")+'"></div>';
@@ -8099,7 +8302,146 @@
     initSearchableSelect("be-party", (kind==="order" ? "매입처" : "판매처") + "를 입력하면 목록이 나옵니다");
     syncSearchableSelect("be-party");
     document.getElementById("be-msg").style.display = "none";
+    await renderBatchEditLines();
     document.getElementById("batch-edit-modal-overlay").style.display = "flex";
+  };
+
+  // 묶음 수정 창의 품목 표를 그립니다.
+  // 이미 도착·매칭된 줄은 잠급니다. (재고와 금액이 어긋나지 않도록)
+  async function renderBatchEditLines(){
+    if(!editingBatch) return;
+    const { kind, lines } = editingBatch;
+    const head = document.getElementById("be-lines-head");
+    const body = document.getElementById("be-lines-body");
+    const isOrder = (kind === "order");
+
+    const cols = isOrder
+      ? ["모델","색상","통신사","수량","출고가","입고가","선할인","선할인%","타할인","타할인%","판매처","판매가","판매할인","판매할인%","상태"]
+      : ["모델","색상","통신사","수량","판매가","판매할인","판매할인%","상태"];
+    head.innerHTML = cols.map(c=>'<th style="padding:6px;border:1px solid var(--line);">'+c+'</th>').join("");
+
+    const destNames = await fetchNamesList("outboundDestinations");
+    let lockedCount = 0;
+    body.innerHTML = "";
+
+    lines.forEach(l=>{
+      const doneCnt = Number(l.fulfilledCount)||0;
+      const locked = doneCnt > 0;          // 도착·매칭된 줄은 잠금
+      if(locked) lockedCount++;
+      const tr = document.createElement("tr");
+      tr.dataset.lineId = l.id;
+      if(locked) tr.style.background = "#f7f7f7";
+
+      const cell = (el)=>{ const td = document.createElement("td");
+        td.style.padding = "4px"; td.style.border = "1px solid var(--line)"; td.appendChild(el); tr.appendChild(td); return td; };
+      const txt = (v)=>{ const sp = document.createElement("span"); sp.textContent = v; sp.style.fontSize = "11.5px"; return sp; };
+      const inp = (cls, val, w)=>{
+        const el = document.createElement("input");
+        el.type = "number"; el.className = cls; el.value = (val==null||val==="") ? "" : val;
+        el.style.width = w; el.style.fontSize = "11.5px"; el.style.padding = "4px";
+        el.style.border = "1px solid var(--line)"; el.style.boxSizing = "border-box";
+        if(locked){ el.disabled = true; el.style.background = "#eee"; }
+        else el.oninput = ()=> recalcBatchLine(tr);
+        return el;
+      };
+
+      cell(txt(docModelLabel(l)));
+      cell(txt(l.systemColor || l.manufacturerColor || "-"));
+      cell(txt(l.carrier || "-"));
+      cell(txt(Number(l.quantity)||0));
+
+      if(isOrder){
+        cell(inp("be-listprice", l.listPrice, "85px"));
+        const buy = document.createElement("input");
+        buy.type = "number"; buy.className = "be-purchase"; buy.value = l.purchasePrice||"";
+        buy.disabled = true; buy.style.cssText = "width:85px;font-size:11.5px;padding:4px;background:#f2f2f2;border:1px solid var(--line);box-sizing:border-box;";
+        cell(buy);
+        cell(inp("be-preamt", l.preDiscountAmt, "80px"));
+        cell(inp("be-prepct", l.preDiscountPct, "65px"));
+        cell(inp("be-otheramt", l.otherDiscountAmt, "80px"));
+        cell(inp("be-otherpct", l.otherDiscountPct, "65px"));
+      }
+
+      // 판매처
+      const ds = document.createElement("select");
+      ds.className = "be-dest"; ds.style.cssText = "width:130px;font-size:11.5px;padding:4px;border:1px solid var(--line);box-sizing:border-box;";
+      ds.innerHTML = '<option value="">해당없음</option>' +
+        destNames.map(n=>'<option value="'+comboEsc(n)+'"'+(String(l.destination||"")===n?' selected':'')+'>'+comboEsc(n)+'</option>').join("");
+      if(l.destination && !destNames.includes(String(l.destination))){
+        const o = document.createElement("option"); o.value = l.destination;
+        o.textContent = l.destination + " (업체정보에 없음)"; o.selected = true; ds.appendChild(o);
+      }
+      if(locked){ ds.disabled = true; ds.style.background = "#eee"; }
+      cell(ds);
+
+      cell(inp("be-saleprice", l.salePrice, "85px"));
+      cell(inp("be-saleamt", l.saleDiscountAmt, "80px"));
+      cell(inp("be-salepct", l.saleDiscountPct, "65px"));
+      cell(txt(locked ? ("도착 " + doneCnt + "/" + (l.quantity||0)) : "수정 가능"));
+
+      body.appendChild(tr);
+    });
+
+    document.getElementById("be-lock-note").textContent = lockedCount > 0
+      ? ("이미 도착·매칭된 " + lockedCount + "줄은 재고와 금액이 어긋나지 않도록 잠겼습니다. 고치려면 도착 등록을 먼저 취소해주세요.")
+      : "";
+
+    // 판매처 일괄 목록
+    const bd = document.getElementById("be-bulk-dest");
+    if(bd){
+      bd.innerHTML = '<option value="">판매처 (선택)</option>' +
+        destNames.map(n=>'<option value="'+comboEsc(n)+'">'+comboEsc(n)+'</option>').join("");
+    }
+    ["be-bulk-preamt","be-bulk-prepct","be-bulk-otheramt","be-bulk-otherpct","be-bulk-salepct"]
+      .forEach(id=>{ const el = document.getElementById(id); if(el) el.value = ""; });
+    // 판매요청은 매입 할인 칸이 없으므로 일괄줄에서 숨깁니다.
+    ["be-bulk-preamt","be-bulk-prepct","be-bulk-otheramt","be-bulk-otherpct"].forEach(id=>{
+      const el = document.getElementById(id); if(el) el.style.display = isOrder ? "" : "none";
+    });
+  }
+
+  // 한 줄의 입고가·비율을 다시 계산합니다.
+  function recalcBatchLine(tr){
+    const v = cls => { const el = tr.querySelector(cls); return el && el.value !== "" ? Number(el.value) : 0; };
+    const has = cls => { const el = tr.querySelector(cls); return el && el.value !== ""; };
+    const L = v(".be-listprice");
+    const set = (cls, val)=>{ const el = tr.querySelector(cls); if(el) el.value = (val===""||val==null) ? "" : val; };
+    if(L){
+      if(has(".be-preamt"))  set(".be-prepct",  pctFromAmt(tr.querySelector(".be-preamt").value, L));
+      if(has(".be-otheramt")) set(".be-otherpct", pctFromAmt(tr.querySelector(".be-otheramt").value, L));
+      if(has(".be-saleprice")) set(".be-saleamt", L - v(".be-saleprice"));
+      if(has(".be-saleamt"))  set(".be-salepct", pctFromAmt(tr.querySelector(".be-saleamt").value, L));
+      set(".be-purchase", L - v(".be-preamt") - v(".be-otheramt"));
+    }
+  }
+
+  // 품목 표의 모든(잠기지 않은) 줄에 같은 값을 넣습니다.
+  window.applyBulkToBatchLines = function(){
+    const rows = Array.from(document.querySelectorAll("#be-lines-body tr"));
+    const g = id => { const el = document.getElementById(id); return el ? el.value.trim() : ""; };
+    const preAmt = g("be-bulk-preamt"), prePct = g("be-bulk-prepct");
+    const othAmt = g("be-bulk-otheramt"), othPct = g("be-bulk-otherpct");
+    const dest = g("be-bulk-dest"), salePct = g("be-bulk-salepct");
+    if(!preAmt && !prePct && !othAmt && !othPct && !dest && !salePct){ alert("넣을 값을 하나 이상 입력해주세요."); return; }
+
+    let n = 0;
+    rows.forEach(tr=>{
+      const lp = tr.querySelector(".be-listprice");
+      if(lp && lp.disabled) return;                 // 잠긴 줄은 건너뜀
+      const L = lp ? (Number(lp.value)||0) : 0;
+      const set = (cls, val)=>{ const el = tr.querySelector(cls); if(el && !el.disabled) el.value = val; };
+      if(preAmt !== ""){ set(".be-preamt", preAmt); set(".be-prepct", pctFromAmt(preAmt, L)); }
+      else if(prePct !== "" && L){ const a = amtFromPct(prePct, L); set(".be-preamt", a); set(".be-prepct", prePct); }
+      if(othAmt !== ""){ set(".be-otheramt", othAmt); set(".be-otherpct", pctFromAmt(othAmt, L)); }
+      else if(othPct !== "" && L){ const a = amtFromPct(othPct, L); set(".be-otheramt", a); set(".be-otherpct", othPct); }
+      if(dest !== ""){ const ds = tr.querySelector(".be-dest"); if(ds && !ds.disabled){
+        if(!Array.from(ds.options).some(o=>o.value===dest)){ const o=document.createElement("option"); o.value=dest; o.textContent=dest; ds.appendChild(o); }
+        ds.value = dest; } }
+      if(salePct !== "" && L){ const a = amtFromPct(salePct, L); set(".be-saleamt", a); set(".be-salepct", salePct); set(".be-saleprice", L - Number(a)); }
+      recalcBatchLine(tr);
+      n++;
+    });
+    alert(n + "줄에 적용했습니다." + (rows.length - n > 0 ? "\n(잠긴 " + (rows.length-n) + "줄 제외)" : ""));
   };
 
   window.submitBatchEdit = async function(){
@@ -8117,6 +8459,8 @@
     const linePatch = {};
     if(kind === "order"){
       batchPatch.source = party; batchPatch.orderDate = d1; batchPatch.expectedArrivalDate = d2;
+      const d3El = document.getElementById("be-date3");
+      if(d3El) batchPatch.payDueDate = (d3El.value||"").replace(/\D/g,"");
       batchPatch.updatedAt = serverTimestamp(); batchPatch.updatedBy = currentUser.name;
       linePatch.source = party;  linePatch.orderDate = d1;  linePatch.expectedArrivalDate = d2;
     }else{
@@ -8125,19 +8469,58 @@
       linePatch.destination = party;  linePatch.requestDate = d1;
     }
 
+    // 품목 표에서 고친 값을 줄마다 모읍니다. (잠긴 줄은 건드리지 않습니다)
+    const perLine = {};
+    let newTotal = 0;
+    document.querySelectorAll("#be-lines-body tr").forEach(tr=>{
+      const lid = tr.dataset.lineId;
+      const num = cls => { const el = tr.querySelector(cls); return (el && el.value !== "") ? Number(el.value) : null; };
+      const lp = tr.querySelector(".be-listprice");
+      const lineLocked = !!(lp && lp.disabled);
+      const src = lines.find(x=>x.id===lid) || {};
+      if(!lineLocked){
+        const p = {};
+        if(kind === "order"){
+          p.listPrice = num(".be-listprice");
+          p.preDiscountAmt = num(".be-preamt");
+          p.preDiscountPct = num(".be-prepct");
+          p.purchaseDiscountAmt = p.preDiscountAmt;
+          p.purchaseDiscount = p.preDiscountPct;
+          p.otherDiscountAmt = num(".be-otheramt");
+          p.otherDiscountPct = num(".be-otherpct");
+          p.purchasePrice = (p.listPrice != null)
+            ? (p.listPrice - (p.preDiscountAmt||0) - (p.otherDiscountAmt||0)) : null;
+        }
+        const ds = tr.querySelector(".be-dest");
+        if(ds) p.destination = ds.value;
+        p.salePrice = num(".be-saleprice");
+        p.saleDiscountAmt = num(".be-saleamt");
+        p.saleDiscountPct = num(".be-salepct");
+        perLine[lid] = p;
+        newTotal += ((kind === "order" ? (p.purchasePrice||0) : (p.salePrice||0)) * (Number(src.quantity)||0));
+      }else{
+        newTotal += ((kind === "order" ? (Number(src.purchasePrice)||0) : (Number(src.salePrice)||0)) * (Number(src.quantity)||0));
+      }
+    });
+    if(Object.keys(perLine).length > 0) batchPatch.depositRequired = newTotal;
+
     try{
       msg("저장 중...", false);
       await withTimeout(updateDoc(doc(db, col, id), batchPatch), 12000, "묶음 수정");
       for(let i=0; i<lines.length; i+=300){
         const bt = writeBatch(db);
-        lines.slice(i, i+300).forEach(l=> bt.update(doc(db, lineCol, l.id), linePatch));
+        lines.slice(i, i+300).forEach(l=>{
+          bt.update(doc(db, lineCol, l.id), { ...linePatch, ...(perLine[l.id] || {}) });
+        });
         await bt.commit();
       }
     }catch(e){
       msg("<b>저장에 실패했습니다.</b><br>" + comboEsc((e && e.message) ? e.message : String(e)), true);
       return;
     }
-    logAction((kind==="order"?"주문":"판매요청")+" 묶음 수정", party + " / " + d1 + " / 품목 " + lines.length + "개");
+    logAction((kind==="order"?"주문":"판매요청")+" 묶음 수정",
+      party + " / " + d1 + " / 품목 " + lines.length + "개"
+      + (Object.keys(perLine).length ? " / 금액수정 " + Object.keys(perLine).length + "줄" : ""));
     msg("저장되었습니다.", false);
     if(kind === "order") loadOrderList(); else loadSaleRequestList();
     setTimeout(closeBatchEdit, 700);
@@ -10031,6 +10414,8 @@
   };
 
   window.deleteB2BLedgerEntry = async function(id){
+    if(!hasPerm(currentUserPerms, "cancelDelete")){ alert("삭제 권한이 없습니다.\\n관리자에게 요청해주세요."); return; }
+
     if(!confirm("이 거래 내역을 삭제하시겠습니까?")) return;
     await deleteDoc(doc(db,"b2bLedger", id));
     logAction("B2B 여신 거래 삭제", id);
@@ -10706,6 +11091,7 @@
   // 삭제는 바로 지우지 않고 "삭제함" 표시만 합니다. 기본 목록에서는 숨겨지고,
   // 보기에서 "삭제함"을 켜면 다시 볼 수 있습니다. 완전 삭제는 그 화면에서 따로 합니다.
   window.deleteSelectedInventoryRows = async function(){
+    // 되돌릴 수 있는 "삭제함" 처리라 권한은 걸지 않되, 기록은 남깁니다.
     let ids = getSelectedInventoryIds();
     const smEl = document.getElementById("bulk-same-model");
     if(smEl && smEl.checked && ids.length>0){
@@ -10764,6 +11150,8 @@
 
   // 완전 삭제 (되돌릴 수 없음)
   window.purgeSelectedInventoryRows = async function(){
+    if(!hasPerm(currentUserPerms, "cancelDelete")){ alert("삭제 권한이 없습니다.\\n관리자에게 요청해주세요."); return; }
+
     let ids = getSelectedInventoryIds();
     const smEl = document.getElementById("bulk-same-model");
     if(smEl && smEl.checked && ids.length>0){
@@ -11186,6 +11574,7 @@
   };
 
   window.deleteMasterStockBatch = async function(batchId, fileName){
+    if(!hasPerm(currentUserPerms, "cancelDelete")){ alert("삭제 권한이 없습니다.\n관리자에게 요청해주세요."); return; }
     if(!confirm('"'+(fileName||batchId)+'" 업로드 건을 완전히 삭제하시겠습니까? (그 안의 모든 행이 삭제됩니다)')) return;
     const rowSnap = await getDocs(query(collection(db,"masterStockRows"), where("batchId","==",batchId)));
     clearMasterSerialCache();
@@ -13007,6 +13396,8 @@
     document.querySelectorAll(".log-check").forEach(cb=> cb.checked = masterCb.checked);
   };
   window.deleteSelectedLogs = async function(){
+    if(!hasPerm(currentUserPerms, "cancelDelete")){ alert("삭제 권한이 없습니다.\\n관리자에게 요청해주세요."); return; }
+
     const checked = Array.from(document.querySelectorAll(".log-check:checked"));
     if(checked.length===0){ alert("삭제할 이력을 먼저 선택해주세요."); return; }
     if(!confirm(checked.length+"건의 이력을 완전히 삭제하시겠습니까?")) return;
