@@ -249,7 +249,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-07-25 v63</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-07-25 v64</span>
       <span id="topbar-username">-</span>
       <button onclick="openPersonalSettingsModal()">개인설정</button>
       <button onclick="handleLogout()">로그아웃</button>
@@ -9367,9 +9367,10 @@
     MULTI_EDIT_FIELDS.forEach(f=>{
       let input = "";
       const cur = curOf(f.key);
-      const hint = cur.same
+      let hint = cur.same
         ? (cur.value ? "현재값 " + cur.value : "현재 비어 있음")
         : "건별 다름 (" + cur.kinds + "가지: " + cur.sample + ")";
+      if(f.key === "listPrice" && !cur.same) hint = "건별 다름 — 오타일 수 있습니다. 모델 등록값으로 맞추세요.";
       const oninput = f.link ? ' oninput="multiRecalc(\''+f.link+'\')"' : '';
       const preset = cur.same ? comboEsc(cur.value) : "";
       if(f.type === "names"){
@@ -9388,10 +9389,26 @@
           + ' placeholder="'+(cur.same ? (f.ph||"") : "건별 다름 — 넣으면 전부 같은 값이 됩니다")+'"'
           + ' style="flex:1;border:none;padding:5px 8px;font-size:12.5px;">';
       }
-      // 등록된 값이 여러 개면 눌러서 가져올 수 있는 칩을 만듭니다.
+      // 출고가는 모델 등록에 정해진 값이 정답입니다. 그 값을 먼저 제시합니다.
       let chips = "";
+      if(f.key === "listPrice"){
+        const prices = [...new Set(items.map(it=>{
+          const m = findModelForItem(it);
+          return m && m.priceIncVat ? Number(m.priceIncVat) : null;
+        }).filter(v=>v))];
+        if(prices.length > 0){
+          chips += '<div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:4px;align-items:center;">' +
+            '<span style="font-size:10.5px;color:var(--navy);font-weight:700;">모델 등록값</span>' +
+            prices.map(v=>
+              '<button type="button" class="btn small" style="width:auto;padding:1px 8px;font-size:10.5px;"' +
+              ' data-mpick-key="listPrice" data-mpick-val="'+v+'" title="모델 등록의 출고가로 채우기">' + v.toLocaleString() + '</button>').join("") +
+            (prices.length > 1 ? '<span style="font-size:10.5px;color:var(--danger);">모델이 여러 개라 값도 여러 개입니다</span>' : '') +
+            '</div>';
+        }
+      }
       if(!cur.same && cur.list.length > 0){
-        chips = '<div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:4px;">' +
+        chips += '<div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:4px;align-items:center;">' +
+          '<span style="font-size:10.5px;color:var(--gray);">지금 값</span>' +
           cur.list.slice(0,6).map(v=>
             '<button type="button" class="btn small secondary" style="width:auto;padding:1px 8px;font-size:10.5px;"' +
             ' data-mpick-key="'+f.key+'" data-mpick-val="'+comboEsc(v)+'" title="이 값으로 채우기">' +
