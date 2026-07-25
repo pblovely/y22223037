@@ -249,7 +249,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-07-25 v45</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-07-25 v47</span>
       <span id="topbar-username">-</span>
       <button onclick="openPersonalSettingsModal()">개인설정</button>
       <button onclick="handleLogout()">로그아웃</button>
@@ -414,6 +414,7 @@
           <button class="btn small secondary" id="order-filter-all" style="width:auto;padding:0 12px;height:26px;border:1px solid var(--navy);margin-left:-1px;" onclick="setOrderListFilter('all')">전체</button>
           <button class="btn small secondary" id="order-filter-cancel" style="width:auto;padding:0 12px;height:26px;border:1px solid var(--navy);margin-left:-1px;" onclick="setOrderListFilter('cancel')">취소</button>
         </div>
+        <div id="order-price-notice" style="display:none;font-size:12.5px;padding:9px 11px;margin-bottom:8px;border:1px solid var(--danger);background:#fdecea;line-height:1.7;"></div>
         <div id="order-list"></div>
       </div>
     </div>
@@ -4941,7 +4942,34 @@
     loadOrderList();
   };
 
+  // 출고가가 비어 있는 주문 품목이 있으면 위에 안내를 띄웁니다.
+  async function renderOrderPriceNotice(){
+    const el = document.getElementById("order-price-notice");
+    if(!el) return;
+    try{
+      await fetchModelsCache();
+      const snap = await getDocs(collection(db,"orders"));
+      let noPrice = 0, nameDiff = 0;
+      snap.forEach(d=>{
+        const o = d.data();
+        if(o.status === "취소") return;
+        if(!Number(o.listPrice)) noPrice++;
+        const m = findModelForItem(o);
+        if(m && String(o.petName||"") !== String(m.petName||"")) nameDiff++;
+      });
+      const total = noPrice + nameDiff;
+      if(total === 0){ el.style.display = "none"; el.innerHTML = ""; return; }
+      el.style.display = "block";
+      el.innerHTML = '<b>모델 정보와 다른 주문 품목이 있습니다.</b>'
+        + (noPrice ? ' 출고가 없음 <b>' + noPrice + '건</b>' : '')
+        + (nameDiff ? (noPrice ? ' · ' : ' ') + '펫네임 다름 <b>' + nameDiff + '건</b>' : '')
+        + '<br><span style="color:var(--gray);">펫네임·모델명·전산모델명을 모델 등록의 현재 값으로 맞추고, 출고가를 채워 할인을 역산합니다. 입고가·판매가는 그대로 둡니다.</span>'
+        + '<br><button class="btn small" style="width:auto;margin-top:6px;" onclick="syncOrderPrices()">모델 기준으로 전부 최신화</button>';
+    }catch(e){ el.style.display = "none"; }
+  }
+
   async function loadOrderList(){
+    renderOrderPriceNotice();
     const listEl = document.getElementById("order-list");
     listEl.innerHTML = '<div class="list-empty">불러오는 중...</div>';
     const batchSnap = await getDocs(query(collection(db,"orderBatches"), orderBy("createdAt","desc")));
@@ -5036,6 +5064,95 @@
     }
     listEl.prepend(renderPaginationBar("orders", visibleBatches.length, loadOrderList));
   }
+
+  // 주문 품목을 모델 등록 기준으로 최신화합니다.
+  //  · 펫네임·모델군·모델명·기가수·전산모델명을 모델의 현재 값으로 맞춤
+  //  · 출고가를 채우고 선할인·타할인%·판매할인을 역산 (입고가·판매가는 그대로)
+  window.syncOrderPrices = async function(){
+    await fetchModelsCache();
+    const snap = await getDocs(collection(db,"orders"));
+    const plan = [], noModel = [];
+    snap.forEach(d=>{
+      const o = { id:d.id, ...d.data() };
+      if(o.status === "취소") return;
+      const m = findModelForItem(o);
+      if(!m){ noModel.push(o); return; }
+
+      const patch = {};
+      const changes = [];
+
+      // 1) 모델 정보 최신화
+      const fields = [
+        ["petName",    m.petName    || ""],
+        ["modelGroup", m.modelGroup || ""],
+        ["baseModel",  m.baseModel  || ""],
+        ["capacity",   m.capacity   || ""],
+        ["systemModel",m.systemModel|| ""]
+      ];
+      fields.forEach(([k,v])=>{
+        if(String(o[k]||"") !== String(v)){ patch[k] = v; if(k==="petName") changes.push("펫네임"); }
+      });
+
+      // 2) 출고가·할인
+      const L = Number(m.priceIncVat)||0;
+      if(L){
+        if((Number(o.listPrice)||0) !== L){ patch.listPrice = L; changes.push("출고가"); }
+        const buy = Number(o.purchasePrice)||0;
+        const other = Number(o.otherDiscountAmt)||0;
+        const sale = Number(o.salePrice)||0;
+        if(buy){
+          const pre = L - buy - other;
+          patch.preDiscountAmt = pre;
+          patch.purchaseDiscountAmt = pre;
+          patch.preDiscountPct = Number(((pre/L)*100).toFixed(2));
+          patch.purchaseDiscount = patch.preDiscountPct;
+          changes.push("선할인");
+        }
+        if(other) patch.otherDiscountPct = Number(((other/L)*100).toFixed(2));
+        if(sale){
+          const sa = L - sale;
+          patch.saleDiscountAmt = sa;
+          patch.saleDiscountPct = Number(((sa/L)*100).toFixed(2));
+          changes.push("판매할인");
+        }
+      }
+      if(Object.keys(patch).length > 0) plan.push({ id:o.id, o, m, patch, changes:[...new Set(changes)] });
+    });
+
+    if(plan.length === 0){
+      alert("고칠 주문 품목이 없습니다." + (noModel.length ? "\n\n모델을 못 찾음: "+noModel.length+"건" : ""));
+      return;
+    }
+    const preview = plan.slice(0,8).map(x=>
+      "· " + (x.m.systemModel || x.m.baseModel || "-") + "  "
+      + (x.patch.petName!==undefined ? '펫네임 "'+(x.o.petName||"-")+'" → "'+x.patch.petName+'"  ' : "")
+      + (x.patch.listPrice!==undefined ? "출고가 " + Number(x.patch.listPrice).toLocaleString() : "")
+    ).join("\n");
+
+    if(!confirm(
+      "진행중인 주문 품목 " + plan.length + "건을 모델 기준으로 최신화합니다.\n\n" + preview +
+      (plan.length>8 ? "\n... 외 " + (plan.length-8) + "건" : "") +
+      "\n\n· 펫네임·모델명·기가수·전산모델명을 모델 등록의 현재 값으로 맞춥니다.\n" +
+      "· 출고가를 채우고 선할인·판매할인을 역산합니다.\n" +
+      "· 입고가와 판매가는 그대로 둡니다.\n" +
+      (noModel.length ? "\n제외: 모델 못 찾음 " + noModel.length + "건\n" : "") +
+      "\n진행하시겠습니까?")) return;
+
+    try{
+      for(let i=0; i<plan.length; i+=300){
+        const batch = writeBatch(db);
+        plan.slice(i, i+300).forEach(x=> batch.update(doc(db,"orders", x.id), x.patch));
+        await batch.commit();
+      }
+    }catch(e){
+      alert("처리에 실패했습니다.\n" + ((e && e.message) ? e.message : String(e)));
+      return;
+    }
+    logAction("주문 품목 모델기준 최신화", plan.length + "건");
+    alert(plan.length + "건을 고쳤습니다."
+      + (noModel.length ? "\n\n모델을 못 찾은 " + noModel.length + "건은 전산모델명을 확인해주세요." : ""));
+    loadOrderList();
+  };
 
   let currentPoBatch = null;
   window.openPoFromDetail = function(){
