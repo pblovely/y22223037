@@ -212,7 +212,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-07-25 v31</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-07-25 v32</span>
       <span id="topbar-username">-</span>
       <button onclick="openPersonalSettingsModal()">개인설정</button>
       <button onclick="handleLogout()">로그아웃</button>
@@ -438,7 +438,7 @@
           <h3 style="margin:0;">예약 지표 <span class="info-tip" title="모델·색상 × 거래처 기준 집계입니다. 잔여 = 예약 − 배정.">ⓘ</span></h3>
           <button class="btn small secondary" style="width:auto;" onclick="toggleResvStats()">접기/펼치기</button>
         </div>
-        <div id="reservation-stat-cards" style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-start;margin-bottom:14px;"></div>
+        <div id="reservation-stat-cards" class="dash-cards" style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-start;margin-bottom:14px;"></div>
         <div id="reservation-table-area"></div>
       </div>
     </div>
@@ -6702,20 +6702,25 @@
     });
     const statEl = document.getElementById("reservation-stat-cards");
     if(statEl){
-      const card = (label, value, color, note)=>
-        '<div style="border:1px solid var(--line);padding:9px 12px;min-width:150px;background:#fff;">' +
-        '<div style="font-size:11px;color:var(--gray);">'+label+'</div>' +
-        '<div style="font-size:16px;font-weight:700;'+(color?('color:'+color+';'):'')+'">'+value+'</div>' +
+      // 대시보드 카드와 같은 구조 — 우클릭으로 글씨 크기·색상 변경, 숨기기 가능
+      const card = (label, value, color, note, key)=>
+        '<div class="dash-stat-card" data-label-key="resv-'+key+'-card" style="flex:1;min-width:150px;border:1px solid var(--line);padding:9px 12px;background:#fff;">' +
+        '<div class="dash-stat-label" data-label-key="resv-'+key+'"><span class="tab-label-text">'+label+'</span></div>' +
+        '<div class="dash-stat-value" data-label-key="resv-'+key+'-value" style="'+(color?('color:'+color+';'):'')+'">'+value+'</div>' +
         (note ? '<div style="font-size:10.5px;color:var(--gray);">'+note+'</div>' : '') +
         '</div>';
+      const discPctAll = sumListAmt ? ((sumListAmt - sumSaleAmt) / sumListAmt * 100) : null;
       statEl.innerHTML =
-        card("예약 수량", sumOrdered) +
-        card("배정", sumAllocated, "#2e7d32") +
-        card("잔여", Math.max(0, sumOrdered - sumAllocated), "var(--danger)") +
-        card("출고가 금액", sumListAmt.toLocaleString(), null, "출고가 × 예약수량") +
+        card("예약 수량", sumOrdered, null, null, "qty") +
+        card("배정", sumAllocated, "#2e7d32", null, "alloc") +
+        card("잔여", Math.max(0, sumOrdered - sumAllocated), "var(--danger)", null, "remain") +
+        card("출고가 금액", sumListAmt.toLocaleString(), null, "출고가 × 예약수량", "listamt") +
         card("판매가 금액", sumSaleAmt.toLocaleString(), "#1565c0",
-             noPriceCount>0 ? ("판매가 미입력 "+noPriceCount+"건 제외") : "출고가 대비 " + (sumListAmt ? (sumSaleAmt/sumListAmt*100).toFixed(1)+"%" : "-")) +
-        card("예상 차액", (sumSaleAmt - sumListAmt).toLocaleString(), (sumSaleAmt-sumListAmt)>=0 ? "#2e7d32" : "var(--danger)", "판매가 − 출고가");
+             noPriceCount>0 ? ("판매가 미입력 "+noPriceCount+"건 제외") : null, "saleamt") +
+        card("할인%", (discPctAll==null ? "-" : discPctAll.toFixed(2)+"%"), "#6a1b9a", "(출고가−판매가) ÷ 출고가", "discpct") +
+        card("예상 차액", (sumSaleAmt - sumListAmt).toLocaleString(), (sumSaleAmt-sumListAmt)>=0 ? "#2e7d32" : "var(--danger)", "판매가 − 출고가", "diff");
+      applyCustomTabLabels();
+      applyDashFontSize();
     }
 
     // 업체 사이를 굵은 세로선으로 구분합니다.
@@ -6809,6 +6814,20 @@
     html += amtRow("출고가 금액", c=>c.listAmt, "출고가 × 예약수량", false);
     html += amtRow("판매가 금액", c=>c.saleAmt, "판매가 × 예약수량", false);
     html += amtRow("차액", c=>(c.saleAmt - c.listAmt), "판매가 − 출고가", true);
+
+    // 할인% = (출고가금액 − 판매가금액) ÷ 출고가금액
+    const pctRow = ()=>{
+      const calc = c => (c.listAmt ? ((c.listAmt - c.saleAmt) / c.listAmt * 100) : null);
+      let h = '<tr style="background:#fafafa;"><td style="font-weight:700;">할인% <span style="color:var(--gray);font-weight:400;font-size:11px;">(출고가−판매가) ÷ 출고가</span></td>';
+      const gv = calc({ listAmt:grandListAmt, saleAmt:grandSaleAmt });
+      h += '<td class="ta-right" colspan="3" style="'+SEP+TOT+'font-weight:700;color:#6a1b9a;">' + (gv==null ? '-' : gv.toFixed(2)+'%') + '</td>';
+      destKeys.forEach((dk, idx)=>{
+        const v = calc(colTotals[idx]);
+        h += '<td class="ta-right" colspan="3" style="'+SEP+'font-weight:700;color:#6a1b9a;">' + (v==null ? '-' : v.toFixed(2)+'%') + '</td>';
+      });
+      return h + '</tr>';
+    };
+    html += pctRow();
 
     html += '</tbody></table></div>';
     html += '<p class="desc" style="margin-top:10px;">모델 바로 오른쪽이 <b>전체 합계</b>이고, 그 뒤로 업체별 칸이 굵은 세로선으로 구분됩니다. 아래 세 줄은 <b>업체별 금액</b>입니다. 표 위에서 <b>마우스 오른쪽 버튼</b>을 누르면 글씨 크기와 색상을 바꿀 수 있습니다. 수정·배정은 위 <b>예약 목록</b>에서 하세요.</p>';
