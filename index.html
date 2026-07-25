@@ -249,7 +249,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-07-25 v67</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-07-25 v69</span>
       <span id="topbar-username">-</span>
       <button onclick="openPersonalSettingsModal()">개인설정</button>
       <button onclick="handleLogout()">로그아웃</button>
@@ -442,7 +442,7 @@
             </div>
           </span>
         </div>
-        <p class="desc" style="margin-top:0;">사용법: ① 아래 판매요청 목록에서 아직 입금 안 받은 건들의 체크박스를 선택 → ② 필요하면 기타 금액 입력 → ③ "체크한 판매요청 묶어서 입금요청" 클릭 → ④ 실제로 입금받으면 정산 관리 탭에서 "입금완료" 체크 (그러면 해당 판매요청들이 자동으로 입금완료 처리됩니다).</p>
+        <p class="desc" style="margin-top:0;">사용법: ① 아래 판매요청 목록에서 아직 입금 안 받은 건들의 체크박스를 선택 → ② 필요하면 기타 금액 입력 → ③ "체크한 판매요청 묶어서 입금요청" 클릭 → ④ 실제로 입금받으면 정산 관리 탭에서 "입금완료" 체크 (그러면 해당 판매요청들이 자동으로 입금완료 처리됩니다). 입금 처리는 <b>정산 관리</b>에서만 합니다.</p>
         <div style="margin-bottom:8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
           <button class="btn small secondary" style="width:auto;" onclick="createSaleDepositRequestFromSelected()">체크한 판매요청 묶어서 입금요청</button>
           <span class="info-tip" title="여러 업체 건을 한 번에 입금받을 때, 아래에서 체크박스로 골라 묶으세요.">ⓘ</span>
@@ -5261,12 +5261,12 @@
       row.innerHTML =
         '<span style="font-size:12.5px;"><label style="margin-right:8px;"><input type="checkbox" class="order-pay-cb" data-batch-id="'+bd.id+'" data-amount="'+(b.depositRequired||0)+'" '+cbDisabled+'></label>' +
         stateBadge +
-        '<b>'+(b.source||"-")+'</b> · 주문일 '+(b.orderDate||"-")+' · 품목 '+lines.length+'개 (도착대기 '+remainTotal+') · '+depositLabel+'</span>' +
+        '<b>'+(b.source||"-")+'</b> · 주문일 '+(b.orderDate||"-")+' · 품목 '+lines.length+'개 (도착대기 '+remainTotal+') · '+depositLabel+
+        '<br>'+stampText(b)+'</span>' +
         '<span>' +
         '<button class="btn small secondary" style="width:auto;margin-right:4px;" data-detail="'+bd.id+'">상세보기</button>' +
         (!isCancelled ? '<button class="btn small secondary" style="width:auto;margin-right:4px;" data-edit-batch="'+bd.id+'">수정</button>' : '') +
-        (!b.depositPaid ? '<button class="btn small secondary" style="width:auto;margin-right:4px;" data-pay="'+bd.id+'">입금 완료 처리</button>' : '') +
-        (!isCancelled ? '<button class="btn small danger" style="width:auto;" data-cancel-batch="'+bd.id+'">주문 전체 취소</button>' : '') +
+        (!isCancelled ? '<button class="btn small danger" style="width:auto;" data-cancel-batch="'+bd.id+'">취소</button>' : '') +
         '</span>';
       listEl.appendChild(row);
       shown++;
@@ -5274,8 +5274,7 @@
       row.querySelector('[data-detail]').onclick = ()=> openOrderBatchDetailModal(bd.id, b);
       const ebBtn = row.querySelector('[data-edit-batch]');
       if(ebBtn) ebBtn.onclick = ()=> openBatchEdit("order", bd.id);
-      const payBtn = row.querySelector('[data-pay]');
-      if(payBtn) payBtn.onclick = ()=> markOrderDepositPaid(bd.id, b);
+      // 입금(이체) 처리는 정산 관리에서만 합니다.
       const cancelBtn = row.querySelector('[data-cancel-batch]');
       if(cancelBtn) cancelBtn.onclick = async ()=>{
         if(!confirm("이 주문 전체를 취소하시겠습니까? (이미 도착 등록된 재고는 그대로 유지됩니다)")) return;
@@ -7396,6 +7395,16 @@
     loadQuotationList(); loadReservationTable();
   };
 
+  // 목록 줄에 공통으로 붙는 작성일·수정일 표기
+  function stampText(b){
+    const d = v => (v && v.seconds) ? new Date(v.seconds*1000) : null;
+    const fmt = dt => dt ? (dt.getFullYear() + "." + String(dt.getMonth()+1).padStart(2,"0") + "." + String(dt.getDate()).padStart(2,"0")) : "-";
+    const c = d(b.createdAt), u = d(b.updatedAt);
+    let t = '작성 ' + fmt(c) + (b.createdBy ? ' ' + comboEsc(b.createdBy) : '');
+    if(u) t += ' · 수정 ' + fmt(u) + (b.updatedBy ? ' ' + comboEsc(b.updatedBy) : '');
+    return '<span style="font-size:11px;color:var(--gray);">' + t + '</span>';
+  }
+
   // ================= 주문·판매요청 묶음 수정 =================
   let editingBatch = null;   // { kind:"order"|"sale", id, b, lines }
 
@@ -7455,9 +7464,11 @@
     const linePatch = {};
     if(kind === "order"){
       batchPatch.source = party; batchPatch.orderDate = d1; batchPatch.expectedArrivalDate = d2;
+      batchPatch.updatedAt = serverTimestamp(); batchPatch.updatedBy = currentUser.name;
       linePatch.source = party;  linePatch.orderDate = d1;  linePatch.expectedArrivalDate = d2;
     }else{
       batchPatch.destination = party; batchPatch.requestDate = d1;
+      batchPatch.updatedAt = serverTimestamp(); batchPatch.updatedBy = currentUser.name;
       linePatch.destination = party;  linePatch.requestDate = d1;
     }
 
@@ -8579,34 +8590,27 @@
           : '<span style="background:var(--danger);color:#fff;font-size:10.5px;padding:1px 6px;margin-right:4px;">입금필요</span><span style="color:var(--danger);font-weight:700;">'+(b.depositRequired||0).toLocaleString()+'</span>');
       const cbDisabled = (b.depositReceived || b.depositRequestId) ? "disabled" : "";
       if(isFinal) row.style.background = "#f4f9f4";
-      row.innerHTML =
-        (isFinal ? '<span style="background:#2e7d32;color:#fff;font-size:10.5px;padding:1px 6px;margin-right:6px;">최종완료</span>' : '') +
+      const saleBadge = (b.status === "취소")
+        ? '<span style="background:#eee;color:var(--gray);font-size:10.5px;padding:1px 6px;margin-right:5px;">취소</span>'
+        : (isFinal
+          ? '<span style="background:#2e7d32;color:#fff;font-size:10.5px;padding:1px 6px;margin-right:5px;">최종완료</span>'
+          : '<span style="background:var(--navy);color:#fff;font-size:10.5px;padding:1px 6px;margin-right:5px;">진행중</span>');
+      row.innerHTML = saleBadge +
         '<span style="font-size:12.5px;"><label style="margin-right:8px;"><input type="checkbox" class="sale-pay-cb" data-batch-id="'+batchId+'" data-legacy="'+(isLegacy?'1':'0')+'" data-amount="'+(b.depositRequired||0)+'" '+cbDisabled+'></label>' +
         '<b>'+(b.destination||"-")+'</b> · 요청일 '+(b.requestDate||"-")+' · 품목 '+lines.length+'개 (판매대기 '
-          + lines.reduce((n,l)=> n + Math.max(0, (Number(l.quantity)||0) - (Number(l.fulfilledCount)||0)), 0) + ') · '+depositLabel+(isLegacy?' <span style="color:var(--gray);">(기존건)</span>':'')+'</span>' +
+          + lines.reduce((n,l)=> n + Math.max(0, (Number(l.quantity)||0) - (Number(l.fulfilledCount)||0)), 0) + ') · '+depositLabel
+          + '<br>'+stampText(b)+(isLegacy?' <span style="color:var(--gray);">(기존건)</span>':'')+'</span>' +
         '<span>' +
         '<button class="btn small secondary" style="width:auto;margin-right:4px;" data-detail>상세보기</button>' +
         (!isLegacy && b.status !== "취소" ? '<button class="btn small secondary" style="width:auto;margin-right:4px;" data-edit-batch>수정</button>' : '') +
-        (!b.depositReceived ? '<button class="btn small secondary" style="width:auto;margin-right:4px;" data-pay>입금 완료 처리</button>' : '') +
-        '<button class="btn small danger" style="width:auto;" data-cancel>취소</button>' +
+        (b.status !== "취소" ? '<button class="btn small danger" style="width:auto;" data-cancel>취소</button>' : '') +
         '</span>';
       listEl.appendChild(row);
 
       row.querySelector('[data-detail]').onclick = ()=> openSaleReqBatchDetailModal(batchId, b, lines, isLegacy);
       const ebBtn2 = row.querySelector('[data-edit-batch]');
       if(ebBtn2) ebBtn2.onclick = ()=> openBatchEdit("sale", batchId);
-      const payBtn = row.querySelector('[data-pay]');
-      if(payBtn) payBtn.onclick = async ()=>{
-        const dateInput = prompt("입금일 (예: 20260724)", todayStr());
-        if(dateInput===null) return;
-        if(isLegacy){
-          await updateDoc(doc(db,"saleRequests", batchId), { depositReceived:true, depositReceivedDate:dateInput.trim(), status:"입금완료" });
-        }else{
-          await updateDoc(doc(db,"saleRequestBatches", batchId), { depositReceived:true, depositReceivedDate:dateInput.trim(), status:"입금완료" });
-        }
-        logAction("판매요청 입금 완료 처리", (b.destination||"-")+" / "+(b.depositRequired||0).toLocaleString());
-        loadSaleRequestList(); loadSettlementTab();
-      };
+      // 입금 처리는 정산 관리에서만 합니다.
       row.querySelector('[data-cancel]').onclick = async ()=>{
         if(!confirm("이 판매요청을 취소하시겠습니까?")) return;
         if(isLegacy){
