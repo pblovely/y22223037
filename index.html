@@ -220,7 +220,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-07-25 v35</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-07-25 v36</span>
       <span id="topbar-username">-</span>
       <button onclick="openPersonalSettingsModal()">개인설정</button>
       <button onclick="handleLogout()">로그아웃</button>
@@ -1088,6 +1088,13 @@
         <div class="stack-form">
           <div class="stack-row"><label>필드</label><select id="bulk-edit-field" onchange="onBulkEditFieldChange()"></select></div>
           <div class="stack-row"><label>값</label><span id="bulk-edit-value-wrap"><input type="text" id="bulk-edit-value"></span></div>
+        </div>
+        <div id="bulk-samemodel-box" style="border:1px solid var(--navy);background:#f4f7fb;padding:9px 11px;margin-bottom:12px;font-size:12.5px;line-height:1.7;">
+          <label style="display:flex;align-items:flex-start;gap:6px;font-weight:700;color:var(--navy);cursor:pointer;">
+            <input type="checkbox" id="bulk-same-model" onchange="onBulkSameModelToggle()" style="margin-top:2px;">
+            <span>체크한 것과 <b>같은 모델 전체</b>에 적용 (일련번호 무시)</span>
+          </label>
+          <div id="bulk-samemodel-desc" style="color:var(--gray);margin-top:4px;padding-left:22px;">전산모델명이 같은 재고를 모두 찾아 한 번에 바꿉니다. 페이지를 넘기지 않아도 됩니다.</div>
         </div>
         <div id="bulk-link-box" style="display:none;border:1px solid var(--navy);background:#fafafa;padding:9px 11px;margin-bottom:12px;font-size:12.5px;line-height:1.7;">
           <label style="display:flex;align-items:flex-start;gap:6px;font-weight:700;color:var(--navy);cursor:pointer;">
@@ -7723,6 +7730,8 @@
     // 창을 열 때마다 첫 항목으로 되돌리고 값 칸도 비웁니다.
     const fieldSel = document.getElementById("bulk-edit-field");
     if(fieldSel && fieldSel.options.length>0) fieldSel.selectedIndex = 0;
+    document.getElementById("bulk-same-model").checked = false;
+    onBulkSameModelToggle();
     onBulkEditFieldChange();
     document.getElementById("bulk-change-modal-overlay").style.display = "flex";
   };
@@ -7876,9 +7885,48 @@
     return p;
   }
 
+  // 재고 한 건의 모델 식별키 (일련번호는 제외 — 전산모델명, 없으면 모델명+기가수)
+  function itemModelKey(it){
+    const sys = String(it.systemModel||"").trim();
+    if(sys) return "S:" + sys;
+    return "B:" + String(it.baseModel||"").trim() + "|" + String(it.capacity||"").trim();
+  }
+  // 체크한 것과 같은 모델의 재고를 모두 모읍니다. (지금 조회된 목록 전체 기준)
+  function expandSameModelIds(baseIds){
+    const keys = new Set();
+    baseIds.forEach(id=>{
+      const it = lastRenderedItems.find(x=>x.id===id);
+      if(it) keys.add(itemModelKey(it));
+    });
+    return lastRenderedItems.filter(it=> keys.has(itemModelKey(it))).map(it=>it.id);
+  }
+  window.onBulkSameModelToggle = function(){
+    const on = document.getElementById("bulk-same-model").checked;
+    const el = document.getElementById("bulk-samemodel-desc");
+    const base = getSelectedInventoryIds();
+    if(!on){
+      el.innerHTML = "전산모델명이 같은 재고를 모두 찾아 한 번에 바꿉니다. 페이지를 넘기지 않아도 됩니다.";
+      return;
+    }
+    if(base.length === 0){ el.innerHTML = '<span style="color:var(--danger);">먼저 재고를 한 건 이상 체크해주세요.</span>'; return; }
+    const all = expandSameModelIds(base);
+    const keys = [...new Set(base.map(id=>{ const it=lastRenderedItems.find(x=>x.id===id); return it ? itemModelKey(it).replace(/^S:|^B:/,"").replace("|"," ") : "?"; }))];
+    el.innerHTML = "대상 <b>" + all.length + "건</b> (체크 " + base.length + "건 → 같은 모델 전체)"
+      + "<br>모델: <b>" + comboEsc(keys.join(", ")) + "</b>";
+  };
+
   window.applyBulkEdit = async function(){
-    const ids = getSelectedInventoryIds();
+    let ids = getSelectedInventoryIds();
     if(ids.length===0){ alert("적용할 재고를 먼저 선택해주세요."); return; }
+    const sameModelEl = document.getElementById("bulk-same-model");
+    const useSameModel = !!(sameModelEl && sameModelEl.checked);
+    if(useSameModel){
+      const expanded = expandSameModelIds(ids);
+      if(expanded.length > ids.length){
+        if(!confirm("체크한 " + ids.length + "건과 같은 모델의 재고 " + expanded.length + "건에 적용합니다.\n(일련번호는 무시하고 전산모델명 기준)\n\n계속하시겠습니까?")) return;
+      }
+      ids = expanded;
+    }
     const key = document.getElementById("bulk-edit-field").value;
     const fieldDef = BULK_EDIT_FIELDS.find(f=>f.key===key);
     const valEl = document.getElementById("bulk-edit-value");
@@ -7938,7 +7986,13 @@
   // 삭제는 바로 지우지 않고 "삭제함" 표시만 합니다. 기본 목록에서는 숨겨지고,
   // 보기에서 "삭제함"을 켜면 다시 볼 수 있습니다. 완전 삭제는 그 화면에서 따로 합니다.
   window.deleteSelectedInventoryRows = async function(){
-    const ids = getSelectedInventoryIds();
+    let ids = getSelectedInventoryIds();
+    const smEl = document.getElementById("bulk-same-model");
+    if(smEl && smEl.checked && ids.length>0){
+      const ex = expandSameModelIds(ids);
+      if(ex.length > ids.length && !confirm("같은 모델 전체 " + ex.length + "건에 삭제을 적용합니다. 계속하시겠습니까?")) return;
+      ids = ex;
+    }
     if(ids.length===0){ alert("삭제할 재고를 먼저 선택해주세요."); return; }
     if(!confirm(ids.length+"건을 <삭제함>으로 표시하시겠습니까?\n\n"
       + "· 목록에서 숨겨지고 집계·대시보드에서도 빠집니다.\n"
@@ -7966,7 +8020,13 @@
 
   // 삭제함 → 되돌리기
   window.restoreSelectedInventoryRows = async function(){
-    const ids = getSelectedInventoryIds();
+    let ids = getSelectedInventoryIds();
+    const smEl = document.getElementById("bulk-same-model");
+    if(smEl && smEl.checked && ids.length>0){
+      const ex = expandSameModelIds(ids);
+      if(ex.length > ids.length && !confirm("같은 모델 전체 " + ex.length + "건에 되돌리기을 적용합니다. 계속하시겠습니까?")) return;
+      ids = ex;
+    }
     if(ids.length===0){ alert("되돌릴 재고를 먼저 선택해주세요."); return; }
     if(!confirm(ids.length+"건을 되돌리시겠습니까? (삭제함 표시를 없앱니다)")) return;
     for(let i=0; i<ids.length; i+=300){
@@ -7984,7 +8044,13 @@
 
   // 완전 삭제 (되돌릴 수 없음)
   window.purgeSelectedInventoryRows = async function(){
-    const ids = getSelectedInventoryIds();
+    let ids = getSelectedInventoryIds();
+    const smEl = document.getElementById("bulk-same-model");
+    if(smEl && smEl.checked && ids.length>0){
+      const ex = expandSameModelIds(ids);
+      if(ex.length > ids.length && !confirm("같은 모델 전체 " + ex.length + "건에 완전 삭제을 적용합니다. 계속하시겠습니까?")) return;
+      ids = ex;
+    }
     if(ids.length===0){ alert("완전 삭제할 재고를 먼저 선택해주세요."); return; }
     if(!confirm(ids.length+"건을 완전히 삭제합니다.\n\n되돌릴 수 없습니다. 정말 진행하시겠습니까?")) return;
     if(!confirm("다시 확인합니다.\n"+ids.length+"건을 영구히 지웁니다. 계속하시겠습니까?")) return;
