@@ -34,7 +34,13 @@
   .btn:hover{ background:var(--navy-dark); border-color:var(--navy-dark); }
   .btn.secondary{ background:#fff; color:var(--navy); border:1px solid var(--navy); }
   .btn.secondary:hover{ background:#f2f2f2; }
-  .btn.small{ width:auto; padding:5px 12px; font-size:12.5px; }
+  .btn.small{ width:auto; padding:5px 12px; font-size:12.5px;
+    line-height:1.2; height:28px; display:inline-flex; align-items:center; justify-content:center; }
+  /* 버튼 옆의 선택칸·입력칸도 같은 높이로 맞춰 선이 어긋나지 않게 합니다. */
+  .tbar select, .tbar input[type="text"], .tbar input[type="number"], .tbar input[type="date"]{
+    height:28px; box-sizing:border-box; vertical-align:middle; }
+  /* 목록 줄·툴바 안의 버튼이 글자와 같은 높이에 오도록 */
+  .list-row .btn.small, .data-table .btn.small, .tbar .btn.small{ vertical-align:middle; }
   .btn.danger{ background:var(--danger); border-color:var(--danger); }
   .btn.danger:hover{ background:#96291d; border-color:#96291d; }
   /* 로그인 화면처럼 세로로 쌓이는 곳에서만 위 여백을 줍니다. */
@@ -259,7 +265,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-07-25 v70</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-07-25 v72</span>
       <span id="topbar-username">-</span>
       <button onclick="openPersonalSettingsModal()">개인설정</button>
       <button onclick="handleLogout()">로그아웃</button>
@@ -324,13 +330,12 @@
           <h3 style="margin:0;">대시보드</h3>
           <span>
             <button class="btn small" id="dash-scope-month-btn" style="width:auto;" onclick="setDashboardScope('month')">당월</button>
-            <button class="btn small secondary" id="dash-scope-year-btn" style="width:auto;" onclick="setDashboardScope('year')">당해년</button>
             <button class="btn small secondary" id="dash-scope-all-btn" style="width:auto;" onclick="setDashboardScope('all')">전체</button>
             <select id="dash-month-picker" onchange="setDashboardCustomMonth(this.value)" style="padding:5px 6px;border:1px solid #c7c7c7;font-size:12.5px;height:28px;"><option value="">월 선택</option></select>
             <select id="dash-year-picker" onchange="setDashboardCustomYear(this.value)" style="padding:5px 6px;border:1px solid #c7c7c7;font-size:12.5px;height:28px;"><option value="">년 선택</option></select>
           </span>
         </div>
-        <div style="display:flex;align-items:center;gap:0;flex-wrap:wrap;margin-bottom:8px;">
+        <div style="display:flex;align-items:center;gap:0;flex-wrap:wrap;margin-bottom:8px;justify-content:flex-end;">
           <span style="font-size:12px;color:var(--gray);margin-right:8px;">공시지원금 집계 기준</span>
           <button class="btn small" id="subsidy-basis-accrual" style="width:auto;padding:0 12px;height:26px;border:1px solid var(--navy);" onclick="setSubsidyBasis('accrual')">귀속월</button>
           <button class="btn small secondary" id="subsidy-basis-sale" style="width:auto;padding:0 12px;height:26px;border:1px solid var(--navy);margin-left:-1px;" onclick="setSubsidyBasis('sale')">판매월</button>
@@ -2166,6 +2171,7 @@
     if(st.page > totalPages) st.page = totalPages;
     const bar = document.createElement("div");
     bar.style.display = "flex"; bar.style.alignItems = "center"; bar.style.gap = "6px";
+    bar.style.lineHeight = "28px";
     bar.style.margin = "0 0 8px 0"; bar.style.flexWrap = "wrap"; bar.style.fontSize = "12px";
     bar.style.justifyContent = "flex-end";   // 목록 오른쪽 위에 붙습니다
 
@@ -5264,7 +5270,7 @@
         ? '<span style="background:#eee;color:var(--gray);font-size:10.5px;padding:1px 6px;margin-right:5px;">취소</span>'
         : (isDone
           ? '<span style="background:#2e7d32;color:#fff;font-size:10.5px;padding:1px 6px;margin-right:5px;">최종완료</span>'
-          : '<span style="background:var(--navy);color:#fff;font-size:10.5px;padding:1px 6px;margin-right:5px;">진행중</span>');
+          : '');
       // 필터는 위에서 이미 적용했습니다.
 
       if(isCancelled) row.style.color = "var(--gray)";
@@ -8604,7 +8610,7 @@
         ? '<span style="background:#eee;color:var(--gray);font-size:10.5px;padding:1px 6px;margin-right:5px;">취소</span>'
         : (isFinal
           ? '<span style="background:#2e7d32;color:#fff;font-size:10.5px;padding:1px 6px;margin-right:5px;">최종완료</span>'
-          : '<span style="background:var(--navy);color:#fff;font-size:10.5px;padding:1px 6px;margin-right:5px;">진행중</span>');
+          : '');
       row.innerHTML = saleBadge +
         '<span style="font-size:12.5px;"><label style="margin-right:8px;"><input type="checkbox" class="sale-pay-cb" data-batch-id="'+batchId+'" data-legacy="'+(isLegacy?'1':'0')+'" data-amount="'+(b.depositRequired||0)+'" '+cbDisabled+'></label>' +
         '<b>'+(b.destination||"-")+'</b> · 요청일 '+(b.requestDate||"-")+' · 품목 '+lines.length+'개 (판매대기 '
@@ -10303,7 +10309,7 @@
     loadDashboard();
   }; // "" 이면 당월, 아니면 YYYYMM
   function paintScopeButtons(scope){
-    [["month","dash-scope-month-btn"],["year","dash-scope-year-btn"],["all","dash-scope-all-btn"]].forEach(([k,id])=>{
+    [["month","dash-scope-month-btn"],["all","dash-scope-all-btn"]].forEach(([k,id])=>{
       const el = document.getElementById(id);
       if(el) el.className = "btn small" + (scope===k ? "" : " secondary");
     });
