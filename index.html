@@ -708,7 +708,9 @@
             <input type="checkbox" id="filter-date-all" onclick="onFilterDateAllToggle()"> 전체
           </label>
           <label style="display:flex;align-items:center;gap:5px;font-size:12.5px;white-space:nowrap;">기간
-            <input type="text" id="filter-date-range" placeholder="20260101~20271231" style="width:190px;height:28px;border:1px solid #c7c7c7;padding:0 8px;font-size:12.5px;box-sizing:border-box;">
+            <input type="date" id="filter-date-from-native" style="height:28px;border:1px solid #c7c7c7;padding:0 6px;font-size:12.5px;box-sizing:border-box;">
+            ~
+            <input type="date" id="filter-date-to-native" style="height:28px;border:1px solid #c7c7c7;padding:0 6px;font-size:12.5px;box-sizing:border-box;">
           </label>
           <select id="primary-cond-field" style="height:28px;border:1px solid #c7c7c7;padding:0 6px;font-size:12.5px;box-sizing:border-box;"></select>
           <select id="primary-cond-match" style="height:28px;border:1px solid #c7c7c7;padding:0 6px;font-size:12.5px;box-sizing:border-box;">
@@ -1279,7 +1281,7 @@
       if(customTabFontSizes[key]) el.style.setProperty("font-size", customTabFontSizes[key]+"px", "important");
       el.style.display = customHiddenKeys[key] ? "none" : "";
     });
-    document.querySelectorAll("button:not([data-label-key]), h3:not([data-label-key])").forEach(el=>{
+    document.querySelectorAll("button:not([data-label-key]), h3:not([data-label-key]), p:not([data-label-key]), label:not([data-label-key])").forEach(el=>{
       if(!el.dataset.origText){
         if(el.children.length>0) return;
         const t = el.textContent.trim();
@@ -1400,7 +1402,7 @@
   document.addEventListener("contextmenu", function(e){
     if(!hasPerm(currentUserPerms, "uiCustomize")) return; // 권한 없으면 기본 브라우저 메뉴만 사용
     const keyedEl = e.target.closest("[data-label-key]");
-    const genericEl = keyedEl ? null : e.target.closest("button, h3");
+    const genericEl = keyedEl ? null : e.target.closest("button, h3, p, label");
     const targetEl = keyedEl || genericEl;
     if(!targetEl) return;
     const key = getElKey(targetEl);
@@ -4564,9 +4566,11 @@
   }
 
   window.clearDateFilter = function(){
-    document.getElementById("filter-date-range").value = "";
+    document.getElementById("filter-date-from-native").value = "";
+    document.getElementById("filter-date-to-native").value = "";
     document.getElementById("filter-date-all").checked = false;
-    document.getElementById("filter-date-range").disabled = false;
+    document.getElementById("filter-date-from-native").disabled = false;
+    document.getElementById("filter-date-to-native").disabled = false;
     document.getElementById("primary-cond-value").value = "";
     activeConditions = [];
     renderConditionChips();
@@ -4574,9 +4578,11 @@
   };
   window.onFilterDateAllToggle = function(){
     const all = document.getElementById("filter-date-all").checked;
-    document.getElementById("filter-date-range").disabled = all;
+    document.getElementById("filter-date-from-native").disabled = all;
+    document.getElementById("filter-date-to-native").disabled = all;
     if(all){
-      document.getElementById("filter-date-range").value = "";
+      document.getElementById("filter-date-from-native").value = "";
+      document.getElementById("filter-date-to-native").value = "";
     }
   };
 
@@ -5287,10 +5293,8 @@
       return;
     }
 
-    const rangeRaw = document.getElementById("filter-date-range").value.trim();
-    const rangeParts = rangeRaw.split("~").map(s=>s.trim().replace(/-/g,""));
-    const filterDateFrom = (rangeParts[0]||"").replace(/\D/g,"");
-    const filterDateTo = (rangeParts[1]||"").replace(/\D/g,"");
+    const filterDateFrom = document.getElementById("filter-date-from-native").value.replace(/-/g,"");
+    const filterDateTo = document.getElementById("filter-date-to-native").value.replace(/-/g,"");
     const filterType = document.getElementById("filter-date-type").value;
     const normDate = (v)=> String(v||"").replace(/\D/g,"");
 
