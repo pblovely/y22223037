@@ -537,11 +537,12 @@
           <button class="btn small secondary" id="company-filter-dest" style="width:auto;padding:0 12px;height:26px;border:1px solid var(--navy);margin-left:-1px;" onclick="setCompanyFilter('dest')">판매처</button>
         </div>
         <div style="overflow-x:auto;">
-        <table class="data-table" style="min-width:1180px;">
+        <table class="data-table" style="min-width:1340px;">
           <thead>
             <tr>
               <th>#</th>
-              <th>업체명</th>
+              <th>업체명 (표시용)</th>
+              <th>사업자명 (정식)</th>
               <th>구분</th>
               <th>사업자번호</th>
               <th>대표자</th>
@@ -567,7 +568,7 @@
         <h3 id="company-modal-title" style="margin-top:0;margin-bottom:4px;">업체 등록</h3>
         <p class="desc">업체명만 있어도 저장됩니다. 나머지는 확인되는 대로 채워주세요.</p>
         <div class="stack-form">
-          <div class="stack-row"><label>업체명 <span style="color:var(--danger);">*</span></label><input type="text" id="co-name-input" placeholder="예: (주)포피플"></div>
+          <div class="stack-row"><label>업체명 (표시용) <span style="color:var(--danger);">*</span> <span class="info-tip" title="화면과 드롭다운에 표시되는 짧은 이름입니다. 재고·주문에 저장되는 값이므로 되도록 바꾸지 마세요.">ⓘ</span></label><input type="text" id="co-name-input" placeholder="예: 포피플"></div>
           <div class="stack-row"><label>구분</label>
             <span style="flex:1;display:flex;align-items:center;gap:14px;padding:5px 8px;font-size:12.5px;">
               <label style="display:flex;align-items:center;gap:5px;"><input type="checkbox" id="co-is-source"> 매입처 (입고처)</label>
@@ -577,6 +578,7 @@
         </div>
         <div style="font-size:11px;font-weight:700;color:var(--gray);margin:12px 0 4px 0;">사업자정보</div>
         <div class="stack-form">
+          <div class="stack-row"><label>사업자명 (정식 명칭) <span class="info-tip" title="사업자등록증에 적힌 그대로 입력하세요. 세금계산서·계약서에 쓰는 이름입니다. 비워두면 표시용 업체명을 그대로 씁니다.">ⓘ</span></label><input type="text" id="co-bizname-input" placeholder="예: 주식회사 포피플"></div>
           <div class="stack-row"><label>사업자등록번호</label><input type="text" id="co-biznum-input" placeholder="000-00-00000" maxlength="14"></div>
           <div class="stack-row"><label>대표자명</label><input type="text" id="co-ceo-input"></div>
           <div class="stack-row"><label>업태</label><input type="text" id="co-biztype-input" placeholder="예: 도매및소매업"></div>
@@ -2250,7 +2252,9 @@
     const snap = await getDocs(query(collection(db,"notices"), orderBy("createdAt","desc")));
     if(snap.empty){ listEl.innerHTML = '<div class="list-empty">등록된 공지가 없습니다.</div>'; return; }
     listEl.innerHTML = "";
-    snap.forEach(d=>{
+    const noticeDocs = snap.docs;
+    const { pageItems: noticePage } = paginateSlice(noticeDocs, "notices");
+    noticePage.forEach(d=>{
       const n = d.data();
       const t = n.createdAt && n.createdAt.toDate ? n.createdAt.toDate().toLocaleString("ko-KR") : "-";
       const row = document.createElement("div");
@@ -2270,6 +2274,7 @@
         }
       };
     });
+    listEl.appendChild(renderPaginationBar("notices", noticeDocs.length, loadNoticeList));
   }
 
   async function checkUnreadNotices(){
@@ -3575,12 +3580,12 @@
   async function loadCompanyList(){
     const bodyEl = document.getElementById("company-table-body");
     if(!bodyEl) return;
-    bodyEl.innerHTML = '<tr><td colspan="11" class="list-empty">불러오는 중...</td></tr>';
+    bodyEl.innerHTML = '<tr><td colspan="12" class="list-empty">불러오는 중...</td></tr>';
     let arr = await fetchCompanies();
     if(companyFilter === "source") arr = arr.filter(c=>c.isSource===true);
     if(companyFilter === "dest")   arr = arr.filter(c=>c.isDest===true);
     if(arr.length === 0){
-      bodyEl.innerHTML = '<tr><td colspan="11" class="list-empty">'
+      bodyEl.innerHTML = '<tr><td colspan="12" class="list-empty">'
         + (companyFilter==="all"
             ? '등록된 업체가 없습니다. <b>기존 입고처·출고처 가져오기</b>를 먼저 눌러주세요.'
             : '해당 구분의 업체가 없습니다.')
@@ -3598,6 +3603,7 @@
       tr.innerHTML =
         '<td style="color:var(--gray);">'+(startIndex+i+1)+'</td>' +
         '<td><b>'+comboEsc(c.name||"-")+'</b></td>' +
+        '<td>'+(c.bizName ? comboEsc(c.bizName) : '<span style="color:var(--gray);">-</span>')+'</td>' +
         '<td>'+(roles.length ? roles.join(" ") : '<span style="color:var(--danger);">미지정</span>')+'</td>' +
         '<td>'+(c.bizNumber ? comboEsc(c.bizNumber) : '<span style="color:var(--danger);">미입력</span>')+'</td>' +
         '<td>'+comboEsc(c.ceoName||"-")+'</td>' +
@@ -3621,11 +3627,11 @@
     });
     const pagEl = document.getElementById("company-pagination");
     pagEl.innerHTML = "";
-    pagEl.appendChild(renderPaginationBar("companies", arr.length, loadCompanyList, false));
+    pagEl.appendChild(renderPaginationBar("companies", arr.length, loadCompanyList));
   }
 
   const CO_FIELDS = [
-    ["co-name-input","name"], ["co-biznum-input","bizNumber"], ["co-ceo-input","ceoName"],
+    ["co-name-input","name"], ["co-bizname-input","bizName"], ["co-biznum-input","bizNumber"], ["co-ceo-input","ceoName"],
     ["co-biztype-input","bizType"], ["co-bizitem-input","bizItem"], ["co-address-input","address"],
     ["co-contact-input","contact"], ["co-bank-input","bankName"], ["co-account-input","accountNumber"],
     ["co-holder-input","accountHolder"], ["co-note-input","note"]
@@ -3712,7 +3718,7 @@
       }else{
         await addDoc(collection(db,"companies"), {
           name, isSource: role.isSource===true, isDest: role.isDest===true,
-          bizNumber:"", ceoName:"", bizType:"", bizItem:"", address:"", contact:"",
+          bizName:"", bizNumber:"", ceoName:"", bizType:"", bizItem:"", address:"", contact:"",
           bankName:"", accountNumber:"", accountHolder:"", note:"",
           createdAt: serverTimestamp(), updatedAt: serverTimestamp()
         });
@@ -4083,11 +4089,28 @@
     });
     orderBatchLinesCache = ordersByBatch;
 
-    listEl.innerHTML = "";
-    let shown = 0;
+    // 필터를 먼저 적용해 배열로 모은 뒤 페이지 단위로 그립니다.
+    const visibleBatches = [];
     batchSnap.forEach(bd=>{
       const b = bd.data();
       const lines = ordersByBatch[bd.id] || [];
+      const activeL = lines.filter(o=>o.status!=="취소");
+      const remainT = activeL.reduce((sum,o)=> sum + ((o.quantity||0)-(o.fulfilledCount||0)), 0);
+      const cancelled = b.status==="취소";
+      const done = !cancelled && activeL.length>0 && remainT===0;
+      if(orderListFilter==="ing"    && (cancelled || done)) return;
+      if(orderListFilter==="done"   && !done) return;
+      if(orderListFilter==="cancel" && !cancelled) return;
+      visibleBatches.push({ id:bd.id, b, lines });
+    });
+
+    listEl.innerHTML = "";
+    let shown = 0;
+    const { pageItems: orderPageItems } = paginateSlice(visibleBatches, "orders");
+    orderPageItems.forEach(entry=>{
+      const bd = { id: entry.id };
+      const b = entry.b;
+      const lines = entry.lines;
       const row = document.createElement("div");
       row.className = "list-row";
       row.style.flexWrap = "wrap";
@@ -4110,9 +4133,7 @@
         : (isDone
           ? '<span style="background:#2e7d32;color:#fff;font-size:10.5px;padding:1px 6px;margin-right:5px;">도착완료</span>'
           : '<span style="background:var(--navy);color:#fff;font-size:10.5px;padding:1px 6px;margin-right:5px;">진행중</span>');
-      if(orderListFilter==="ing"    && (isCancelled || isDone)) return;
-      if(orderListFilter==="done"   && !isDone) return;
-      if(orderListFilter==="cancel" && !isCancelled) return;
+      // 필터는 위에서 이미 적용했습니다.
 
       if(isCancelled) row.style.color = "var(--gray)";
       row.innerHTML =
@@ -4139,12 +4160,14 @@
         loadOrderList();
       };
     });
-    if(shown === 0){
+    if(visibleBatches.length === 0){
       const label = { all:"", ing:"진행중인", done:"도착완료된", cancel:"취소된" }[orderListFilter] || "";
       listEl.innerHTML = '<div class="list-empty">' +
         (label ? label + ' 주문이 없습니다. 위 <b>전체</b>를 누르면 모든 주문이 보입니다.' : '등록된 주문이 없습니다.') +
         '</div>';
+      return;
     }
+    listEl.appendChild(renderPaginationBar("orders", visibleBatches.length, loadOrderList));
   }
 
   window.printOrderDetail = function(){ window.print(); };
@@ -4464,7 +4487,9 @@
     const snap = await getDocs(query(collection(db,"paymentRequests"), orderBy("createdAt","desc")));
     if(snap.empty){ el.innerHTML = '<div class="list-empty">등록된 출금요청이 없습니다.</div>'; return; }
     el.innerHTML = "";
-    snap.forEach(d=>{
+    const prDocs = snap.docs;
+    const { pageItems: prPage } = paginateSlice(prDocs, "paymentRequests");
+    prPage.forEach(d=>{
       const p = d.data();
       const row = document.createElement("div");
       row.className = "list-row";
@@ -4511,6 +4536,7 @@
         };
       }
     });
+    el.appendChild(renderPaginationBar("paymentRequests", prDocs.length, loadPaymentRequestList));
   }
 
   // ---------- 판매요청 묶어서 입금요청 ----------
@@ -4546,7 +4572,9 @@
     const snap = await getDocs(query(collection(db,"saleDepositRequests"), orderBy("createdAt","desc")));
     if(snap.empty){ el.innerHTML = '<div class="list-empty">등록된 입금요청이 없습니다.</div>'; return; }
     el.innerHTML = "";
-    snap.forEach(d=>{
+    const sdrDocs = snap.docs;
+    const { pageItems: sdrPage } = paginateSlice(sdrDocs, "saleDepositRequests");
+    sdrPage.forEach(d=>{
       const p = d.data();
       const row = document.createElement("div");
       row.className = "list-row";
@@ -4595,6 +4623,7 @@
         };
       }
     });
+    el.appendChild(renderPaginationBar("saleDepositRequests", sdrDocs.length, loadSaleDepositRequestList));
   }
 
   // ---------- 판매 요청 ----------
@@ -4998,6 +5027,15 @@
 
     listEl.innerHTML = "";
 
+    // 배치 + 예전 개별건을 한 배열로 모아 페이지 단위로 그립니다.
+    const saleRows = [];
+    batchSnap.forEach(bd=> saleRows.push({ kind:"batch", id:bd.id, b:bd.data(), lines:(linesByBatch[bd.id]||[]) }));
+    legacyLines.forEach(s2=> saleRows.push({ kind:"legacy", id:s2.id, b:{
+      destination:s2.destination, requestDate:s2.requestDate, depositRequired:s2.depositRequired,
+      depositReceived:s2.depositReceived, depositReceivedDate:s2.depositReceivedDate, status:s2.status,
+      depositRequestId:s2.depositRequestId
+    }, lines:[s2] }));
+
     function renderBatchRow(batchId, b, lines, isLegacy){
       const row = document.createElement("div");
       row.className = "list-row"; row.style.flexWrap = "wrap";
@@ -5041,15 +5079,11 @@
       };
     }
 
-    batchSnap.forEach(bd=>{
-      const b = bd.data();
-      renderBatchRow(bd.id, b, linesByBatch[bd.id]||[], false);
+    const { pageItems: salePage } = paginateSlice(saleRows, "saleRequests");
+    salePage.forEach(r=>{
+      renderBatchRow(r.id, r.b, r.lines, r.kind === "legacy");
     });
-    legacyLines.forEach(s=>{
-      // 개별건 하나를 "1개 품목짜리 묶음"처럼 표시
-      const pseudoBatch = { destination:s.destination, requestDate:s.requestDate, depositRequired:s.depositRequired, depositReceived:s.depositReceived, depositReceivedDate:s.depositReceivedDate, status:s.status };
-      renderBatchRow(s.id, pseudoBatch, [s], true);
-    });
+    listEl.appendChild(renderPaginationBar("saleRequests", saleRows.length, loadSaleRequestList));
   }
 
   function openSaleReqBatchDetailModal(batchId, b, lines, isLegacy){
@@ -5472,14 +5506,16 @@
     if(entries.length===0){
       listEl.innerHTML = '<div class="list-empty">등록된 거래가 없습니다.</div>';
     }else{
+      const { pageItems: b2bPage } = paginateSlice(entries, "b2bLedger");
       let tbl = '<div style="overflow-x:auto;"><table class="data-table"><thead><tr><th>거래일자</th><th>구분</th><th class="ta-right">금액</th><th>메모</th><th class="ta-right">관리</th></tr></thead><tbody>';
-      entries.forEach(e=>{
+      b2bPage.forEach(e=>{
         tbl += '<tr><td>'+e.date+'</td><td>'+(B2B_CATEGORY_LABELS[e.category]||e.category)+'</td>' +
           '<td class="ta-right">'+Number(e.amount).toLocaleString()+'</td><td>'+(e.memo||'-')+'</td>' +
           '<td class="ta-right"><button class="btn small danger" style="width:auto;padding:4px 10px;" onclick="deleteB2BLedgerEntry(\''+e.id+'\')">삭제</button></td></tr>';
       });
       tbl += '</tbody></table></div>';
       listEl.innerHTML = tbl;
+      listEl.appendChild(renderPaginationBar("b2bLedger", entries.length, loadB2BTab));
     }
   }
 
@@ -5921,7 +5957,7 @@
   };
 
   async function loadDataUploadTab(){
-    const batchSnap = await getDocs(query(collection(db,"masterStockBatches"), orderBy("uploadedAt","desc"), limit(30)));
+    const batchSnap = await getDocs(query(collection(db,"masterStockBatches"), orderBy("uploadedAt","desc")));
     const listEl = document.getElementById("master-stock-batch-list");
     if(batchSnap.empty){
       document.getElementById("master-stock-last-date").textContent = "-";
@@ -5935,10 +5971,12 @@
     const latestDate = latest.uploadedAt && latest.uploadedAt.toDate ? latest.uploadedAt.toDate().toLocaleString("ko-KR") : "-";
     document.getElementById("master-stock-last-date").textContent = latestDate;
     document.getElementById("master-stock-last-user").textContent = (latest.uploadedBy||"-") + (latest.uploadedByUsername ? " ("+latest.uploadedByUsername+")" : "");
-    document.getElementById("master-stock-total-count").textContent = docs.length + (docs.length>=30 ? "+" : "");
+    document.getElementById("master-stock-total-count").textContent = docs.length;
 
     listEl.innerHTML = "";
-    docs.forEach((d,i)=>{
+    const { pageItems: msbPage, startIndex: msbStart } = paginateSlice(docs, "masterStockBatches");
+    msbPage.forEach((d,i0)=>{
+      const i = msbStart + i0;
       const b = d.data();
       const t = b.uploadedAt && b.uploadedAt.toDate ? b.uploadedAt.toDate().toLocaleString("ko-KR") : "-";
       const row = document.createElement("div");
@@ -5953,6 +5991,7 @@
       row.querySelector('[data-download-batch]').onclick = ()=> downloadMasterStockBatch(d.id, b.fileName);
       row.querySelector('[data-delete-batch]').onclick = ()=> deleteMasterStockBatch(d.id, b.fileName);
     });
+    listEl.appendChild(renderPaginationBar("masterStockBatches", docs.length, loadDataUploadTab));
 
     // 첫 로드 시 최신 배치를 자동으로 조회 화면에 띄워줌
     if(!currentMasterStockBatchId){
@@ -6004,14 +6043,15 @@
     let html = '<div style="overflow-x:auto;"><table class="data-table" style="min-width:800px;"><thead><tr>';
     cols.forEach(c=> html += '<th>'+c+'</th>');
     html += '</tr></thead><tbody>';
-    rows.slice(0,300).forEach(row=>{
+    const { pageItems: msPage } = paginateSlice(rows, "masterStock");
+    msPage.forEach(row=>{
       html += '<tr>';
       cols.forEach(c=> html += '<td>'+(row[c]!==undefined&&row[c]!==""?String(row[c]):'-')+'</td>');
       html += '</tr>';
     });
     html += '</tbody></table></div>';
-    if(rows.length>300){ html += '<p class="desc">전체 '+rows.length+'행 중 300행만 표시됩니다. 검색으로 좁혀서 확인해주세요.</p>'; }
     el.innerHTML = html;
+    el.appendChild(renderPaginationBar("masterStock", rows.length, ()=>renderMasterStockTable(rows)));
   }
 
   window.downloadMasterStockBatch = async function(batchId, fileName){
