@@ -212,7 +212,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-07-25 v18</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-07-25 v20</span>
       <span id="topbar-username">-</span>
       <button onclick="openPersonalSettingsModal()">개인설정</button>
       <button onclick="handleLogout()">로그아웃</button>
@@ -498,6 +498,12 @@
           </span>
         </div>
         <div id="model-syscode-notice" style="display:none;font-size:12.5px;padding:9px 11px;margin-bottom:8px;border:1px solid var(--danger);background:#fdecea;line-height:1.7;"></div>
+        <div style="font-size:12.5px;padding:9px 11px;margin-bottom:8px;border:1px solid var(--line);background:#fafafa;line-height:1.7;">
+          <b>재고 출고가를 모델 기준으로 맞추기</b>
+          <span class="info-tip" title="모델 등록의 출고가(VAT포함)를 기준으로 기존 재고의 출고가를 맞춥니다. 입고가·판매가는 그대로 두고 할인 금액과 비율만 다시 계산합니다.">ⓘ</span>
+          <br><span style="color:var(--gray);">전산모델명으로 모델을 찾아 출고가를 맞춥니다. 출고가가 인하되면 다시 눌러주세요. 실행 전 대상 건수와 미리보기를 확인할 수 있습니다.</span>
+          <br><button class="btn small secondary" style="width:auto;margin-top:6px;" onclick="syncInventoryListPrice()">재고 출고가 맞추기</button>
+        </div>
         <p class="desc">등록된 모델을 한눈에 볼 수 있습니다. SKU가 없는 색상은 빨간색으로 표시되니 클릭해서 채워주세요.</p>
         <div id="model-pagination"></div>
         <div style="overflow-x:auto;">
@@ -880,8 +886,11 @@
             <span class="tbar-sep">~</span>
             <input type="date" id="filter-date-to-native">
             <select id="primary-cond-field"></select>
-            <select id="primary-cond-match">
-              <option value="포함">포함</option><option value="일치">일치</option>
+            <select id="primary-cond-match" onchange="onCondMatchChange()">
+              <option value="포함">포함</option>
+              <option value="일치">일치</option>
+              <option value="빈칸">빈칸</option>
+              <option value="빈칸아님">빈칸 아님</option>
             </select>
             <input type="text" id="primary-cond-value" placeholder="검색어" style="width:115px;">
             <button class="btn small secondary" onclick="openAddConditionModal()">+ 조건 추가</button>
@@ -1003,7 +1012,7 @@
         <h3 style="margin-top:0;margin-bottom:12px;">조건 추가</h3>
         <div class="stack-form">
           <div class="stack-row"><label>필드</label><select id="cond-field-select"></select></div>
-          <div class="stack-row"><label>방식</label><select id="cond-match-select"><option value="포함">포함</option><option value="일치">일치</option></select></div>
+          <div class="stack-row"><label>방식</label><select id="cond-match-select" onchange="onCondModalMatchChange()"><option value="포함">포함</option><option value="일치">일치</option><option value="빈칸">빈칸</option><option value="빈칸아님">빈칸 아님</option></select></div>
           <div class="stack-row"><label>검색어</label><input type="text" id="cond-value-input"></div>
         </div>
         <button class="btn small" style="width:auto;" onclick="confirmAddCondition()">추가</button>
@@ -2562,6 +2571,82 @@
     loadModelAdminList();
   };
 
+  // 재고 한 건에 해당하는 모델을 찾습니다. 기준은 전산모델명 → 모델명+기가수 → SKU 순입니다.
+  function findModelForItem(it){
+    if(it.systemModel){
+      const m = modelsCache.find(x=> String(x.systemModel||"") === String(it.systemModel));
+      if(m) return m;
+    }
+    if(it.baseModel){
+      const m = modelsCache.find(x=> String(x.baseModel||"") === String(it.baseModel)
+        && String(x.capacity||"") === String(it.capacity||""));
+      if(m) return m;
+    }
+    if(it.sku){
+      const m = modelsCache.find(x=> (x.colors||[]).some(c=>c.sku === it.sku));
+      if(m) return m;
+    }
+    return null;
+  }
+
+  // 모델에 등록된 출고가를 기준으로 기존 재고의 출고가를 맞춥니다.
+  // 출고가가 바뀌면 입고가·판매가는 그대로 두고 할인 금액·비율만 다시 계산합니다.
+  window.syncInventoryListPrice = async function(){
+    await fetchModelsCache();
+    const snap = await getDocs(collection(db,"inventoryItems"));
+    const plan = [], noModel = [], noPrice = [], same = [];
+    snap.forEach(d=>{
+      const it = { id:d.id, ...d.data() };
+      const m = findModelForItem(it);
+      if(!m){ noModel.push(it); return; }
+      const price = Number(m.priceIncVat) || 0;
+      if(!price){ noPrice.push(it); return; }
+      const cur = Number(it.listPrice) || 0;
+      if(cur === price){ same.push(it); return; }
+      plan.push({ id:it.id, it, from:cur, to:price });
+    });
+
+    if(plan.length === 0){
+      alert("맞출 대상이 없습니다.\n\n"
+        + "· 이미 일치: " + same.length + "건\n"
+        + "· 모델을 못 찾음: " + noModel.length + "건\n"
+        + "· 모델에 출고가가 없음: " + noPrice.length + "건");
+      return;
+    }
+
+    const fmt = v => (v==null||v==="") ? "-" : Number(v).toLocaleString();
+    const preview = plan.slice(0,8).map(x=>
+      "· " + (x.it.systemModel || x.it.baseModel || "-") + " " + (x.it.serialNumber||"") +
+      "  " + fmt(x.from) + " → " + fmt(x.to)).join("\n");
+
+    if(!confirm(
+      "모델에 등록된 출고가를 기준으로 재고 " + plan.length + "건의 출고가를 맞춥니다.\n\n" + preview +
+      (plan.length>8 ? "\n... 외 " + (plan.length-8) + "건" : "") +
+      "\n\n입고가와 판매가는 그대로 두고, 선할인·타할인·판매할인의 금액과 비율만 다시 계산합니다.\n\n" +
+      "제외: 이미 일치 " + same.length + "건 / 모델 못 찾음 " + noModel.length + "건 / 모델에 출고가 없음 " + noPrice.length + "건\n\n" +
+      "진행하시겠습니까?")) return;
+
+    try{
+      for(let i=0; i<plan.length; i+=300){
+        const batch = writeBatch(db);
+        plan.slice(i, i+300).forEach(x=>{
+          const patch = { listPrice: x.to };
+          Object.assign(patch, computeLinkedPatch(x.it, "listPrice", x.to));
+          batch.update(doc(db,"inventoryItems", x.id), patch);
+        });
+        await batch.commit();
+      }
+    }catch(e){
+      alert("맞추는 중 오류가 났습니다.\n" + ((e && e.message) ? e.message : String(e)));
+      return;
+    }
+    logAction("재고 출고가 일괄 맞춤", plan.length + "건 (모델 기준)");
+    alert(plan.length + "건의 출고가를 모델 기준으로 맞췄습니다."
+      + (noModel.length ? "\n\n모델을 못 찾은 " + noModel.length + "건은 전산모델명을 확인해주세요." : "")
+      + (noPrice.length ? "\n모델에 출고가가 없는 " + noPrice.length + "건은 모델 등록에서 출고가를 먼저 넣어주세요." : ""));
+    loadInventoryList();
+  };
+
   async function loadModelAdminList(){
     await fetchModelsCache();
     renderSystemModelNotice();
@@ -3349,8 +3434,10 @@
     });
     const listPriceInput = document.getElementById("item-listprice-input");
     const purchasePriceInput = document.getElementById("item-purchaseprice-input");
-    if(!listPriceInput.value && m.priceExVat){ listPriceInput.value = m.priceExVat; }
+    // 출고가는 모델에 등록된 "출고가(VAT포함)"를 그대로 가져옵니다. (예전에는 VAT제외 값을 넣어 어긋났습니다)
+    if(!listPriceInput.value && m.priceIncVat){ listPriceInput.value = m.priceIncVat; }
     if(!purchasePriceInput.value && m.priceExVat){ purchasePriceInput.value = m.priceExVat; }
+    if(listPriceInput.value){ onPurchasePriceInput(); }   // 출고가 기준으로 선할인·% 재계산
   };
   window.onSysColorChange = function(){
     const idx = document.getElementById("item-syscolor-select").value;
@@ -5861,6 +5948,8 @@
     document.getElementById("filter-date-from-native").disabled = false;
     document.getElementById("filter-date-to-native").disabled = false;
     document.getElementById("primary-cond-value").value = "";
+    document.getElementById("primary-cond-match").value = "포함";
+    onCondMatchChange();
     activeConditions = [];
     renderConditionChips();
     loadInventoryList();
@@ -6288,6 +6377,7 @@
   }
 
   window.openAddConditionModal = function(){
+    setTimeout(()=>{ if(typeof onCondModalMatchChange === "function") onCondModalMatchChange(); }, 0);
     const sel = document.getElementById("cond-field-select");
     if(sel.options.length===0){
       FILTER_FIELDS.forEach(f=>{
@@ -6302,11 +6392,36 @@
   window.closeAddConditionModal = function(){
     document.getElementById("add-condition-modal-overlay").style.display = "none";
   };
+  // 화면에 "-" 로 보이거나 값이 없으면 빈칸으로 봅니다. (보이는 그대로 판단)
+  const COND_NO_VALUE = ["빈칸","빈칸아님"];
+  function condIsEmpty(fieldDef, it){
+    const v = fieldDef.get(it);
+    const disp = String(v == null ? "" : v).trim();
+    return disp === "" || disp === "-";
+  }
+  // 방식이 빈칸/빈칸아님이면 검색어를 쓰지 않으므로 입력칸을 잠급니다.
+  window.onCondMatchChange = function(){
+    const noVal = COND_NO_VALUE.includes(document.getElementById("primary-cond-match").value);
+    const el = document.getElementById("primary-cond-value");
+    el.disabled = noVal;
+    el.placeholder = noVal ? "검색어 없음" : "검색어";
+    if(noVal) el.value = "";
+    el.style.background = noVal ? "#f2f2f2" : "#fff";
+  };
+  window.onCondModalMatchChange = function(){
+    const noVal = COND_NO_VALUE.includes(document.getElementById("cond-match-select").value);
+    const el = document.getElementById("cond-value-input");
+    el.disabled = noVal;
+    el.placeholder = noVal ? "검색어 없음 (빈칸 조건)" : "";
+    if(noVal) el.value = "";
+    el.style.background = noVal ? "#f2f2f2" : "#fff";
+  };
+
   window.confirmAddCondition = function(){
     const field = document.getElementById("cond-field-select").value;
     const matchType = document.getElementById("cond-match-select").value;
     const value = document.getElementById("cond-value-input").value.trim();
-    if(!value){ alert("검색어를 입력해주세요."); return; }
+    if(!COND_NO_VALUE.includes(matchType) && !value){ alert("검색어를 입력해주세요."); return; }
     activeConditions.push({ field, matchType, value });
     closeAddConditionModal();
     renderConditionChips();
@@ -6323,7 +6438,8 @@
     if(activeConditions.length===0){ el.innerHTML = ""; return; }
     el.innerHTML = activeConditions.map((c,idx)=>{
       const label = (FILTER_FIELDS.find(f=>f.key===c.field)||{}).label || c.field;
-      return '<span class="perm-tag" style="cursor:pointer;" onclick="removeCondition('+idx+')">'+label+'('+c.matchType+') "'+c.value+'" ✕</span>';
+      const valPart = COND_NO_VALUE.includes(c.matchType) ? "" : ' "'+comboEsc(c.value)+'"';
+      return '<span class="perm-tag" style="cursor:pointer;" onclick="removeCondition('+idx+')">'+comboEsc(label)+'('+c.matchType+')'+valPart+' ✕</span>';
     }).join("");
   }
 
@@ -6928,30 +7044,44 @@
     const primaryField = document.getElementById("primary-cond-field").value;
     const primaryMatch = document.getElementById("primary-cond-match").value;
     const primaryVal = document.getElementById("primary-cond-value").value.trim().toLowerCase();
-    if(primaryVal){
+    const primaryNoVal = COND_NO_VALUE.includes(primaryMatch);
+    if(primaryVal || primaryNoVal){
       const fieldDef = FILTER_FIELDS.find(f=>f.key===primaryField);
       if(fieldDef){
-        if(primaryMatch === "일치"){
+        if(primaryMatch === "빈칸"){
+          items = items.filter(it => condIsEmpty(fieldDef, it));
+        }else if(primaryMatch === "빈칸아님"){
+          items = items.filter(it => !condIsEmpty(fieldDef, it));
+        }else if(primaryMatch === "일치"){
           items = items.filter(it => String(fieldDef.get(it)||"").toLowerCase() === primaryVal);
         }else{
           items = items.filter(it => String(fieldDef.get(it)||"").toLowerCase().includes(primaryVal));
         }
-        filterSteps.push({ label: fieldDef.label+" "+primaryMatch+' "'+document.getElementById("primary-cond-value").value.trim()+'"', left: items.length, field: fieldDef });
+        filterSteps.push({
+          label: fieldDef.label+" "+primaryMatch + (primaryNoVal ? "" : ' "'+document.getElementById("primary-cond-value").value.trim()+'"'),
+          left: items.length, field: fieldDef });
       }
     }
 
     // 추가 조건 ("+조건 추가"로 넣은 것들, 전부 AND)
     activeConditions.forEach(cond=>{
       const val = cond.value.trim().toLowerCase();
-      if(!val) return;
+      const noVal = COND_NO_VALUE.includes(cond.matchType);
+      if(!val && !noVal) return;
       const fieldDef = FILTER_FIELDS.find(f=>f.key===cond.field);
       if(!fieldDef) return;
-      if(cond.matchType === "일치"){
+      if(cond.matchType === "빈칸"){
+        items = items.filter(it => condIsEmpty(fieldDef, it));
+      }else if(cond.matchType === "빈칸아님"){
+        items = items.filter(it => !condIsEmpty(fieldDef, it));
+      }else if(cond.matchType === "일치"){
         items = items.filter(it => String(fieldDef.get(it)||"").toLowerCase() === val);
       }else{
         items = items.filter(it => String(fieldDef.get(it)||"").toLowerCase().includes(val));
       }
-      filterSteps.push({ label: fieldDef.label+" "+cond.matchType+' "'+cond.value.trim()+'"', left: items.length, field: fieldDef });
+      filterSteps.push({
+        label: fieldDef.label+" "+cond.matchType + (noVal ? "" : ' "'+cond.value.trim()+'"'),
+        left: items.length, field: fieldDef });
     });
 
     // 정렬: 기본 판매일(출고일) 내림차순, 버튼으로 주문일로 전환 가능
@@ -7852,7 +7982,7 @@
       }
 
       const purchasePriceNum = purchasePrice ? Number(purchasePrice) : (model ? model.priceExVat : null);
-      const listPriceNum = listPrice ? Number(listPrice) : (model ? model.priceExVat : null);
+      const listPriceNum = listPrice ? Number(listPrice) : (model ? model.priceIncVat : null);
       const salePriceNum = salePrice ? Number(salePrice) : null;
       const profit = (salePriceNum && purchasePriceNum) ? (salePriceNum - purchasePriceNum) : null;
 
