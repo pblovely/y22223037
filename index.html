@@ -5372,10 +5372,10 @@
         statRow(keyPrefix+'-pending', pendingLabel, pendingValue, false) +
         '</div>';
     }
-    function statCardCarrierSpecial(carrierLabel, agg, keyPrefix){
+    function statCardCarrierSpecial(carrierLabel, agg, keyPrefix, note){
       return '<div class="dash-stat-card" data-label-key="'+keyPrefix+'-card" style="flex:1;min-width:200px;border:1px solid var(--line);background:#fff;padding:10px 14px;">' +
         '<div class="dash-stat-label" data-label-key="'+keyPrefix+'-title" style="font-size:calc(11.5px * var(--dash-scale,1));color:var(--gray);font-weight:700;"><span class="tab-label-text">'+carrierLabel+'</span></div>' +
-        '<div class="dash-stat-label" data-label-key="'+keyPrefix+'-note" style="font-size:calc(10px * var(--dash-scale,1));color:var(--gray);margin-bottom:4px;"><span class="tab-label-text">(자체개통 불가·판매전용)</span></div>' +
+        '<div class="dash-stat-label" data-label-key="'+keyPrefix+'-note" style="font-size:calc(10px * var(--dash-scale,1));color:var(--gray);margin-bottom:4px;"><span class="tab-label-text">'+note+'</span></div>' +
         statRow(keyPrefix+'-purchase-count', '매입대수', agg.purchaseCount, false) +
         statRow(keyPrefix+'-sale-count', '판매대수', agg.saleCount, false) +
         statRow(keyPrefix+'-sale-amount', '매출액', agg.saleAmount.toLocaleString(), true) +
@@ -5389,15 +5389,18 @@
     statHtml += statCard("보유재고 출고가 합계", heldListPriceSum.toLocaleString(), null, "dash-held-listprice");
     statHtml += statCard("수익 (판매가-입고가만, 공시지원금 별도)", profitSum.toLocaleString(), null, "dash-profit");
     statHtml += '<div style="flex-basis:100%;height:0;"></div>';
+    const lgAgg = {purchaseCount:0, saleCount:0, purchaseAmount:0, saleAmount:0};
     const skAgg = {purchaseCount:0, saleCount:0, purchaseAmount:0, saleAmount:0};
     const ktAgg = {purchaseCount:0, saleCount:0, purchaseAmount:0, saleAmount:0};
     Object.keys(carrierAgg).forEach(c=>{
       const v = carrierAgg[c];
+      if(c.includes("LG")){ lgAgg.purchaseCount+=v.purchaseCount; lgAgg.saleCount+=v.saleCount; lgAgg.purchaseAmount+=v.purchaseAmount; lgAgg.saleAmount+=v.saleAmount; }
       if(c.includes("SK")){ skAgg.purchaseCount+=v.purchaseCount; skAgg.saleCount+=v.saleCount; skAgg.purchaseAmount+=v.purchaseAmount; skAgg.saleAmount+=v.saleAmount; }
       if(c.includes("KT")){ ktAgg.purchaseCount+=v.purchaseCount; ktAgg.saleCount+=v.saleCount; ktAgg.purchaseAmount+=v.purchaseAmount; ktAgg.saleAmount+=v.saleAmount; }
     });
-    statHtml += statCardCarrierSpecial("SK향 재고", skAgg, "dash-sk");
-    statHtml += statCardCarrierSpecial("KT향 재고", ktAgg, "dash-kt");
+    statHtml += statCardCarrierSpecial("LG향 재고", lgAgg, "dash-lg", "(자체개통·판매 모두 가능)");
+    statHtml += statCardCarrierSpecial("SK향 재고", skAgg, "dash-sk", "(자체개통 불가·판매전용)");
+    statHtml += statCardCarrierSpecial("KT향 재고", ktAgg, "dash-kt", "(자체개통 불가·판매전용)");
     statHtml += '<div style="flex-basis:100%;height:0;"></div>';
     statHtml += statCardTriple("매입", "입고", purchaseSum.toLocaleString(), "미입고", pendingPurchaseAmount.toLocaleString(), null, "dash-purchase");
     statHtml += statCardTriple("매출", "출고", saleSum.toLocaleString(), "미출고", pendingSaleAmount.toLocaleString(), null, "dash-sale");
