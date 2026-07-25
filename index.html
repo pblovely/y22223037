@@ -169,6 +169,7 @@
           <button class="tab-btn" data-tab="tab-inv-work" data-label-key="tab-inv-work" id="tabbtn-inv-work" onclick="switchTab('tab-inv-work')" style="display:none;"><span class="tab-label-text">재고 등록</span></button>
           <button class="tab-btn" data-tab="tab-orders" data-label-key="tab-orders" id="tabbtn-orders" onclick="switchTab('tab-orders')" style="display:none;"><span class="tab-label-text">주문 관리</span></button>
           <button class="tab-btn" data-tab="tab-salereq" data-label-key="tab-salereq" id="tabbtn-salereq" onclick="switchTab('tab-salereq')" style="display:none;"><span class="tab-label-text">판매 관리</span></button>
+          <button class="tab-btn" data-tab="tab-reservation" data-label-key="tab-reservation" id="tabbtn-reservation" onclick="switchTab('tab-reservation')" style="display:none;"><span class="tab-label-text">예약 관리</span></button>
           <button class="tab-btn" data-tab="tab-data-upload" data-label-key="tab-data-upload" id="tabbtn-data-upload" onclick="switchTab('tab-data-upload')" style="display:none;"><span class="tab-label-text">자료업로드</span></button>
         </div>
         <button id="admin-toggle-btn" data-label-key="admin-toggle" onclick="toggleAdminMenu()" style="display:none;"><span class="tab-label-text">⚙ 관리자</span></button>
@@ -321,6 +322,18 @@
           <label style="font-size:12.5px;">기타 금액(원)<input type="number" id="sale-payment-other-amount-input" placeholder="판매요청에 없는 입금분" style="margin-left:6px;width:130px;padding:5px 6px;border:1px solid #c7c7c7;font-size:12.5px;"></label>
         </div>
         <div id="sale-request-list"></div>
+      </div>
+    </div>
+
+    <!-- ===== 작업: 예약 관리 ===== -->
+    <div id="tab-reservation" class="tab-panel">
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+          <h3 style="margin:0;">예약 관리 <span class="info-tip" title="폴더블 신제품처럼 물량이 귀한 모델을 여러 거래처가 미리 예약(주문)해두고, 실제 입고될 때마다 배정 수량을 채워나가는 화면입니다. 잔여 = 주문 - 배정.">ⓘ</span></h3>
+          <button class="btn small" style="width:auto;" onclick="openReservationModal()">+ 예약 추가</button>
+        </div>
+        <p class="desc" style="margin-top:0;">사용법: ① "+ 예약 추가"로 거래처별 예약 수량을 등록 → ② 실제 입고되면 아래 표에서 해당 칸의 "배정"을 눌러 배정 수량을 늘려주세요 → ③ 잔여가 0이 되면 그 거래처 예약은 완료된 거예요.</p>
+        <div id="reservation-table-area"></div>
       </div>
     </div>
 
@@ -963,6 +976,23 @@
         </div>
         <button class="btn small" style="width:auto;" onclick="submitInstantSale()">즉시 판매 처리</button>
         <div id="instant-sale-result" style="font-size:12.5px;margin-top:10px;"></div>
+      </div>
+    </div>
+
+    <!-- 예약 추가 팝업 -->
+    <div id="reservation-modal-overlay" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.55);z-index:1000;align-items:center;justify-content:center;">
+      <div style="background:#fff;border:2px solid var(--navy);max-width:520px;width:94%;max-height:90vh;overflow-y:auto;padding:22px;position:relative;">
+        <button onclick="closeReservationModal()" style="position:absolute;top:12px;right:12px;background:none;border:1px solid var(--navy);width:26px;height:26px;cursor:pointer;font-size:13px;">✕</button>
+        <h3 style="margin-top:0;margin-bottom:4px;">예약 추가</h3>
+        <p class="desc">모델·용량 단위로, 거래처별 예약(주문) 수량을 등록합니다. 같은 모델을 여러 거래처가 각각 예약하면 줄을 나눠서 추가하세요.</p>
+        <div class="stack-form">
+          <div class="stack-row"><label>요청일</label><input type="text" id="resv-date-input" placeholder="예: 20260724" maxlength="8" inputmode="numeric"></div>
+          <div class="stack-row"><label>모델 검색</label><input type="text" id="resv-model-search" placeholder="모델명 입력해서 찾기" oninput="filterSelectOptions('resv-model-select', this.value)"></div>
+          <div class="stack-row"><label>모델 (모델명+용량)</label><select id="resv-model-select"><option value="">모델을 선택하세요</option></select></div>
+          <div class="stack-row"><label>거래처</label><select id="resv-dest-select"><option value="">선택</option></select></div>
+          <div class="stack-row"><label>예약(주문) 수량</label><input type="number" id="resv-order-qty-input" value="1"></div>
+        </div>
+        <button class="btn small" style="width:auto;" onclick="submitReservation()">예약 등록</button>
       </div>
     </div>
 
@@ -4048,6 +4078,147 @@
     return merged;
   }
 
+  // ---------- 예약 관리 (물량 귀한 모델의 거래처별 예약/배정) ----------
+  window.openReservationModal = async function(){
+    document.getElementById("resv-date-input").value = todayStr();
+    document.getElementById("resv-order-qty-input").value = "1";
+    document.getElementById("resv-model-search").value = "";
+
+    await fetchModelsCache();
+    const modelSel = document.getElementById("resv-model-select");
+    modelSel.innerHTML = '<option value="">모델을 선택하세요</option>';
+    modelsCache.forEach(m=>{
+      const opt = document.createElement("option");
+      opt.value = m.id;
+      opt.textContent = (m.baseModel||m.systemModel||m.petName||"모델") + (m.capacity?(" "+m.capacity):"");
+      modelSel.appendChild(opt);
+    });
+    if(typeof resetSelectSearchCache === "function") resetSelectSearchCache("resv-model-select");
+    filterSelectOptions("resv-model-select", "");
+
+    const destSel = document.getElementById("resv-dest-select");
+    destSel.innerHTML = '<option value="">선택</option>';
+    const destNames = await fetchNamesList("outboundDestinations");
+    destNames.forEach(n=>{ const opt=document.createElement("option"); opt.value=n; opt.textContent=n; destSel.appendChild(opt); });
+
+    document.getElementById("reservation-modal-overlay").style.display = "flex";
+  };
+  window.closeReservationModal = function(){
+    document.getElementById("reservation-modal-overlay").style.display = "none";
+  };
+  window.submitReservation = async function(){
+    const modelId = document.getElementById("resv-model-select").value;
+    const m = modelsCache.find(x=>x.id===modelId);
+    if(!m){ alert("모델을 선택해주세요."); return; }
+    const destination = document.getElementById("resv-dest-select").value;
+    if(!destination){ alert("거래처를 선택해주세요."); return; }
+    const orderedQty = Number(document.getElementById("resv-order-qty-input").value) || 0;
+    if(!orderedQty){ alert("예약 수량을 입력해주세요."); return; }
+    const requestDate = document.getElementById("resv-date-input").value || todayStr();
+
+    await addDoc(collection(db,"reservations"), {
+      modelId, modelGroup:m.modelGroup, baseModel:m.baseModel, capacity:m.capacity, petName:m.petName||"",
+      destination, orderedQty, allocatedQty:0, requestDate,
+      createdBy: currentUser.name, createdByUsername: currentUser.username, createdAt: serverTimestamp()
+    });
+    logAction("예약 추가", destination+" / "+(m.petName||m.baseModel)+" "+orderedQty+"개");
+    closeReservationModal();
+    loadReservationTable();
+  };
+
+  window.adjustReservationAllocation = async function(id, currentAllocated, orderedQty){
+    const newVal = prompt("배정 수량을 입력하세요 (예약 수량: "+orderedQty+")", currentAllocated);
+    if(newVal===null) return;
+    const num = Number(newVal);
+    if(isNaN(num) || num<0){ alert("0 이상의 숫자를 입력해주세요."); return; }
+    if(num > orderedQty){ if(!confirm("배정 수량이 예약 수량보다 많습니다. 그래도 저장하시겠습니까?")) return; }
+    await updateDoc(doc(db,"reservations", id), { allocatedQty:num });
+    logAction("예약 배정 수정", id+" → "+num);
+    loadReservationTable();
+  };
+
+  window.deleteReservation = async function(id){
+    if(!confirm("이 예약을 삭제하시겠습니까?")) return;
+    await deleteDoc(doc(db,"reservations", id));
+    logAction("예약 삭제", id);
+    loadReservationTable();
+  };
+
+  async function loadReservationTable(){
+    const el = document.getElementById("reservation-table-area");
+    if(!el) return;
+    el.innerHTML = '<div class="list-empty">불러오는 중...</div>';
+
+    const snap = await getDocs(query(collection(db,"reservations"), orderBy("createdAt","desc")));
+    if(snap.empty){ el.innerHTML = '<div class="list-empty">등록된 예약이 없습니다.</div>'; return; }
+
+    const rows = []; snap.forEach(d=> rows.push({ id:d.id, ...d.data() }));
+
+    // 모델(펫네임/모델명/용량) × 거래처 로 묶기
+    const modelKeys = []; // 순서 유지
+    const destKeys = [];
+    const grid = {}; // grid[modelKey][destKey] = { orderedQty, allocatedQty, ids:[] }
+
+    rows.forEach(r=>{
+      const modelKey = (r.petName||r.modelGroup||"모델")+"/"+(r.baseModel||"-")+" "+(r.capacity||"");
+      if(!modelKeys.includes(modelKey)) modelKeys.push(modelKey);
+      if(!destKeys.includes(r.destination)) destKeys.push(r.destination);
+      if(!grid[modelKey]) grid[modelKey] = {};
+      if(!grid[modelKey][r.destination]) grid[modelKey][r.destination] = { orderedQty:0, allocatedQty:0, entries:[] };
+      grid[modelKey][r.destination].orderedQty += Number(r.orderedQty)||0;
+      grid[modelKey][r.destination].allocatedQty += Number(r.allocatedQty)||0;
+      grid[modelKey][r.destination].entries.push(r);
+    });
+
+    let html = '<div style="overflow-x:auto;"><table class="data-table" style="min-width:'+(300+destKeys.length*180)+'px;">';
+    // 헤더 1행: 거래처명 (colspan 3)
+    html += '<thead><tr><th rowspan="2">모델</th>';
+    destKeys.forEach(dk=>{ html += '<th colspan="3" style="text-align:center;">'+dk+'</th>'; });
+    html += '<th colspan="3" style="text-align:center;">합계</th></tr>';
+    // 헤더 2행: 주문/배정/잔여
+    html += '<tr>';
+    destKeys.forEach(()=>{ html += '<th class="ta-right">주문</th><th class="ta-right">배정</th><th class="ta-right">잔여</th>'; });
+    html += '<th class="ta-right">주문</th><th class="ta-right">배정</th><th class="ta-right">잔여</th></tr></thead><tbody>';
+
+    let colTotals = destKeys.map(()=>({ordered:0, allocated:0}));
+    let grandOrdered=0, grandAllocated=0;
+
+    modelKeys.forEach(mk=>{
+      html += '<tr><td>'+mk+'</td>';
+      let rowOrdered=0, rowAllocated=0;
+      destKeys.forEach((dk, idx)=>{
+        const cell = grid[mk][dk];
+        if(cell){
+          const remain = cell.orderedQty - cell.allocatedQty;
+          rowOrdered += cell.orderedQty; rowAllocated += cell.allocatedQty;
+          colTotals[idx].ordered += cell.orderedQty; colTotals[idx].allocated += cell.allocatedQty;
+          const firstEntryId = cell.entries[0].id;
+          html += '<td class="ta-right">'+cell.orderedQty+'</td>' +
+            '<td class="ta-right"><span style="cursor:pointer;color:var(--navy);text-decoration:underline;" onclick="adjustReservationAllocation(\''+firstEntryId+'\','+cell.entries[0].allocatedQty+','+cell.entries[0].orderedQty+')">'+cell.allocatedQty+'</span></td>' +
+            '<td class="ta-right">'+(remain>0?remain:'-')+'</td>';
+        }else{
+          html += '<td class="ta-right">-</td><td class="ta-right">-</td><td class="ta-right">-</td>';
+        }
+      });
+      grandOrdered += rowOrdered; grandAllocated += rowAllocated;
+      const rowRemain = rowOrdered - rowAllocated;
+      html += '<td class="ta-right" style="font-weight:700;">'+rowOrdered+'</td><td class="ta-right" style="font-weight:700;">'+rowAllocated+'</td><td class="ta-right" style="font-weight:700;">'+(rowRemain>0?rowRemain:'-')+'</td>';
+      html += '</tr>';
+    });
+
+    html += '<tr style="background:#fafafa;font-weight:700;"><td>합계</td>';
+    destKeys.forEach((dk, idx)=>{
+      const remain = colTotals[idx].ordered - colTotals[idx].allocated;
+      html += '<td class="ta-right">'+colTotals[idx].ordered+'</td><td class="ta-right">'+colTotals[idx].allocated+'</td><td class="ta-right">'+(remain>0?remain:'-')+'</td>';
+    });
+    const grandRemain = grandOrdered - grandAllocated;
+    html += '<td class="ta-right">'+grandOrdered+'</td><td class="ta-right">'+grandAllocated+'</td><td class="ta-right">'+(grandRemain>0?grandRemain:'-')+'</td></tr>';
+    html += '</tbody></table></div>';
+    html += '<p class="desc" style="margin-top:10px;">배정 숫자를 클릭하면 수정할 수 있어요.</p>';
+
+    el.innerHTML = html;
+  }
+
   async function loadSaleRequestList(){
     const listEl = document.getElementById("sale-request-list");
     if(!listEl) return;
@@ -6598,6 +6769,7 @@
     if(tabId==="tab-data-upload") loadDataUploadTab();
     if(tabId==="tab-orders") loadOrderList();
     if(tabId==="tab-salereq") loadSaleRequestList();
+    if(tabId==="tab-reservation") loadReservationTable();
     if(tabId==="tab-settlement") loadSettlementTab();
     if(tabId==="tab-b2b") loadB2BTab();
     if(tabId==="tab-team") loadTeamList();
@@ -6741,6 +6913,7 @@
       document.getElementById("tabbtn-data-upload").style.display = showDataUpload ? "block":"none";
       document.getElementById("tabbtn-orders").style.display = showOrders ? "block":"none";
       document.getElementById("tabbtn-salereq").style.display = showSaleReq ? "block":"none";
+      document.getElementById("tabbtn-reservation").style.display = showSaleReq ? "block":"none";
 
       const hasAnyAdmin = (showSite||showTeam||showInvAdmin||showUsers||showSettlement||showLogs);
       document.getElementById("admin-toggle-btn").style.display = hasAnyAdmin ? "block":"none";
