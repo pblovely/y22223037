@@ -212,7 +212,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-07-25 v16</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-07-25 v17</span>
       <span id="topbar-username">-</span>
       <button onclick="openPersonalSettingsModal()">개인설정</button>
       <button onclick="handleLogout()">로그아웃</button>
@@ -510,7 +510,7 @@
               <th>펫네임</th>
               <th>전산모델명</th>
               <th>모델명</th>
-              <th>용량</th>
+              <th>기가수</th>
               <th>삼성모델명</th>
               <th>출고가</th>
               <th>닉네임</th>
@@ -692,7 +692,7 @@
           <div class="stack-row"><label>전산모델명 <span class="info-tip" title="LG 마스터재고 파일의 '모델코드'와 맞춰야 하는 값입니다. 입력하면 아래에 파일 속 펫네임을 찾아 보여줍니다.">ⓘ</span></label><input type="text" id="ms-system-input" placeholder="예: SM-F976N256" oninput="checkMasterPetName('ms')"></div>
           <div class="master-hint" id="ms-master-hint"></div>
           <div class="stack-row"><label>모델명</label><input type="text" id="ms-base-input" placeholder="예: SM-F976N"></div>
-          <div class="stack-row"><label>용량</label><input type="text" id="ms-capacity-input" placeholder="예: 256 (GB 없이 숫자만)"></div>
+          <div class="stack-row"><label>기가수</label><input type="text" id="ms-capacity-input" placeholder="예: 256 (GB 없이 숫자만)"></div>
           <div class="stack-row"><label>출고가 (VAT포함)</label><input type="number" id="ms-price-input"></div>
           <div class="stack-row"><label>닉네임</label><input type="text" id="ms-nick-input"></div>
         </div>
@@ -728,7 +728,7 @@
           <div class="stack-row"><label>전산모델명 <span class="info-tip" title="LG 마스터재고 파일의 '모델코드'와 맞춰야 하는 값입니다. 입력하면 아래에 파일 속 펫네임을 찾아 보여줍니다.">ⓘ</span></label><input type="text" id="me-system-input" oninput="checkMasterPetName('me')"></div>
           <div class="master-hint" id="me-master-hint"></div>
           <div class="stack-row"><label>모델명</label><input type="text" id="me-base-input"></div>
-          <div class="stack-row"><label>용량</label><input type="text" id="me-capacity-input" placeholder="예: 256 (GB 없이 숫자만)"></div>
+          <div class="stack-row"><label>기가수</label><input type="text" id="me-capacity-input" placeholder="예: 256 (GB 없이 숫자만)"></div>
           <div class="stack-row"><label>출고가 (VAT포함)</label><input type="number" id="me-price-input"></div>
           <div class="stack-row"><label>닉네임</label><input type="text" id="me-nick-input"></div>
         </div>
@@ -1436,7 +1436,7 @@
     { key:"petName", label:"펫네임", get:it=>it.petName||"-" },
     { key:"systemModel", label:"전산모델명", get:it=>it.systemModel||"-" },
     { key:"baseModel", label:"모델명", get:it=>it.baseModel||"-" },
-    { key:"capacity", label:"용량", get:it=>it.capacity||"-" },
+    { key:"capacity", label:"기가수", get:it=>it.capacity||"-" },
     { key:"manufacturerColor", label:"제조사색상", get:it=>it.manufacturerColor||"-" },
     { key:"systemColor", label:"전산색상", get:it=>it.systemColor||"-" },
     { key:"sku", label:"삼성모델명(SKU)", get:it=>it.sku||"-" },
@@ -2447,28 +2447,34 @@
     });
   }
 
-  // 모델 드롭다운·목록 표시는 전산모델명을 기준으로 합니다. (모든 대조 기준이 전산모델명)
-  // 형식: "SM-F976N512 · 갤럭시Z 폴드8"  — 전산모델명이 없으면 모델명+용량으로 대체
+  // ===== 모델 항목의 정의 =====
+  //   전산모델명(systemModel) = 모델명 + 기가수 를 합친 값. 마스터재고의 모델코드와 같음. (예: SM-F976N512)
+  //   모델명(baseModel)      = 모델명만 (예: SM-F976N)
+  //   펫네임(petName)        = 명칭 (예: 갤럭시Z 폴드8)
+  //   기가수(capacity)       = 용량 숫자만 (예: 512)
+  // 네 항목을 따로 저장하므로 나중에 자료를 내려받아 가공할 수 있습니다.
+
+  // 모델을 고르는 드롭다운 = "전산모델명만" 보여줍니다. (입력·선택의 기준값)
   function modelOptionLabel(m){
     if(!m) return "-";
-    const sys  = String(m.systemModel||"").trim();
+    const sys = String(m.systemModel||"").trim();
+    if(sys) return sys;
+    // 전산모델명이 아직 비어 있는 모델은 임시로 모델명+기가수를 보여주고 미입력임을 알립니다.
     const base = String(m.baseModel||"").trim();
     const cap  = String(m.capacity||"").trim();
-    const pet  = String(m.petName||"").trim();
-    const head = sys || (base ? (base + (cap ? " " + cap : "")) : (String(m.modelGroup||"").trim() || pet || "모델"));
-    return head + (pet ? " · " + pet : "");
+    const alt  = base ? (base + cap) : (String(m.modelGroup||"").trim() || String(m.petName||"").trim() || "모델");
+    return alt + "  ← 전산모델명 미입력";
   }
 
-  // 재고·주문·판매요청 문서를 화면에 표시할 때도 전산모델명이 기준입니다.
-  // 전산모델명은 바뀌지 않는 식별값이고, 펫네임은 참고용으로 뒤에 붙입니다.
+  // 대시보드·요청서 등 표시용 = "전산모델명/펫네임"
   function docModelLabel(o){
     if(!o) return "-";
     const sys  = String(o.systemModel||"").trim();
     const base = String(o.baseModel||"").trim();
     const cap  = String(o.capacity||"").trim();
     const pet  = String(o.petName||"").trim();
-    const head = sys || (base ? (base + (cap ? " " + cap : "")) : (String(o.modelGroup||"").trim() || pet || "-"));
-    return head + (pet ? " · " + pet : "");
+    const head = sys || (base ? (base + cap) : (String(o.modelGroup||"").trim() || "-"));
+    return head + "/" + (pet || "-");
   }
 
   async function fetchModelsCache(){
@@ -3229,7 +3235,7 @@
   };
 
   // ---------- 모델 엑셀 업로드 팝업 ----------
-  const MODEL_TEMPLATE_HEADERS = ["제조사","펫네임","전산모델명","모델명","용량","출고가","닉네임"];
+  const MODEL_TEMPLATE_HEADERS = ["제조사","펫네임","전산모델명","모델명","기가수","출고가","닉네임"];
 
   window.openModelExcelModal = function(){
     // 창을 열 때마다 이전에 고른 파일·결과를 지웁니다.
@@ -3272,7 +3278,7 @@
       const petName = String(row["펫네임"]||"").trim();
       const systemModel = String(row["전산모델명"]||"").trim();
       const baseModel = String(row["모델명"]||"").trim();
-      const capacity = normalizeCapacity(row["용량"]);
+      const capacity = normalizeCapacity(row["기가수"] !== undefined && row["기가수"] !== "" ? row["기가수"] : row["용량"]);
       const priceRaw = row["출고가"];
       const nickname = String(row["닉네임"]||"").trim();
       const manufacturer = String(row["제조사"]||"").trim();
@@ -4488,7 +4494,7 @@
       '</div>';
 
     let html = head + '<div style="overflow-x:auto;"><table class="data-table" style="min-width:1260px;"><thead><tr>' +
-      '<th>모델 (전산모델명)</th><th>용량</th><th>통신사</th>' +
+      '<th>모델 (전산모델명)</th><th>기가수</th><th>통신사</th>' +
       '<th class="ta-right">주문수량</th>' +
       '<th class="ta-right">출고가</th>' +
       '<th class="ta-right">선할인</th><th class="ta-right">선할인%</th>' +
@@ -4573,7 +4579,7 @@
     }
     document.getElementById("arrival-bulk-desc").innerHTML =
       descCell("모델 (전산모델명)", comboEsc(docModelLabel(o))) +
-      descCell("용량", o.capacity||"-") +
+      descCell("기가수", o.capacity||"-") +
       descCell("통신사", o.carrier||"-") +
       descCell("남은 대수", remain) +
       descCell("판매처", o.destination || "미지정");
@@ -5412,7 +5418,7 @@
     document.getElementById("order-detail-heading").textContent = "판매 요청서";
     document.getElementById("order-detail-title").textContent = (b.destination||"-") + " · 요청일 " + (b.requestDate||"-");
     let html = '<div style="overflow-x:auto;"><table class="data-table" style="min-width:850px;"><thead><tr>' +
-      '<th>펫네임/모델명</th><th>용량</th><th>통신사</th><th class="ta-right">요청수량</th><th class="ta-right">판매가</th><th class="ta-right">판매할인</th><th class="ta-right">매칭</th><th>상태</th><th class="ta-right">관리</th>' +
+      '<th>모델 (전산모델명/펫네임)</th><th>기가수</th><th>통신사</th><th class="ta-right">요청수량</th><th class="ta-right">판매가</th><th class="ta-right">판매할인</th><th class="ta-right">매칭</th><th>상태</th><th class="ta-right">관리</th>' +
       '</tr></thead><tbody id="order-detail-tbody"></tbody></table></div>';
     document.getElementById("order-detail-body").innerHTML = html;
     const tbody = document.getElementById("order-detail-tbody");
