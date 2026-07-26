@@ -279,7 +279,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-07-25 v141</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-07-25 v143</span>
       <span id="topbar-username">-</span>
       <button onclick="openPersonalSettingsModal()">개인설정</button>
       <button onclick="handleLogout()">로그아웃</button>
@@ -11661,45 +11661,31 @@
     const interestReceivedTotal = entries.filter(e=>e.category==="interest_received").reduce((s,e)=>s+(Number(e.amount)||0),0);
     const finalProfit = baseProfitSum - loanCostTotal + interestReceivedTotal;
 
-    function statCard(label, value, color){
+    function statCard(label, value, color, note){
       return '<div style="flex:1;min-width:170px;border:1px solid var(--line);background:#fff;padding:10px 14px;">' +
         '<div style="font-size:11.5px;color:var(--gray);margin-bottom:4px;">'+label+'</div>' +
-        '<div style="font-size:19px;font-weight:800;color:'+(color||'var(--navy)')+';">'+value+'</div></div>';
+        '<div style="font-size:19px;font-weight:800;color:'+(color||'var(--navy)')+';">'+value+'</div>'
+        + (note ? '<div style="font-size:10.5px;color:var(--gray);margin-top:3px;">'+note+'</div>' : '') + '</div>';
     }
     // 계산 근거를 그대로 보여줘서 숫자가 왜 그런지 바로 알 수 있게 합니다.
-    let html = statCard("실시간 잔여여신", remainingCredit.toLocaleString(), remainingCredit < 0 ? "var(--danger)" : "#1565c0");
+    let html = statCard("실시간 잔여여신", remainingCredit.toLocaleString(),
+      remainingCredit < 0 ? "var(--danger)" : "#1565c0", "①+②−③");
     html += statCard("① 여신 입금 (충전)", depositTotal.toLocaleString(), "#2e7d32");
-    html += statCard("② 클럽장려금", clubIncentiveTotal.toLocaleString(), "#6a1b9a");
+    html += statCard("② 클럽장려금 수령", clubIncentiveTotal.toLocaleString(), "#6a1b9a");
     html += statCard("③ 주문사용 (차감)", orderUseTotal.toLocaleString(), "var(--danger)");
     html += statCard("B2B대출비용 합계 (수수료+이자)", loanCostTotal.toLocaleString(), "var(--danger)");
-    html += statCard("잔여여신 = ①+②−③", remainingCredit.toLocaleString(), remainingCredit < 0 ? "var(--danger)" : "#1565c0");
-    // 타할인 = 나중에 클럽장려금으로 받을 금액
+    // 타할인 = 3개월 뒤 클럽장려금으로 받을 금액 (주문 품목의 타할인 합계)
     let pendingRebate = 0;
     try{
-      const obs = await getDocs(collection(db,"orderBatches"));
-      obs.forEach(dd=>{
-        const bb = dd.data();
-        if(bb.status === "취소") return;
-        const cu = Number(bb.creditUsed)||0, dr = Number(bb.depositRequired)||0;
-        if(cu > dr) pendingRebate += (cu - dr);
+      const os = await getDocs(collection(db,"orders"));
+      os.forEach(dd=>{
+        const o = dd.data();
+        if(o.status !== "취소") pendingRebate += (Number(o.otherDiscountAmt)||0) * (Number(o.quantity)||0);
       });
     }catch(e){}
-    html += statCard("클럽장려금 예정금액 (타할인 누적)", pendingRebate.toLocaleString(), "#b8860b");
-    if(pendingRebate === 0){
-      // creditUsed 가 저장되기 전 주문은 주문 품목에서 직접 계산합니다.
-      try{
-        const os = await getDocs(collection(db,"orders"));
-        let oth = 0;
-        os.forEach(dd=>{ const o = dd.data(); if(o.status!=="취소") oth += (Number(o.otherDiscountAmt)||0) * (Number(o.quantity)||0); });
-        if(oth > 0){
-          html = html.replace('>'+pendingRebate.toLocaleString()+'<', '>'+oth.toLocaleString()+'<');
-          pendingRebate = oth;
-        }
-      }catch(e){}
-    }
-    html += statCard("받은 클럽장려금", clubIncentiveTotal.toLocaleString(), "#6a1b9a");
-    html += statCard("미수령 차액", (pendingRebate - clubIncentiveTotal).toLocaleString(),
-      (pendingRebate - clubIncentiveTotal) > 0 ? "var(--danger)" : "#2e7d32");
+    const notYet = pendingRebate - clubIncentiveTotal;
+    html += statCard("클럽장려금 받을 금액 (3개월 뒤)", (notYet > 0 ? notYet : 0).toLocaleString(), "#b8860b",
+      "누적 " + pendingRebate.toLocaleString() + " · 수령 " + clubIncentiveTotal.toLocaleString());
     html += statCard("이자지급 수령 합계", interestReceivedTotal.toLocaleString(), "#2e7d32");
     html += statCard("기존 매입-매출 차액 (수익)", baseProfitSum.toLocaleString());
     html += statCard("최종 실제수익 (수익-대출비용+이자수령)", finalProfit.toLocaleString(), "#2e7d32");
