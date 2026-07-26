@@ -289,7 +289,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-07-25 v165</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-07-25 v167</span>
       <span id="topbar-username">-</span>
       <button onclick="openPersonalSettingsModal()">개인설정</button>
       <button onclick="handleLogout()">로그아웃</button>
@@ -1455,10 +1455,30 @@
           <h3 style="margin-top:0;margin-bottom:4px;" id="order-detail-heading">주문 요청서</h3>
           <span class="no-print" style="margin-right:34px;">
             <button class="btn small secondary" style="width:auto;margin-right:6px;" id="order-po-btn" onclick="openPoFromDetail()">삼성전자 발주서</button>
+            <button class="btn small secondary" style="width:auto;" id="order-bulkarr-btn" onclick="toggleBulkArrival()">도착 일괄 등록</button>
             <button class="btn small secondary" style="width:auto;" onclick="printOrderDetail()">인쇄 / PDF 저장</button>
           </span>
         </div>
         <p class="desc" id="order-detail-title"></p>
+        <div id="bulk-arrival-box" class="no-print" style="display:none;border:1px solid var(--navy);background:#f4f7fb;padding:12px 14px;margin-bottom:12px;">
+          <div style="font-size:13px;font-weight:700;margin-bottom:4px;">도착 일괄 등록</div>
+          <p class="desc" style="margin-top:0;">일련번호를 그대로 붙여넣으세요. <b>모델·색상은 이 주문의 품목에서 자동으로 찾습니다.</b></p>
+          <textarea id="bulk-arrival-text" rows="8" style="width:100%;border:1px solid var(--line);padding:8px;font-size:12.5px;font-family:monospace;box-sizing:border-box;" placeholder="SM-F776N256&#9;핑크&#9;1038307&#10;SM-F776N256&#9;핑크&#9;1038472&#10;&#10;또는 일련번호만 (품목이 하나뿐일 때)&#10;1038307&#10;1038472"></textarea>
+          <div class="stack-form" style="max-width:520px;margin-top:10px;">
+            <div class="stack-row"><label>입고일</label><input type="text" id="bulk-arrival-indate" maxlength="8" inputmode="numeric" placeholder="예: 20260726"></div>
+            <div class="stack-row"><label>출고일 (선택)</label><input type="text" id="bulk-arrival-outdate" maxlength="8" inputmode="numeric" placeholder="비우면 입고일과 동일"></div>
+            <div class="stack-row"><label>위치 (선택)</label><select id="bulk-arrival-location"><option value="">선택</option></select></div>
+            <div class="stack-row"><label>판매처리</label>
+              <select id="bulk-arrival-autosell">
+                <option value="yes">도착과 동시에 판매처리 (판매처·판매가가 있는 품목만)</option>
+                <option value="no">보유중으로 두기</option>
+              </select>
+            </div>
+          </div>
+          <button class="btn small" style="width:auto;margin-top:10px;" onclick="analyzeBulkArrival()">분석하기</button>
+          <button class="btn small secondary" style="width:auto;" onclick="toggleBulkArrival()">닫기</button>
+          <div id="bulk-arrival-result" style="font-size:12.5px;margin-top:10px;"></div>
+        </div>
         <div id="order-detail-body"></div>
       </div>
     </div>
@@ -6972,6 +6992,230 @@
       '<td style="padding:4px;border:1px solid var(--line);"><input type="text" class="arr-serial" style="width:100%;font-size:12px;padding:4px;border:1px solid #c7c7c7;box-sizing:border-box;"></td>';
     tbody.appendChild(tr);
   };
+  // ================= 도착 일괄 등록 (주문 요청서에서) =================
+  let bulkArrRows = [];   // 분석 통과한 목록
+
+  window.toggleBulkArrival = async function(){
+    const box = document.getElementById("bulk-arrival-box");
+    const show = box.style.display === "none";
+    box.style.display = show ? "block" : "none";
+    if(!show) return;
+    document.getElementById("bulk-arrival-text").value = "";
+    document.getElementById("bulk-arrival-indate").value = todayStr();
+    document.getElementById("bulk-arrival-outdate").value = "";
+    document.getElementById("bulk-arrival-result").innerHTML = "";
+    bulkArrRows = [];
+    const sel = document.getElementById("bulk-arrival-location");
+    if(sel && sel.options.length <= 1){
+      (await fetchNamesList("locations")).forEach(n=>{
+        const o = document.createElement("option"); o.value = n; o.textContent = n; sel.appendChild(o);
+      });
+    }
+    // 이 주문에 남은 품목을 안내합니다.
+    const lines = (orderBatchLinesCache[currentPoBatch ? currentPoBatch.batchId : ""] || [])
+      .filter(o=> o.status !== "취소");
+    const remainList = lines.map(o=>{
+      const r = (Number(o.quantity)||0) - (Number(o.fulfilledCount)||0);
+      return r > 0 ? (docModelLabel(o) + " " + (o.systemColor||o.manufacturerColor||"-") + " " + r + "대") : null;
+    }).filter(Boolean);
+    document.getElementById("bulk-arrival-result").innerHTML = remainList.length
+      ? '<div style="color:var(--gray);">남은 품목 — ' + remainList.map(comboEsc).join(" · ") + '</div>'
+      : '<div style="color:#2e7d32;">이 주문은 모두 도착했습니다.</div>';
+  };
+
+  window.analyzeBulkArrival = async function(){
+    const el = document.getElementById("bulk-arrival-result");
+    const raw = document.getElementById("bulk-arrival-text").value;
+    const batchId = currentPoBatch ? currentPoBatch.batchId : "";
+    const lines = (orderBatchLinesCache[batchId] || []).filter(o=> o.status !== "취소");
+    if(lines.length === 0){ el.innerHTML = '<span style="color:var(--danger);">이 주문에 품목이 없습니다.</span>'; return; }
+
+    const rows = raw.split(/\r?\n/).map(x=>x.trim()).filter(Boolean);
+    if(rows.length === 0){ el.innerHTML = '<span style="color:var(--danger);">붙여넣은 내용이 없습니다.</span>'; return; }
+    await fetchModelsCache();
+
+    // 남은 수량을 품목별로 추적합니다.
+    const remain = {};
+    lines.forEach(o=> remain[o.id] = (Number(o.quantity)||0) - (Number(o.fulfilledCount)||0));
+
+    const ok = [], bad = [];
+    const seen = new Set();
+    rows.forEach((line, i)=>{
+      const label = (i+1) + "번째 줄";
+      const c = line.split(/\t|\s{2,}|\s/).map(x=>x.trim()).filter(Boolean);
+      // 일련번호 = 숫자 4자리 이상
+      const serial = c.find(x=> /^[0-9]{4,}$/.test(x));
+      if(!serial){ bad.push({ label, reason:"일련번호를 찾지 못했습니다", raw:line }); return; }
+      if(seen.has(serial)){ bad.push({ label, reason:"같은 일련번호가 여러 번 있습니다", raw:line }); return; }
+      seen.add(serial);
+
+      const rest = c.filter(x=> x !== serial);
+      // 품목 찾기 — 적어준 모델·색상으로 좁히고, 없으면 남은 품목 중 하나
+      let cands = lines.filter(o=> remain[o.id] > 0);
+      if(cands.length === 0){ bad.push({ label, reason:"이 주문에 남은 수량이 없습니다", raw:line }); return; }
+      rest.forEach(t=>{
+        const tl = t.toLowerCase();
+        const narrowed = cands.filter(o=>
+          String(o.systemModel||"").toLowerCase() === tl ||
+          String(o.baseModel||"").toLowerCase() === tl ||
+          String(o.systemColor||"").toLowerCase() === tl ||
+          String(o.manufacturerColor||"").toLowerCase() === tl ||
+          String(o.sku||"").toLowerCase() === tl);
+        if(narrowed.length > 0) cands = narrowed;
+      });
+      if(cands.length > 1 && rest.length === 0 && lines.filter(o=>remain[o.id]>0).length > 1){
+        bad.push({ label, reason:"품목이 여러 개라 어느 것인지 모릅니다 — 모델·색상을 함께 적어주세요", raw:line });
+        return;
+      }
+      const o = cands[0];
+      remain[o.id] -= 1;
+      ok.push({ label, serial, order:o });
+    });
+
+    bulkArrRows = ok;
+    let h = '<div style="font-weight:700;margin-bottom:8px;">분석 결과 — 정상 '+ok.length+'대 / 오류 '+bad.length+'줄</div>';
+    if(bad.length){
+      h += '<div style="border:1px solid var(--danger);background:#fdecea;padding:8px 10px;margin-bottom:10px;max-height:180px;overflow-y:auto;">'
+        + bad.map(b=>'· '+comboEsc(b.label)+' — '+comboEsc(b.reason)+'<br><span style="color:var(--gray);font-size:11px;">'+comboEsc(b.raw)+'</span>').join('<br>') + '</div>';
+    }
+    if(ok.length){
+      h += '<div style="border:1px solid var(--line);max-height:260px;overflow-y:auto;margin-bottom:10px;">'
+        + '<table class="data-table" style="min-width:640px;"><thead><tr><th>일련번호</th><th>모델</th><th>색상</th><th>통신사</th><th>판매처</th><th class="ta-right">판매가</th></tr></thead><tbody>'
+        + ok.map(r=>'<tr><td><b>'+comboEsc(r.serial)+'</b></td>'
+            + '<td>'+comboEsc(docModelLabel(r.order))+'</td>'
+            + '<td>'+comboEsc(r.order.systemColor||r.order.manufacturerColor||"-")+'</td>'
+            + '<td>'+comboEsc(r.order.carrier||"-")+'</td>'
+            + '<td>'+comboEsc(r.order.destination||"-")+'</td>'
+            + '<td class="ta-right">'+(r.order.salePrice ? Number(r.order.salePrice).toLocaleString() : "-")+'</td></tr>').join("")
+        + '</tbody></table></div>'
+        + '<button class="btn small" style="width:auto;" onclick="submitBulkArrival()">이 목록으로 도착 등록 ('+ok.length+'대)</button>';
+    }
+    el.innerHTML = h;
+  };
+
+  window.submitBulkArrival = async function(){
+    if(bulkArrRows.length === 0){ alert("등록할 내용이 없습니다."); return; }
+    const inDate  = (document.getElementById("bulk-arrival-indate").value||"").replace(/\D/g,"") || todayStr();
+    const outDateIn = (document.getElementById("bulk-arrival-outdate").value||"").replace(/\D/g,"");
+    const location = document.getElementById("bulk-arrival-location").value;
+    const autoSell = document.getElementById("bulk-arrival-autosell").value === "yes";
+    const outDate = outDateIn || inDate;
+
+    if(!confirm(bulkArrRows.length + "대를 도착 등록합니다.\n\n"
+      + "· 입고일 " + inDate + (location ? " · 위치 " + location : "") + "\n"
+      + (autoSell ? "· 판매처·판매가가 있는 품목은 바로 판매처리됩니다.\n" : "· 모두 보유중으로 둡니다.\n")
+      + "\n진행하시겠습니까?")) return;
+
+    const el = document.getElementById("bulk-arrival-result");
+    el.innerHTML = '<div style="color:var(--gray);">등록 중입니다...</div>';
+
+    // 품목별로 묶어 처리합니다.
+    const byOrder = {};
+    bulkArrRows.forEach(r=>{
+      if(!byOrder[r.order.id]) byOrder[r.order.id] = { order:r.order, serials:[] };
+      byOrder[r.order.id].serials.push(r.serial);
+    });
+
+    let made = 0, soldCnt = 0;
+    const newItems = [];
+    try{
+      for(const oid of Object.keys(byOrder)){
+        const { order:o, serials } = byOrder[oid];
+        const sell = autoSell && !!o.destination && !!o.salePrice;
+        const ids = [];
+        for(let i=0; i<serials.length; i+=300){
+          const bt = writeBatch(db);
+          serials.slice(i, i+300).forEach(sn=>{
+            const ref = doc(collection(db,"inventoryItems"));
+            ids.push({ id:ref.id, serialNumber:sn });
+            bt.set(ref, {
+              baseModel:o.baseModel||"", capacity:o.capacity||"", systemModel:o.systemModel||"",
+              petName:o.petName||"", modelId:o.modelId||null,
+              manufacturerColor:o.manufacturerColor||"", systemColor:o.systemColor||"", sku:o.sku||"",
+              carrier:o.carrier||"", source:o.source||"", manufacturer:"", location: location||"",
+              destination: sell ? (o.destination||"") : (o.destination||""),
+              listPrice:o.listPrice||null, purchasePrice:o.purchasePrice||null,
+              salePrice: o.salePrice||null,
+              purchaseDiscountAmt:o.preDiscountAmt||null, purchaseDiscount:o.preDiscountPct||null,
+              otherDiscountAmt:o.otherDiscountAmt||null, otherDiscountPct:o.otherDiscountPct||null,
+              saleDiscountAmt:o.saleDiscountAmt||null, saleDiscount:o.saleDiscountPct||null,
+              profit: (o.salePrice && o.purchasePrice) ? (Number(o.salePrice)-Number(o.purchasePrice)) : null,
+              imei:"", status: sell ? "판매" : "보유중",
+              orderDate:o.orderDate||"", inDate, expectedSaleDate:"", outDate: sell ? outDate : "",
+              entryType:"imei", quantity:1, serialNumber:sn,
+              orderId: oid,
+              createdBy: currentUser.name, createdByUsername: currentUser.username,
+              createdAt: serverTimestamp()
+            });
+          });
+          await bt.commit();
+        }
+        made += ids.length;
+        newItems.push(...ids);
+
+        // 주문 도착 수량 갱신
+        const nf = (Number(o.fulfilledCount)||0) + ids.length;
+        await updateDoc(doc(db,"orders", oid), {
+          fulfilledCount: nf,
+          linkedItemIds: [...(o.linkedItemIds||[]), ...ids.map(x=>x.id)],
+          status: nf >= (Number(o.quantity)||0) ? "도착완료" : "부분도착"
+        });
+        await logItems(ids, "inbound", "포피플 입고 · " + (o.source||"-") + (location ? " · " + location : ""));
+
+        // 판매처리한 경우 연결된 판매요청도 매칭
+        if(sell){
+          soldCnt += ids.length;
+          await logItems(ids, "outbound", (o.destination||"-") + " · " + outDate);
+          try{
+            const srSnap = await getDocs(query(collection(db,"saleRequests"), where("fromOrderId","==",oid)));
+            let pool = ids.map(x=>x.id);
+            for(const d of srSnap.docs){
+              if(pool.length === 0) break;
+              const sr = d.data();
+              if(sr.status === "취소") continue;
+              const left = (Number(sr.quantity)||0) - (Number(sr.fulfilledCount)||0);
+              if(left <= 0) continue;
+              const take = pool.splice(0, Math.min(left, pool.length));
+              const nf2 = (Number(sr.fulfilledCount)||0) + take.length;
+              await updateDoc(doc(db,"saleRequests", d.id), {
+                fulfilledCount: nf2,
+                matchedItemIds: [...(sr.matchedItemIds||[]), ...take],
+                status: nf2 >= (Number(sr.quantity)||0) ? "매칭완료" : "부분매칭"
+              });
+              const bt2 = writeBatch(db);
+              take.forEach(tid=> bt2.update(doc(db,"inventoryItems", tid), { saleRequestId: d.id }));
+              await bt2.commit();
+              await writeMatchLogs(d.id, sr, take.map(tid=>{
+                const f = ids.find(x=>x.id===tid); return { id:tid, serialNumber: f ? f.serialNumber : "" };
+              }), "도착 일괄 등록", outDate);
+            }
+          }catch(e){ console.error(e); }
+        }
+      }
+    }catch(e){
+      el.innerHTML = '<span style="color:var(--danger);">등록에 실패했습니다.<br>' + comboEsc((e&&e.message)?e.message:String(e)) + '</span>';
+      return;
+    }
+
+    logAction("도착 일괄 등록", made + "대" + (soldCnt ? " / 판매처리 " + soldCnt + "대" : ""));
+    clearDashCache(); clearCache("inventory");
+    alert(made + "대를 도착 등록했습니다." + (soldCnt ? "\n그중 " + soldCnt + "대는 판매처리했습니다." : ""));
+    bulkArrRows = [];
+    document.getElementById("bulk-arrival-box").style.display = "none";
+    loadOrderList();
+    if(typeof loadSaleRequestList === "function") loadSaleRequestList();
+    // 요청서를 다시 그립니다.
+    if(currentPoBatch){
+      try{
+        const bSnap = await getDoc(doc(db,"orderBatches", currentPoBatch.batchId));
+        const lineSnap = await getDocs(query(collection(db,"orders"), where("batchId","==",currentPoBatch.batchId)));
+        const fresh = []; lineSnap.forEach(d=> fresh.push({ id:d.id, ...d.data() }));
+        orderBatchLinesCache[currentPoBatch.batchId] = fresh;
+        if(bSnap.exists()) openOrderBatchDetailModal(currentPoBatch.batchId, bSnap.data());
+      }catch(e){}
+    }
+  };
+
   window.toggleArrivalPaste = function(){
     const el = document.getElementById("arrival-paste-box");
     const show = el.style.display === "none";
