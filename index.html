@@ -291,7 +291,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-07-25 v205</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-07-25 v218</span>
       <span id="topbar-username">-</span>
       <button onclick="openPersonalSettingsModal()">개인설정</button>
       <button onclick="handleLogout()">로그아웃</button>
@@ -331,6 +331,7 @@
           <button class="tab-btn" data-label-key="inv-admin" id="tabbtn-inv-admin" onclick="openInvAdminSection()" style="display:none;"><span class="tab-label-text">재고 기초설정</span></button>
           <button class="tab-btn" data-tab="tab-users" data-label-key="tab-users" id="tabbtn-users" onclick="switchTab('tab-users')" style="display:none;"><span class="tab-label-text">사용자 관리</span> <span id="user-admin-badge" style="display:none;background:var(--danger);color:#fff;font-size:10px;padding:1px 6px;margin-left:4px;">0</span></button>
           <button class="tab-btn" data-tab="tab-settlement" data-label-key="tab-settlement" id="tabbtn-settlement" onclick="switchTab('tab-settlement')" style="display:none;"><span class="tab-label-text">정산 관리</span></button>
+          <button class="tab-btn" data-tab="tab-lgrefund" data-label-key="tab-lgrefund" id="tabbtn-lgrefund" onclick="switchTab('tab-lgrefund')" style="display:none;"><span class="tab-label-text">LG 환불·수수료</span></button>
           <button class="tab-btn" data-tab="tab-itemhistory" data-label-key="tab-itemhistory" id="tabbtn-itemhistory" onclick="switchTab('tab-itemhistory')" style="display:none;"><span class="tab-label-text">단말 이력</span></button>
           <button class="tab-btn" data-tab="tab-datacheck" data-label-key="tab-datacheck" id="tabbtn-datacheck" onclick="switchTab('tab-datacheck')" style="display:none;"><span class="tab-label-text">데이터 점검</span></button>
           <button class="tab-btn" data-tab="tab-ledger" data-label-key="tab-ledger" id="tabbtn-ledger" onclick="switchTab('tab-ledger')" style="display:none;"><span class="tab-label-text">거래처 정산</span></button>
@@ -504,8 +505,7 @@
           <button class="btn small secondary" id="sale-filter-all" style="width:auto;border:1px solid var(--navy);margin-left:-1px;" onclick="setSaleFilter('all')">전체</button>
           <button class="btn small secondary" style="width:auto;margin-left:-1px;" onclick="toggleColPicker('sale')">보기 설정</button>
           <span id="sale-wait-summary" style="margin-left:12px;font-size:12.5px;"></span>
-          <button class="btn small secondary" style="width:auto;margin-left:12px;" title="재고에서 이미 판매처리된 건을 찾아 판매요청의 매칭 현황을 다시 계산합니다" onclick="recalcSaleMatching()">매칭 현황 다시 계산</button>
-        </div>
+          </div>
         <div id="sale-col-picker" style="display:none;border:1px solid var(--navy);background:#fafafa;padding:10px 12px;margin-bottom:8px;"></div>
         <div id="sale-orphan-notice" style="display:none;font-size:12.5px;padding:9px 11px;margin-bottom:8px;border:1px solid var(--danger);background:#fdecea;line-height:1.7;"></div>
         <div id="sale-model-notice" style="display:none;font-size:12.5px;padding:9px 11px;margin-bottom:8px;border:1px solid var(--danger);background:#fdecea;line-height:1.7;"></div>
@@ -520,7 +520,7 @@
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
           <h3 style="margin:0;">예약 목록 <span class="info-tip" title="등록한 예약을 한 줄씩 보여줍니다. 수정·삭제·배정을 여기서 하세요.">ⓘ</span></h3>
           <span style="display:inline-flex;align-items:center;">
-          <button class="btn small secondary" style="width:auto;" onclick="openResvBulkAlloc()">일련번호로 일괄 배정</button>
+          <button class="btn small secondary" style="width:auto;" onclick="openResvBulkAlloc()">일괄매칭</button>
           <button class="btn small secondary" style="width:auto;" onclick="createQuotationFromSelected()">견적서</button>
           <button class="btn small secondary" style="width:auto;" onclick="toggleQuotationList()">견적서 조회</button>
           <span style="position:relative;">
@@ -558,6 +558,49 @@
         </div>
         <div id="reservation-stat-cards" class="dash-cards" style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-start;margin-bottom:14px;"></div>
         <div id="reservation-table-area"></div>
+      </div>
+    </div>
+
+    <!-- ===== LG 자체개통 환불·수수료 ===== -->
+    <div id="tab-lgrefund" class="tab-panel">
+      <div class="card" style="max-width:1500px;">
+        <h3 style="margin:0 0 6px 0;">LG 자체개통 · 환불·수수료 <span class="info-tip" title="포피플에서 직접 개통한 건만 대상입니다. 유플러스에 들어간 금액(출고가)과 본사에서 받은 환불금·공시지원금 수수료를 귀속월로 맞춥니다.">ⓘ</span></h3>
+        <p class="desc" style="margin-top:0;">포피플 <b>자체개통</b> 건의 회수 현황입니다. 타 대리점 판매분은 돈을 다 받으니 여기 들어오지 않습니다.</p>
+        <div style="border:1px solid var(--line);background:#fafafa;padding:9px 11px;margin-bottom:10px;font-size:12px;line-height:1.9;color:var(--gray);">
+          <b>단말기 환불</b> — 6월 개통분이면 7월 초에 들어옵니다. 채권이 반영된 차액이라 단말기별 매칭은 안 되고 <b>출고가 총액</b>으로 봅니다. 나눠 들어와도 계속 등록하시면 됩니다.<br>
+          <b>공시지원금 수수료</b> — 6월 개통분이면 7월 15일에 들어옵니다. 재고에 <b>단말기별로 입력한 공시지원금</b>이 예정 금액이 됩니다.
+        </div>
+        <div style="display:flex;gap:0;align-items:center;flex-wrap:wrap;margin-bottom:10px;">
+          <input type="text" id="lgr-from" maxlength="6" inputmode="numeric" placeholder="시작 귀속월 202601" style="width:150px;height:28px;border:1px solid var(--line);padding:0 8px;font-size:12.5px;box-sizing:border-box;">
+          <input type="text" id="lgr-to" maxlength="6" inputmode="numeric" placeholder="종료 귀속월 202612" style="width:150px;height:28px;border:1px solid var(--line);padding:0 8px;font-size:12.5px;margin-left:-1px;box-sizing:border-box;">
+          <button class="btn small" style="width:auto;margin-left:-1px;" onclick="loadLgRefund()">조회</button>
+          <span style="margin-left:auto;display:inline-flex;align-items:center;">
+            <button class="btn small secondary" style="width:auto;" onclick="openLgrEntry('refund')">+ 환불금 등록</button>
+            <button class="btn small secondary" style="width:auto;" onclick="openLgrEntry('subsidy')">+ 수수료 등록</button>
+          </span>
+        </div>
+        <div id="lgr-cards" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px;"></div>
+        <div id="lgr-table"></div>
+        <h3 style="font-size:13px;margin-top:18px;">받은 내역</h3>
+        <div id="lgr-received"></div>
+      </div>
+    </div>
+
+    <!-- LG 환불·수수료 등록 팝업 -->
+    <div id="lgr-modal-overlay" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.55);z-index:1040;align-items:center;justify-content:center;">
+      <div style="background:#fff;border:2px solid var(--navy);max-width:520px;width:95%;max-height:92vh;overflow-y:auto;padding:22px;position:relative;">
+        <button onclick="closeLgrEntry()" style="position:absolute;top:12px;right:12px;background:none;border:1px solid var(--navy);width:26px;height:26px;cursor:pointer;font-size:13px;">✕</button>
+        <h3 id="lgr-title" style="margin-top:0;margin-bottom:4px;">환불금 등록</h3>
+        <p class="desc" id="lgr-desc"></p>
+        <div class="stack-form">
+          <div class="stack-row"><label>입금일</label><input type="text" id="lgr-date" maxlength="8" inputmode="numeric" placeholder="예: 20260705"></div>
+          <div class="stack-row"><label>금액</label><input type="number" id="lgr-amount" placeholder="받은 금액"></div>
+          <div class="stack-row"><label>귀속월 <span class="info-tip" title="어느 달 개통분에 대한 입금인지 적어주세요. 예: 6월 개통분이면 202606">ⓘ</span></label><input type="text" id="lgr-month" maxlength="6" inputmode="numeric" placeholder="예: 202606"></div>
+          <div class="stack-row"><label>메모</label><input type="text" id="lgr-memo" placeholder="예: 1차, 2차 등 (선택)"></div>
+        </div>
+        <button class="btn small" style="width:auto;margin-top:12px;" onclick="submitLgrEntry()">저장</button>
+        <button class="btn small secondary" style="width:auto;" onclick="closeLgrEntry()">닫기</button>
+        <div id="lgr-msg" style="display:none;font-size:12.5px;margin-top:10px;padding:8px 10px;border-left:3px solid var(--navy);background:#f2f2f2;line-height:1.6;"></div>
       </div>
     </div>
 
@@ -805,6 +848,10 @@
       <div class="card">
         <h3>시작 화면 <span class="info-tip" title="로그인하면 어느 화면부터 보여줄지 정합니다. 새로고침할 때는 보던 화면이 그대로 유지됩니다.">ⓘ</span></h3>
         <p class="desc">로그인 후 처음 열릴 화면을 고르세요. 권한이 없는 화면을 고르면 자동으로 다른 화면이 열립니다.</p>
+        <div style="border:1px solid var(--line);background:#fafafa;padding:9px 11px;margin-bottom:10px;font-size:12px;line-height:1.9;color:var(--gray);">
+          <b>새로고침(F5)</b>은 보던 화면이 그대로 유지됩니다. 이 설정은 <b>새로 로그인할 때</b>만 적용됩니다.<br>
+          <b>예)</b> 주문 입력이 주 업무면 <b>주문 관리</b>로 두세요. 대시보드는 열 때마다 재고 전체를 읽으므로 읽기도 아낄 수 있습니다.
+        </div>
         <div class="stack-form" style="max-width:520px;">
           <div class="stack-row"><label>첫 화면</label>
             <select id="start-tab-select">
@@ -817,9 +864,26 @@
       </div>
 
       <div class="card">
+        <h3>자동 정리 설정 <span class="info-tip" title="화면을 열 때 어긋난 숫자를 알아서 맞춥니다. 켜두면 버튼을 누르지 않아도 되고, 끄면 필요할 때 버튼으로 하실 수 있습니다.">ⓘ</span></h3>
+        <p class="desc">체크한 항목은 <b>화면을 열 때 알아서 맞춰집니다.</b> 끄면 그 화면에 정리 버튼이 나타나서 직접 누르시면 됩니다.<br>
+          숫자만 맞추는 것은 켜두시는 게 편하고, <span style="color:var(--danger);">금액이 바뀌는 항목</span>은 확인하고 켜세요.</p>
+        <div id="autofix-list" style="display:flex;flex-wrap:wrap;gap:10px 20px;font-size:12.5px;margin-bottom:10px;"></div>
+        <button class="btn small" style="width:auto;" onclick="saveAutoFix()">저장</button>
+        <div id="autofix-msg" class="msg info" style="margin-top:8px;">저장되었습니다.</div>
+      </div>
+
+      <div class="card">
         <h3>읽기 절약 설정 <span class="info-tip" title="Firestore는 하루 5만 건까지 무료로 읽을 수 있습니다. 대시보드는 한 번 열 때 재고 전체를 읽으므로, 켜두면 읽어둔 값을 다시 써서 읽기를 크게 줄입니다.">ⓘ</span></h3>
         <p class="desc">데이터가 많아지면 하루 읽기 한도에 걸릴 수 있습니다. 아래를 켜두면 크게 줄어듭니다.</p>
-        <p class="desc">체크한 화면은 <b>한 번 읽은 값을 다시 씁니다.</b> 데이터를 고치면 자동으로 다시 읽으니 신경 쓰지 않으셔도 됩니다.</p>
+        <p class="desc">체크한 화면은 <b>한 번 읽은 값을 다시 씁니다.</b> 데이터를 고치면 자동으로 다시 읽으니 신경 쓰지 않으셔도 됩니다.<br>
+          <b>무거움</b> 표시가 있는 화면은 한 번 열 때 수천 건을 읽으므로 켜두시는 게 좋습니다.</p>
+        <div style="border:1px solid var(--line);background:#fafafa;padding:9px 11px;margin-bottom:10px;font-size:12px;line-height:1.9;color:var(--gray);">
+          <b>왜 필요한가</b> — Firestore는 하루 5만 건까지 무료로 읽을 수 있습니다. 재고가 1,500건이면 대시보드를 한 번 열 때 1,500건을 읽습니다.<br>
+          <b>켜면</b> 처음 한 번만 읽고 그 뒤에는 저장된 값을 씁니다. 하루 20번 열어도 1,500건입니다.<br>
+          <b>끄면</b> 열 때마다 새로 읽습니다. 30,000건이 됩니다.<br>
+          <b>최신 숫자가 필요할 때</b> — 대시보드의 <b>지금 다시 계산</b>, 재고 목록의 <b>새로 읽기</b>를 누르시면 됩니다.<br>
+          <b>다른 사람이 고친 것</b>은 캐시에 안 보입니다. 여럿이 동시에 작업할 때만 <b>지금 전부 다시 읽기</b>를 누르세요.
+        </div>
         <div id="cache-target-list" style="display:flex;flex-wrap:wrap;gap:10px 20px;font-size:12.5px;margin-bottom:10px;"></div>
         <button class="btn small" style="width:auto;" onclick="saveCacheTargets()">저장</button>
         <button class="btn small secondary" style="width:auto;" onclick="clearAllCaches()">지금 전부 다시 읽기</button>
@@ -1232,9 +1296,8 @@
         <div id="b2b-stat-cards" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px;"></div>
         <button class="btn small secondary" style="width:auto;" onclick="showOrderAmountCheck()">주문 금액 검산</button>
         <button class="btn small secondary" style="width:auto;" onclick="showB2BOrderUseDetail()">주문사용 내역 보기</button>
-        <button class="btn small secondary" style="width:auto;" onclick="repairB2BOrderUse()">주문사용 금액 정리</button>
         <div id="b2b-orderuse-detail" style="display:none;margin-top:10px;"></div>
-        <p class="desc" style="margin-top:6px;">여신으로 결제한 주문의 실제 금액과 <b>주문사용</b> 기록이 다르면 맞춰줍니다. 수기로 넣은 기록은 건드리지 않습니다.</p>
+        <p class="desc" style="margin-top:6px;">주문사용 기록은 <b>주문 관리를 열 때 자동으로 맞춰집니다.</b> 수기로 넣은 기록은 건드리지 않습니다.</p>
       </div>
 
       <div class="card">
@@ -2086,6 +2149,8 @@
           </div>
           <div class="stack-row" id="item-clawback-row" style="display:none;"><label>환수액</label><input type="number" id="item-clawbackamount-input"></div>
           <div class="stack-row" id="item-subsidymonth-row"><label>공시지원금 귀속월 (선택, 예: 202607)</label><input type="text" id="item-subsidymonth-input" placeholder="YYYYMM" maxlength="6" inputmode="numeric"></div>
+          <div class="stack-row"><label>비고1 <span class="info-tip" title="자유롭게 적어두는 칸입니다. 나중에 검색·엑셀다운으로 대조할 때 쓰세요.">ⓘ</span></label><input type="text" id="item-note1-input" placeholder="자유 입력 (선택)"></div>
+          <div class="stack-row"><label>비고2</label><input type="text" id="item-note2-input" placeholder="자유 입력 (선택)"></div>
           <div class="stack-row"><label>수익 (자동계산, 공시지원금 별도)</label><input type="text" id="item-profit-display" disabled style="background:#f2f2f2;"></div>
         </div>
         <button class="btn small" id="item-submit-btn" onclick="addInventoryItem()">재고 등록</button>
@@ -2276,6 +2341,8 @@
     { key:"subsidyStatus", label:"공시지원금 상태", get:it=>it.subsidyStatus||"-" },
     { key:"clawbackAmount", label:"환수액", get:it=> (it.clawbackAmount!=null)?Number(it.clawbackAmount).toLocaleString():"-", getRaw:it=>it.clawbackAmount!=null?Number(it.clawbackAmount):"" },
     { key:"subsidyAccrualMonth", label:"공시지원금 귀속월", get:it=>it.subsidyAccrualMonth||"-" },
+    { key:"note1", label:"비고1", get:it=>it.note1||"-", getRaw:it=>it.note1||"" },
+    { key:"note2", label:"비고2", get:it=>it.note2||"-", getRaw:it=>it.note2||"" },
     { key:"profit", label:"수익", get:it=> (it.profit!=null)?Number(it.profit).toLocaleString():"-", getRaw:it=>it.profit!=null?Number(it.profit):"" }
   ];
   const DEFAULT_VIEW_SETTINGS = INV_COLUMNS.map(c=>c.key);
@@ -4809,6 +4876,8 @@
     document.getElementById("item-subsidystatus-select").value = it.subsidyStatus || "";
     document.getElementById("item-clawbackamount-input").value = it.clawbackAmount || "";
     document.getElementById("item-subsidymonth-input").value = it.subsidyAccrualMonth || "";
+    document.getElementById("item-note1-input").value = it.note1 || "";
+    document.getElementById("item-note2-input").value = it.note2 || "";
     document.getElementById("item-otherdiscountamt-input").value = it.otherDiscountAmt || "";
     document.getElementById("item-otherdiscountpct-input").value = it.otherDiscountPct || "";
     updateTotalDiscountDisplay();
@@ -4940,6 +5009,8 @@
       subsidyStatus: subsidyStatus||null,
       clawbackAmount: clawbackAmount?Number(clawbackAmount):null,
       subsidyAccrualMonth: subsidyAccrualMonth||null,
+      note1: document.getElementById("item-note1-input").value.trim(),
+      note2: document.getElementById("item-note2-input").value.trim(),
       orderId: currentOrderLinkId||null,
       profit, imei, status, orderDate, inDate, expectedSaleDate, outDate
     };
@@ -6301,6 +6372,12 @@
       });
       const total = noPrice + nameDiff;
       if(total === 0){ el.style.display = "none"; el.innerHTML = ""; return; }
+      // 출고가 자동 채우기가 켜져 있으면 조용히 처리합니다. (금액이 바뀌므로 기본은 꺼짐)
+      if(autoFixOn("orderPrice")){
+        el.style.display = "none"; el.innerHTML = "";
+        try{ await syncOrderPrices(true); }catch(e){}
+        return;
+      }
       el.style.display = "block";
       el.innerHTML = '<b>모델 정보와 다른 주문 품목이 있습니다.</b>'
         + (noPrice ? ' 출고가 없음 <b>' + noPrice + '건</b>' : '')
@@ -6334,6 +6411,42 @@
     };
     Object.keys(ordersByBatch).forEach(k=> ordersByBatch[k].sort(byLineNo));
     orderBatchLinesCache = ordersByBatch;
+
+    // 여신 차감 기록을 자동으로 맞춥니다. (설정에서 끌 수 있습니다)
+    try{
+      if(!autoFixOn("creditUse")) throw new Error("skip");
+      const ledSnap = await getDocs(query(collection(db,"b2bLedger"), where("category","==","order_use")));
+      const ledByBatch = {};
+      ledSnap.forEach(d=>{
+        const e = { id:d.id, ...d.data() };
+        if(!e.fromOrderBatchId) return;
+        if(!ledByBatch[e.fromOrderBatchId]) ledByBatch[e.fromOrderBatchId] = [];
+        ledByBatch[e.fromOrderBatchId].push(e);
+      });
+      for(const bd of batchSnap.docs){
+        const b = bd.data();
+        const isCredit = b.paymentMethod === "b2b_credit" && b.status !== "취소";
+        const recs = ledByBatch[bd.id] || [];
+        const sum = recs.reduce((n,r)=> n + (Number(r.amount)||0), 0);
+        // 선할인까지만 반영한 금액이 여신 차감액입니다.
+        const lines = (ordersByBatch[bd.id]||[]).filter(o=> o.status !== "취소");
+        const want = isCredit ? lines.reduce((n,o)=>{
+          const L = Number(o.listPrice)||0;
+          const unit = L ? (L - (Number(o.preDiscountAmt)||0))
+            : ((Number(o.purchasePrice)||0) + (Number(o.otherDiscountAmt)||0));
+          return n + unit * (Number(o.quantity)||0);
+        }, 0) : 0;
+        if(sum !== want || recs.length > 1){
+          await replaceB2BOrderUse(bd.id, want, b.depositPaidDate || b.orderDate || todayStr(), b.source || "-");
+        }
+      }
+      // 주문이 없어진 기록도 지웁니다.
+      const aliveB = new Set(batchSnap.docs.map(x=>x.id));
+      for(const bid of Object.keys(ledByBatch)){
+        if(aliveB.has(bid)) continue;
+        for(const r of ledByBatch[bid]){ try{ await deleteDoc(doc(db,"b2bLedger", r.id)); }catch(e){} }
+      }
+    }catch(e){}
 
     // 요약: 도착대기 · 이체대기 (필터와 무관하게 전체 기준)
     let arriveWait = 0, payWaitCnt = 0, payWaitAmt = 0, confirmCnt = 0, confirmAmt = 0, creditCnt = 0, creditAmt = 0;
@@ -6502,31 +6615,52 @@
   };
 
   // 모델과 다른 건이 있으면 안내 줄을 그립니다.
+  // 모델 등록과 다른 건을 맞춥니다.
+  // 자동 정리가 켜져 있으면 조용히 처리하고, 꺼져 있으면 안내와 버튼을 보여줍니다.
   async function renderModelSyncNotice(elId, col){
     const el = document.getElementById(elId);
-    if(!el) return;
+    if(el){ el.style.display = "none"; el.innerHTML = ""; }
     try{
       await fetchModelsCache();
       const snap = await getDocs(collection(db, col));
-      let diff = 0;
+      const fix = [];
       snap.forEach(d=>{
         const o = d.data();
         if(o.status === "취소") return;
         const m = findModelForItem(o);
-        if(m && String(o.petName||"") !== String(m.petName||"")) diff++;
+        if(!m) return;
+        const patch = {};
+        if(String(o.petName||"") !== String(m.petName||"")) patch.petName = m.petName||"";
+        if(String(o.baseModel||"") !== String(m.baseModel||"")) patch.baseModel = m.baseModel||"";
+        if(String(o.capacity||"") !== String(m.capacity||"")) patch.capacity = m.capacity||"";
+        if(String(o.systemModel||"") !== String(m.systemModel||"")) patch.systemModel = m.systemModel||"";
+        if(Object.keys(patch).length) fix.push({ id:d.id, patch });
       });
-      if(diff === 0){ el.style.display = "none"; el.innerHTML = ""; return; }
-      el.style.display = "block";
-      el.innerHTML = '<b>모델 등록과 펫네임이 다른 ' + (MODEL_SYNC_LABELS[col]||col) + ' ' + diff + '건</b>이 있습니다.'
-        + '<br><span style="color:var(--gray);">펫네임·모델명·전산모델명만 맞춥니다. 수량·금액·상태는 그대로입니다.</span>'
-        + '<br><button class="btn small" style="width:auto;margin-top:6px;" onclick="syncModelInfoIn(\''+col+'\')">모델 기준으로 최신화 (' + diff + '건)</button>';
-    }catch(e){ el.style.display = "none"; }
+      if(fix.length === 0) return;
+
+      if(!autoFixOn("modelSync")){
+        // 자동이 꺼져 있으면 안내와 버튼만 보여줍니다.
+        if(el){
+          el.style.display = "block";
+          el.innerHTML = '<b>모델 등록과 다른 ' + (MODEL_SYNC_LABELS[col]||col) + ' ' + fix.length + '건</b>이 있습니다.'
+            + '<br><span style="color:var(--gray);">펫네임·모델명·기가수·전산모델명만 맞춥니다. 수량·금액·상태는 그대로입니다.</span>'
+            + '<br><button class="btn small" style="width:auto;margin-top:6px;" onclick="syncModelInfoIn(\''+col+'\')">모델 기준으로 최신화 (' + fix.length + '건)</button>';
+        }
+        return;
+      }
+      for(let i=0; i<fix.length; i+=300){
+        const bt = writeBatch(db);
+        fix.slice(i, i+300).forEach(f=> bt.update(doc(db, col, f.id), f.patch));
+        await bt.commit();
+      }
+      logAction("모델 정보 자동 최신화", (MODEL_SYNC_LABELS[col]||col) + " " + fix.length + "건");
+    }catch(e){}
   }
 
   // 주문 품목을 모델 등록 기준으로 최신화합니다.
   //  · 펫네임·모델명·기가수·전산모델명을 모델의 현재 값으로 맞춤
   //  · 출고가를 채우고 선할인·타할인%·판매할인을 역산 (입고가·판매가는 그대로)
-  window.syncOrderPrices = async function(){
+  window.syncOrderPrices = async function(silent){
     await fetchModelsCache();
     const snap = await getDocs(collection(db,"orders"));
     const plan = [], noModel = [];
@@ -6577,7 +6711,7 @@
     });
 
     if(plan.length === 0){
-      alert("고칠 주문 품목이 없습니다." + (noModel.length ? "\n\n모델을 못 찾음: "+noModel.length+"건" : ""));
+      if(!silent) alert("고칠 주문 품목이 없습니다." + (noModel.length ? "\n\n모델을 못 찾음: "+noModel.length+"건" : ""));
       return;
     }
     const preview = plan.slice(0,8).map(x=>
@@ -6586,7 +6720,7 @@
       + (x.patch.listPrice!==undefined ? "출고가 " + Number(x.patch.listPrice).toLocaleString() : "")
     ).join("\n");
 
-    if(!confirm(
+    if(!silent && !confirm(
       "진행중인 주문 품목 " + plan.length + "건을 모델 기준으로 최신화합니다.\n\n" + preview +
       (plan.length>8 ? "\n... 외 " + (plan.length-8) + "건" : "") +
       "\n\n· 펫네임·모델명·기가수·전산모델명을 모델 등록의 현재 값으로 맞춥니다.\n" +
@@ -6605,10 +6739,12 @@
       alert("처리에 실패했습니다.\n" + ((e && e.message) ? e.message : String(e)));
       return;
     }
-    logAction("주문 품목 모델기준 최신화", plan.length + "건");
-    alert(plan.length + "건을 고쳤습니다."
-      + (noModel.length ? "\n\n모델을 못 찾은 " + noModel.length + "건은 전산모델명을 확인해주세요." : ""));
-    loadOrderList();
+    logAction("주문 품목 모델기준 최신화", plan.length + "건" + (silent ? " (자동)" : ""));
+    if(!silent){
+      alert(plan.length + "건을 고쳤습니다."
+        + (noModel.length ? "\n\n모델을 못 찾은 " + noModel.length + "건은 전산모델명을 확인해주세요." : ""));
+      loadOrderList();
+    }
   };
 
   let currentPoBatch = null;
@@ -7681,6 +7817,7 @@
     el.innerHTML = '<div style="color:var(--gray);">만드는 중입니다...</div>';
     const planTot = rbPlan.reduce((n,x)=> n + (Number(x.resv.salePrice)||0) * x.qty, 0);
     let leftPaid2 = prePaidSel ? (paidAmt > 0 ? paidAmt : planTot) : 0;
+    const addByResv2 = {};   // 예약별 배정 합계
     let made = 0;
     try{
       for(const x of rbPlan){
@@ -7717,8 +7854,16 @@
           requestDate: date, status:"대기중", fromReservationId: r.id,
           createdBy: currentUser.name, createdByUsername: currentUser.username, createdAt: serverTimestamp()
         });
-        await updateDoc(doc(db,"reservations", r.id), { allocatedQty: (Number(r.allocatedQty)||0) + qty });
+        addByResv2[r.id] = (addByResv2[r.id]||0) + qty;
         made += qty;
+      }
+      // 예약별 배정 합계를 한 번에 저장합니다.
+      for(const rid of Object.keys(addByResv2)){
+        const cur = await getDoc(doc(db,"reservations", rid));
+        if(!cur.exists()) continue;
+        await updateDoc(doc(db,"reservations", rid), {
+          allocatedQty: (Number(cur.data().allocatedQty)||0) + addByResv2[rid]
+        });
       }
     }catch(e){
       el.innerHTML = '<span style="color:var(--danger);">실패했습니다.<br>' + comboEsc((e&&e.message)?e.message:String(e)) + '</span>';
@@ -7777,6 +7922,7 @@
     el.innerHTML = '<div style="color:var(--gray);">처리 중입니다...</div>';
     // 받은 금액을 앞 건부터 순서대로 채웁니다.
     let leftPaid = prePaid ? (paidAmt > 0 ? paidAmt : planTotal) : 0;
+    const addByResv = {};   // 예약별 배정 합계 (색상별로 나뉘어도 합쳐서 한 번만 저장)
     let done = 0;
     try{
       for(const k of Object.keys(groups)){
@@ -7840,16 +7986,22 @@
           await bt.commit();
         }
 
-        // 예약 배정 수량 갱신
-        await updateDoc(doc(db,"reservations", r.id), {
-          allocatedQty: (Number(r.allocatedQty)||0) + qty
-        });
+        // 예약 배정 수량은 색상별로 나뉘어도 한 예약에 합쳐야 하므로 모아둡니다.
+        addByResv[r.id] = (addByResv[r.id]||0) + qty;
 
         const items = list.map(x=>({ id:x.item.id, serialNumber:x.sn }));
         await writeMatchLogs(srRef.id, { destination:r.destination, systemModel:r.systemModel, petName:r.petName, salePrice:price },
           items, "예약 일괄 배정", outDate);
         await logItems(items, "outbound", (r.destination||"-") + " · 예약 배정 · " + outDate);
         done += qty;
+      }
+      // 예약별 배정 합계를 한 번에 저장합니다.
+      for(const rid of Object.keys(addByResv)){
+        const cur = await getDoc(doc(db,"reservations", rid));
+        if(!cur.exists()) continue;
+        await updateDoc(doc(db,"reservations", rid), {
+          allocatedQty: (Number(cur.data().allocatedQty)||0) + addByResv[rid]
+        });
       }
     }catch(e){
       el.innerHTML = '<span style="color:var(--danger);">처리에 실패했습니다.<br>' + comboEsc((e&&e.message)?e.message:String(e)) + '</span>';
@@ -10576,7 +10728,7 @@
   };
 
   // 기존 예약의 출고가를 모델 기준으로 채웁니다. (판매가는 건드리지 않습니다)
-  window.fillReservationListPrice = async function(){
+  window.fillReservationListPrice = async function(silent){
     await fetchModelsCache();
     const snap = await getDocs(collection(db,"reservations"));
     const plan = [], noModel = [], noPrice = [];
@@ -10593,12 +10745,12 @@
     });
 
     if(plan.length === 0){
-      alert("채울 대상이 없습니다.\n\n· 모델을 못 찾음: "+noModel.length+"건\n· 모델에 출고가가 없음: "+noPrice.length+"건");
+      if(!silent) alert("채울 대상이 없습니다.\n\n· 모델을 못 찾음: "+noModel.length+"건\n· 모델에 출고가가 없음: "+noPrice.length+"건");
       return;
     }
     const preview = plan.slice(0,8).map(x=>
       "· " + (x.r.destination||"-") + " / " + (x.r.systemModel||x.r.baseModel||"-") + "  → " + x.price.toLocaleString()).join("\n");
-    if(!confirm(
+    if(!silent && !confirm(
       "모델 등록의 출고가를 기준으로 예약 " + plan.length + "건의 출고가를 채웁니다.\n\n" + preview +
       (plan.length>8 ? "\n... 외 " + (plan.length-8) + "건" : "") +
       "\n\n판매가와 예약 수량은 건드리지 않습니다." +
@@ -10625,11 +10777,13 @@
       alert("채우는 중 오류가 났습니다.\n" + ((e && e.message) ? e.message : String(e)));
       return;
     }
-    logAction("예약 출고가 일괄 채움", plan.length+"건");
-    alert(plan.length + "건의 출고가를 채웠습니다."
-      + (noModel.length ? "\n\n모델을 못 찾은 "+noModel.length+"건은 예약을 수정해 모델을 다시 골라주세요." : "")
-      + (noPrice.length ? "\n모델에 출고가가 없는 "+noPrice.length+"건은 모델 등록에서 출고가를 먼저 넣어주세요." : ""));
-    loadReservationTable();
+    logAction("예약 출고가 일괄 채움", plan.length+"건" + (silent ? " (자동)" : ""));
+    if(!silent){
+      alert(plan.length + "건의 출고가를 채웠습니다."
+        + (noModel.length ? "\n\n모델을 못 찾은 "+noModel.length+"건은 예약을 수정해 모델을 다시 골라주세요." : "")
+        + (noPrice.length ? "\n모델에 출고가가 없는 "+noPrice.length+"건은 모델 등록에서 출고가를 먼저 넣어주세요." : ""));
+      loadReservationTable();
+    }
   };
 
   // ================= 견적서 =================
@@ -11872,6 +12026,199 @@
     loadInventoryList();
   };
 
+  // ================= LG 자체개통 환불·수수료 =================
+  // 포피플이 직접 개통한 건만 대상입니다. 유플러스에 들어간 금액(출고가)과
+  // 본사에서 받은 환불금·공시지원금을 귀속월로 맞춥니다.
+  let lgrKind = "refund";
+
+  window.closeLgrEntry = function(){ document.getElementById("lgr-modal-overlay").style.display = "none"; };
+
+  window.openLgrEntry = function(kind){
+    lgrKind = kind;
+    const isRef = kind === "refund";
+    document.getElementById("lgr-title").textContent = isRef ? "단말기 환불금 등록" : "공시지원금 수수료 등록";
+    document.getElementById("lgr-desc").innerHTML = isRef
+      ? "본사에서 내려준 <b>단말기 환불금</b>을 적어주세요. 한 달에 여러 번 나눠 들어오면 그때마다 등록하시면 됩니다."
+      : "<b>공시지원금 수수료</b>로 들어온 금액을 적어주세요. 6월 개통분이면 보통 7월 15일에 들어옵니다.";
+    document.getElementById("lgr-date").value = todayStr();
+    document.getElementById("lgr-amount").value = "";
+    document.getElementById("lgr-month").value = "";
+    document.getElementById("lgr-memo").value = "";
+    document.getElementById("lgr-msg").style.display = "none";
+    document.getElementById("lgr-modal-overlay").style.display = "flex";
+  };
+
+  window.submitLgrEntry = async function(){
+    const msg = (t, err)=> showModelMsg("lgr-msg", t, err);
+    const date = (document.getElementById("lgr-date").value||"").replace(/\D/g,"");
+    const amount = Number(document.getElementById("lgr-amount").value)||0;
+    const month = (document.getElementById("lgr-month").value||"").replace(/\D/g,"");
+    const memo = document.getElementById("lgr-memo").value.trim();
+
+    if(date.length !== 8){ msg("입금일을 8자리로 입력해주세요.", true); return; }
+    if(amount <= 0){ msg("금액을 입력해주세요.", true); return; }
+    if(month.length !== 6){ msg("귀속월을 6자리로 입력해주세요. (예: 202606)", true); return; }
+
+    try{
+      msg("저장 중...", false);
+      await addDoc(collection(db,"lgReceipts"), {
+        kind: lgrKind, date, amount, accrualMonth: month, memo,
+        createdBy: currentUser.name, createdByUsername: currentUser.username, createdAt: serverTimestamp()
+      });
+    }catch(e){
+      msg("<b>저장에 실패했습니다.</b><br>" + comboEsc((e && e.message) ? e.message : String(e)), true); return;
+    }
+    logAction(lgrKind === "refund" ? "LG 단말기 환불금 등록" : "LG 공시지원금 수수료 등록",
+      amount.toLocaleString() + " / 귀속 " + month + " / " + date);
+    msg("등록했습니다.", false);
+    loadLgRefund();
+    setTimeout(closeLgrEntry, 700);
+  };
+
+  window.loadLgRefund = async function(){
+    const cardEl = document.getElementById("lgr-cards");
+    const tblEl = document.getElementById("lgr-table");
+    const recEl = document.getElementById("lgr-received");
+    if(!cardEl) return;
+    cardEl.innerHTML = '<div class="list-empty">불러오는 중...</div>';
+    tblEl.innerHTML = ""; recEl.innerHTML = "";
+
+    const from = (document.getElementById("lgr-from").value||"").replace(/\D/g,"");
+    const to   = (document.getElementById("lgr-to").value||"").replace(/\D/g,"");
+
+    // 자체개통 재고를 귀속월로 모읍니다.
+    let items = [];
+    try{
+      if(cacheOn("inventory") && dataCache.inventory) items = dataCache.inventory;
+      else{
+        const snap = await getDocs(collection(db,"inventoryItems"));
+        items = []; snap.forEach(d=> items.push({ id:d.id, ...d.data() }));
+        if(cacheOn("inventory")) dataCache.inventory = items;
+      }
+    }catch(e){}
+
+    const byMonth = {};
+    const monthOf = (it)=>{
+      // 귀속월은 공시지원금 귀속월이 있으면 그것, 없으면 개통일(또는 출고일)의 연월
+      const m = String(it.subsidyAccrualMonth||"").replace(/\D/g,"");
+      if(m.length === 6) return m;
+      const d = String(it.activateDate || it.outDate || "").replace(/\D/g,"");
+      return d.length >= 6 ? d.slice(0,6) : "";
+    };
+    items.forEach(it=>{
+      if(it.deleted === true) return;
+      // 자체개통 = 개통일이 있거나 상태가 개통인 건
+      const isSelf = !!it.activateDate || it.status === "개통";
+      if(!isSelf) return;
+      const mm = monthOf(it);
+      if(!mm) return;
+      if(from && mm < from) return;
+      if(to && mm > to) return;
+      if(!byMonth[mm]) byMonth[mm] = { cnt:0, listSum:0, subsidyPlan:0 };
+      byMonth[mm].cnt += 1;
+      byMonth[mm].listSum += Number(it.listPrice)||0;
+      byMonth[mm].subsidyPlan += Number(it.subsidyAmount)||0;
+    });
+
+    // 받은 내역
+    let receipts = [];
+    try{
+      const snap = await getDocs(query(collection(db,"lgReceipts"), orderBy("date","desc")));
+      snap.forEach(d=> receipts.push({ id:d.id, ...d.data() }));
+    }catch(e){}
+    const gotRef = {}, gotSub = {};
+    receipts.forEach(r=>{
+      const m = String(r.accrualMonth||"");
+      if(r.kind === "refund") gotRef[m] = (gotRef[m]||0) + (Number(r.amount)||0);
+      else gotSub[m] = (gotSub[m]||0) + (Number(r.amount)||0);
+    });
+
+    const months = Object.keys(byMonth).sort().reverse();
+    let T = { cnt:0, list:0, ref:0, sub:0, subGot:0 };
+    months.forEach(m=>{
+      T.cnt += byMonth[m].cnt;
+      T.list += byMonth[m].listSum;
+      T.ref += (gotRef[m]||0);
+      T.sub += byMonth[m].subsidyPlan;
+      T.subGot += (gotSub[m]||0);
+    });
+
+    const card = (label, value, color, note)=>
+      '<div class="stat-card" style="flex:1;min-width:160px;border:1px solid var(--line);background:#fff;padding:10px 14px;">'
+      + '<div style="font-size:11.5px;color:var(--gray);margin-bottom:4px;">'+label+'</div>'
+      + '<div style="font-size:19px;font-weight:800;color:'+(color||'var(--navy)')+';">'+value+'</div>'
+      + (note ? '<div style="font-size:10.5px;color:var(--gray);margin-top:3px;">'+note+'</div>' : '') + '</div>';
+
+    cardEl.innerHTML =
+      card("유플러스 투입 (출고가)", T.list.toLocaleString(), "#1565c0", "자체개통 " + T.cnt + "대") +
+      card("환불받은 금액", T.ref.toLocaleString(), "#2e7d32") +
+      card("환불 미회수", (T.list - T.ref).toLocaleString(), (T.list-T.ref)>0 ? "var(--danger)" : "#2e7d32") +
+      card("공시지원금 예정", T.sub.toLocaleString(), "#b8860b", "재고에 입력한 합계") +
+      card("공시지원금 받음", T.subGot.toLocaleString(), "#6a1b9a") +
+      card("공시 미수령", (T.sub - T.subGot).toLocaleString(), (T.sub-T.subGot)>0 ? "var(--danger)" : "#2e7d32");
+
+    if(months.length === 0){
+      tblEl.innerHTML = '<div class="list-empty">자체개통 건이 없습니다.<br><span style="color:var(--gray);">일련번호를 눌러 <b>개통</b> 처리하면 여기 집계됩니다.</span></div>';
+    }else{
+      let h = '<div style="overflow-x:auto;"><table class="data-table" style="min-width:960px;"><thead><tr>'
+        + '<th>귀속월</th><th class="ta-right">개통</th><th class="ta-right">출고가 합계</th>'
+        + '<th class="ta-right">환불받음</th><th class="ta-right">환불잔액</th>'
+        + '<th class="ta-right">공시예정</th><th class="ta-right">공시받음</th><th class="ta-right">공시잔액</th>'
+        + '</tr></thead><tbody>';
+      months.forEach(m=>{
+        const x = byMonth[m];
+        const rg = gotRef[m]||0, sg = gotSub[m]||0;
+        const rl = x.listSum - rg, sl = x.subsidyPlan - sg;
+        h += '<tr><td><b>'+comboEsc(m)+'</b></td>'
+          + '<td class="ta-right">'+x.cnt+'</td>'
+          + '<td class="ta-right">'+x.listSum.toLocaleString()+'</td>'
+          + '<td class="ta-right">'+rg.toLocaleString()+'</td>'
+          + '<td class="ta-right"'+(rl>0?' style="color:var(--danger);font-weight:700;"':' style="color:#2e7d32;"')+'>'+rl.toLocaleString()+'</td>'
+          + '<td class="ta-right">'+x.subsidyPlan.toLocaleString()+'</td>'
+          + '<td class="ta-right">'+sg.toLocaleString()+'</td>'
+          + '<td class="ta-right"'+(sl>0?' style="color:var(--danger);font-weight:700;"':' style="color:#2e7d32;"')+'>'+sl.toLocaleString()+'</td>'
+          + '</tr>';
+      });
+      h += '<tr style="background:#fafafa;font-weight:700;border-top:2px solid var(--navy);">'
+        + '<td>합계</td><td class="ta-right">'+T.cnt+'</td><td class="ta-right">'+T.list.toLocaleString()+'</td>'
+        + '<td class="ta-right">'+T.ref.toLocaleString()+'</td><td class="ta-right">'+(T.list-T.ref).toLocaleString()+'</td>'
+        + '<td class="ta-right">'+T.sub.toLocaleString()+'</td><td class="ta-right">'+T.subGot.toLocaleString()+'</td>'
+        + '<td class="ta-right">'+(T.sub-T.subGot).toLocaleString()+'</td></tr>';
+      h += '</tbody></table></div>';
+      tblEl.innerHTML = h;
+    }
+
+    if(receipts.length === 0){
+      recEl.innerHTML = '<div class="list-empty">등록된 입금이 없습니다.</div>';
+    }else{
+      let h2 = '<div style="overflow-x:auto;"><table class="data-table" style="min-width:720px;"><thead><tr>'
+        + '<th>입금일</th><th>구분</th><th>귀속월</th><th class="ta-right">금액</th><th class="ta-left">메모</th><th class="ta-right">관리</th>'
+        + '</tr></thead><tbody>';
+      receipts.forEach(r=>{
+        const isRef = r.kind === "refund";
+        h2 += '<tr><td>'+comboEsc(r.date||"-")+'</td>'
+          + '<td><span style="color:'+(isRef?'#2e7d32':'#6a1b9a')+';font-weight:700;">'+(isRef?'단말기 환불':'공시 수수료')+'</span></td>'
+          + '<td>'+comboEsc(r.accrualMonth||"-")+'</td>'
+          + '<td class="ta-right"><b>'+(Number(r.amount)||0).toLocaleString()+'</b></td>'
+          + '<td class="ta-left" style="font-size:11px;color:var(--gray);">'+comboEsc(r.memo||"")+'</td>'
+          + '<td class="ta-right"><button class="btn small danger" style="width:auto;" data-lgr-del="'+r.id+'">삭제</button></td></tr>';
+      });
+      h2 += '</tbody></table></div>';
+      recEl.innerHTML = h2;
+      recEl.querySelectorAll("[data-lgr-del]").forEach(b=> b.onclick = ()=> deleteLgrEntry(b.dataset.lgrDel));
+    }
+  };
+
+  window.deleteLgrEntry = async function(id){
+    const snap = await getDoc(doc(db,"lgReceipts", id));
+    if(!snap.exists()) return;
+    const x = snap.data();
+    if(!confirm("이 입금 기록을 지우시겠습니까?\n\n  " + (Number(x.amount)||0).toLocaleString() + " · " + (x.date||"-"))) return;
+    await deleteDoc(doc(db,"lgReceipts", id));
+    logAction("LG 입금 기록 삭제", (Number(x.amount)||0).toLocaleString() + " / " + (x.date||"-"));
+    loadLgRefund();
+  };
+
   // ================= 단말 이력 =================
   // 단말기 한 대가 지나온 모든 기록을 남깁니다. 일련번호로 언제든 조회할 수 있습니다.
   const IH_TYPES = {
@@ -13020,6 +13367,10 @@
     const snap = await getDocs(query(collection(db,"reservations"), orderBy("createdAt","desc")));
     if(snap.empty){ el.innerHTML = '<div class="list-empty">등록된 예약이 없습니다. 위 <b>+ 예약</b>에서 추가해주세요.</div>'; return; }
     let rows = []; snap.forEach(d=> rows.push({ id:d.id, ...d.data() }));
+    // 배정 수량을 판매요청에서 그때그때 세어 씁니다. (저장값이 어긋나도 화면은 정확)
+    const alcMap = await fetchAllocatedByResv();
+    rows.forEach(r=>{ r.allocatedQty = alcMap[r.id] || 0; });
+
     if(resvListFilter === "sale") rows = rows.filter(r=> r.kind !== "buy");
     if(resvListFilter === "buy")  rows = rows.filter(r=> r.kind === "buy");
     // 배정 진행 상태로도 걸러줍니다.
@@ -13104,6 +13455,22 @@
     el.querySelectorAll('[data-resv-quote]').forEach(b=> b.onclick = ()=> openQuotationView(b.dataset.resvQuote));
   }
 
+  // 예약의 배정 수량은 저장값을 믿지 않고 판매요청에서 그때그때 셉니다.
+  // 이렇게 하면 숫자가 어긋날 일이 없습니다.
+  async function fetchAllocatedByResv(){
+    const map = {};
+    try{
+      const snap = await getDocs(collection(db,"saleRequests"));
+      snap.forEach(d=>{
+        const sr = d.data();
+        if(sr.status === "취소") return;
+        if(!sr.fromReservationId) return;
+        map[sr.fromReservationId] = (map[sr.fromReservationId]||0) + (Number(sr.quantity)||0);
+      });
+    }catch(e){}
+    return map;
+  }
+
   async function loadReservationTable(){
     const el = document.getElementById("reservation-table-area");
     if(!el) return;
@@ -13113,6 +13480,28 @@
     if(snap.empty){ el.innerHTML = '<div class="list-empty">등록된 예약이 없습니다.</div>'; return; }
 
     let rows = []; snap.forEach(d=> rows.push({ id:d.id, ...d.data() }));
+    // 예약 출고가 자동 채우기 (설정에서 켜면 동작)
+    if(autoFixOn("resvPrice")){
+      try{ await fillReservationListPrice(true); }catch(e){}
+    }
+    // 배정 수량을 판매요청에서 그때그때 세어 씁니다. (저장값이 어긋나도 화면은 정확)
+    const alcMap = await fetchAllocatedByResv();
+    rows.forEach(r=>{ r.allocatedQty = alcMap[r.id] || 0; });
+    // 저장값이 다르면 조용히 맞춰둡니다. (설정에서 끄면 안 합니다)
+    try{
+      if(!autoFixOn("resvAlloc")) throw new Error("skip");
+      const wrongList = [];
+      snap.forEach(d=>{
+        const real = alcMap[d.id] || 0;
+        if((Number(d.data().allocatedQty)||0) !== real) wrongList.push({ id:d.id, real });
+      });
+      for(let x=0; x<wrongList.length; x+=300){
+        const bt = writeBatch(db);
+        wrongList.slice(x, x+300).forEach(w=> bt.update(doc(db,"reservations", w.id), { allocatedQty: w.real }));
+        await bt.commit();
+      }
+    }catch(e){}
+
     if(resvListFilter === "sale") rows = rows.filter(r=> r.kind !== "buy");
     if(resvListFilter === "buy")  rows = rows.filter(r=> r.kind === "buy");
     // 배정 진행 상태로도 걸러줍니다.
@@ -13345,6 +13734,48 @@
       return ta - tb;
     };
     Object.keys(linesByBatch).forEach(k=> linesByBatch[k].sort(srByLineNo));
+
+    // 매칭 숫자를 자동으로 맞춥니다. (설정에서 끌 수 있습니다)
+    // 이미 읽어둔 재고가 있을 때만 하므로 읽기가 늘지 않습니다.
+    try{
+      if(!autoFixOn("saleMatch")) throw new Error("skip");
+      const invRows = (cacheOn("inventory") && dataCache.inventory) ? dataCache.inventory
+                    : (dashItemsCache || null);
+      if(invRows){
+        const bySr = {};
+        invRows.forEach(it=>{
+          if(it.deleted === true) return;
+          if(!it.saleRequestId) return;
+          if(!bySr[it.saleRequestId]) bySr[it.saleRequestId] = [];
+          bySr[it.saleRequestId].push(it.id);
+        });
+        const fix = [];
+        linesSnap.forEach(d=>{
+          const sr = d.data();
+          if(sr.status === "취소") return;
+          const real = (bySr[d.id] || []).length;
+          if((Number(sr.fulfilledCount)||0) !== real){
+            const q = Number(sr.quantity)||0;
+            fix.push({ id:d.id, real, ids:(bySr[d.id]||[]),
+              status: real >= q ? "매칭완료" : (real > 0 ? "부분매칭" : "대기중") });
+          }
+        });
+        for(let i=0; i<fix.length; i+=300){
+          const bt = writeBatch(db);
+          fix.slice(i, i+300).forEach(f=> bt.update(doc(db,"saleRequests", f.id),
+            { fulfilledCount: f.real, matchedItemIds: f.ids, status: f.status }));
+          await bt.commit();
+        }
+        // 화면에 바로 반영합니다.
+        if(fix.length){
+          const m = {}; fix.forEach(f=> m[f.id] = f);
+          Object.keys(linesByBatch).forEach(k=> linesByBatch[k].forEach(l=>{
+            if(m[l.id]){ l.fulfilledCount = m[l.id].real; l.status = m[l.id].status; }
+          }));
+          legacyLines.forEach(l=>{ if(m[l.id]){ l.fulfilledCount = m[l.id].real; l.status = m[l.id].status; } });
+        }
+      }
+    }catch(e){}
     saleReqBatchLinesCache = linesByBatch;
 
     if(batchSnap.empty && legacyLines.length===0){
@@ -14006,6 +14437,8 @@
     { key:"subsidyStatus", label:"공시지원금 상태", type:"options", options:["지급대기","지급완료","환수"] },
     { key:"clawbackAmount", label:"환수액", type:"number" },
     { key:"subsidyAccrualMonth", label:"공시지원금 귀속월", type:"text", placeholder:"예: 202607" },
+    { key:"note1", label:"비고1", type:"text", placeholder:"자유 입력" },
+    { key:"note2", label:"비고2", type:"text", placeholder:"자유 입력" },
     { key:"profit", label:"수익", type:"number" },
     { key:"orderDate", label:"주문일", type:"text" },
     { key:"inDate", label:"입고일", type:"text" },
@@ -15169,16 +15602,16 @@
 
   // 캐시를 켤 수 있는 화면 목록 — 나중에 화면이 늘어도 여기만 추가하면 됩니다.
   const CACHE_TARGETS = [
-    { key:"dashboard", label:"대시보드",     note:"재고 전체" },
-    { key:"inventory", label:"재고 목록",    note:"재고 전체" },
-    { key:"orders",    label:"주문 관리",    note:"주문 전체" },
-    { key:"sales",     label:"판매 관리",    note:"판매요청 전체" },
-    { key:"models",    label:"모델·색상",    note:"모델 목록" },
-    { key:"companies", label:"업체정보",     note:"업체 목록" },
-    { key:"masterstock",label:"자료업로드",   note:"마스터재고 전체" },
-    { key:"reservation",label:"예약 관리",    note:"예약 전체" },
-    { key:"ledger",     label:"거래처 정산",   note:"주문·판매 전체" },
-    { key:"itemhistory",label:"단말 이력",    note:"이력 전체" }
+    { key:"dashboard",  label:"대시보드",   what:"재고 전체", heavy:true },
+    { key:"inventory",  label:"재고 목록",  what:"재고 전체", heavy:true },
+    { key:"orders",     label:"주문 관리",  what:"주문 전체" },
+    { key:"sales",      label:"판매 관리",  what:"판매요청 전체" },
+    { key:"models",     label:"모델·색상",  what:"모델 목록" },
+    { key:"companies",  label:"업체정보",   what:"업체 목록" },
+    { key:"masterstock",label:"자료업로드", what:"마스터재고 전체", heavy:true },
+    { key:"reservation",label:"예약 관리",  what:"예약 전체" },
+    { key:"ledger",     label:"거래처 정산", what:"주문·판매 전체" },
+    { key:"itemhistory",label:"단말 이력",  what:"이력 전체" }
   ];
   const dataCache = {};   // key → { at, data }
 
@@ -15233,13 +15666,87 @@
     }catch(e){ alert("저장에 실패했습니다."); }
   };
 
+  // 자동 정리 대상 — 항목이 늘어나면 여기만 추가하면 됩니다.
+  const AUTOFIX_TARGETS = [
+    { key:"resvAlloc", label:"예약 배정 수량", where:"예약 관리",
+      what:"예약의 <b>배정</b> 숫자를 실제로 만들어진 판매요청 수량과 맞춥니다.",
+      ex:"예약 20대에서 7대 + 12대 + 1대를 나눠 배정했는데 배정 숫자가 1로 보이면 → <b>20</b>으로 고칩니다.",
+      risk:"안전 — 숫자만 맞춥니다.", read:"판매요청 1회" },
+    { key:"saleMatch", label:"판매 매칭 현황", where:"판매 관리",
+      what:"판매요청의 <b>매칭</b> 숫자를 실제 연결된 재고 개수와 맞춥니다.",
+      ex:"재고 3대를 지웠는데 매칭이 여전히 10/10으로 보이면 → <b>7/10 부분매칭</b>으로 고칩니다.",
+      risk:"안전 — 숫자만 맞춥니다.", read:"없음 (이미 읽어둔 재고 사용)" },
+    { key:"creditUse", label:"여신 주문사용", where:"주문 관리",
+      what:"삼성 B2B 여신의 <b>주문사용</b> 기록을 주문 금액과 맞춥니다.",
+      ex:"주문 금액을 수정했는데 여신 차감액이 옛 금액이면 → 새 금액으로 고칩니다. 지운 주문의 기록도 지웁니다.",
+      risk:"안전 — 계산으로 나오는 값입니다.", read:"여신 기록 1회" },
+    { key:"modelSync", label:"모델 정보", where:"주문·판매·예약",
+      what:"<b>펫네임·모델명·기가수·전산모델명</b>을 모델 등록의 현재 값으로 맞춥니다.",
+      ex:"모델 등록에서 펫네임을 <b>폴드8</b> → <b>갤럭시Z 폴드8</b>로 바꿨으면 기록에도 반영합니다.",
+      risk:"안전 — 이름만 바뀝니다. 수량·금액·상태는 그대로.", read:"해당 목록 1회" },
+    { key:"orderPrice", label:"주문 출고가", where:"주문 관리",
+      what:"출고가가 비어 있으면 <b>모델 등록의 출고가</b>로 채우고, 선할인·판매할인을 역산합니다.",
+      ex:"출고가가 없는 주문에 2,830,300을 채우고, 입고가가 2,764,071이면 선할인을 66,229로 역산합니다.",
+      risk:"<b>주의 — 금액이 바뀝니다.</b> 모델 등록의 출고가가 정확할 때만 켜세요.", read:"주문 1회" },
+    { key:"resvPrice", label:"예약 출고가", where:"예약 관리",
+      what:"출고가가 비어 있는 예약을 <b>모델 등록의 출고가</b>로 채우고, 판매할인을 계산합니다.",
+      ex:"출고가가 없는 예약에 2,830,300을 채우고, 판매가가 2,773,694면 할인을 2.00%로 계산합니다.",
+      risk:"<b>주의 — 금액이 바뀝니다.</b> 판매가와 수량은 건드리지 않습니다.", read:"예약 1회" }
+  ];
+  const AUTOFIX_DEFAULT = { resvAlloc:true, saleMatch:true, creditUse:true, modelSync:true, orderPrice:false, resvPrice:false };
+
+  function autoFixOn(key){
+    const m = (currentSettings && currentSettings.autoFix) || null;
+    if(!m) return AUTOFIX_DEFAULT[key] === true;
+    return m[key] === true;
+  }
+
+  window.renderAutoFixList = function(){
+    const el = document.getElementById("autofix-list");
+    if(!el) return;
+    el.style.display = "block";
+    el.innerHTML = AUTOFIX_TARGETS.map(t=>{
+      const on = autoFixOn(t.key);
+      const warn = t.risk.indexOf("주의") >= 0;
+      return '<div style="border:1px solid '+(warn?'var(--danger)':'var(--line)')+';background:'+(warn?'#fdf6f5':'#fff')+';padding:10px 12px;margin-bottom:8px;">'
+        + '<label style="display:flex;align-items:center;gap:6px;font-weight:700;cursor:pointer;">'
+        + '<input type="checkbox" class="autofix-cb" value="'+t.key+'"'+(on?' checked':'')+'>'
+        + comboEsc(t.label)
+        + ' <span style="font-weight:400;color:var(--gray);font-size:11.5px;">— ' + comboEsc(t.where) + ' 화면</span>'
+        + '</label>'
+        + '<div style="font-size:12px;line-height:1.8;margin-top:5px;padding-left:22px;color:#333;">'
+        + '<div>' + t.what + '</div>'
+        + '<div style="color:var(--gray);margin-top:3px;"><b>예)</b> ' + t.ex + '</div>'
+        + '<div style="margin-top:3px;">'
+        + '<span style="color:' + (warn ? 'var(--danger)' : '#2e7d32') + ';">' + t.risk + '</span>'
+        + ' <span style="color:var(--gray);">· 읽기 ' + comboEsc(t.read) + '</span></div>'
+        + '</div></div>';
+    }).join("");
+  };
+
+  window.saveAutoFix = async function(){
+    const m = {};
+    AUTOFIX_TARGETS.forEach(t=> m[t.key] = false);
+    document.querySelectorAll(".autofix-cb:checked").forEach(cb=> m[cb.value] = true);
+    try{
+      await setDoc(doc(db,"settings","general"), { autoFix: m }, { merge:true });
+      currentSettings.autoFix = m;
+      const on = Object.keys(m).filter(k=>m[k]);
+      logAction("자동 정리 설정 변경", on.length ? on.join(", ") : "전부 끄기");
+      flashMsg("autofix-msg");
+    }catch(e){ alert("저장에 실패했습니다."); }
+  };
+
   window.renderCacheTargets = function(){
     const el = document.getElementById("cache-target-list");
     if(!el) return;
     el.innerHTML = CACHE_TARGETS.map(t=>
-      '<label style="display:flex;align-items:center;gap:5px;white-space:nowrap;">'
+      '<label style="display:flex;align-items:center;gap:5px;white-space:nowrap;'
+      + (t.heavy ? 'font-weight:700;' : '') + '">'
       + '<input type="checkbox" class="cache-target-cb" value="'+t.key+'"'+(cacheOn(t.key)?' checked':'')+'>'
-      + comboEsc(t.label) + ' <span style="color:var(--gray);font-size:11px;">'+comboEsc(t.note)+'</span></label>').join("");
+      + comboEsc(t.label)
+      + ' <span style="color:var(--gray);font-size:11px;font-weight:400;">'+comboEsc(t.what)
+      + (t.heavy ? ' · 무거움' : '') + '</span></label>').join("");
   };
 
   window.saveCacheTargets = async function(){
@@ -17066,10 +17573,12 @@
     if(tabId==="tab-ledger") initLedgerTab();
     if(tabId==="tab-datacheck" && typeof runDataCheck === "function") runDataCheck();
     if(tabId==="tab-itemhistory" && typeof initItemHistoryTab === "function") initItemHistoryTab();
+    if(tabId==="tab-lgrefund" && typeof loadLgRefund === "function") loadLgRefund();
     if(tabId==="tab-b2b" && typeof loadLoanList === "function") loadLoanList();
     if(tabId==="tab-site" && typeof renderHiddenList === "function") renderHiddenList();
     if(tabId==="tab-site" && typeof renderCacheTargets === "function") renderCacheTargets();
     if(tabId==="tab-site" && typeof renderStartTabSelect === "function") renderStartTabSelect();
+    if(tabId==="tab-site" && typeof renderAutoFixList === "function") renderAutoFixList();
 
     if(tabId==="tab-inv-carrier") loadCarrierList();
     if(tabId==="tab-inv-manufacturer") loadManufacturerList();
@@ -17211,6 +17720,7 @@
       setMenu("tabbtn-ledger", showSettlement);
       setMenu("tabbtn-datacheck", showSettlement);
       setMenu("tabbtn-itemhistory", showAnyWorkMenu);
+      setMenu("tabbtn-lgrefund", showSettlement);
       setMenu("tabbtn-logs", showLogs);
       setMenu("tabbtn-dashboard", showDashboard);
       setMenu("tabbtn-inv-work", showInvWork);
@@ -17232,6 +17742,7 @@
 
       if(showSite){
         renderStartTabSelect();
+        renderAutoFixList();
         renderCacheTargets();
         document.getElementById("site-name-input").value = currentSettings.siteName || DEFAULT_SITE_NAME;
         document.getElementById("pending-title-input").value = currentSettings.pendingTitle || DEFAULT_PENDING_TITLE;
