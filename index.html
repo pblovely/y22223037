@@ -228,6 +228,10 @@
   .list-row > span:last-child{ flex-shrink:0; display:inline-flex; align-items:center; gap:0; }
   .list-row.compact{ padding:0 10px; height:36px; box-sizing:border-box; }
   .list-row.compact .btn.small{ padding:4px 10px; }
+  /* 표 밀도 — 보통 / 좁게 / 아주 좁게 */
+  .tbl-tight .data-table th, .tbl-tight .data-table td{ padding:3px 6px !important; font-size:12px !important; }
+  .tbl-xtight .data-table th, .tbl-xtight .data-table td{ padding:1px 4px !important; font-size:11.5px !important; }
+  .tbl-fit .data-table{ min-width:0 !important; width:100% !important; table-layout:auto; }
   .data-table{ width:100%; border-collapse:collapse; font-size:12.5px; }
   .data-table th, .data-table td{ padding:3px 10px; text-align:left; vertical-align:middle; white-space:nowrap; line-height:1.3; height:28px; box-sizing:border-box; }
   .data-table .btn.small{ padding:3px 9px; }
@@ -279,7 +283,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-07-25 v143</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-07-25 v148</span>
       <span id="topbar-username">-</span>
       <button onclick="openPersonalSettingsModal()">개인설정</button>
       <button onclick="handleLogout()">로그아웃</button>
@@ -439,23 +443,22 @@
             </div>
           </span>
         </div>
-        <p class="desc" style="margin-top:0;">사용법: ① 아래 주문 목록에서 아직 입금 안 한 건들의 체크박스를 선택 → ② 필요하면 기타 금액 입력 → ③ "체크한 주문 묶어서 출금요청" 클릭 → ④ 실제로 이체하면 정산 관리 탭에서 "이체완료" 체크 (그러면 해당 주문들이 자동으로 입금완료 처리됩니다).</p>
+        <p class="desc" style="margin-top:0;">체크한 주문을 묶어 <b>출금요청</b>을 만듭니다. 실제로 이체하면 정산 관리에서 이체 기록을 넣어주세요.</p>
         <div style="margin-bottom:8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
           <button class="btn small secondary" style="width:auto;" onclick="createPaymentRequestFromSelected()">체크한 주문 묶어서 출금요청</button>
           <span class="info-tip" title="여러 업체(SK/KT/LG 등) 건을 한 번에 이체할 때, 아래에서 체크박스로 골라 묶으세요.">ⓘ</span>
           <span style="color:var(--line);">|</span>
-          <label style="font-size:12.5px;">기타 금액(원)<input type="number" id="payment-other-amount-input" placeholder="주문에 없는 결제분" style="margin-left:6px;width:130px;padding:5px 6px;border:1px solid #c7c7c7;font-size:12.5px;"></label>
+          <label style="font-size:12.5px;display:none;">기타 금액(원)<input type="number" id="payment-other-amount-input" placeholder="주문에 없는 결제분" style="margin-left:6px;width:130px;padding:5px 6px;border:1px solid var(--line);font-size:12.5px;"></label>
           <span class="info-tip" title="체크한 주문 외에 같이 이체해야 할 금액이 있으면 여기 적으세요. 이 금액은 주문과 연결되지 않으니, 나중에 재고를 따로 등록해주셔야 합니다.">ⓘ</span>
         </div>
         <div style="display:flex;align-items:center;gap:0;flex-wrap:wrap;margin-bottom:8px;">
-          <span style="font-size:12px;color:var(--gray);margin-right:8px;">보기</span>
           <button class="btn small" id="order-filter-ing" style="width:auto;padding:0 12px;height:26px;border:1px solid var(--navy);" onclick="setOrderListFilter('ing')">진행중</button>
           <button class="btn small secondary" id="order-filter-done" style="width:auto;padding:0 12px;height:26px;border:1px solid var(--navy);margin-left:-1px;" onclick="setOrderListFilter('done')">최종완료</button>
           <button class="btn small secondary" id="order-filter-waiting" style="width:auto;padding:0 12px;height:26px;border:1px solid var(--navy);margin-left:-1px;" onclick="setOrderListFilter('waiting')">입금확인중</button>
           <button class="btn small secondary" id="order-filter-cancel" style="width:auto;padding:0 12px;height:26px;border:1px solid var(--navy);margin-left:-1px;" onclick="setOrderListFilter('cancel')">취소</button>
           <button class="btn small secondary" id="order-filter-all" style="width:auto;padding:0 12px;height:26px;border:1px solid var(--navy);margin-left:-1px;" onclick="setOrderListFilter('all')">전체</button>
+          <button class="btn small secondary" style="width:auto;margin-left:-1px;" onclick="toggleColPicker('order')">보기 설정</button>
           <span id="order-wait-summary" style="margin-left:12px;font-size:12.5px;"></span>
-          <button class="btn small secondary" style="width:auto;margin-left:12px;" onclick="toggleColPicker('order')">보기 설정</button>
         </div>
         <div id="order-col-picker" style="display:none;border:1px solid var(--navy);background:#fafafa;padding:10px 12px;margin-bottom:8px;"></div>
         <div id="order-price-notice" style="display:none;font-size:12.5px;padding:9px 11px;margin-bottom:8px;border:1px solid var(--danger);background:#fdecea;line-height:1.7;"></div>
@@ -476,25 +479,23 @@
             </div>
           </span>
         </div>
-        <p class="desc" style="margin-top:0;">사용법: ① 아래 판매요청 목록에서 아직 입금 안 받은 건들의 체크박스를 선택 → ② 필요하면 기타 금액 입력 → ③ "체크한 판매요청 묶어서 입금요청" 클릭 → ④ 실제로 입금받으면 정산 관리 탭에서 "입금완료" 체크 (그러면 해당 판매요청들이 자동으로 입금완료 처리됩니다). 입금 처리는 <b>정산 관리</b>에서만 합니다.</p>
+        <p class="desc" style="margin-top:0;">체크한 판매요청을 묶어 <b>입금요청</b>을 만듭니다. 실제로 입금되면 정산 관리에서 입금완료를 체크해주세요.</p>
         <div style="margin-bottom:8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
           <button class="btn small secondary" style="width:auto;" onclick="createSaleDepositRequestFromSelected()">체크한 판매요청 묶어서 입금요청</button>
           <span class="info-tip" title="여러 업체 건을 한 번에 입금받을 때, 아래에서 체크박스로 골라 묶으세요.">ⓘ</span>
           <span style="color:var(--line);">|</span>
           <button class="btn small secondary" style="width:auto;margin-right:6px;" onclick="openInvToSaleReq()">재고에서 판매요청 만들기</button>
           <span class="info-tip" title="판매요청 없이 재고만 등록된 건(급하게 나간 단말기 등)을 골라 판매요청으로 만듭니다. 그러면 다른 건과 함께 입금요청에 묶을 수 있습니다.">ⓘ</span>
-          <span style="color:var(--line);margin:0 8px;">|</span>
-          <label style="font-size:12.5px;">기타 금액(원)<input type="number" id="sale-payment-other-amount-input" placeholder="판매요청에 없는 입금분" style="margin-left:6px;width:130px;padding:5px 6px;border:1px solid #c7c7c7;font-size:12.5px;"></label>
+          <label style="font-size:12.5px;display:none;">기타 금액(원)<input type="number" id="sale-payment-other-amount-input" placeholder="판매요청에 없는 입금분" style="margin-left:6px;width:130px;padding:5px 6px;border:1px solid #c7c7c7;font-size:12.5px;"></label>
         </div>
         <div style="display:flex;align-items:center;gap:0;flex-wrap:wrap;margin-bottom:8px;">
-          <span style="font-size:12px;color:var(--gray);margin-right:8px;">보기</span>
           <button class="btn small" id="sale-filter-ing" style="width:auto;padding:0 12px;height:26px;border:1px solid var(--navy);" onclick="setSaleFilter('ing')">진행중</button>
           <button class="btn small secondary" id="sale-filter-done" style="width:auto;padding:0 12px;height:26px;border:1px solid var(--navy);margin-left:-1px;" onclick="setSaleFilter('done')">최종완료</button>
           <button class="btn small secondary" id="sale-filter-waiting" style="width:auto;padding:0 12px;height:26px;border:1px solid var(--navy);margin-left:-1px;" onclick="setSaleFilter('waiting')">입금확인중</button>
           <button class="btn small secondary" id="sale-filter-cancel" style="width:auto;padding:0 12px;height:26px;border:1px solid var(--navy);margin-left:-1px;" onclick="setSaleFilter('cancel')">취소</button>
           <button class="btn small secondary" id="sale-filter-all" style="width:auto;padding:0 12px;height:26px;border:1px solid var(--navy);margin-left:-1px;" onclick="setSaleFilter('all')">전체</button>
+          <button class="btn small secondary" style="width:auto;margin-left:-1px;" onclick="toggleColPicker('sale')">보기 설정</button>
           <span id="sale-wait-summary" style="margin-left:12px;font-size:12.5px;"></span>
-          <button class="btn small secondary" style="width:auto;margin-left:12px;" onclick="toggleColPicker('sale')">보기 설정</button>
           <button class="btn small secondary" style="width:auto;margin-left:12px;" title="재고에서 이미 판매처리된 건을 찾아 판매요청의 매칭 현황을 다시 계산합니다" onclick="recalcSaleMatching()">매칭 현황 다시 계산</button>
         </div>
         <div id="sale-col-picker" style="display:none;border:1px solid var(--navy);background:#fafafa;padding:10px 12px;margin-bottom:8px;"></div>
@@ -2165,7 +2166,7 @@
         el.style.display = customHiddenKeys[key] ? "none" : "";
       }
     });
-    document.querySelectorAll("button:not([data-label-key]), h3:not([data-label-key]), h4:not([data-label-key]), p:not([data-label-key]), label:not([data-label-key]), .menu-item:not([data-label-key]), .desc:not([data-label-key])").forEach(el=>{
+    document.querySelectorAll("button:not([data-label-key]), h3:not([data-label-key]), h4:not([data-label-key]), p:not([data-label-key]), label:not([data-label-key]), .menu-item:not([data-label-key]), .desc:not([data-label-key]), th:not([data-label-key])").forEach(el=>{
       if(!el.dataset.origText){
         const t = (el.textContent||"").replace(/\s+/g," ").trim();
         if(!t) return;
@@ -2409,7 +2410,7 @@
     if(tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || e.target.isContentEditable) return;
 
     const keyedEl = e.target.closest("[data-label-key]");
-    const genericEl = keyedEl ? null : e.target.closest("button, h3, h4, p, label, .menu-item, .desc, .list-empty");
+    const genericEl = keyedEl ? null : e.target.closest("button, h3, h4, p, label, .menu-item, .desc, .list-empty, .stat-card, .dash-stat-card, td, th");
     const targetEl = keyedEl || genericEl;
     if(!targetEl) return;
     const key = getElKey(targetEl);
@@ -5934,6 +5935,33 @@
   function saveListCols(kind, arr){
     try{ localStorage.setItem(kind === "order" ? "orderCols" : "saleCols", JSON.stringify(arr)); }catch(e){}
   }
+  // 줄 간격·가로 폭 설정 (브라우저에 저장)
+  function listDensity(kind){
+    try{
+      const v = localStorage.getItem(kind + "Density");
+      if(v) return JSON.parse(v);
+    }catch(e){}
+    return { density:"normal", width:"auto" };
+  }
+  function saveListDensity(kind, obj){
+    try{ localStorage.setItem(kind + "Density", JSON.stringify(obj)); }catch(e){}
+  }
+  function reopenPicker(kind){
+    const el = document.getElementById(kind + "-col-picker");
+    if(el) el.style.display = "none";
+    setTimeout(()=> toggleColPicker(kind), 10);
+  }
+  window.setListDensity = function(kind, v){
+    const d = listDensity(kind); d.density = v; saveListDensity(kind, d);
+    if(kind === "order") loadOrderList(); else loadSaleRequestList();
+    reopenPicker(kind);
+  };
+  window.setListWidth = function(kind, v){
+    const d = listDensity(kind); d.width = v; saveListDensity(kind, d);
+    if(kind === "order") loadOrderList(); else loadSaleRequestList();
+    reopenPicker(kind);
+  };
+
   let listSort = { order:{ key:"", dir:1 }, sale:{ key:"", dir:1 } };
   window.setListSort = function(kind, key){
     const st = listSort[kind];
@@ -5946,11 +5974,22 @@
     if(el.style.display !== "none"){ el.style.display = "none"; return; }
     const all = kind === "order" ? ORDER_COLS : SALE_COLS;
     const on = listCols(kind);
+    const d = listDensity(kind);
     el.innerHTML = '<div style="font-size:12.5px;font-weight:700;margin-bottom:6px;">보고 싶은 열을 고르세요</div>'
       + '<div style="display:flex;flex-wrap:wrap;gap:10px 16px;font-size:12.5px;">'
       + all.map(c=>'<label style="display:flex;align-items:center;gap:4px;white-space:nowrap;">'
           + '<input type="checkbox" class="'+kind+'-col-cb" value="'+c.key+'"'+(on.includes(c.key)?' checked':'')+'>'
           + comboEsc(c.label)+'</label>').join("")
+      + '</div>'
+      + '<div style="border-top:1px solid var(--line);margin-top:10px;padding-top:8px;display:flex;align-items:center;gap:0;flex-wrap:wrap;">'
+      + '<span style="font-size:12.5px;margin-right:8px;">줄 간격</span>'
+      + ['normal','tight','xtight'].map((v,i)=>
+          '<button type="button" class="btn small'+(d.density===v?'':' secondary')+'" style="width:auto;padding:0 12px;height:26px;" '
+          + 'onclick="setListDensity(\''+kind+'\',\''+v+'\')">'+["보통","좁게","아주 좁게"][i]+'</button>').join("")
+      + '<span style="font-size:12.5px;margin:0 8px 0 16px;">가로 폭</span>'
+      + ['auto','fit'].map((v,i)=>
+          '<button type="button" class="btn small'+(d.width===v?'':' secondary')+'" style="width:auto;padding:0 12px;height:26px;" '
+          + 'onclick="setListWidth(\''+kind+'\',\''+v+'\')">'+["내용에 맞게","화면에 꽉 채우기"][i]+'</button>').join("")
       + '</div>'
       + '<button class="btn small" style="width:auto;margin-top:8px;" onclick="applyColPicker(\''+kind+'\')">적용</button>'
       + '<button class="btn small secondary" style="width:auto;" onclick="resetColPicker(\''+kind+'\')">기본으로</button>';
@@ -5965,6 +6004,7 @@
   };
   window.resetColPicker = function(kind){
     saveListCols(kind, kind === "order" ? ORDER_COLS_DEFAULT.slice() : SALE_COLS_DEFAULT.slice());
+    saveListDensity(kind, { density:"normal", width:"auto" });
     document.getElementById(kind + "-col-picker").style.display = "none";
     if(kind === "order") loadOrderList(); else loadSaleRequestList();
   };
@@ -5982,7 +6022,10 @@
         if(va < vb) return -st.dir; if(va > vb) return st.dir; return 0;
       });
     }
-    let h = '<div style="overflow-x:auto;"><table class="data-table" style="min-width:'+(220+cols.length*95)+'px;"><thead><tr>' +
+    const dens = listDensity(kind);
+    const wrapCls = (dens.density==="tight" ? "tbl-tight " : (dens.density==="xtight" ? "tbl-xtight " : ""))
+      + (dens.width==="fit" ? "tbl-fit" : "");
+    let h = '<div class="'+wrapCls+'" style="overflow-x:auto;"><table class="data-table" style="min-width:'+(dens.width==="fit" ? 0 : (220+cols.length*95))+'px;"><thead><tr>' +
       '<th style="width:34px;"><input type="checkbox" onclick="toggleAllListRows(\''+kind+'\', this)"></th>' +
       cols.map(c=>'<th'+(c.num?' class="ta-right"':'')+' style="cursor:pointer;white-space:nowrap;" onclick="setListSort(\''+kind+'\',\''+c.key+'\')">'
         + comboEsc(c.label) + (st.key===c.key ? (st.dir>0?' ▲':' ▼') : '') + '</th>').join("") +
@@ -6071,27 +6114,40 @@
 
     // 요약: 도착대기 · 이체대기 (필터와 무관하게 전체 기준)
     let arriveWait = 0, payWaitCnt = 0, payWaitAmt = 0, confirmCnt = 0, confirmAmt = 0, creditCnt = 0, creditAmt = 0;
+    let cntIng = 0, cntDone = 0, cntWaiting = 0, cntCancel = 0, cntAll = 0;
     batchSnap.forEach(bd=>{
       const b = bd.data();
-      if(b.status === "취소") return;
+      cntAll++;
+      if(b.status === "취소"){ cntCancel++; return; }
       const ls = (ordersByBatch[bd.id]||[]).filter(o=>o.status!=="취소");
-      if(ls.some(o=> (Number(o.fulfilledCount)||0) < (Number(o.quantity)||0))) arriveWait++;
+      const remain = ls.reduce((n,o)=> n + ((Number(o.quantity)||0)-(Number(o.fulfilledCount)||0)), 0);
+      const done = ls.length>0 && remain===0;
+      if(done) cntDone++; else cntIng++;
+      if(remain > 0) arriveWait++;
       if(b.depositPaid !== true){
         payWaitCnt++; payWaitAmt += Number(b.depositRequired)||0;
-        if(b.paymentRequestId){ confirmCnt++; confirmAmt += Number(b.depositRequired)||0; }
+        if(b.paymentRequestId){ confirmCnt++; confirmAmt += Number(b.depositRequired)||0; cntWaiting++; }
       }else if(b.paymentMethod === "b2b_credit"){
         creditCnt++; creditAmt += Number(b.creditUsed != null ? b.creditUsed : b.depositRequired)||0;
       }
     });
+    // 필터 버튼 안에 건수를 넣습니다.
+    const setBtnCount = (id, label, n)=>{
+      const el = document.getElementById(id);
+      if(el) el.innerHTML = label + ' <span style="opacity:0.65;font-weight:400;">' + n + '</span>';
+    };
+    setBtnCount("order-filter-ing", "진행", cntIng);
+    setBtnCount("order-filter-done", "완료", cntDone);
+    setBtnCount("order-filter-waiting", "입금확인중", cntWaiting);
+    setBtnCount("order-filter-cancel", "취소", cntCancel);
+    setBtnCount("order-filter-all", "전체", cntAll);
     const oSum = document.getElementById("order-wait-summary");
     if(oSum){
       oSum.innerHTML =
-        '<span style="color:#b8860b;font-weight:700;">도착대기 ' + arriveWait + '건</span>' +
-        ' · <span style="color:var(--danger);font-weight:700;">이체대기 ' + payWaitCnt + '건</span>' +
-        ' <span style="color:var(--gray);">' + payWaitAmt.toLocaleString() + '</span>' +
-        ' · <span style="color:#b8860b;font-weight:700;">입금확인중 ' + confirmCnt + '건</span>' +
-        (creditCnt ? ' · <span style="color:#6a1b9a;font-weight:700;">삼성여신 ' + creditCnt + '건</span>'
-                     + ' <span style="color:var(--gray);">' + creditAmt.toLocaleString() + '</span>' : '');
+        (payWaitCnt ? '<span style="color:var(--danger);font-weight:700;">이체대기</span> '
+          + '<span style="color:var(--gray);">' + payWaitAmt.toLocaleString() + '</span>' : '') +
+        (creditCnt ? (payWaitCnt ? ' · ' : '') + '<span style="color:#6a1b9a;font-weight:700;">여신</span> '
+          + '<span style="color:var(--gray);">' + creditAmt.toLocaleString() + '</span>' : '');
     }
 
     // 필터를 먼저 적용해 배열로 모은 뒤 페이지 단위로 그립니다.
@@ -9120,6 +9176,14 @@
     return parts.join(" ");
   }
 
+  // 카드 라벨로 안정적인 키를 만듭니다. (우클릭 수정용)
+  function cardKeyOf(prefix, label){
+    const t = String(label||"").replace(/<[^>]*>/g,"").replace(/\s+/g," ").trim();
+    let h = 0;
+    for(let i=0;i<t.length;i++){ h = ((h<<5) - h + t.charCodeAt(i)) | 0; }
+    return prefix + "-" + Math.abs(h).toString(36);
+  }
+
   function stampText(b){
     const d = v => (v && v.seconds) ? new Date(v.seconds*1000) : null;
     const fmt = dt => dt ? (dt.getFullYear() + "." + String(dt.getMonth()+1).padStart(2,"0") + "." + String(dt.getDate()).padStart(2,"0")) : "-";
@@ -10136,17 +10200,20 @@
     const recvTotal = ledgerRecvRows.reduce((n,r)=> n + r.remain, 0);
     const payTotal  = ledgerPayRows.reduce((n,r)=> n + r.remain, 0);
     const net = recvTotal - payTotal;
-    const card = (label, value, color, note)=>
-      '<div style="border:1px solid var(--line);padding:9px 12px;min-width:170px;background:#fff;">' +
-      '<div style="font-size:11px;color:var(--gray);">'+label+'</div>' +
-      '<div style="font-size:17px;font-weight:800;'+(color?('color:'+color+';'):'')+'">'+value+'</div>' +
-      (note?'<div style="font-size:10.5px;color:var(--gray);">'+note+'</div>':'') + '</div>';
+    const card = (label, value, color, note)=>{
+      const k = cardKeyOf("ledger", label);
+      return '<div class="stat-card" data-label-key="'+k+'-card" style="border:1px solid var(--line);padding:9px 12px;min-width:170px;background:#fff;">' +
+      '<div data-label-key="'+k+'" style="font-size:11px;color:var(--gray);"><span class="tab-label-text">'+label+'</span></div>' +
+      '<div data-label-key="'+k+'-value" style="font-size:17px;font-weight:800;'+(color?('color:'+color+';'):'')+'">'+value+'</div>' +
+      (note?'<div data-label-key="'+k+'-note" style="font-size:10.5px;color:var(--gray);">'+note+'</div>':'') + '</div>';
+    };
     cardEl.innerHTML =
       card("받을 돈 (미수)", recvTotal.toLocaleString(), "#1565c0", ledgerRecvRows.length+"건") +
       card("줄 돈 (미지급)", payTotal.toLocaleString(), "var(--danger)", ledgerPayRows.length+"건") +
       card("상계 가능액", Math.min(recvTotal, payTotal).toLocaleString(), "#6a1b9a", "적은 쪽 기준") +
       card(net>=0 ? "최종 받을 돈" : "최종 줄 돈", Math.abs(net).toLocaleString(),
            net>=0 ? "#2e7d32" : "var(--danger)", "상계 후 실제 이체액");
+    applyCustomTabLabels();
 
     const rowsHtml = (rows, side)=>{
       if(rows.length === 0) return '<div class="list-empty">남은 건이 없습니다.</div>';
@@ -10955,7 +11022,7 @@
         '<div data-label-key="resv-'+key+'-card" style="border:1px solid var(--line);padding:9px 12px;min-width:150px;background:#fff;">' +
         '<div data-label-key="resv-'+key+'" style="font-size:11px;color:var(--gray);"><span class="tab-label-text">'+label+'</span></div>' +
         '<div data-label-key="resv-'+key+'-value" style="font-size:16px;font-weight:700;'+(color?('color:'+color+';'):'')+'">'+value+'</div>' +
-        (note ? '<div style="font-size:10.5px;color:var(--gray);">'+note+'</div>' : '') +
+        (note ? '<div data-label-key="resv-'+key+'-note" style="font-size:10.5px;color:var(--gray);">'+note+'</div>' : '') +
         '</div>';
       const discPctAll = sumListAmt ? ((sumListAmt - sumSaleAmt) / sumListAmt * 100) : null;
       statEl.innerHTML =
@@ -11164,16 +11231,27 @@
     const waitAmt = waitRows.reduce((n,r)=> n + (Number(r.b.depositRequired)||0), 0);
     const confirmingRows = waitRows.filter(r=> !!r.b.depositRequestId);
     const confirmingAmt = confirmingRows.reduce((n,r)=> n + (Number(r.b.depositRequired)||0), 0);
+    // 필터 버튼 안에 건수를 넣습니다.
+    const sCancel = saleRows.filter(r=> r.b.status === "취소").length;
+    const sDone   = saleRows.filter(r=> r.b.status !== "취소" && isSaleFinal(r.b, r.lines)).length;
+    const sIng    = saleRows.length - sCancel - sDone;
+    const setSaleBtn = (id, label, n)=>{
+      const el = document.getElementById(id);
+      if(el) el.innerHTML = label + ' <span style="opacity:0.65;font-weight:400;">' + n + '</span>';
+    };
+    setSaleBtn("sale-filter-ing", "진행", sIng);
+    setSaleBtn("sale-filter-done", "완료", sDone);
+    setSaleBtn("sale-filter-waiting", "입금확인중", confirmingRows.length);
+    setSaleBtn("sale-filter-cancel", "취소", sCancel);
+    setSaleBtn("sale-filter-all", "전체", saleRows.length);
     const matchWait = saleRows.filter(r=> r.b.status!=="취소" &&
       !(r.lines.length>0 && r.lines.every(l=> (Number(l.fulfilledCount)||0) >= (Number(l.quantity)||0)))).length;
     const sumEl = document.getElementById("sale-wait-summary");
     if(sumEl){
       sumEl.innerHTML =
-        '<span style="color:var(--danger);font-weight:700;">입금대기 ' + waitRows.length + '건</span>' +
-        ' <span style="color:var(--gray);">' + waitAmt.toLocaleString() + '</span>' +
-        ' · <span style="color:#b8860b;font-weight:700;">입금확인중 ' + confirmingRows.length + '건</span>' +
-        ' <span style="color:var(--gray);">' + confirmingAmt.toLocaleString() + '</span>' +
-        ' · <span style="color:#b8860b;font-weight:700;">매칭대기 ' + matchWait + '건</span>';
+        (waitRows.length ? '<span style="color:var(--danger);font-weight:700;">입금대기</span> '
+          + '<span style="color:var(--gray);">' + waitAmt.toLocaleString() + '</span>' : '') +
+        (matchWait ? (waitRows.length ? ' · ' : '') + '<span style="color:#b8860b;font-weight:700;">매칭대기 ' + matchWait + '건</span>' : '');
     }
 
     // 보기 필터 적용 — 최종완료는 기본으로 숨깁니다.
@@ -11561,9 +11639,10 @@
     salePendingEl.innerHTML = saleHtml || '<div class="list-empty">입금 대기중인 판매요청이 없습니다.</div>';
 
     function statCard(label, value, color){
-      return '<div style="flex:1;min-width:150px;border:1px solid var(--line);background:#fff;padding:10px 14px;">' +
-        '<div style="font-size:11.5px;color:var(--gray);margin-bottom:4px;">'+label+'</div>' +
-        '<div style="font-size:20px;font-weight:800;color:'+(color||'var(--navy)')+';">'+value+'</div></div>';
+      const k = cardKeyOf("settle", label);
+      return '<div class="stat-card" data-label-key="'+k+'-card" style="flex:1;min-width:150px;border:1px solid var(--line);background:#fff;padding:10px 14px;">' +
+        '<div data-label-key="'+k+'" style="font-size:11.5px;color:var(--gray);margin-bottom:4px;"><span class="tab-label-text">'+label+'</span></div>' +
+        '<div data-label-key="'+k+'-value" style="font-size:20px;font-weight:800;color:'+(color||'var(--navy)')+';">'+value+'</div></div>';
     }
     statEl.innerHTML =
       statCard("미지급액 (줘야 할 돈)", unpaidTotal.toLocaleString()+" ("+unpaidCount+"건)", "var(--danger)") +
@@ -11662,10 +11741,11 @@
     const finalProfit = baseProfitSum - loanCostTotal + interestReceivedTotal;
 
     function statCard(label, value, color, note){
-      return '<div style="flex:1;min-width:170px;border:1px solid var(--line);background:#fff;padding:10px 14px;">' +
-        '<div style="font-size:11.5px;color:var(--gray);margin-bottom:4px;">'+label+'</div>' +
-        '<div style="font-size:19px;font-weight:800;color:'+(color||'var(--navy)')+';">'+value+'</div>'
-        + (note ? '<div style="font-size:10.5px;color:var(--gray);margin-top:3px;">'+note+'</div>' : '') + '</div>';
+      const k = cardKeyOf("b2b", label);
+      return '<div class="stat-card" data-label-key="'+k+'-card" style="flex:1;min-width:170px;border:1px solid var(--line);background:#fff;padding:10px 14px;">' +
+        '<div data-label-key="'+k+'" style="font-size:11.5px;color:var(--gray);margin-bottom:4px;"><span class="tab-label-text">'+label+'</span></div>' +
+        '<div data-label-key="'+k+'-value" style="font-size:19px;font-weight:800;color:'+(color||'var(--navy)')+';">'+value+'</div>'
+        + (note ? '<div data-label-key="'+k+'-note" style="font-size:10.5px;color:var(--gray);margin-top:3px;">'+note+'</div>' : '') + '</div>';
     }
     // 계산 근거를 그대로 보여줘서 숫자가 왜 그런지 바로 알 수 있게 합니다.
     let html = statCard("실시간 잔여여신", remainingCredit.toLocaleString(),
@@ -11690,6 +11770,7 @@
     html += statCard("기존 매입-매출 차액 (수익)", baseProfitSum.toLocaleString());
     html += statCard("최종 실제수익 (수익-대출비용+이자수령)", finalProfit.toLocaleString(), "#2e7d32");
     statEl.innerHTML = html;
+    applyCustomTabLabels();
 
     // 후정산 참고 비교
     const settleSnap = await getDoc(doc(db,"settings","b2b"));
