@@ -297,7 +297,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-07-25 v238</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-07-25 v239</span>
       <span id="topbar-username">-</span>
       <button onclick="openPersonalSettingsModal()">개인설정</button>
       <button onclick="handleLogout()">로그아웃</button>
@@ -853,7 +853,13 @@
         <p class="desc">브라우저 탭·로그인 화면·상단에 함께 쓰입니다.</p>
         <div class="stack-form" style="max-width:640px;">
           <div class="stack-row"><label>사이트 이름</label><input type="text" id="site-name-input"></div>
-          <div class="stack-row"><label>아이콘 주소 <span class="info-tip" title="이미지 주소(https://...)를 넣으면 그 그림이 탭에 보입니다. 비워두면 사이트 이름의 첫 글자로 만든 아이콘이 쓰입니다.">ⓘ</span></label><input type="text" id="site-favicon-input" placeholder="비우면 이름 첫 글자로 자동 (예: https://.../icon.png)"></div>
+          <div class="stack-row"><label>탭 아이콘 <span class="info-tip" title="브라우저 탭에 보이는 작은 그림입니다. 파일을 고르면 바로 올라갑니다. 비워두면 사이트 이름 첫 글자로 만든 아이콘이 쓰입니다.">ⓘ</span></label>
+            <span style="flex:1;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+              <input type="file" id="site-favicon-file" accept="image/png,image/jpeg,image/svg+xml,image/x-icon,image/webp" style="font-size:12px;" onchange="onFaviconFile(event)">
+              <button class="btn small secondary" style="width:auto;" onclick="clearFaviconFile()">기본으로</button>
+            </span>
+          </div>
+          <div class="stack-row"><label>또는 주소로</label><input type="text" id="site-favicon-input" placeholder="https://.../icon.png (파일을 올리면 비워두세요)"></div>
         </div>
         <div style="display:flex;align-items:center;gap:10px;margin-top:8px;">
           <button class="btn small" style="width:auto;" onclick="saveSiteName()">저장</button>
@@ -861,9 +867,10 @@
           <img id="site-favicon-preview" style="width:24px;height:24px;border:1px solid var(--line);object-fit:contain;background:#fff;">
         </div>
         <div style="border:1px solid var(--line);background:#fafafa;padding:9px 11px;margin-top:8px;font-size:12px;line-height:1.9;color:var(--gray);">
-          <b>아이콘 주소를 넣으면</b> 그 그림이 브라우저 탭에 보입니다. png·svg·ico 모두 됩니다.<br>
+          <b>파일을 고르면</b> 자동으로 64×64로 줄여 저장합니다. 따로 어딘가에 올리실 필요가 없습니다. png·jpg·svg·ico 모두 됩니다.<br>
           <b>비워두면</b> 사이트 이름의 첫 글자로 만든 아이콘이 쓰입니다. (예: 「유통폰 관리」 → 「유」)<br>
-          <b>바꾼 뒤에도 옛 아이콘이 보이면</b> 브라우저가 아이콘을 기억하고 있는 것입니다. <b>Ctrl+Shift+R</b>로 새로고침하거나 탭을 닫았다 다시 열어주세요.
+          <b>고른 뒤 반드시 저장</b>을 눌러주세요. 저장하면 모든 사용자에게 적용됩니다.<br>
+          <b>바꿨는데 옛 아이콘이 보이면</b> 브라우저가 기억하고 있는 것입니다. <b>Ctrl+Shift+R</b>로 새로고침하거나 탭을 닫았다 다시 열어주세요.
         </div>
         <div id="site-name-msg" style="font-size:12px;color:var(--navy);display:none;margin-top:8px;">저장되었습니다.</div>
       </div>
@@ -2899,6 +2906,56 @@
     updateFaviconPreview();
     flashMsg("site-name-msg");
     logAction("사이트 이름·아이콘 변경", "→ " + val + (fav ? " / 아이콘 지정" : " / 기본 아이콘"));
+  };
+
+  // 고른 이미지를 작게 줄여 그림 데이터로 바꿉니다. (따로 올릴 곳이 필요 없습니다)
+  window.onFaviconFile = function(ev){
+    const f = ev.target.files && ev.target.files[0];
+    if(!f) return;
+    if(f.size > 3 * 1024 * 1024){ alert("3MB 이하 이미지를 골라주세요."); ev.target.value = ""; return; }
+    // svg 는 그대로 씁니다.
+    if(f.type === "image/svg+xml"){
+      const r = new FileReader();
+      r.onload = ()=>{
+        document.getElementById("site-favicon-input").value = r.result;
+        applyFavicon(r.result, "");
+        updateFaviconPreview();
+        alert("아이콘을 골랐습니다. 아래 저장을 눌러주세요.");
+      };
+      r.readAsDataURL(f);
+      return;
+    }
+    // 그림은 64×64 로 줄여 용량을 줄입니다.
+    const r = new FileReader();
+    r.onload = ()=>{
+      const img = new Image();
+      img.onload = ()=>{
+        const size = 64;
+        const cv = document.createElement("canvas");
+        cv.width = size; cv.height = size;
+        const ctx = cv.getContext("2d");
+        // 비율을 지키며 가운데를 씁니다.
+        const scale = Math.min(size / img.width, size / img.height);
+        const w = img.width * scale, h = img.height * scale;
+        ctx.drawImage(img, (size-w)/2, (size-h)/2, w, h);
+        const url = cv.toDataURL("image/png");
+        document.getElementById("site-favicon-input").value = url;
+        applyFavicon(url, "");
+        updateFaviconPreview();
+        alert("아이콘을 골랐습니다. 아래 저장을 눌러주세요.");
+      };
+      img.onerror = ()=> alert("이미지를 읽지 못했습니다. 다른 파일로 해보세요.");
+      img.src = r.result;
+    };
+    r.readAsDataURL(f);
+  };
+
+  window.clearFaviconFile = function(){
+    document.getElementById("site-favicon-input").value = "";
+    const f = document.getElementById("site-favicon-file");
+    if(f) f.value = "";
+    applyFavicon("", document.getElementById("site-name-input").value || DEFAULT_SITE_NAME);
+    updateFaviconPreview();
   };
 
   // 설정 화면에 아이콘 미리보기를 보여줍니다.
@@ -18723,6 +18780,7 @@
         renderCacheTargets();
         document.getElementById("site-name-input").value = currentSettings.siteName || DEFAULT_SITE_NAME;
         document.getElementById("site-favicon-input").value = currentSettings.faviconUrl || "";
+        const ff = document.getElementById("site-favicon-file"); if(ff) ff.value = "";
         applyFavicon(currentSettings.faviconUrl || "", currentSettings.siteName || DEFAULT_SITE_NAME);
         updateFaviconPreview();
         document.getElementById("pending-title-input").value = currentSettings.pendingTitle || DEFAULT_PENDING_TITLE;
