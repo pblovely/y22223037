@@ -279,7 +279,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-07-25 v137</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-07-25 v139</span>
       <span id="topbar-username">-</span>
       <button onclick="openPersonalSettingsModal()">개인설정</button>
       <button onclick="handleLogout()">로그아웃</button>
@@ -5800,6 +5800,8 @@
         fromOrderBatchId: batchRef.id,
         createdBy: currentUser.name, createdByUsername: currentUser.username, createdAt: serverTimestamp()
       });
+      // 주문 목록에서 바로 보이도록 묶음에도 남깁니다.
+      await updateDoc(doc(db,"orderBatches", batchRef.id), { creditUsed: creditUse });
     }
 
     const orderRefs = [];
@@ -6941,6 +6943,11 @@
         createdBy: currentUser.name, createdByUsername: currentUser.username, createdAt: serverTimestamp()
       });
     }
+    // 주문 목록에 바로 보이도록 묶음에도 남깁니다.
+    try{
+      await updateDoc(doc(db,"orderBatches", orderBatchId),
+        { creditUsed: Number(amount) > 0 ? Number(amount) : null });
+    }catch(e){}
   }
 
   // ================= B2B 대출 관리 =================
@@ -7374,6 +7381,9 @@
   // 여신 주문사용 기록을 실제 주문금액과 맞춥니다.
   // 중복·금액 불일치·삭제된 주문의 기록을 한 번에 바로잡습니다.
   window.repairB2BOrderUse = async function(){
+    if(!hasPerm(currentUserPerms, "settlementSettings") && !hasPerm(currentUserPerms, "permissionManage")){
+      alert("정산 권한이 필요합니다."); return;
+    }
     const obSnap = await getDocs(collection(db,"orderBatches"));
     const orders = {};
     obSnap.forEach(d=>{
