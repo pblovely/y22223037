@@ -279,7 +279,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-07-25 v121</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-07-25 v123</span>
       <span id="topbar-username">-</span>
       <button onclick="openPersonalSettingsModal()">개인설정</button>
       <button onclick="handleLogout()">로그아웃</button>
@@ -7196,8 +7196,12 @@
           wrongModels.push((o.systemModel||o.baseModel||"-") + " " + L.toLocaleString() + "→" + ML.toLocaleString());
         }
       });
+      // 여신차감은 저장값이 없으면 (출고가 − 선할인)으로 그 자리에서 계산합니다.
+      const creditCalc = listSum - preSum;
       rows.push({ id:d.id, b, qty, listSum, preSum, othSum, buySum, noList, modelListSum, priceDiff, wrongModels,
-        credit: Number(b.creditUsed)||0, saved: Number(b.depositRequired)||0 });
+        credit: (b.creditUsed != null ? Number(b.creditUsed) : creditCalc),
+        isCredit: b.paymentMethod === "b2b_credit",
+        saved: Number(b.depositRequired)||0 });
     });
     if(rows.length === 0){ el.innerHTML = '<div class="list-empty">주문이 없습니다.</div>'; return; }
 
@@ -7233,7 +7237,8 @@
         '<td class="ta-right">'+r.preSum.toLocaleString()+'</td>' +
         '<td class="ta-right">'+r.othSum.toLocaleString()+'</td>' +
         '<td class="ta-right">'+r.buySum.toLocaleString()+'</td>' +
-        '<td class="ta-right">'+(r.credit?r.credit.toLocaleString():"-")+'</td>' +
+        '<td class="ta-right"'+(r.isCredit?'':' style="color:var(--gray);"')+'>'+(r.credit?r.credit.toLocaleString():"-")+
+          (r.isCredit?'':' <span style="font-size:10px;">(일반)</span>')+'</td>' +
         '<td style="font-size:11.5px;">'+note+'</td></tr>';
     });
     h += '<tr style="background:#fafafa;font-weight:700;border-top:2px solid var(--navy);">' +
@@ -9297,7 +9302,38 @@
       const m = modelsCache.find(x=> norm(x.baseModel) === v);
       if(m) return { model:m, colorObj:null, usedCell:c };
     }
-    // 4) "이름 + 기가수" 형태 (예: "플립8 256", "폴드8울트라 512")
+    // 4) 삼성코드에서 모델명을 뽑고, 다른 칸의 기가수를 붙여서 찾습니다.
+    //    예: "SM-F776NLIAKOD" + "플립 256" → SM-F776N + 256 → SM-F776N256
+    const capsInLine = [];
+    cells.forEach(c=>{
+      const t = String(c||"").trim();
+      // "플립 256", "256", "512", "1TB" 등에서 기가수만 뽑습니다.
+      const m1 = t.match(/(\d{2,4})\s*(?:GB|기가)?$/i);
+      if(m1) capsInLine.push(m1[1]);
+      if(/1\s*TB/i.test(t)) capsInLine.push("1TB");
+    });
+    for(const c of cells){
+      const t = String(c||"").trim().toUpperCase();
+      // 삼성코드 형태에서 앞부분(모델명)을 뽑습니다. SM-F776N LIA KOD
+      const mm = t.match(/^(SM-[A-Z]\d{3,4}[A-Z]?)/);
+      if(!mm) continue;
+      const base = mm[1];
+      for(const cap of capsInLine){
+        const capNum = String(cap).replace(/\D/g,"") || cap;
+        const hit = modelsCache.find(x=>
+          norm(x.baseModel) === norm(base) &&
+          String(x.capacity||"").replace(/\D/g,"").toUpperCase() === String(capNum).toUpperCase());
+        if(hit) return { model:hit, colorObj:null, usedCell:c, usedCap:cap };
+        // 전산모델명이 "모델명+기가수" 형태인 경우도 봅니다.
+        const hit2 = modelsCache.find(x=> norm(x.systemModel) === norm(base + capNum));
+        if(hit2) return { model:hit2, colorObj:null, usedCell:c, usedCap:cap };
+      }
+      // 기가수가 줄에 없으면 모델명만으로 — 하나뿐일 때만
+      const onlyBase = modelsCache.filter(x=> norm(x.baseModel) === norm(base));
+      if(onlyBase.length === 1) return { model:onlyBase[0], colorObj:null, usedCell:c };
+    }
+
+    // 5) "이름 + 기가수" 형태 (예: "플립8 256", "폴드8울트라 512")
     //    이름이 여러 모델에 걸리면(예: "폴드"는 폴드8·폴드8울트라 둘 다) 고르지 않고 알려줍니다.
     const pickByNameCap = (name, cap)=>{
       const capOk = x => String(x.capacity||"").replace(/\D/g,"") === String(cap);
@@ -9323,7 +9359,7 @@
       if(r.ok) return { model:r.ok, colorObj:null, usedCell:c };
       if(r.ambiguous) return { ambiguous:r.ambiguous, usedCell:c };
     }
-    // 5) 이름과 기가수가 다른 칸에 있는 경우
+    // 6) 이름과 기가수가 다른 칸에 있는 경우
     const nums = cells.filter(c=> /^\d{2,4}$/.test(String(c).trim()));
     for(const c of cells){
       const name = norm(c); if(!name || /^\d+$/.test(name)) continue;
@@ -11181,6 +11217,18 @@
       });
     }catch(e){}
     html += statCard("클럽장려금 예정금액 (타할인 누적)", pendingRebate.toLocaleString(), "#b8860b");
+    if(pendingRebate === 0){
+      // creditUsed 가 저장되기 전 주문은 주문 품목에서 직접 계산합니다.
+      try{
+        const os = await getDocs(collection(db,"orders"));
+        let oth = 0;
+        os.forEach(dd=>{ const o = dd.data(); if(o.status!=="취소") oth += (Number(o.otherDiscountAmt)||0) * (Number(o.quantity)||0); });
+        if(oth > 0){
+          html = html.replace('>'+pendingRebate.toLocaleString()+'<', '>'+oth.toLocaleString()+'<');
+          pendingRebate = oth;
+        }
+      }catch(e){}
+    }
     html += statCard("받은 클럽장려금", clubIncentiveTotal.toLocaleString(), "#6a1b9a");
     html += statCard("미수령 차액", (pendingRebate - clubIncentiveTotal).toLocaleString(),
       (pendingRebate - clubIncentiveTotal) > 0 ? "var(--danger)" : "#2e7d32");
