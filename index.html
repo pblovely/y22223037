@@ -279,7 +279,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-07-25 v113</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-07-25 v116</span>
       <span id="topbar-username">-</span>
       <button onclick="openPersonalSettingsModal()">개인설정</button>
       <button onclick="handleLogout()">로그아웃</button>
@@ -618,6 +618,35 @@
         </div>
         <div id="i2s-list"></div>
         <div id="i2s-sum" style="display:none;border:1px solid var(--navy);background:#f4f7fb;padding:9px 11px;margin-top:10px;font-size:12.5px;line-height:1.8;"></div>
+      </div>
+    </div>
+
+    <!-- B2B 대출 등록 -->
+    <div id="loan-modal-overlay" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.55);z-index:1080;align-items:center;justify-content:center;">
+      <div style="background:#fff;border:2px solid var(--navy);max-width:520px;width:95%;max-height:92vh;overflow-y:auto;padding:22px;position:relative;">
+        <button onclick="closeLoanModal()" style="position:absolute;top:12px;right:12px;background:none;border:1px solid var(--navy);width:26px;height:26px;cursor:pointer;font-size:13px;">✕</button>
+        <h3 id="loan-modal-title" style="margin-top:0;margin-bottom:4px;">대출 등록</h3>
+        <p class="desc">등록하면 <b>여신이 자동으로 충전</b>됩니다. 만기는 실행일 기준 6개월로 계산됩니다.</p>
+        <div class="stack-form">
+          <div class="stack-row"><label>대출명</label><input type="text" id="loan-name" placeholder="예: 1차 대출 (국민은행)"></div>
+          <div class="stack-row"><label>실행일</label><input type="text" id="loan-start" maxlength="8" inputmode="numeric" placeholder="예: 20260723" oninput="calcLoanDue()"></div>
+          <div class="stack-row"><label>기간(개월)</label><input type="number" id="loan-term" value="6" oninput="calcLoanDue()"></div>
+          <div class="stack-row"><label>만기일 (자동)</label><input type="text" id="loan-due" disabled style="background:#f2f2f2;"></div>
+          <div class="stack-row"><label>대출 원금</label><input type="number" id="loan-principal" placeholder="예: 500000000" oninput="calcLoanInterest()"></div>
+          <div class="stack-row"><label>연 이자율(%)</label><input type="number" step="0.01" id="loan-rate" placeholder="예: 5.8" oninput="calcLoanInterest()"></div>
+          <div class="stack-row"><label>월 이자 (자동)</label><input type="number" id="loan-monthly" disabled style="background:#f2f2f2;"></div>
+          <div class="stack-row"><label>MP수수료율(%)</label><input type="number" step="0.01" id="loan-mprate" placeholder="예: 0.5" oninput="calcLoanInterest()"></div>
+          <div class="stack-row"><label>MP수수료 (자동)</label><input type="number" id="loan-mpfee" disabled style="background:#f2f2f2;"></div>
+          <div class="stack-row"><label>여신 충전</label>
+            <select id="loan-charge">
+              <option value="yes">예 — 여신에 바로 충전합니다</option>
+              <option value="no">아니오 — 대출만 기록합니다</option>
+            </select>
+          </div>
+          <div class="stack-row"><label>메모</label><input type="text" id="loan-memo" placeholder="선택"></div>
+        </div>
+        <button class="btn small" style="width:auto;margin-top:12px;" onclick="submitLoan()">저장</button>
+        <div id="loan-msg" style="display:none;font-size:12.5px;margin-top:10px;padding:8px 10px;border-left:3px solid var(--navy);background:#f2f2f2;line-height:1.6;"></div>
       </div>
     </div>
 
@@ -1067,6 +1096,14 @@
         <button class="btn small secondary" style="width:auto;" onclick="repairB2BOrderUse()">주문사용 금액 정리</button>
         <div id="b2b-orderuse-detail" style="display:none;margin-top:10px;"></div>
         <p class="desc" style="margin-top:6px;">여신으로 결제한 주문의 실제 금액과 <b>주문사용</b> 기록이 다르면 맞춰줍니다. 수기로 넣은 기록은 건드리지 않습니다.</p>
+      </div>
+
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+          <h3 style="margin:0;">B2B 대출 관리 <span class="info-tip" title="6개월 만기 대출을 건별로 관리합니다. 대출을 실행하면 여신이 자동으로 충전되고, 매달 이자·MP수수료를 기록하면 대출비용에 반영됩니다. 3개월 연장도 기록됩니다.">ⓘ</span></h3>
+          <button class="btn small" style="width:auto;" onclick="openLoanModal()">+ 대출 등록</button>
+        </div>
+        <div id="loan-list"></div>
       </div>
 
       <div class="card">
@@ -5712,10 +5749,15 @@
           "\n\n그래도 등록하시겠습니까?")) return;
       }catch(e){}
     }
-    if(useB2BCredit && depositRequired>0){
+    const creditUse = lines.reduce((n,l)=>{
+      const unit = (Number(l.listPrice)||0) ? ((Number(l.listPrice)||0) - (Number(l.preDiscountAmt)||0))
+        : ((Number(l.purchasePrice)||0) + (Number(l.otherDiscountAmt)||0));
+      return n + unit * (Number(l.quantity)||0);
+    }, 0);
+    if(useB2BCredit && creditUse>0){
       await addDoc(collection(db,"b2bLedger"), {
-        date: orderDate, category:"order_use", amount: depositRequired,
-        memo: "주문 자동반영: "+source+" ("+lines.length+"개 품목)",
+        date: orderDate, category:"order_use", amount: creditUse,
+        memo: "주문 여신결제: "+source+" ("+lines.length+"개 품목, 선할인 기준)",
         fromOrderBatchId: batchRef.id,
         createdBy: currentUser.name, createdByUsername: currentUser.username, createdAt: serverTimestamp()
       });
@@ -6802,6 +6844,24 @@
     loadSettlementTab();
   };
 
+  // 여신 차감액 = (출고가 − 선할인) × 수량
+  // 타할인(2.23%)은 나중에 클럽장려금으로 받는 후정산이라 여신에서 빼지 않습니다.
+  async function creditAmountOfBatch(orderBatchId){
+    const snap = await getDocs(query(collection(db,"orders"), where("batchId","==",orderBatchId)));
+    let sum = 0;
+    snap.forEach(d=>{
+      const o = d.data();
+      if(o.status === "취소") return;
+      const qty = Number(o.quantity)||0;
+      const list = Number(o.listPrice)||0;
+      const pre = Number(o.preDiscountAmt)||0;
+      const unit = list ? (list - pre)
+        : ((Number(o.purchasePrice)||0) + (Number(o.otherDiscountAmt)||0));
+      sum += unit * qty;
+    });
+    return sum;
+  }
+
   // 이 주문의 여신 차감 기록을 지우고 새 금액으로 다시 넣습니다. (중복 방지)
   async function replaceB2BOrderUse(orderBatchId, amount, date, sourceName){
     try{
@@ -6817,6 +6877,283 @@
       });
     }
   }
+
+  // ================= B2B 대출 관리 =================
+  // 6개월 만기 · 매달 이자 납부 · 3개월 연장 가능 · MP수수료 별도
+  function addMonthsStr(yyyymmdd, months){
+    const t = String(yyyymmdd||"").replace(/\D/g,"");
+    if(t.length !== 8) return "";
+    const y = Number(t.slice(0,4)), m = Number(t.slice(4,6)), d = Number(t.slice(6,8));
+    const dt = new Date(y, m-1+Number(months||0), d);
+    return dt.getFullYear() + String(dt.getMonth()+1).padStart(2,"0") + String(dt.getDate()).padStart(2,"0");
+  }
+  function daysBetween(a, b){
+    const p = t => { const x = String(t||"").replace(/\D/g,""); return x.length===8 ? new Date(+x.slice(0,4), +x.slice(4,6)-1, +x.slice(6,8)) : null; };
+    const d1 = p(a), d2 = p(b);
+    if(!d1 || !d2) return null;
+    return Math.round((d2 - d1) / 86400000);
+  }
+
+  window.closeLoanModal = function(){ document.getElementById("loan-modal-overlay").style.display = "none"; };
+  window.openLoanModal = function(){
+    ["loan-name","loan-start","loan-due","loan-principal","loan-rate","loan-monthly","loan-mprate","loan-mpfee","loan-memo"]
+      .forEach(id=>{ const el = document.getElementById(id); if(el) el.value = ""; });
+    document.getElementById("loan-term").value = "6";
+    document.getElementById("loan-start").value = todayStr();
+    document.getElementById("loan-charge").value = "yes";
+    document.getElementById("loan-msg").style.display = "none";
+    calcLoanDue();
+    document.getElementById("loan-modal-overlay").style.display = "flex";
+  };
+  window.calcLoanDue = function(){
+    const st = (document.getElementById("loan-start").value||"").replace(/\D/g,"");
+    const tm = Number(document.getElementById("loan-term").value)||6;
+    document.getElementById("loan-due").value = addMonthsStr(st, tm);
+    calcLoanInterest();
+  };
+  window.calcLoanInterest = function(){
+    const p = Number(document.getElementById("loan-principal").value)||0;
+    const r = Number(document.getElementById("loan-rate").value)||0;
+    const mp = Number(document.getElementById("loan-mprate").value)||0;
+    document.getElementById("loan-monthly").value = p && r ? Math.round(p * r / 100 / 12) : "";
+    document.getElementById("loan-mpfee").value  = p && mp ? Math.round(p * mp / 100) : "";
+  };
+
+  window.submitLoan = async function(){
+    const msg = (t, err)=> showModelMsg("loan-msg", t, err);
+    const name = document.getElementById("loan-name").value.trim();
+    const start = (document.getElementById("loan-start").value||"").replace(/\D/g,"");
+    const term = Number(document.getElementById("loan-term").value)||6;
+    const due = document.getElementById("loan-due").value;
+    const principal = Number(document.getElementById("loan-principal").value)||0;
+    const rate = Number(document.getElementById("loan-rate").value)||0;
+    const monthly = Number(document.getElementById("loan-monthly").value)||0;
+    const mpRate = Number(document.getElementById("loan-mprate").value)||0;
+    const mpFee = Number(document.getElementById("loan-mpfee").value)||0;
+    const charge = document.getElementById("loan-charge").value === "yes";
+    const memo = document.getElementById("loan-memo").value.trim();
+
+    if(!name){ msg("대출명을 입력해주세요.", true); return; }
+    if(start.length !== 8){ msg("실행일을 8자리로 입력해주세요. (예: 20260723)", true); return; }
+    if(principal <= 0){ msg("대출 원금을 입력해주세요.", true); return; }
+
+    try{
+      msg("저장 중...", false);
+      const ref = await addDoc(collection(db,"b2bLoans"), {
+        name, startDate:start, termMonths:term, dueDate:due,
+        principal, rateAnnual:rate, monthlyInterest:monthly,
+        mpFeeRate:mpRate, mpFeeAmount:mpFee,
+        repaidPrincipal:0, status:"진행중", extensions:[], payments:[],
+        memo, chargedToCredit: charge,
+        createdBy: currentUser.name, createdByUsername: currentUser.username, createdAt: serverTimestamp()
+      });
+      if(charge){
+        await addDoc(collection(db,"b2bLedger"), {
+          date: start, category:"loan_deposit", amount: principal,
+          memo: "대출 실행: " + name,
+          fromLoanId: ref.id,
+          createdBy: currentUser.name, createdByUsername: currentUser.username, createdAt: serverTimestamp()
+        });
+      }
+    }catch(e){
+      msg("<b>저장에 실패했습니다.</b><br>" + comboEsc((e && e.message) ? e.message : String(e)), true);
+      return;
+    }
+    logAction("B2B 대출 등록", name + " / " + principal.toLocaleString() + " / 만기 " + due);
+    msg("등록되었습니다." + (charge ? " 여신도 충전했습니다." : ""), false);
+    loadLoanList();
+    if(typeof loadB2BTab === "function") loadB2BTab();
+    setTimeout(closeLoanModal, 800);
+  };
+
+  window.loadLoanList = async function(){
+    const el = document.getElementById("loan-list");
+    if(!el) return;
+    el.innerHTML = '<div class="list-empty">불러오는 중...</div>';
+    const snap = await getDocs(query(collection(db,"b2bLoans"), orderBy("startDate","desc")));
+    if(snap.empty){ el.innerHTML = '<div class="list-empty">등록된 대출이 없습니다. <b>+ 대출 등록</b>으로 추가해주세요.</div>'; return; }
+
+    let h = '<div style="overflow-x:auto;"><table class="data-table" style="min-width:1080px;"><thead><tr>' +
+      '<th>대출명</th><th>실행일</th><th>만기일</th><th>남은일수</th>' +
+      '<th class="ta-right">원금</th><th class="ta-right">상환</th><th class="ta-right">잔액</th>' +
+      '<th class="ta-right">월이자</th><th class="ta-right">누적 이자·수수료</th><th>상태</th><th class="ta-right">관리</th>' +
+      '</tr></thead><tbody>';
+    snap.forEach(d=>{
+      const L = { id:d.id, ...d.data() };
+      const remain = (Number(L.principal)||0) - (Number(L.repaidPrincipal)||0);
+      const paidCost = (L.payments||[]).filter(x=>x.type!=="principal").reduce((n,x)=> n + (Number(x.amount)||0), 0);
+      const left = daysBetween(todayStr(), L.dueDate);
+      const dday = (L.status === "상환완료") ? "-"
+        : (left === null ? "-" : (left < 0 ? '<span style="color:var(--danger);font-weight:700;">' + Math.abs(left) + '일 지남</span>'
+          : (left <= 30 ? '<span style="color:var(--danger);font-weight:700;">' + left + '일</span>' : left + '일')));
+      const badge = L.status === "상환완료"
+        ? '<span style="background:#2e7d32;color:#fff;font-size:10.5px;padding:1px 6px;">상환완료</span>'
+        : ((L.extensions||[]).length
+          ? '<span style="background:#b8860b;color:#fff;font-size:10.5px;padding:1px 6px;">연장 ' + (L.extensions||[]).length + '회</span>'
+          : '<span style="background:var(--navy);color:#fff;font-size:10.5px;padding:1px 6px;">진행중</span>');
+      h += '<tr>' +
+        '<td><b>'+comboEsc(L.name||"-")+'</b></td>' +
+        '<td>'+comboEsc(L.startDate||"-")+'</td>' +
+        '<td>'+comboEsc(L.dueDate||"-")+'</td>' +
+        '<td>'+dday+'</td>' +
+        '<td class="ta-right">'+(Number(L.principal)||0).toLocaleString()+'</td>' +
+        '<td class="ta-right">'+(Number(L.repaidPrincipal)||0).toLocaleString()+'</td>' +
+        '<td class="ta-right"><b>'+remain.toLocaleString()+'</b></td>' +
+        '<td class="ta-right">'+(Number(L.monthlyInterest)||0).toLocaleString()+'</td>' +
+        '<td class="ta-right">'+paidCost.toLocaleString()+'</td>' +
+        '<td>'+badge+'</td>' +
+        '<td class="ta-right" style="white-space:nowrap;">' +
+          (L.status !== "상환완료"
+            ? '<button class="btn small secondary" style="width:auto;" data-loan-pay="'+d.id+'">이자·수수료</button>' +
+              '<button class="btn small secondary" style="width:auto;" data-loan-ext="'+d.id+'">연장</button>' +
+              '<button class="btn small secondary" style="width:auto;" data-loan-repay="'+d.id+'">상환</button>'
+            : '') +
+          '<button class="btn small secondary" style="width:auto;" data-loan-detail="'+d.id+'">내역</button>' +
+        '</td></tr>';
+    });
+    h += '</tbody></table></div><div id="loan-detail-area" style="margin-top:10px;"></div>';
+    el.innerHTML = h;
+    el.querySelectorAll("[data-loan-pay]").forEach(b=> b.onclick = ()=> addLoanPayment(b.dataset.loanPay));
+    el.querySelectorAll("[data-loan-ext]").forEach(b=> b.onclick = ()=> extendLoan(b.dataset.loanExt));
+    el.querySelectorAll("[data-loan-repay]").forEach(b=> b.onclick = ()=> repayLoan(b.dataset.loanRepay));
+    el.querySelectorAll("[data-loan-detail]").forEach(b=> b.onclick = ()=> showLoanDetail(b.dataset.loanDetail));
+  };
+
+  // 이자·MP수수료 납부 기록 (대출비용으로 자동 반영)
+  window.addLoanPayment = async function(loanId){
+    const snap = await getDoc(doc(db,"b2bLoans", loanId));
+    if(!snap.exists()){ alert("대출을 찾을 수 없습니다."); return; }
+    const L = snap.data();
+
+    const kindIn = prompt(
+      "무엇을 납부하셨나요? 번호를 입력해주세요.\n\n" +
+      "  1. 이자 (월 " + (Number(L.monthlyInterest)||0).toLocaleString() + ")\n" +
+      "  2. MP수수료 (" + (Number(L.mpFeeAmount)||0).toLocaleString() + ")\n" +
+      "  3. 기타 수수료", "1");
+    if(kindIn === null) return;
+    const k = String(kindIn).trim();
+    const preset = k === "1" ? (Number(L.monthlyInterest)||0) : (k === "2" ? (Number(L.mpFeeAmount)||0) : 0);
+    const type = k === "1" ? "interest" : (k === "2" ? "mp_fee" : "fee");
+    const label = k === "1" ? "이자" : (k === "2" ? "MP수수료" : "기타 수수료");
+    const category = k === "1" ? "b2b_interest" : (k === "2" ? "b2b_fee_mp" : "b2b_fee_payment");
+
+    const amtIn = prompt(label + " 금액을 입력하세요.", String(preset || ""));
+    if(amtIn === null) return;
+    const amt = Number(String(amtIn).replace(/[^0-9]/g,"")) || 0;
+    if(amt <= 0){ alert("금액을 입력해주세요."); return; }
+
+    const dateIn = prompt("납부일 (예: 20260823)", todayStr());
+    if(dateIn === null) return;
+    const date = String(dateIn).replace(/\D/g,"") || todayStr();
+
+    try{
+      await updateDoc(doc(db,"b2bLoans", loanId), {
+        payments: [...(L.payments||[]), { type, amount:amt, date, by: currentUser.name }]
+      });
+      await addDoc(collection(db,"b2bLedger"), {
+        date, category, amount: amt,
+        memo: label + " 납부: " + (L.name||"-"),
+        fromLoanId: loanId,
+        createdBy: currentUser.name, createdByUsername: currentUser.username, createdAt: serverTimestamp()
+      });
+    }catch(e){ alert("저장에 실패했습니다.\n" + ((e && e.message) ? e.message : String(e))); return; }
+    logAction("B2B 대출 " + label + " 납부", (L.name||"-") + " / " + amt.toLocaleString() + " / " + date);
+    alert(label + " " + amt.toLocaleString() + " 을 기록했습니다.");
+    loadLoanList(); if(typeof loadB2BTab === "function") loadB2BTab();
+  };
+
+  // 3개월 연장
+  window.extendLoan = async function(loanId){
+    const snap = await getDoc(doc(db,"b2bLoans", loanId));
+    if(!snap.exists()) return;
+    const L = snap.data();
+    const mIn = prompt("몇 개월 연장하시나요?", "3");
+    if(mIn === null) return;
+    const months = Number(mIn)||0;
+    if(months <= 0){ alert("개월 수를 확인해주세요."); return; }
+    const newDue = addMonthsStr(L.dueDate, months);
+    if(!confirm("만기를 연장합니다.\n\n  현재 만기 " + (L.dueDate||"-") + "\n  연장 후   " + newDue + "\n\n진행하시겠습니까?")) return;
+    try{
+      await updateDoc(doc(db,"b2bLoans", loanId), {
+        dueDate: newDue,
+        extensions: [...(L.extensions||[]), { date: todayStr(), months, from: L.dueDate, to: newDue, by: currentUser.name }]
+      });
+    }catch(e){ alert("실패했습니다."); return; }
+    logAction("B2B 대출 연장", (L.name||"-") + " / " + months + "개월 / " + L.dueDate + " → " + newDue);
+    alert("연장했습니다. 새 만기 " + newDue);
+    loadLoanList();
+  };
+
+  // 원금 상환 (여신과는 무관 — 은행에 갚는 돈입니다)
+  window.repayLoan = async function(loanId){
+    const snap = await getDoc(doc(db,"b2bLoans", loanId));
+    if(!snap.exists()) return;
+    const L = snap.data();
+    const remain = (Number(L.principal)||0) - (Number(L.repaidPrincipal)||0);
+    const amtIn = prompt("상환 금액을 입력하세요.\n\n  원금 " + (Number(L.principal)||0).toLocaleString()
+      + "\n  기상환 " + (Number(L.repaidPrincipal)||0).toLocaleString()
+      + "\n  잔액 " + remain.toLocaleString(), String(remain));
+    if(amtIn === null) return;
+    const amt = Number(String(amtIn).replace(/[^0-9]/g,"")) || 0;
+    if(amt <= 0){ alert("금액을 확인해주세요."); return; }
+
+    const dateIn = prompt("상환일 (예: 20270123)", todayStr());
+    if(dateIn === null) return;
+    const date = String(dateIn).replace(/\D/g,"") || todayStr();
+
+    const newRepaid = (Number(L.repaidPrincipal)||0) + amt;
+    const done = newRepaid >= (Number(L.principal)||0);
+    if(!confirm("원금을 상환합니다.\n\n  이번 " + amt.toLocaleString()
+      + "\n  누적 " + newRepaid.toLocaleString() + " / " + (Number(L.principal)||0).toLocaleString()
+      + (done ? "\n\n전액 상환되어 상환완료로 바뀝니다." : "\n  남은 금액 " + ((Number(L.principal)||0) - newRepaid).toLocaleString())
+      + "\n\n※ 상환은 은행에 갚는 돈이라 여신 잔액에는 영향이 없습니다.\n\n진행하시겠습니까?")) return;
+
+    try{
+      await updateDoc(doc(db,"b2bLoans", loanId), {
+        repaidPrincipal: newRepaid,
+        status: done ? "상환완료" : "진행중",
+        payments: [...(L.payments||[]), { type:"principal", amount:amt, date, by: currentUser.name }]
+      });
+      await addDoc(collection(db,"b2bLedger"), {
+        date, category:"loan_repay", amount: amt,
+        memo: "원금 상환: " + (L.name||"-"),
+        fromLoanId: loanId,
+        createdBy: currentUser.name, createdByUsername: currentUser.username, createdAt: serverTimestamp()
+      });
+    }catch(e){ alert("실패했습니다."); return; }
+    logAction("B2B 대출 원금상환", (L.name||"-") + " / " + amt.toLocaleString() + " / " + date);
+    alert("상환을 기록했습니다." + (done ? "\n전액 상환 완료입니다." : ""));
+    loadLoanList(); if(typeof loadB2BTab === "function") loadB2BTab();
+  };
+
+  // 대출 상세 내역
+  window.showLoanDetail = async function(loanId){
+    const el = document.getElementById("loan-detail-area");
+    if(!el) return;
+    const snap = await getDoc(doc(db,"b2bLoans", loanId));
+    if(!snap.exists()) return;
+    const L = snap.data();
+    const TYPE = { interest:"이자", mp_fee:"MP수수료", fee:"기타 수수료", principal:"원금 상환" };
+    let h = '<div style="border:1px solid var(--navy);padding:12px 14px;">' +
+      '<b>' + comboEsc(L.name||"-") + '</b> <span style="color:var(--gray);font-size:12px;">' +
+      comboEsc(L.startDate||"-") + " ~ " + comboEsc(L.dueDate||"-") + " · 원금 " + (Number(L.principal)||0).toLocaleString() +
+      (L.rateAnnual ? " · 연 " + L.rateAnnual + "%" : "") + (L.mpFeeRate ? " · MP " + L.mpFeeRate + "%" : "") + '</span>';
+    if((L.extensions||[]).length){
+      h += '<div style="margin-top:8px;font-size:12px;"><b>연장 내역</b><br>' +
+        L.extensions.map(x=> '· ' + comboEsc(x.date) + ' — ' + x.months + '개월 (' + comboEsc(x.from) + ' → ' + comboEsc(x.to) + ')').join('<br>') + '</div>';
+    }
+    const ps = (L.payments||[]).slice().sort((a,b)=> String(b.date||"").localeCompare(String(a.date||"")));
+    if(ps.length){
+      h += '<table class="data-table" style="margin-top:10px;"><thead><tr><th>일자</th><th>구분</th><th class="ta-right">금액</th><th>처리자</th></tr></thead><tbody>' +
+        ps.map(x=> '<tr><td>'+comboEsc(x.date||"-")+'</td><td>'+(TYPE[x.type]||x.type)+'</td>' +
+          '<td class="ta-right">'+(Number(x.amount)||0).toLocaleString()+'</td><td>'+comboEsc(x.by||"-")+'</td></tr>').join("") +
+        '</tbody></table>';
+    }else{
+      h += '<div style="margin-top:8px;font-size:12px;color:var(--gray);">납부·상환 내역이 없습니다.</div>';
+    }
+    h += '<button class="btn small secondary" style="width:auto;margin-top:10px;" onclick="document.getElementById(\'loan-detail-area\').innerHTML=\'\'">닫기</button></div>';
+    el.innerHTML = h;
+  };
 
   // 주문사용이 어떤 주문에서 나왔는지 하나하나 보여줍니다.
   window.showB2BOrderUseDetail = async function(){
@@ -6871,10 +7208,15 @@
       const b = d.data();
       orders[d.id] = {
         isCredit: b.paymentMethod === "b2b_credit" && b.status !== "취소",
-        amount: Number(b.depositRequired)||0,
+        amount: 0,
         source: b.source||"-", date: b.depositPaidDate || b.orderDate || ""
       };
     });
+
+    // 여신 차감액을 선할인 기준으로 다시 계산합니다.
+    for(const bid of Object.keys(orders)){
+      if(orders[bid].isCredit) orders[bid].amount = await creditAmountOfBatch(bid);
+    }
 
     const ledSnap = await getDocs(query(collection(db,"b2bLedger"), where("category","==","order_use")));
     const byBatch = {};      // 주문묶음별 기록
@@ -8700,7 +9042,8 @@
       const newPm = pmEl.value;
       const oldPm = (b.paymentMethod === "b2b_credit") ? "b2b_credit" : "normal";
       // 실제 차감할 금액 = 이번에 저장될 최종 주문금액
-      const amt = (batchPatch.depositRequired != null) ? Number(batchPatch.depositRequired) : (Number(b.depositRequired)||0);
+      // 여신은 선할인까지만 반영한 금액으로 차감합니다. (타할인은 후정산)
+      const amt = await creditAmountOfBatch(id);
 
       if(newPm !== oldPm){
         if(b.paymentRequestId){
@@ -13696,6 +14039,7 @@
     if(tabId==="tab-inv-color") loadColorAdminList();
     if(tabId==="tab-inv-company") loadCompanyList();
     if(tabId==="tab-ledger") initLedgerTab();
+    if(tabId==="tab-b2b" && typeof loadLoanList === "function") loadLoanList();
     if(tabId==="tab-site" && typeof renderHiddenList === "function") renderHiddenList();
     if(tabId==="tab-inv-carrier") loadCarrierList();
     if(tabId==="tab-inv-manufacturer") loadManufacturerList();
