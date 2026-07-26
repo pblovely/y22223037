@@ -5,6 +5,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title id="page-title">유통폰 관리 대시보드</title>
+<link id="page-favicon" rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%232b2b2b'/%3E%3Ctext x='32' y='44' font-size='38' font-family='sans-serif' font-weight='700' fill='white' text-anchor='middle'%3E폰%3C/text%3E%3C/svg%3E">
 <style>
   :root{
     --navy:#2b2b2b;
@@ -291,7 +292,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-07-25 v227</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-07-25 v228</span>
       <span id="topbar-username">-</span>
       <button onclick="openPersonalSettingsModal()">개인설정</button>
       <button onclick="handleLogout()">로그아웃</button>
@@ -805,12 +806,23 @@
     <!-- ===== 관리자: 사이트 설정 ===== -->
     <div id="tab-site" class="tab-panel">
       <div class="card">
-        <h3>사이트 이름</h3>
-        <div class="inline-form">
-          <input type="text" id="site-name-input">
-          <button class="btn small" onclick="saveSiteName()">저장</button>
+        <h3>사이트 이름·아이콘 <span class="info-tip" title="브라우저 탭에 보이는 이름과 아이콘입니다. 로그인 화면 제목에도 함께 쓰입니다.">ⓘ</span></h3>
+        <p class="desc">브라우저 탭·로그인 화면·상단에 함께 쓰입니다.</p>
+        <div class="stack-form" style="max-width:640px;">
+          <div class="stack-row"><label>사이트 이름</label><input type="text" id="site-name-input"></div>
+          <div class="stack-row"><label>아이콘 주소 <span class="info-tip" title="이미지 주소(https://...)를 넣으면 그 그림이 탭에 보입니다. 비워두면 사이트 이름의 첫 글자로 만든 아이콘이 쓰입니다.">ⓘ</span></label><input type="text" id="site-favicon-input" placeholder="비우면 이름 첫 글자로 자동 (예: https://.../icon.png)"></div>
         </div>
-        <div id="site-name-msg" style="font-size:12px;color:var(--navy);display:none;">저장되었습니다.</div>
+        <div style="display:flex;align-items:center;gap:10px;margin-top:8px;">
+          <button class="btn small" style="width:auto;" onclick="saveSiteName()">저장</button>
+          <span style="font-size:12px;color:var(--gray);">미리보기</span>
+          <img id="site-favicon-preview" style="width:24px;height:24px;border:1px solid var(--line);object-fit:contain;background:#fff;">
+        </div>
+        <div style="border:1px solid var(--line);background:#fafafa;padding:9px 11px;margin-top:8px;font-size:12px;line-height:1.9;color:var(--gray);">
+          <b>아이콘 주소를 넣으면</b> 그 그림이 브라우저 탭에 보입니다. png·svg·ico 모두 됩니다.<br>
+          <b>비워두면</b> 사이트 이름의 첫 글자로 만든 아이콘이 쓰입니다. (예: 「유통폰 관리」 → 「유」)<br>
+          <b>바꾼 뒤에도 옛 아이콘이 보이면</b> 브라우저가 아이콘을 기억하고 있는 것입니다. <b>Ctrl+Shift+R</b>로 새로고침하거나 탭을 닫았다 다시 열어주세요.
+        </div>
+        <div id="site-name-msg" style="font-size:12px;color:var(--navy);display:none;margin-top:8px;">저장되었습니다.</div>
       </div>
       <div class="card">
         <h3>승인 대기 화면 문구</h3>
@@ -2385,7 +2397,39 @@
     document.getElementById("page-title").textContent = n;
     document.getElementById("site-title-login").textContent = n;
     document.getElementById("site-title-topbar").textContent = n;
+    // 다음에 로그인 화면을 열 때 바로 보이도록 브라우저에도 남겨둡니다.
+    try{ localStorage.setItem("siteName", n); }catch(e){}
   }
+
+  // 아이콘(파비콘)을 바꿉니다. 이미지 주소이거나 비우면 기본 글자 아이콘입니다.
+  function applyFavicon(url, name){
+    const el = document.getElementById("page-favicon");
+    if(!el) return;
+    if(url){ el.href = url; return; }
+    const ch = String(name || DEFAULT_SITE_NAME).trim().charAt(0) || "폰";
+    el.href = "data:image/svg+xml," + encodeURIComponent(
+      "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'>"
+      + "<rect width='64' height='64' rx='12' fill='#2b2b2b'/>"
+      + "<text x='32' y='44' font-size='38' font-family='sans-serif' font-weight='700' fill='white' text-anchor='middle'>"
+      + ch + "</text></svg>");
+    try{ localStorage.setItem("faviconUrl", url || ""); }catch(e){}
+  }
+  // 로그인 전이라 Firestore를 못 읽으니, 지난번에 저장해둔 이름·아이콘을 먼저 보여줍니다.
+  (function primeSiteName(){
+    try{
+      const n = localStorage.getItem("siteName");
+      if(n){
+        document.getElementById("page-title").textContent = n;
+        const el = document.getElementById("site-title-login");
+        if(el) el.textContent = n;
+        const tb = document.getElementById("site-title-topbar");
+        if(tb) tb.textContent = n;
+      }
+      const f = localStorage.getItem("faviconUrl");
+      applyFavicon(f || "", n || "");
+    }catch(e){}
+  })();
+
   function applyPendingScreen(s){
     document.getElementById("pending-title").textContent = s.pendingTitle || DEFAULT_PENDING_TITLE;
     document.getElementById("pending-desc").textContent = s.pendingDesc || DEFAULT_PENDING_DESC;
@@ -2399,6 +2443,7 @@
       if(snap.exists()){
         currentSettings = snap.data();
         applySiteName(currentSettings.siteName);
+        applyFavicon(currentSettings.faviconUrl || "", currentSettings.siteName);
         applyPendingScreen(currentSettings);
         customTabLabels = currentSettings.tabLabels || {};
         customTabColors = currentSettings.tabColors || {};
@@ -2788,9 +2833,22 @@
   window.saveSiteName = async function(){
     const val = document.getElementById("site-name-input").value.trim();
     if(!val) return;
-    await setDoc(doc(db, "settings", "general"), { siteName: val }, { merge:true });
-    applySiteName(val); flashMsg("site-name-msg");
-    logAction("사이트 이름 변경", "→ " + val);
+    const fav = document.getElementById("site-favicon-input").value.trim();
+    await setDoc(doc(db, "settings", "general"), { siteName: val, faviconUrl: fav }, { merge:true });
+    currentSettings.siteName = val;
+    currentSettings.faviconUrl = fav;
+    applySiteName(val);
+    applyFavicon(fav, val);
+    updateFaviconPreview();
+    flashMsg("site-name-msg");
+    logAction("사이트 이름·아이콘 변경", "→ " + val + (fav ? " / 아이콘 지정" : " / 기본 아이콘"));
+  };
+
+  // 설정 화면에 아이콘 미리보기를 보여줍니다.
+  window.updateFaviconPreview = function(){
+    const img = document.getElementById("site-favicon-preview");
+    const el = document.getElementById("page-favicon");
+    if(img && el) img.src = el.href;
   };
   window.savePendingScreen = async function(){
     const title = document.getElementById("pending-title-input").value.trim();
@@ -17939,6 +17997,9 @@
         renderAutoFixList();
         renderCacheTargets();
         document.getElementById("site-name-input").value = currentSettings.siteName || DEFAULT_SITE_NAME;
+        document.getElementById("site-favicon-input").value = currentSettings.faviconUrl || "";
+        applyFavicon(currentSettings.faviconUrl || "", currentSettings.siteName || DEFAULT_SITE_NAME);
+        updateFaviconPreview();
         document.getElementById("pending-title-input").value = currentSettings.pendingTitle || DEFAULT_PENDING_TITLE;
         document.getElementById("pending-desc-input").value = currentSettings.pendingDesc || DEFAULT_PENDING_DESC;
         document.getElementById("pending-icon-input").value = currentSettings.pendingIconUrl || "";
