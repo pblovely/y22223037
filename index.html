@@ -253,6 +253,10 @@
   .data-table .ta-right{ text-align:right; }
   .data-table .ta-left{ text-align:left; }
   .data-table{ width:100%; border-collapse:collapse; font-size:12.5px; }
+  /* 업체별 지표 표 — 좌우로 늘리지 않고 내용 너비만 차지하며 왼쪽에 붙입니다. */
+  .data-table.resv-dest-fit{ width:auto !important; min-width:0 !important; margin:0 !important; table-layout:auto; }
+  .data-table.resv-dest-fit th, .data-table.resv-dest-fit td{ white-space:nowrap; padding-left:10px; padding-right:10px; }
+  .data-table.resv-dest-fit th:first-child, .data-table.resv-dest-fit td:first-child{ padding-left:0; }
   .data-table th, .data-table td{ padding:2px 6px; text-align:left; vertical-align:middle; white-space:nowrap; line-height:1.25; height:26px; box-sizing:border-box; }
   .data-table .btn.small{ padding:3px 9px; }
   .data-table thead tr{ background:#fafafa; border-bottom:2px solid var(--navy); }
@@ -305,7 +309,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-07-26 v259</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-07-26 v261</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -6592,7 +6596,7 @@
     rows.forEach(r=>{
       h += '<tr'+(r.cancelled?' style="color:var(--gray);"':(r.isDone?' style="background:#f4f9f4;"':''))+'>' +
         '<td><input type="checkbox" class="'+(kind==="order"?"order-pay-cb":"sale-pay-cb")+'" data-batch-id="'+r.id+'"'
-          + (kind==="order" ? ' data-amount="'+(Number(r.b.depositRequired)||0)+'"' : ' data-amount="'+(Number(r.b.depositRequired)||0)+'" data-legacy="'+(r.isLegacy?"1":"0")+'"')
+          + (kind==="order" ? ' data-amount="'+(Number(r.b.depositRequired)||0)+'"' : ' data-amount="'+(Number(r.b.depositRequired)||0)+'" data-legacy="'+(r.isLegacy?"1":"0")+'" data-dest="'+comboEsc(r.b.destination||"")+'"')
           + ((kind==="order" ? (r.b.depositPaid||r.b.paymentRequestId) : (r.b.depositReceived||r.b.depositRequestId)) ? ' disabled' : '') + '></td>' +
         cols.map(c=>'<td'+(c.num?' class="ta-right"':'')+(c.cls?' style="'+c.cls(r)+'"':'')+'>'+c.get(r)+'</td>').join("") +
         '<td class="ta-right" style="white-space:nowrap;">'+actionsFn(r)+'</td></tr>';
@@ -9538,13 +9542,16 @@
     const otherAmount = Number(document.getElementById("sale-payment-other-amount-input").value) || 0;
     if(checked.length===0 && otherAmount===0){ alert("입금요청으로 묶을 판매요청을 체크하거나, 기타 금액을 입력해주세요."); return; }
     const batchRefs = checked.map(cb=>({ id:cb.dataset.batchId, isLegacy: cb.dataset.legacy==="1" }));
+    // 업체명을 요청에 함께 저장합니다. 나중에 판매요청이 지워져도 어느 업체 건인지 남습니다.
+    const destinations = [...new Set(checked.map(cb=> (cb.dataset.dest||"").trim()).filter(Boolean))];
     let total = otherAmount;
     checked.forEach(cb=> total += Number(cb.dataset.amount)||0);
-    const confirmMsg = batchRefs.length+"건"+(otherAmount>0?" + 기타 "+otherAmount.toLocaleString():"")+" / 총 "+total.toLocaleString()+" — 입금요청을 만드시겠습니까?";
+    const confirmMsg = (destinations.length ? destinations.join(", ")+" / " : "")
+      + batchRefs.length+"건"+(otherAmount>0?" + 기타 "+otherAmount.toLocaleString():"")+" / 총 "+total.toLocaleString()+" — 입금요청을 만드시겠습니까?";
     if(!confirm(confirmMsg)) return;
 
     const reqRef = await addDoc(collection(db,"saleDepositRequests"), {
-      saleBatchRefs: batchRefs, otherAmount, totalAmount: total,
+      saleBatchRefs: batchRefs, destinations, otherAmount, totalAmount: total,
       requestDate: todayStr(), depositCompleted:false, depositCompleteDate:"",
       receivedAmount: 0, receipts: [],                 // 부분입금 누적
       taxInvoiceIssued:false, taxInvoiceDate:"",
@@ -9554,7 +9561,8 @@
       const col = b.isLegacy ? "saleRequests" : "saleRequestBatches";
       await updateDoc(doc(db, col, b.id), { depositRequestId: reqRef.id });
     }
-    logAction("판매 입금요청 생성", batchRefs.length+"건 / 기타 "+otherAmount.toLocaleString()+" / 총 "+total.toLocaleString());
+    logAction("판매 입금요청 생성", (destinations.length?destinations.join(",")+" / ":"")
+      + batchRefs.length+"건 / 기타 "+otherAmount.toLocaleString()+" / 총 "+total.toLocaleString());
     document.getElementById("sale-payment-other-amount-input").value = "";
     loadSaleRequestList();
     loadSettlementTab();
@@ -9866,16 +9874,23 @@
         approvedBy: canApprove ? currentUser.name : "",
         approvedAt: canApprove ? date : ""
       }];
+      // ★ 승인된 입금만 반영합니다. ★
+      //  승인 전 기록은 금액에 넣지 않고, 입금완료로도 바꾸지 않습니다.
+      //  (예전에는 승인 없이도 바로 입금완료가 되어 미수금액이 사라졌습니다)
+      const okSum = receipts.filter(x=> x.approved).reduce((n,x)=> n + (Number(x.amount)||0), 0);
+      const okFull = total > 0 && okSum >= total;
+      const okLastDate = receipts.filter(x=> x.approved).map(x=> x.date).sort().slice(-1)[0] || "";
       await updateDoc(doc(db,"saleDepositRequests", reqId), {
-        receivedAmount: newRecv, receipts,
-        depositCompleted: full,
-        depositCompleteDate: full ? date : "",
-        status: full ? "입금완료" : "부분입금"
+        receivedAmount: okSum, receipts,
+        depositCompleted: okFull,
+        depositCompleteDate: okFull ? okLastDate : "",
+        status: okFull ? "입금완료" : (okSum > 0 ? "부분입금" : "승인대기")
       });
-      if(full){
+      // 판매요청 묶음은 승인이 끝나 전액이 채워졌을 때만 입금완료로 바꿉니다.
+      if(okFull){
         for(const b of (p.saleBatchRefs||[])){
           const col = b.isLegacy ? "saleRequests" : "saleRequestBatches";
-          await updateDoc(doc(db, col, b.id), { depositReceived:true, depositReceivedDate: date, status:"입금완료" });
+          await updateDoc(doc(db, col, b.id), { depositReceived:true, depositReceivedDate: okLastDate, status:"입금완료" });
         }
       }
     }catch(e){
@@ -9899,6 +9914,29 @@
     el.innerHTML = "";
     const sdrDocs = snap.docs;
     const { pageItems: sdrPage } = paginateSlice(sdrDocs, "saleDepositRequests");
+    // 업체명이 저장돼 있지 않은 옛 요청은 연결된 판매요청에서 찾아옵니다.
+    // 판매요청이 지워져 찾을 수 없으면 "연결 끊김"으로 표시합니다.
+    const needLookup = sdrPage.some(d=> !(d.data().destinations||[]).length);
+    const destById = {};
+    if(needLookup){
+      try{
+        const [bs, ls] = await Promise.all([
+          getDocs(collection(db,"saleRequestBatches")),
+          getDocs(collection(db,"saleRequests"))
+        ]);
+        bs.forEach(x=>{ const v=x.data(); if(v.destination) destById[x.id]=v.destination; });
+        ls.forEach(x=>{ const v=x.data(); if(v.destination) destById[x.id]=v.destination; });
+      }catch(e){}
+    }
+    const destLabelOf = (p)=>{
+      const saved = (p.destinations||[]).filter(Boolean);
+      if(saved.length) return saved.join(", ");
+      const refs = p.saleBatchRefs||[];
+      const found = [...new Set(refs.map(b=> destById[b.id]).filter(Boolean))];
+      if(found.length) return found.join(", ");
+      if(refs.length) return '<span style="color:var(--danger);">연결 끊김 (판매요청 없음)</span>';
+      return '<span style="color:var(--gray);">-</span>';
+    };
     sdrPage.forEach(d=>{
       const p = d.data();
       const row = document.createElement("div");
@@ -9906,7 +9944,7 @@
       row.style.alignItems = "flex-start"; row.style.flexWrap = "wrap";
       row.innerHTML =
         '<span style="font-size:12.5px;">' +
-        '<b>'+(p.totalAmount||0).toLocaleString()+'</b> · 판매요청 '+p.saleBatchRefs.length+'건'+(p.otherAmount?' + 기타 '+p.otherAmount.toLocaleString():'')+' · 요청일 '+p.requestDate+' · 상태 <b>'+p.status+'</b><br>' +
+        '<b>'+destLabelOf(p)+'</b> · <b>'+(p.totalAmount||0).toLocaleString()+'</b> · 판매요청 '+p.saleBatchRefs.length+'건'+(p.otherAmount?' + 기타 '+p.otherAmount.toLocaleString():'')+' · 요청일 '+p.requestDate+' · 상태 <b>'+p.status+'</b><br>' +
         // 입금 내역 (부분입금 포함)
         ((p.receipts && p.receipts.length)
           ? '<br>' + p.receipts.map(x=>
@@ -14023,7 +14061,8 @@
         destCardEl.innerHTML = "";
       }else{
         let dh = '<div style="font-size:12.5px;font-weight:700;margin-bottom:6px;">업체별 지표</div>'
-          + '<div style="overflow-x:auto;"><table class="data-table" data-label-key="resv-dest-table" style="min-width:760px;">'
+          + '<div style="overflow-x:auto;text-align:left;">'
+          + '<table class="data-table resv-dest-fit" data-label-key="resv-dest-table">'
           + '<thead><tr><th>업체</th>'
           + '<th class="ta-right">예약수량</th><th class="ta-right">배정</th><th class="ta-right">잔여</th>'
           + '<th class="ta-right">출고가 금액</th><th class="ta-right">판매가 금액</th>'
