@@ -291,7 +291,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-07-25 v195</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-07-25 v199</span>
       <span id="topbar-username">-</span>
       <button onclick="openPersonalSettingsModal()">개인설정</button>
       <button onclick="handleLogout()">로그아웃</button>
@@ -2123,6 +2123,8 @@
     companyEdit:"업체 정보 수정·삭제 (추가는 누구나 가능)",
     listPriceOverride:"출고가 직접 입력 (모델 등록값과 다르게 저장)",
     cancelDelete:"⚠ 취소된 주문·판매요청 삭제 (되돌릴 수 없음)",
+    accountView:"업체 계좌·사업자번호 보기 (없으면 가려짐)",
+    depositApprove:"입금·이체 승인 (정산팀 — 실제 입금을 확인하고 확정)",
     uiCustomize:"화면 문구·버튼 이름 수정 (마우스 오른쪽 클릭)",
     userApproval:"사용자 승인·추방", permissionManage:"권한 설정 관리(전체 관리자)",
     teamManage:"팀 관리", inventorySettings:"재고 기초설정 관리",
@@ -2131,7 +2133,7 @@
   // 권한을 성격별로 묶어서 보여줍니다 (화면에서 찾기 쉽게)
   const PERMISSION_GROUPS = [
     { title:"화면 메뉴", keys:["dashboard","menuInvWork","menuInvUpload","menuOrders","menuSaleReq","menuDataUpload"] },
-    { title:"기능", keys:["excelExport","bulkEdit","bulkModelApply","companyEdit","listPriceOverride","cancelDelete","accountView","uiCustomize"] },
+    { title:"기능", keys:["excelExport","bulkEdit","bulkModelApply","companyEdit","listPriceOverride","cancelDelete","accountView","depositApprove","uiCustomize"] },
     { title:"관리자", keys:["userApproval","permissionManage","teamManage","inventorySettings","settlementSettings","siteSettings","dataReset"] }
   ];
   const PERMISSION_SUB_KEYS = ["menuInvUpload"];   // 상위 항목 아래에 들여쓰기할 항목
@@ -3032,7 +3034,7 @@
     closePersonalSettingsModal();
   };
 
-  const ALL_PERM_KEYS = ["dashboard","menuInvWork","menuInvUpload","menuOrders","menuSaleReq","menuDataUpload","excelExport","bulkEdit","bulkModelApply","companyEdit","listPriceOverride","cancelDelete","accountView","uiCustomize","userApproval","permissionManage","teamManage","inventorySettings","settlementSettings","siteSettings","dataReset"];
+  const ALL_PERM_KEYS = ["dashboard","menuInvWork","menuInvUpload","menuOrders","menuSaleReq","menuDataUpload","excelExport","bulkEdit","bulkModelApply","companyEdit","listPriceOverride","cancelDelete","accountView","depositApprove","uiCustomize","userApproval","permissionManage","teamManage","inventorySettings","settlementSettings","siteSettings","dataReset"];
 
   async function loadUserAdminList(){
     const listEl = document.getElementById("user-admin-list");
@@ -7692,15 +7694,22 @@
     const noPrice = Object.keys(groups).filter(k=> !groups[k].resv.salePrice);
     if(noPrice.length){ alert("판매가가 없는 예약이 있습니다. 예약을 먼저 수정해주세요."); return; }
 
+    const planTotal = Object.keys(groups).reduce((n,k)=>
+      n + (Number(groups[k].resv.salePrice)||0) * groups[k].list.length, 0);
     if(!confirm(rbPlan.length + "대를 배정하고 판매처리합니다.\n\n"
       + "· 예약 " + Object.keys(groups).length + "건에 나눠 배정됩니다.\n"
       + "· 판매요청이 만들어지고 재고가 판매처리됩니다.\n"
       + "· 출고일 " + outDate + "\n"
-      + (prePaid ? "· 입금완료로 처리됩니다. (입금일 " + paidDate + ")\n" : "· 입금은 아직 대기 상태입니다.\n")
+      + (prePaid
+        ? "· 받은 금액 " + (paidAmt || planTotal).toLocaleString() + " / 판매요청 " + planTotal.toLocaleString() + "\n"
+          + (paidAmt && paidAmt < planTotal ? "· 모자란 만큼은 부분입금으로 기록됩니다.\n" : "· 입금완료로 처리됩니다.\n")
+        : "· 입금은 아직 대기 상태입니다.\n")
       + "\n진행하시겠습니까?")) return;
 
     const el = document.getElementById("rb-result");
     el.innerHTML = '<div style="color:var(--gray);">처리 중입니다...</div>';
+    // 받은 금액을 앞 건부터 순서대로 채웁니다.
+    let leftPaid = prePaid ? (paidAmt > 0 ? paidAmt : planTotal) : 0;
     let done = 0;
     try{
       for(const k of Object.keys(groups)){
@@ -8898,7 +8907,13 @@
       + "남은 금액은 미지급으로 유지됩니다. 진행하시겠습니까?")) return;
 
     try{
-      const payments = [...(p.payments||[]), { amount: amt, date, payer, by: currentUser.name }];
+      const canApprove = hasPerm(currentUserPerms, "depositApprove");
+      const payments = [...(p.payments||[]), {
+        amount: amt, date, payer, by: currentUser.name,
+        approved: canApprove,
+        approvedBy: canApprove ? currentUser.name : "",
+        approvedAt: canApprove ? date : ""
+      }];
       await updateDoc(doc(db,"paymentRequests", reqId), {
         paidAmount: newPaid, payments,
         transferCompleted: full,
@@ -8944,10 +8959,13 @@
                   ? comboEsc(a.bankName||"") + ' ' + comboEsc(maskAccount(a.accountNumber)) + ' ' + comboEsc(a.accountHolder||"")
                   : '<span style="color:var(--danger);">계좌 미등록</span>')).join(' / ') + '</span>'
           : '') +
-        (p.transferCompleted && p.transferCompleteDate
-          ? '<br><span style="color:#2e7d32;">이체완료 ' + comboEsc(p.transferCompleteDate) + '</span>' : '') +
+        // 이체 내역 (승인 상태 포함)
+        ((p.payments && p.payments.length)
+          ? '<br>' + p.payments.map((x,i)=> recordLine(x, i, "out", d.id)).join('<br>')
+          : '') +
+        matchNotice(p) +
         (p.taxInvoiceIssued && p.taxInvoiceDate
-          ? ' <span style="color:var(--gray);">· 세금계산서 ' + comboEsc(p.taxInvoiceDate) + '</span>' : '') +
+          ? '<br><span style="color:var(--gray);">세금계산서 ' + comboEsc(p.taxInvoiceDate) + '</span>' : '') +
         '<br>' +
         '<label><input type="checkbox" class="pr-tax-cb" data-id="'+d.id+'" '+(p.taxInvoiceIssued?'checked':'')+' '+(p.status==='취소'?'disabled':'')+'> 세금계산서 발행완료</label>' +
         '</span>' +
@@ -8987,6 +9005,14 @@
         logAction("세금계산서 " + (checked ? "발행완료" : "해제"), (p.totalAmount||0).toLocaleString() + (dateStr ? " / " + dateStr : ""));
         loadPaymentRequestList();
       };
+      row.querySelectorAll("[data-appr]").forEach(b=>{
+        const [k, id, i] = b.dataset.appr.split("|");
+        b.onclick = ()=> approveRecord(k, id, Number(i), false);
+      });
+      row.querySelectorAll("[data-rej]").forEach(b=>{
+        const [k, id, i] = b.dataset.rej.split("|");
+        b.onclick = ()=> approveRecord(k, id, Number(i), true);
+      });
       const addPayBtn = row.querySelector('[data-add-pay]');
       if(addPayBtn) addPayBtn.onclick = ()=> addTransferRecord(d.id, p);
       const cancelBtn = row.querySelector('[data-cancel-pr]');
@@ -9025,6 +9051,113 @@
     loadSettlementTab();
   };
 
+  // 입금·이체 기록 한 줄을 승인 상태와 함께 보여줍니다.
+  function recordLine(x, i, kind, reqId){
+    const amt = (Number(x.amount)||0).toLocaleString();
+    const label = (kind === "in") ? "입금" : "이체";
+    const canApprove = hasPerm(currentUserPerms, "depositApprove");
+    let state, color;
+    if(x.rejected){ state = "반려"; color = "var(--danger)"; }
+    else if(x.approved){ state = "승인"; color = "#2e7d32"; }
+    else { state = "승인대기"; color = "#b8860b"; }
+    return '<span style="color:'+color+';">' + label + ' ' + comboEsc(x.date||"-") + ' &nbsp;<b>' + amt + '</b>'
+      + (x.payer ? ' &nbsp;' + comboEsc(x.payer) : '')
+      + ' <span style="font-size:10.5px;">[' + state + ']</span>'
+      + (x.approvedBy ? ' <span style="color:var(--gray);font-size:10.5px;">' + comboEsc(x.approvedBy) + '</span>' : '')
+      + (x.rejectReason ? '<br><span style="color:var(--danger);font-size:11px;">반려 사유: ' + comboEsc(x.rejectReason) + '</span>' : '')
+      + '</span>'
+      + ((!x.approved && !x.rejected && canApprove)
+        ? ' <button class="btn small secondary" style="width:auto;" data-appr="'+kind+'|'+reqId+'|'+i+'">승인</button>'
+          + '<button class="btn small danger" style="width:auto;" data-rej="'+kind+'|'+reqId+'|'+i+'">반려</button>'
+        : '');
+  }
+
+  // 승인·반려 처리
+  window.approveRecord = async function(kind, reqId, idx, reject){
+    const col = (kind === "in") ? "saleDepositRequests" : "paymentRequests";
+    const field = (kind === "in") ? "receipts" : "payments";
+    const amtField = (kind === "in") ? "receivedAmount" : "paidAmount";
+    const doneField = (kind === "in") ? "depositCompleted" : "transferCompleted";
+    const dateField = (kind === "in") ? "depositCompleteDate" : "transferCompleteDate";
+
+    const snap = await getDoc(doc(db, col, reqId));
+    if(!snap.exists()){ alert("요청을 찾을 수 없습니다."); return; }
+    const p = snap.data();
+    const list = [...(p[field]||[])];
+    if(!list[idx]){ alert("기록을 찾을 수 없습니다."); return; }
+    const rec = list[idx];
+
+    let reason = "";
+    if(reject){
+      if(!confirm("이 기록을 반려합니다.\n\n  " + (Number(rec.amount)||0).toLocaleString() + " · " + (rec.date||"-")
+        + "\n\n반려하면 누적 금액에서 빠집니다. 진행하시겠습니까?")) return;
+      const r = prompt("반려 사유를 입력해주세요. (필수)", "");
+      if(r === null) return;
+      if(!String(r).trim()){ alert("사유를 입력해주세요."); return; }
+      reason = String(r).trim();
+      list[idx] = { ...rec, approved:false, rejected:true, rejectReason:reason,
+        approvedBy: currentUser.name, approvedAt: todayStr() };
+    }else{
+      if(!confirm("이 기록을 승인합니다.\n\n  " + (Number(rec.amount)||0).toLocaleString() + " · " + (rec.date||"-")
+        + (rec.payer ? " · " + rec.payer : "") + "\n\n실제 입금을 확인하셨나요?")) return;
+      list[idx] = { ...rec, approved:true, rejected:false, rejectReason:"",
+        approvedBy: currentUser.name, approvedAt: todayStr() };
+    }
+
+    // 승인된 기록만 누적합니다.
+    const okSum = list.filter(x=> x.approved).reduce((n,x)=> n + (Number(x.amount)||0), 0);
+    const total = Number(p.totalAmount)||0;
+    const full = okSum >= total && total > 0;
+    const lastDate = list.filter(x=>x.approved).map(x=>x.date).sort().slice(-1)[0] || "";
+
+    try{
+      await updateDoc(doc(db, col, reqId), {
+        [field]: list, [amtField]: okSum,
+        [doneField]: full, [dateField]: full ? lastDate : "",
+        status: full ? ((kind==="in") ? "입금완료" : "이체완료") : (okSum > 0 ? ((kind==="in")?"부분입금":"부분이체") : "요청중")
+      });
+      // 전액이 채워지면 묶음도 완료 처리합니다.
+      if(kind === "in"){
+        for(const b of (p.saleBatchRefs||[])){
+          const c2 = b.isLegacy ? "saleRequests" : "saleRequestBatches";
+          await updateDoc(doc(db, c2, b.id), full
+            ? { depositReceived:true, depositReceivedDate: lastDate, status:"입금완료" }
+            : { depositReceived:false, depositReceivedDate:"", status:"대기중" });
+        }
+      }else{
+        for(const bId of (p.orderBatchIds||[])){
+          await updateDoc(doc(db,"orderBatches", bId), full
+            ? { depositPaid:true, depositPaidDate: lastDate }
+            : { depositPaid:false, depositPaidDate:"" });
+        }
+      }
+    }catch(e){ alert("처리에 실패했습니다.\n" + ((e&&e.message)?e.message:String(e))); return; }
+
+    logAction((kind==="in" ? "입금" : "이체") + (reject ? " 반려" : " 승인"),
+      (Number(rec.amount)||0).toLocaleString() + (reason ? " / 사유: " + reason : ""));
+    alert(reject ? "반려했습니다." : "승인했습니다.");
+    if(kind === "in"){ loadSaleDepositRequestList(); loadSaleRequestList(); }
+    else { loadPaymentRequestList(); loadOrderList(); }
+    loadSettlementTab();
+  };
+
+  // 요청 금액과 승인된 입금 합계를 대조해 보여줍니다.
+  function matchNotice(p){
+    const total = Number(p.totalAmount)||0;
+    const list = p.receipts || p.payments || [];
+    const okSum = list.filter(x=>x.approved).reduce((n,x)=> n + (Number(x.amount)||0), 0);
+    const waitSum = list.filter(x=> !x.approved && !x.rejected).reduce((n,x)=> n + (Number(x.amount)||0), 0);
+    if(list.length === 0) return "";
+    const diff = okSum - total;
+    let msg;
+    if(diff === 0) msg = '<span style="color:#2e7d32;font-weight:700;">금액 일치</span>';
+    else if(diff > 0) msg = '<span style="color:#b8860b;font-weight:700;">' + diff.toLocaleString() + ' 초과</span>';
+    else msg = '<span style="color:var(--danger);font-weight:700;">' + Math.abs(diff).toLocaleString() + ' 부족</span>';
+    return '<br><span style="font-size:11.5px;color:var(--gray);">승인 ' + okSum.toLocaleString()
+      + ' / 요청 ' + total.toLocaleString() + ' · </span>' + msg
+      + (waitSum > 0 ? ' <span style="color:#b8860b;font-size:11.5px;">· 승인대기 ' + waitSum.toLocaleString() + '</span>' : '');
+  }
+
   // 입금 내역을 한 건 추가합니다. (부분입금 지원)
   window.addReceiptRecord = async function(reqId, p){
     const already = Number(p.receivedAmount)||0;
@@ -9059,7 +9192,14 @@
       + "남은 금액은 미수로 남습니다. 진행하시겠습니까?")) return;
 
     try{
-      const receipts = [...(p.receipts||[]), { amount: amt, date, payer, by: currentUser.name }];
+      // 넣은 사람이 승인 권한을 가지고 있으면 바로 승인으로 둡니다.
+      const canApprove = hasPerm(currentUserPerms, "depositApprove");
+      const receipts = [...(p.receipts||[]), {
+        amount: amt, date, payer, by: currentUser.name,
+        approved: canApprove,
+        approvedBy: canApprove ? currentUser.name : "",
+        approvedAt: canApprove ? date : ""
+      }];
       await updateDoc(doc(db,"saleDepositRequests", reqId), {
         receivedAmount: newRecv, receipts,
         depositCompleted: full,
@@ -9077,7 +9217,11 @@
       return;
     }
     logAction(full ? "판매 입금완료" : "판매 부분입금",
-      amt.toLocaleString() + " / " + date + (payer ? " / " + payer : "") + " / 누적 " + newRecv.toLocaleString());
+      amt.toLocaleString() + " / " + date + (payer ? " / " + payer : "") + " / 누적 " + newRecv.toLocaleString()
+      + (hasPerm(currentUserPerms, "depositApprove") ? " / 자동승인" : " / 승인대기"));
+    if(!hasPerm(currentUserPerms, "depositApprove")){
+      alert("기록했습니다.\n정산팀 승인 후 확정됩니다.");
+    }
     loadSaleDepositRequestList(); loadSaleRequestList(); loadSettlementTab();
   };
 
@@ -9134,6 +9278,14 @@
         depositCb.checked = false;   // 실제 처리는 아래 입력을 마쳐야 반영
         await addReceiptRecord(d.id, p);
       };
+      row.querySelectorAll("[data-appr]").forEach(b=>{
+        const [k, id, i] = b.dataset.appr.split("|");
+        b.onclick = ()=> approveRecord(k, id, Number(i), false);
+      });
+      row.querySelectorAll("[data-rej]").forEach(b=>{
+        const [k, id, i] = b.dataset.rej.split("|");
+        b.onclick = ()=> approveRecord(k, id, Number(i), true);
+      });
       const addRcpBtn = row.querySelector('[data-add-receipt]');
       if(addRcpBtn) addRcpBtn.onclick = ()=> addReceiptRecord(d.id, p);
       const taxCb = row.querySelector(".sdr-tax-cb");
