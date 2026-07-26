@@ -291,7 +291,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-07-25 v188</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-07-25 v193</span>
       <span id="topbar-username">-</span>
       <button onclick="openPersonalSettingsModal()">개인설정</button>
       <button onclick="handleLogout()">로그아웃</button>
@@ -1871,10 +1871,11 @@
         <p class="desc" id="rb-desc"></p>
         <div style="display:flex;gap:0;align-items:center;margin-bottom:10px;">
           <button type="button" class="btn small" id="rb-mode-serial" onclick="setRbMode('serial')">일련번호로 (재고 있음)</button>
-          <button type="button" class="btn small secondary" id="rb-mode-color" onclick="setRbMode('color')">색상·수량으로 (재고 없음)</button>
+          <button type="button" class="btn small secondary" id="rb-mode-color" onclick="setRbMode('color')">색상·수량매칭</button>
+          <button type="button" class="btn small secondary" id="rb-mode-pick" onclick="setRbMode('pick')">업체로 골라매칭</button>
         </div>
         <div class="stack-form" style="max-width:560px;margin-bottom:10px;">
-          <div class="stack-row"><label>거래처 <span class="info-tip" title="비워두면 일련번호에 맞는 예약을 거래처 상관없이 찾습니다. 특정 거래처로 좁히려면 골라주세요.">ⓘ</span></label><select id="rb-dest"><option value="">전체 거래처</option></select></div>
+          <div class="stack-row"><label>거래처 <span class="info-tip" title="비워두면 일련번호에 맞는 예약을 거래처 상관없이 찾습니다. 특정 거래처로 좁히려면 골라주세요.">ⓘ</span></label><select id="rb-dest" onchange="onRbDestChange()"><option value="">전체 거래처</option></select></div>
           <div class="stack-row"><label>요청일</label><input type="text" id="rb-date" maxlength="8" inputmode="numeric" placeholder="예: 20260726"></div>
           <div class="stack-row"><label>출고일 (판매일)</label><input type="text" id="rb-outdate" maxlength="8" inputmode="numeric" placeholder="비우면 요청일과 동일"></div>
           <div class="stack-row"><label>입금 상태 <span class="info-tip" title="배정 전에 이미 입금받았다면 입금완료로 두세요. 만들어지는 판매요청이 바로 입금완료로 처리됩니다.">ⓘ</span></label>
@@ -1884,7 +1885,10 @@
             </select>
           </div>
           <div class="stack-row" id="rb-paiddate-row" style="display:none;"><label>입금일</label><input type="text" id="rb-paiddate" maxlength="8" inputmode="numeric" placeholder="예: 20260724"></div>
+          <div class="stack-row" id="rb-paidamt-row" style="display:none;"><label>받은 총금액 <span class="info-tip" title="실제로 받은 전체 금액을 적어주세요. 만들어지는 판매요청 금액과 비교해서 남거나 모자란 금액을 알려드립니다.">ⓘ</span></label><input type="number" id="rb-paidamt" placeholder="예: 100000000"></div>
+          <div class="stack-row" id="rb-payer-row" style="display:none;"><label>입금자명</label><input type="text" id="rb-payer" placeholder="통장에 찍힌 이름"></div>
         </div>
+        <div id="rb-pick-area" style="display:none;"></div>
         <textarea id="rb-serials" rows="8" style="width:100%;border:1px solid var(--line);padding:8px;font-size:12.5px;font-family:monospace;box-sizing:border-box;" placeholder="SM-F776N256&#9;1038307&#10;SM-F776N256&#9;1038472&#10;SM-F971N256&#9;1056548&#10;&#10;모델은 전산모델명·모델명·삼성모델명 아무거나 되고, 색상을 함께 적어도 됩니다.&#10;일련번호만 적어도 되지만 겹치면 오류로 알려드립니다."></textarea>
         <button class="btn small" style="width:auto;margin-top:10px;" onclick="analyzeResvBulk()">분석하기</button>
         <button class="btn small secondary" style="width:auto;" onclick="closeResvBulkAlloc()">닫기</button>
@@ -7095,6 +7099,8 @@
     document.getElementById("rb-outdate").value = "";
     document.getElementById("rb-paid").value = "no";
     document.getElementById("rb-paiddate").value = "";
+    document.getElementById("rb-paidamt").value = "";
+    document.getElementById("rb-payer").value = "";
     onRbPaidChange();
     setRbMode("serial");
     document.getElementById("resv-bulk-modal-overlay").style.display = "flex";
@@ -7106,9 +7112,24 @@
     rbMode = m;
     document.getElementById("rb-mode-serial").className = "btn small" + (m==="serial" ? "" : " secondary");
     document.getElementById("rb-mode-color").className  = "btn small" + (m==="color"  ? "" : " secondary");
+    document.getElementById("rb-mode-pick").className   = "btn small" + (m==="pick"   ? "" : " secondary");
     const ta = document.getElementById("rb-serials");
     const desc = document.getElementById("rb-desc");
+    const pickArea = document.getElementById("rb-pick-area");
     const outRow = document.getElementById("rb-outdate") ? document.getElementById("rb-outdate").closest(".stack-row") : null;
+
+    // 업체로 골라매칭 — 붙여넣기 대신 표에서 수량을 넣습니다.
+    ta.style.display = (m === "pick") ? "none" : "";
+    pickArea.style.display = (m === "pick") ? "block" : "none";
+    if(m === "pick"){
+      desc.innerHTML = '거래처를 고르면 <b>예약중인 모델·색상이 모두 나옵니다.</b> 넘길 수량만 적으면 <b>판매요청</b>이 만들어집니다.<br>'
+        + '재고가 없어도 됩니다. 단말기가 들어오면 도착 등록·매칭으로 채우시면 됩니다.';
+      if(outRow) outRow.style.display = "none";
+      document.getElementById("rb-result").innerHTML = "";
+      rbPlan = [];
+      loadRbPickList();
+      return;
+    }
     if(m === "serial"){
       desc.innerHTML = '보유중인 재고를 붙여넣으면 <b>알맞은 예약에 배정</b>하고 <b>판매처리까지</b> 합니다.<br>'
         + '<b>모델과 일련번호를 함께</b> 적어주세요. 일련번호가 겹치는 경우가 있어 모델까지 보고 정확히 찾습니다.';
@@ -7125,9 +7146,99 @@
     rbPlan = [];
   };
 
+  window.onRbDestChange = function(){
+    if(rbMode === "pick") loadRbPickList();
+  };
+
+  // 예약중인 모델·색상을 표로 보여주고 수량만 받습니다.
+  window.loadRbPickList = async function(){
+    const el = document.getElementById("rb-pick-area");
+    const dest = document.getElementById("rb-dest").value;
+    if(!dest){
+      el.innerHTML = '<div class="list-empty">위에서 <b>거래처</b>를 먼저 골라주세요.</div>';
+      return;
+    }
+    el.innerHTML = '<div class="list-empty">불러오는 중...</div>';
+    await fetchModelsCache();
+
+    const snap = await getDocs(collection(db,"reservations"));
+    const rows = [];
+    snap.forEach(d=>{
+      const r = { id:d.id, ...d.data() };
+      if(r.kind === "buy") return;
+      if(String(r.destination||"").trim() !== dest) return;
+      const left = (Number(r.orderedQty)||Number(r.quantity)||0) - (Number(r.allocatedQty)||0);
+      if(left <= 0) return;
+      rows.push({ ...r, _left: left });
+    });
+    if(rows.length === 0){
+      el.innerHTML = '<div class="list-empty">이 거래처의 남은 예약이 없습니다.</div>';
+      return;
+    }
+    rows.sort((a,b)=> String(a.systemModel||"").localeCompare(String(b.systemModel||"")));
+
+    // 예약에 색상이 없으면 모델의 색상 목록을 고를 수 있게 합니다.
+    let h = '<div style="overflow-x:auto;border:1px solid var(--line);max-height:360px;overflow-y:auto;">'
+      + '<table class="data-table" style="min-width:820px;"><thead><tr>'
+      + '<th>요청일</th><th>모델</th><th>색상</th><th>통신사</th>'
+      + '<th class="ta-right">예약</th><th class="ta-right">배정</th><th class="ta-right">남음</th>'
+      + '<th class="ta-right">판매가</th><th class="ta-right" style="width:90px;">넘길 수량</th>'
+      + '</tr></thead><tbody>';
+    rows.forEach(r=>{
+      const hasColor = !!(r.systemColor || r.manufacturerColor);
+      let colorCell;
+      if(hasColor){
+        colorCell = comboEsc(r.systemColor || r.manufacturerColor);
+      }else{
+        const m = modelsCache.find(x=> x.id === r.modelId)
+          || modelsCache.find(x=> String(x.systemModel||"") === String(r.systemModel||""));
+        const colors = m ? (m.colors||[]) : [];
+        colorCell = colors.length
+          ? '<select class="rb-pick-color" style="width:130px;font-size:11.5px;padding:3px;border:1px solid var(--line);">'
+            + '<option value="">색상 선택</option>'
+            + colors.map(c=>'<option value="'+comboEsc(c.systemColor||c.manufacturerColor||"")+'">'+comboEsc(c.systemColor||c.manufacturerColor||"-")+'</option>').join("")
+            + '</select>'
+          : '<span style="color:var(--danger);">색상 없음</span>';
+      }
+      h += '<tr data-rb-resv="'+r.id+'">'
+        + '<td>'+comboEsc(r.requestDate||"-")+'</td>'
+        + '<td>'+comboEsc(docModelLabel(r))+'</td>'
+        + '<td>'+colorCell+'</td>'
+        + '<td>'+comboEsc(r.carrier||"-")+'</td>'
+        + '<td class="ta-right">'+(Number(r.orderedQty)||0)+'</td>'
+        + '<td class="ta-right">'+(Number(r.allocatedQty)||0)+'</td>'
+        + '<td class="ta-right"><b>'+r._left+'</b></td>'
+        + '<td class="ta-right">'+(r.salePrice ? Number(r.salePrice).toLocaleString() : '<span style="color:var(--danger);">미입력</span>')+'</td>'
+        + '<td class="ta-right"><input type="number" class="rb-pick-qty" min="0" max="'+r._left+'" placeholder="0" '
+        + 'style="width:70px;font-size:12px;padding:3px;border:1px solid var(--line);text-align:right;"></td>'
+        + '</tr>';
+    });
+    h += '</tbody></table></div>'
+      + '<div style="margin-top:8px;">'
+      + '<button class="btn small secondary" style="width:auto;" onclick="fillRbPickAll()">남은 수량 전부 채우기</button>'
+      + '<button class="btn small secondary" style="width:auto;" onclick="clearRbPickAll()">수량 비우기</button>'
+      + '</div>';
+    el.innerHTML = h;
+    rbPickRows = rows;
+  };
+
+  let rbPickRows = [];
+  window.fillRbPickAll = function(){
+    document.querySelectorAll("#rb-pick-area tr[data-rb-resv]").forEach(tr=>{
+      const r = rbPickRows.find(x=> x.id === tr.dataset.rbResv);
+      const q = tr.querySelector(".rb-pick-qty");
+      if(r && q) q.value = r._left;
+    });
+  };
+  window.clearRbPickAll = function(){
+    document.querySelectorAll("#rb-pick-area .rb-pick-qty").forEach(q=> q.value = "");
+  };
+
   window.onRbPaidChange = function(){
     const on = document.getElementById("rb-paid").value === "yes";
-    document.getElementById("rb-paiddate-row").style.display = on ? "" : "none";
+    ["rb-paiddate-row","rb-paidamt-row","rb-payer-row"].forEach(id=>{
+      const el = document.getElementById(id); if(el) el.style.display = on ? "" : "none";
+    });
     if(on && !document.getElementById("rb-paiddate").value){
       document.getElementById("rb-paiddate").value = document.getElementById("rb-date").value || todayStr();
     }
@@ -7135,6 +7246,7 @@
 
   window.analyzeResvBulk = async function(){
     if(rbMode === "color"){ return analyzeResvBulkColor(); }
+    if(rbMode === "pick"){ return analyzeResvBulkPick(); }
     const el = document.getElementById("rb-result");
     const dest = document.getElementById("rb-dest").value;
     const raw  = document.getElementById("rb-serials").value;
@@ -7258,7 +7370,68 @@
         + '</tbody></table></div>';
       const noPrice = Object.keys(groups).filter(k=> !groups[k].resv.salePrice).length;
       if(noPrice) h += '<div style="color:var(--danger);margin-bottom:8px;">판매가가 없는 예약 '+noPrice+'건이 있습니다. 예약을 먼저 수정해주세요.</div>';
-      h += '<button class="btn small" style="width:auto;" onclick="submitResvBulkSerial()">이대로 배정하고 판매처리 ('+ok.length+'대)</button>';
+      h += rbPaidNotice(Object.keys(groups).reduce((n,k)=>
+              n + (Number(groups[k].resv.salePrice)||0) * groups[k].list.length, 0))
+        + '<button class="btn small" style="width:auto;" onclick="submitResvBulkSerial()">이대로 배정하고 판매처리 ('+ok.length+'대)</button>';
+    }
+    el.innerHTML = h;
+  };
+
+  // 업체로 골라매칭 — 표에서 넣은 수량을 그대로 판매요청으로
+  window.analyzeResvBulkPick = function(){
+    const el = document.getElementById("rb-result");
+    const trs = Array.from(document.querySelectorAll("#rb-pick-area tr[data-rb-resv]"));
+    if(trs.length === 0){ el.innerHTML = '<span style="color:var(--danger);">거래처를 먼저 골라주세요.</span>'; return; }
+
+    const ok = [], bad = [];
+    trs.forEach(tr=>{
+      const r = rbPickRows.find(x=> x.id === tr.dataset.rbResv);
+      if(!r) return;
+      const qEl = tr.querySelector(".rb-pick-qty");
+      const qty = Number(qEl ? qEl.value : 0) || 0;
+      if(qty <= 0) return;                                  // 안 넣은 줄은 건너뜁니다
+      const label = docModelLabel(r);
+      if(qty > r._left){ bad.push({ label, reason:"남은 수량("+r._left+")보다 많습니다" }); return; }
+      if(!r.salePrice){ bad.push({ label, reason:"판매가가 없습니다 — 예약을 먼저 수정해주세요" }); return; }
+      // 색상 결정
+      let color = r.systemColor || r.manufacturerColor || "";
+      if(!color){
+        const cs = tr.querySelector(".rb-pick-color");
+        color = cs ? cs.value.trim() : "";
+        if(!color){ bad.push({ label, reason:"색상을 골라주세요" }); return; }
+      }
+      ok.push({ resv:r, qty, color });
+    });
+
+    if(ok.length === 0 && bad.length === 0){
+      el.innerHTML = '<span style="color:var(--danger);">넘길 수량을 하나 이상 넣어주세요.</span>'; return;
+    }
+    rbPlan = ok;
+
+    let h = '<div style="font-weight:700;margin-bottom:8px;">확인 — 판매요청 '+ok.length+'건 / 오류 '+bad.length+'건</div>';
+    if(bad.length){
+      h += '<div style="border:1px solid var(--danger);background:#fdecea;padding:8px 10px;margin-bottom:10px;">'
+        + bad.map(b=>'· '+comboEsc(b.label)+' — '+comboEsc(b.reason)).join('<br>') + '</div>';
+    }
+    if(ok.length){
+      let totQ = 0, totAmt = 0;
+      h += '<div style="border:1px solid var(--line);max-height:260px;overflow-y:auto;margin-bottom:10px;">'
+        + '<table class="data-table" style="min-width:700px;"><thead><tr><th>모델</th><th>색상</th><th>통신사</th><th class="ta-right">수량</th><th class="ta-right">판매가</th><th class="ta-right">금액</th></tr></thead><tbody>'
+        + ok.map(x=>{
+            const amt = (Number(x.resv.salePrice)||0) * x.qty;
+            totQ += x.qty; totAmt += amt;
+            return '<tr><td>'+comboEsc(docModelLabel(x.resv))+'</td>'
+              + '<td>'+comboEsc(x.color||"-")+'</td>'
+              + '<td>'+comboEsc(x.resv.carrier||"-")+'</td>'
+              + '<td class="ta-right"><b>'+x.qty+'</b></td>'
+              + '<td class="ta-right">'+(Number(x.resv.salePrice)||0).toLocaleString()+'</td>'
+              + '<td class="ta-right">'+amt.toLocaleString()+'</td></tr>';
+          }).join("")
+        + '<tr style="background:#fafafa;font-weight:700;"><td colspan="3">합계</td>'
+        + '<td class="ta-right">'+totQ+'</td><td></td><td class="ta-right">'+totAmt.toLocaleString()+'</td></tr>'
+        + '</tbody></table></div>'
+        + rbPaidNotice(totAmt)
+        + '<button class="btn small" style="width:auto;" onclick="submitResvBulkColor()">이대로 판매요청 만들기 ('+totQ+'대)</button>';
     }
     el.innerHTML = h;
   };
@@ -7350,16 +7523,36 @@
         + '<tr style="background:#fafafa;font-weight:700;"><td colspan="4">합계</td>'
         + '<td class="ta-right">'+totQ+'</td><td></td><td class="ta-right">'+totAmt.toLocaleString()+'</td></tr>'
         + '</tbody></table></div>'
+        + rbPaidNotice(totAmt)
         + '<button class="btn small" style="width:auto;" onclick="submitResvBulkColor()">이대로 판매요청 만들기 ('+totQ+'대)</button>';
     }
     el.innerHTML = h;
   };
+
+  // 받은 총금액과 만들어질 금액을 비교해 알려줍니다.
+  function rbPaidNotice(planAmount){
+    if(document.getElementById("rb-paid").value !== "yes") return "";
+    const got = Number(document.getElementById("rb-paidamt").value)||0;
+    const payer = document.getElementById("rb-payer").value.trim();
+    if(got <= 0) return '<div style="color:var(--gray);font-size:12px;margin-bottom:8px;">받은 총금액을 적으면 남거나 모자란 금액을 알려드립니다.</div>';
+    const diff = got - planAmount;
+    let msg;
+    if(diff === 0) msg = '<span style="color:#2e7d32;font-weight:700;">금액이 정확히 맞습니다.</span>';
+    else if(diff > 0) msg = '<span style="color:#b8860b;font-weight:700;">받은 금액이 ' + diff.toLocaleString() + ' 많습니다.</span> <span style="color:var(--gray);">남은 금액은 다음 건에 쓰실 수 있습니다.</span>';
+    else msg = '<span style="color:var(--danger);font-weight:700;">받은 금액이 ' + Math.abs(diff).toLocaleString() + ' 모자랍니다.</span> <span style="color:var(--gray);">부분입금으로 기록됩니다.</span>';
+    return '<div style="border:1px solid var(--line);background:#fafafa;padding:8px 10px;margin-bottom:8px;font-size:12.5px;line-height:1.8;">'
+      + '받은 금액 <b>' + got.toLocaleString() + '</b>'
+      + (payer ? ' <span style="color:var(--gray);">· ' + comboEsc(payer) + '</span>' : '')
+      + '<br>이번 판매요청 <b>' + planAmount.toLocaleString() + '</b><br>' + msg + '</div>';
+  }
 
   window.submitResvBulkColor = async function(){
     if(rbPlan.length === 0){ alert("만들 내용이 없습니다."); return; }
     const date = (document.getElementById("rb-date").value||"").replace(/\D/g,"") || todayStr();
     const prePaidSel = document.getElementById("rb-paid").value === "yes";
     const paidDate = (document.getElementById("rb-paiddate").value||"").replace(/\D/g,"") || date;
+    const paidAmt = Number(document.getElementById("rb-paidamt").value)||0;
+    const payer = document.getElementById("rb-payer").value.trim();
     const totQ = rbPlan.reduce((n,x)=> n + x.qty, 0);
 
     if(!confirm("판매요청 " + rbPlan.length + "건 (" + totQ + "대)을 만듭니다.\n\n"
@@ -7369,16 +7562,28 @@
 
     const el = document.getElementById("rb-result");
     el.innerHTML = '<div style="color:var(--gray);">만드는 중입니다...</div>';
+    const planTot = rbPlan.reduce((n,x)=> n + (Number(x.resv.salePrice)||0) * x.qty, 0);
+    let leftPaid2 = prePaidSel ? (paidAmt > 0 ? paidAmt : planTot) : 0;
     let made = 0;
     try{
       for(const x of rbPlan){
         const r = x.resv, qty = x.qty, price = Number(r.salePrice)||0;
-        const paid = prePaidSel || (Number(r.prepaidAmount)||0) > 0;
+        const need = price * qty;
+        const use = Math.min(leftPaid2, need);
+        leftPaid2 -= use;
+        const byResv = (Number(r.prepaidAmount)||0) > 0 && !prePaidSel;
+        const full = (use >= need) || byResv;
         const srBatch = await addDoc(collection(db,"saleRequestBatches"), {
           destination: r.destination, requestDate: date,
-          depositRequired: price * qty,
-          depositReceived: paid, depositReceivedDate: paid ? (prePaidSel ? paidDate : (r.prepaidDate || date)) : "",
-          lineCount: 1, status:"대기중", fromReservationId: r.id,
+          depositRequired: need,
+          depositReceived: full,
+          depositReceivedDate: full ? (prePaidSel ? paidDate : (r.prepaidDate || date)) : "",
+          receivedAmount: use > 0 ? use : (byResv ? need : 0),
+          receipts: use > 0
+            ? [{ amount: use, date: paidDate, payer: payer || "", by: currentUser.name }]
+            : (byResv ? [{ amount: need, date: (r.prepaidDate || date), payer: "선입금", by: currentUser.name }] : []),
+          status: full ? "입금완료" : (use > 0 ? "부분입금" : "대기중"),
+          lineCount: 1, fromReservationId: r.id,
           createdBy: currentUser.name, createdByUsername: currentUser.username, createdAt: serverTimestamp()
         });
         await addDoc(collection(db,"saleRequests"), {
@@ -7402,7 +7607,7 @@
       el.innerHTML = '<span style="color:var(--danger);">실패했습니다.<br>' + comboEsc((e&&e.message)?e.message:String(e)) + '</span>';
       return;
     }
-    logAction("예약 색상별 판매요청 생성", made + "대 / " + rbPlan.length + "건");
+    logAction("예약 판매요청 생성", made + "대 / " + rbPlan.length + "건");
     alert("판매요청을 만들었습니다. (" + made + "대)\n재고가 들어오면 도착 등록·매칭으로 채워주세요.");
     rbPlan = [];
     closeResvBulkAlloc();
@@ -7416,6 +7621,8 @@
     const outDate = (document.getElementById("rb-outdate").value||"").replace(/\D/g,"") || date;
     const prePaid = document.getElementById("rb-paid").value === "yes";
     const paidDate = (document.getElementById("rb-paiddate").value||"").replace(/\D/g,"") || date;
+    const paidAmt = Number(document.getElementById("rb-paidamt").value)||0;
+    const payer = document.getElementById("rb-payer").value.trim();
 
     // 예약별로 묶습니다.
     const groups = {};
@@ -7454,9 +7661,23 @@
         const srBatch = await addDoc(collection(db,"saleRequestBatches"), {
           destination: r.destination, requestDate: date,
           depositRequired: price * qty,
-          // 화면에서 고른 값이거나, 예약에 선입금이 적혀 있으면 입금완료로 둡니다.
-          depositReceived: prePaid || (Number(r.prepaidAmount)||0) > 0,
-          depositReceivedDate: prePaid ? paidDate : (r.prepaidDate || date),
+          // 받은 금액을 앞 건부터 채워, 다 차면 입금완료·모자라면 부분입금으로 둡니다.
+          ...(function(){
+            const need = price * qty;
+            const use = Math.min(leftPaid, need);
+            leftPaid -= use;
+            const byResv = (Number(r.prepaidAmount)||0) > 0 && !prePaid;
+            const full = (use >= need) || byResv;
+            return {
+              depositReceived: full,
+              depositReceivedDate: full ? (prePaid ? paidDate : (r.prepaidDate || date)) : "",
+              receivedAmount: use > 0 ? use : (byResv ? need : 0),
+              receipts: use > 0
+                ? [{ amount: use, date: paidDate, payer: payer || "", by: currentUser.name }]
+                : (byResv ? [{ amount: need, date: (r.prepaidDate || date), payer: "선입금", by: currentUser.name }] : []),
+              status: full ? "입금완료" : (use > 0 ? "부분입금" : "대기중")
+            };
+          })(),
           lineCount: 1, status:"대기중", fromReservationId: r.id,
           createdBy: currentUser.name, createdByUsername: currentUser.username, createdAt: serverTimestamp()
         });
