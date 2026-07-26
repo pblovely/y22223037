@@ -297,7 +297,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-07-25 v240</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-07-25 v241</span>
       <span id="topbar-username">-</span>
       <button onclick="openPersonalSettingsModal()">개인설정</button>
       <button onclick="handleLogout()">로그아웃</button>
@@ -1581,7 +1581,13 @@
       <div style="background:#fff;border:2px solid var(--navy);max-width:640px;width:96%;max-height:90vh;overflow-y:auto;padding:22px;position:relative;">
         <button onclick="closeBulkEditUploadModal()" style="position:absolute;top:12px;right:12px;background:none;border:1px solid var(--navy);width:26px;height:26px;cursor:pointer;font-size:13px;">✕</button>
         <h3 style="margin-top:0;margin-bottom:4px;">재고 일괄수정 업로드</h3>
-        <p class="desc">"일괄수정용 다운로드"로 받은 엑셀에서 첫 칸(일련번호)은 그대로 두고, 채우고 싶은 칸만 입력한 뒤 여기에 업로드하세요. <b>값이 채워진 칸만</b> 반영되고, 빈칸은 건드리지 않습니다.</p>
+        <p class="desc">받은 엑셀에서 <b>일련번호</b>는 그대로 두고, 고칠 칸만 채워 올려주세요. <b>채워진 칸만</b> 반영되고 빈칸은 건드리지 않습니다.</p>
+        <div style="border:1px solid var(--line);background:#fafafa;padding:9px 11px;margin-bottom:10px;font-size:12px;line-height:1.9;color:var(--gray);">
+          <b>값을 지우고 싶으면</b> 빈칸이 아니라 <b>0</b>을 넣으세요.<br>
+          <b>할인은 자동 계산됩니다.</b> %만 넣으면 금액을, 금액만 넣으면 %를 출고가 기준으로 채웁니다.<br>
+          <b>참고용 칸</b>(확인·전산모델명·모델명·기가수·펫네임)은 고쳐도 반영되지 않습니다. 대신 <b>같은 일련번호를 가려내는 데</b> 씁니다.<br>
+          <b>열 순서를 바꾸거나 안 쓰는 열을 지워도</b> 됩니다. 머리글 이름으로 찾습니다.
+        </div>
         <input type="file" id="bulk-edit-file-input" accept=".xlsx,.xls" style="font-size:13px;">
         <button class="btn small" style="width:auto;margin-left:8px;" onclick="analyzeBulkEditFile()">분석하기</button>
         <div id="bulk-edit-analysis" style="margin-top:14px;"></div>
@@ -15603,6 +15609,15 @@
   }
 
   let lastRenderedItems = [];
+  let invSortCol = "";      // 열 제목을 눌러 고른 정렬 기준
+  let invSortAsc = true;    // 오름차순 여부
+  window.setInvSort = function(key){
+    if(invSortCol === key){
+      if(invSortAsc) invSortAsc = false;
+      else { invSortCol = ""; invSortAsc = true; }   // 두 번 더 누르면 기본으로
+    }else{ invSortCol = key; invSortAsc = true; }
+    loadInventoryList();
+  };
   let showDeletedInventory = false;   // 삭제함만 보기
   window.toggleDeletedInventory = function(){
     showDeletedInventory = !showDeletedInventory;
@@ -16660,9 +16675,27 @@
         left: items.length, field: fieldDef });
     });
 
-    // 정렬: 기본 판매일(출고일) 내림차순, 버튼으로 주문일로 전환 가능
-    const sortField = inventorySortField==="orderDate" ? "orderDate" : "outDate";
-    items.sort((a,b)=> normDate(b[sortField]).localeCompare(normDate(a[sortField])));
+    // 정렬 — 열 제목을 눌러 고른 것이 있으면 그것, 없으면 기본(판매일 내림차순)
+    if(invSortCol){
+      const col = INV_COLUMNS.find(c=> c.key === invSortCol);
+      if(col){
+        const val = it=>{
+          const raw = col.getRaw ? col.getRaw(it) : col.get(it);
+          return (raw === "-" || raw == null) ? "" : raw;
+        };
+        items.sort((a,b)=>{
+          const x = val(a), y = val(b);
+          const nx = Number(String(x).replace(/,/g,"")), ny = Number(String(y).replace(/,/g,""));
+          let r;
+          if(x !== "" && y !== "" && !isNaN(nx) && !isNaN(ny)) r = nx - ny;
+          else r = String(x).localeCompare(String(y), "ko");
+          return invSortAsc ? r : -r;
+        });
+      }
+    }else{
+      const sortField = inventorySortField==="orderDate" ? "orderDate" : "outDate";
+      items.sort((a,b)=> normDate(b[sortField]).localeCompare(normDate(a[sortField])));
+    }
 
     lastRenderedItems = items;
     const masterStockSerials = await getLatestMasterStockSerialSet();
@@ -16718,8 +16751,11 @@
     const thCheck = document.createElement("th"); thCheck.textContent = ""; headRow.appendChild(thCheck);
     visibleCols.forEach(c=>{
       const th = document.createElement("th");
-      th.textContent = c.label;
+      th.textContent = c.label + (invSortCol === c.key ? (invSortAsc ? " ▲" : " ▼") : "");
       if(c.getRaw) th.className = "ta-right";   // 금액·율 컬럼은 오른쪽 정렬
+      th.style.cursor = "pointer";
+      th.title = "누르면 이 열로 정렬합니다 (세 번 누르면 기본으로)";
+      th.onclick = ()=> setInvSort(c.key);
       headRow.appendChild(th);
     });
     const thStatus = document.createElement("th"); thStatus.textContent = "현재상태"; headRow.appendChild(thStatus);
@@ -17349,11 +17385,23 @@
   window.downloadBulkEditExcel = function(){
     if(!hasPerm(currentUserPerms, "bulkEdit")){ alert("이 기능을 사용할 권한이 없습니다. 관리자에게 요청해주세요."); return; }
     if(!lastRenderedItems || lastRenderedItems.length===0){ alert("다운로드할 재고가 없습니다. 재고 목록을 먼저 조회해주세요."); return; }
-    const headers = ["일련번호", ...BULK_EDIT_DOWNLOAD_FIELDS.map(f=>f.header)];
+    const headers = ["확인", "일련번호", ...BULK_EDIT_DOWNLOAD_FIELDS.map(f=>f.header)];
     const numericColIndices = new Set();
-    BULK_EDIT_DOWNLOAD_FIELDS.forEach((f,idx)=>{ if(f.type==="number") numericColIndices.add(idx+1); }); // +1: 일련번호가 0번
+    BULK_EDIT_DOWNLOAD_FIELDS.forEach((f,idx)=>{ if(f.type==="number") numericColIndices.add(idx+2); }); // +2: 확인·일련번호가 앞에
+    // 화면에 보이는 순서 그대로 내려받습니다. (정렬·필터 반영)
+    // 같은 일련번호가 여러 개면 「중복」으로 표시해 미리 알려드립니다.
+    const snCount = {};
+    lastRenderedItems.forEach(it=>{
+      const sn = String(it.serialNumber||"").trim();
+      if(sn) snCount[sn] = (snCount[sn]||0) + 1;
+    });
     const rows = lastRenderedItems.map(it=>{
-      const row = [it.serialNumber || ""];
+      const sn = String(it.serialNumber||"").trim();
+      const marks = [];
+      if(!sn) marks.push("일련번호 없음");
+      else if(snCount[sn] > 1) marks.push("중복");
+      if(!it.listPrice) marks.push("출고가 없음");
+      const row = [marks.join(" · "), it.serialNumber || ""];
       BULK_EDIT_DOWNLOAD_FIELDS.forEach(f=> row.push(it[f.key]!=null ? it[f.key] : ""));
       return row;
     });
