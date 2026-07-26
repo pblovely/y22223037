@@ -279,7 +279,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-07-25 v116</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-07-25 v121</span>
       <span id="topbar-username">-</span>
       <button onclick="openPersonalSettingsModal()">개인설정</button>
       <button onclick="handleLogout()">로그아웃</button>
@@ -1013,7 +1013,6 @@
         <h3 style="margin-top:0;margin-bottom:4px;">모델 수정</h3>
         <div class="stack-form">
           <div class="stack-row"><label>표시 순서 <span class="info-tip" title="작은 숫자가 드롭다운에서 먼저 나옵니다. 자주 쓰는 모델에 1, 2, 3 을 주세요. 비우면 맨 뒤로 갑니다.">ⓘ</span></label><input type="number" id="me-sortorder-input" placeholder="예: 1 (비우면 맨 뒤)"></div>
-          <div class="stack-row"><label>모델군 (내부 식별용)</label><input type="text" id="me-group-input"></div>
           <div class="stack-row"><label>제조사</label><select id="me-manufacturer-select"></select></div>
           <div class="stack-row"><label>펫네임</label><input type="text" id="me-pet-input"></div>
           <div class="stack-row"><label>전산모델명 <span class="info-tip" title="LG 마스터재고 파일의 '모델코드'와 맞춰야 하는 값입니다. 입력하면 아래에 파일 속 펫네임을 찾아 보여줍니다.">ⓘ</span></label><input type="text" id="me-system-input" oninput="checkMasterPetName('me')"></div>
@@ -1092,6 +1091,7 @@
       <div class="card">
         <h3>삼성 B2B 여신 관리 <span class="info-tip" title="포피플에서 삼성에 직접입금하거나 B2B대출로 입금하면 여신이 쌓입니다. 그 여신에서 단말기를 할인된 가격으로 주문해서 차감됩니다. B2B대출 관련 수수료·이자는 여신과 별개의 비용입니다.">ⓘ</span></h3>
         <div id="b2b-stat-cards" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px;"></div>
+        <button class="btn small secondary" style="width:auto;" onclick="showOrderAmountCheck()">주문 금액 검산</button>
         <button class="btn small secondary" style="width:auto;" onclick="showB2BOrderUseDetail()">주문사용 내역 보기</button>
         <button class="btn small secondary" style="width:auto;" onclick="repairB2BOrderUse()">주문사용 금액 정리</button>
         <div id="b2b-orderuse-detail" style="display:none;margin-top:10px;"></div>
@@ -1658,7 +1658,7 @@
         <h3 style="margin-top:0;margin-bottom:4px;">주문 텍스트로 붙여넣기</h3>
         <p class="desc">엑셀·메모장에서 복사한 내용을 그대로 붙여넣으세요. 주문은 <b>수량 단위</b>입니다.<br>
           탭이나 2칸 이상 띄어쓰기로 구분하면 <b>칸 순서가 달라도</b> 알아서 찾습니다. 머리글 줄은 건너뜁니다.<br>
-          <span style="color:var(--gray);">모델은 <b>삼성코드(SKU)</b> · <b>전산모델명</b> · <b>모델명</b> · <b>"모델군 기가수"(예: 플립 256)</b> 중 아무거나 되고, 통신사는 U+ / LG / SK / KT 로 적으세요.</span></p>
+          <span style="color:var(--gray);">모델은 <b>삼성코드(SKU)</b> · <b>전산모델명</b> · <b>모델명</b> · <b>"모델명 기가수"(예: SM-F776N 256)</b> 중 아무거나 되고, 통신사는 U+ / LG / SK / KT 로 적으세요.</span></p>
         <textarea id="order-paste-text" rows="9" style="width:100%;border:1px solid #c7c7c7;padding:8px;font-size:12.5px;font-family:monospace;box-sizing:border-box;" placeholder="SM-F976NZKPKOD&#9;그라파이트&#9;U+&#9;6&#10;SM-F976NZYPKOD&#9;바이올렛쉐도우&#9;U+&#9;5"></textarea>
         <div class="stack-form" style="max-width:520px;margin-top:10px;">
           <div class="stack-row"><label>매입처</label><select id="order-paste-source"><option value="">선택</option></select></div>
@@ -3275,7 +3275,7 @@
       if(so !== 0) return so;
       const d = ts(b) - ts(a);
       if(d !== 0) return d;
-      return String(a.modelGroup||"").localeCompare(String(b.modelGroup||""));
+      return String(a.systemModel||"").localeCompare(String(b.systemModel||""));
     });
   }
 
@@ -3294,7 +3294,7 @@
     // 전산모델명이 아직 비어 있는 모델은 임시로 모델명+기가수를 보여주고 미입력임을 알립니다.
     const base = String(m.baseModel||"").trim();
     const cap  = String(m.capacity||"").trim();
-    const alt  = base ? (base + cap) : (String(m.modelGroup||"").trim() || String(m.petName||"").trim() || "모델");
+    const alt  = base ? (base + cap) : (String(m.petName||"").trim() || "모델");
     return alt + "  ← 전산모델명 미입력";
   }
 
@@ -3305,7 +3305,7 @@
     const base = String(o.baseModel||"").trim();
     const cap  = String(o.capacity||"").trim();
     const pet  = String(o.petName||"").trim();
-    const head = sys || (base ? (base + cap) : (String(o.modelGroup||"").trim() || "-"));
+    const head = sys || (base ? (base + cap) : (String(o.petName||"").trim() || "-"));
     return head + "/" + (pet || "-");
   }
 
@@ -3319,7 +3319,7 @@
     modelsCache.sort((a,b)=>{
       const so = sortVal(a) - sortVal(b);
       if(so !== 0) return so;
-      return String(a.systemModel||a.modelGroup||"").localeCompare(String(b.systemModel||b.modelGroup||""));
+      return String(a.systemModel||"").localeCompare(String(b.systemModel||""));
     });
   }
 
@@ -3352,10 +3352,9 @@
       let candidate = "";
       let from = "";
       if(base){ candidate = base + cap; from = "모델명+용량"; }
-      else if(String(m.modelGroup||"").trim()){ candidate = String(m.modelGroup).trim(); from = "모델군"; }
       else if(String(m.petName||"").trim()){ candidate = String(m.petName).trim(); from = "펫네임"; }
 
-      const label = m.petName || m.modelGroup || m.baseModel || "(이름 없음)";
+      const label = m.systemModel || m.petName || m.baseModel || "(이름 없음)";
       if(!candidate){ skipped.push({ name: label, reason: "채울 근거가 되는 값이 없음" }); return; }
       if(used.has(candidate)){ skipped.push({ name: label, reason: "'"+candidate+"' 은 이미 다른 모델이 쓰는 중" }); return; }
       used.add(candidate);
@@ -3526,7 +3525,7 @@
       tr.querySelector('[data-del-model]').onclick = async ()=>{
         if(confirm(docModelLabel(m) + " 모델을 삭제하시겠습니까? (색상도 함께 삭제되며, 기존 재고 기록은 유지됩니다)")){
           await deleteDoc(doc(db, "inventoryModels", m.id));
-          logAction("모델 삭제", m.modelGroup);
+          logAction("모델 삭제", docModelLabel(m));
           loadModelAdminList();
           loadColorAdminList();
         }
@@ -3543,7 +3542,6 @@
     if(!m) return;
     currentEditingModelId = modelId;
     document.getElementById("me-sortorder-input").value = (m.sortOrder != null ? m.sortOrder : "");
-    document.getElementById("me-group-input").value = m.modelGroup || "";
     document.getElementById("me-pet-input").value = m.petName || "";
     document.getElementById("me-system-input").value = m.systemModel || "";
     document.getElementById("me-base-input").value = m.baseModel || "";
@@ -3566,7 +3564,6 @@
 
     const priceIncVat = document.getElementById("me-price-input").value ? Number(document.getElementById("me-price-input").value) : null;
     const newFields = {
-      modelGroup: document.getElementById("me-group-input").value.trim(),
       petName: document.getElementById("me-pet-input").value.trim(),
       systemModel: document.getElementById("me-system-input").value.trim(),
       baseModel: document.getElementById("me-base-input").value.trim(),
@@ -3594,7 +3591,7 @@
         "정말 바꾸시겠습니까?")) return;
     }
 
-    const changed = newFields.modelGroup!==m.modelGroup || newFields.baseModel!==m.baseModel ||
+    const changed = newFields.baseModel!==m.baseModel ||
       newFields.capacity!==m.capacity || newFields.systemModel!==m.systemModel || newFields.petName!==m.petName;
     if(changed){
       // 기존 재고에도 반영합니다.
@@ -3632,7 +3629,7 @@
           try{
             const ids = Array.from(targetIds);
             const patch = {
-              modelGroup:newFields.modelGroup, baseModel:newFields.baseModel,
+              baseModel:newFields.baseModel,
               capacity:newFields.capacity, systemModel:newFields.systemModel, petName:newFields.petName
             };
             for(let i=0; i<ids.length; i+=400){
@@ -3640,7 +3637,7 @@
               ids.slice(i, i+400).forEach(id=> batch.update(doc(db,"inventoryItems", id), patch));
               await batch.commit();
             }
-            logAction("모델 수정 재고반영", newFields.modelGroup + " → 재고 " + ids.length + "건");
+            logAction("모델 수정 재고반영", (newFields.systemModel||"-") + " → 재고 " + ids.length + "건");
             alert("재고 " + ids.length + "건에 반영했습니다.");
           }catch(e){
             showModelMsg("me-result-msg", "재고 반영에 실패했습니다.<br>" + comboEsc((e && e.message) ? e.message : String(e)), true);
@@ -3649,7 +3646,7 @@
         }
       }
     }
-    logAction("모델 수정", m.modelGroup + " → " + newFields.modelGroup);
+    logAction("모델 수정", (m.systemModel||"-") + " → " + (newFields.systemModel||"-"));
     closeModelEditModal();
     await loadModelAdminList();
     loadColorAdminList();
@@ -4069,17 +4066,16 @@
       });
       if(!existing.priceIncVat && fields.priceIncVat){ patch.priceIncVat = fields.priceIncVat; patch.priceExVat = fields.priceExVat; }
       if(Object.keys(patch).length>0){ patch.updatedAt = serverTimestamp(); await updateDoc(doc(db,"inventoryModels", existing.id), patch); }
-      logAction("모델 누적 업데이트", (fields.modelGroup||existing.modelGroup));
+      logAction("모델 누적 업데이트", (fields.systemModel || existing.systemModel || existing.baseModel || "-"));
       return { created:false };
     }else{
       await addDoc(collection(db, "inventoryModels"), {
-        modelGroup: fields.modelGroup || fields.baseModel || fields.systemModel || fields.petName,
         baseModel: fields.baseModel||"", capacity: fields.capacity||"", systemModel: fields.systemModel||"",
         priceExVat: fields.priceExVat||null, priceIncVat: fields.priceIncVat||null,
         petName: fields.petName||"", nickname: fields.nickname||"", manufacturer: fields.manufacturer||"", colors: [],
         createdAt: serverTimestamp(), updatedAt: serverTimestamp()
       });
-      logAction("모델 등록", (fields.modelGroup || fields.baseModel || fields.systemModel || fields.petName));
+      logAction("모델 등록", (fields.systemModel || fields.baseModel || fields.petName || "-"));
       return { created:true };
     }
   }
@@ -4127,7 +4123,7 @@
       await withTimeout(fetchModelsCache(), 12000, "모델 목록 조회");
       showModelMsg("ms-result-msg", "② 저장 중...", false);
       result = await withTimeout(
-        upsertModel({ petName, systemModel, baseModel, capacity, priceIncVat, priceExVat, nickname, manufacturer, modelGroup: petName||baseModel||systemModel }),
+        upsertModel({ petName, systemModel, baseModel, capacity, priceIncVat, priceExVat, nickname, manufacturer }),
         12000, "모델 저장");
     }catch(e){
       // 저장 자체가 거부된 경우 (권한·보안규칙·네트워크 등) — 예전에는 아무 표시 없이 멈췄습니다.
@@ -4212,7 +4208,7 @@
       const priceExVat = priceIncVat ? Math.round(priceIncVat/1.1) : null;
 
       const result = await upsertModel(
-        { petName, systemModel, baseModel, capacity, priceIncVat, priceExVat, nickname, manufacturer, modelGroup: petName||baseModel||systemModel }
+        { petName, systemModel, baseModel, capacity, priceIncVat, priceExVat, nickname, manufacturer }
       );
       if(result.created) createdCount++; else updatedCount++;
       await fetchModelsCache(); // 다음 행 매칭을 위해 캐시 갱신
@@ -4662,7 +4658,7 @@
     const colorLabel = systemColor || manufacturerColor || "";
 
     const base = {
-      modelGroup:m.modelGroup, baseModel:m.baseModel, capacity:m.capacity, systemModel:m.systemModel,
+      baseModel:m.baseModel, capacity:m.capacity, systemModel:m.systemModel,
       petName: m.petName || "", manufacturerColor, systemColor, sku, carrier, source, manufacturer, location, destination:dest,
       listPrice: listPrice?Number(listPrice):null,
       purchasePrice: purchasePrice?Number(purchasePrice):null,
@@ -4711,7 +4707,7 @@
     if(entryType==="qty"){
       const qty = Number(document.getElementById("item-qty-input").value) || 1;
       await addDoc(collection(db,"inventoryItems"), { ...base, entryType:"qty", quantity:qty, serialNumber:"" });
-      logAction("재고 입고(수량)", m.modelGroup+" "+colorLabel+" / "+carrier+" / 수량 "+qty);
+      logAction("재고 입고(수량)", docModelLabel(m)+" "+colorLabel+" / "+carrier+" / 수량 "+qty);
       closeItemModal();
       loadInventoryList();
     }else{
@@ -4723,7 +4719,7 @@
         return;
       }
       const newItemRef = await addDoc(collection(db,"inventoryItems"), { ...base, entryType:"imei", quantity:1, serialNumber });
-      logAction("재고 입고(일련번호)", m.modelGroup+" "+colorLabel+" / "+carrier+" / 일련번호 "+serialNumber);
+      logAction("재고 입고(일련번호)", docModelLabel(m)+" "+colorLabel+" / "+carrier+" / 일련번호 "+serialNumber);
 
       if(currentOrderLinkId){
         await advanceOrderFulfillment(currentOrderLinkId, newItemRef.id);
@@ -5313,7 +5309,7 @@
 
       const orderRef = await addDoc(collection(db,"orders"), {
         batchId: batchRef.id, source, orderDate, expectedArrivalDate: expected,
-        modelId: m.id, modelGroup: m.modelGroup||"", baseModel: m.baseModel||"",
+        modelId: m.id, baseModel: m.baseModel||"",
         capacity: m.capacity||"", systemModel: m.systemModel||"", petName: m.petName||"",
         manufacturerColor: c ? (c.manufacturerColor||"") : "",
         systemColor: c ? (c.systemColor||"") : "",
@@ -5342,7 +5338,7 @@
         });
         await addDoc(collection(db,"saleRequests"), {
           batchId: srBatch.id, destination: dest,
-          modelId: m.id, modelGroup: m.modelGroup||"", baseModel: m.baseModel||"",
+          modelId: m.id, baseModel: m.baseModel||"",
           capacity: m.capacity||"", systemModel: m.systemModel||"", petName: m.petName||"",
           manufacturerColor: c ? (c.manufacturerColor||"") : "",
           systemColor: c ? (c.systemColor||"") : "", sku: c ? (c.sku||"") : "",
@@ -5767,7 +5763,7 @@
     for(const l of lines){
       const orderRef = await addDoc(collection(db,"orders"), {
         batchId: batchRef.id,
-        modelId: l.modelId, modelGroup: l.m.modelGroup, baseModel: l.m.baseModel, capacity: l.m.capacity,
+        modelId: l.modelId, baseModel: l.m.baseModel, capacity: l.m.capacity,
         systemModel: l.m.systemModel, petName: l.m.petName||"",
         // 색상은 줄마다 다르므로 줄에서 고른 값을 저장합니다.
         manufacturerColor: l.colorObj ? (l.colorObj.manufacturerColor||"") : "",
@@ -5807,7 +5803,7 @@
       for(const {orderRef, l} of group){
         await addDoc(collection(db,"saleRequests"), {
           batchId: srBatchRef.id,
-          destination: dest, modelId: l.modelId, modelGroup:l.m.modelGroup, baseModel:l.m.baseModel, capacity:l.m.capacity,
+          destination: dest, modelId: l.modelId, baseModel:l.m.baseModel, capacity:l.m.capacity,
           systemModel:l.m.systemModel, petName:l.m.petName||"",
           manufacturerColor: l.colorObj ? (l.colorObj.manufacturerColor||"") : "",
           systemColor: l.colorObj ? (l.colorObj.systemColor||"") : "",
@@ -5893,7 +5889,7 @@
         payWaitCnt++; payWaitAmt += Number(b.depositRequired)||0;
         if(b.paymentRequestId){ confirmCnt++; confirmAmt += Number(b.depositRequired)||0; }
       }else if(b.paymentMethod === "b2b_credit"){
-        creditCnt++; creditAmt += Number(b.depositRequired)||0;
+        creditCnt++; creditAmt += Number(b.creditUsed != null ? b.creditUsed : b.depositRequired)||0;
       }
     });
     const oSum = document.getElementById("order-wait-summary");
@@ -5935,8 +5931,11 @@
       row.style.flexWrap = "wrap";
 
       const depositLabel = b.paymentMethod==="b2b_credit"
-        ? '<span style="color:#6a1b9a;font-weight:700;">삼성여신 결제 '+(b.depositRequired||0).toLocaleString()+'</span>'
-          + '<span style="color:var(--gray);"> ('+(b.depositPaidDate||"-")+')</span>'
+        ? '<span style="color:#6a1b9a;font-weight:700;">삼성여신 차감 '+((b.creditUsed!=null?b.creditUsed:b.depositRequired)||0).toLocaleString()+'</span>'
+          + '<span style="color:var(--gray);"> · 원가 '+(b.depositRequired||0).toLocaleString()
+          + (b.creditUsed!=null && b.creditUsed > (b.depositRequired||0)
+              ? ' · 후정산 '+(b.creditUsed - (b.depositRequired||0)).toLocaleString() : '')
+          + ' ('+(b.depositPaidDate||"-")+')</span>'
         : (b.depositPaid
           ? '<span style="color:#2e7d32;font-weight:700;">입금완료 '+(b.depositRequired||0).toLocaleString()+'</span>'
             + '<span style="color:var(--gray);"> ('+(b.depositPaidDate||"-")+')</span>'
@@ -6007,7 +6006,7 @@
     applyCustomTabLabels();
   }
 
-  // 어떤 컬렉션이든 모델 정보(펫네임·모델명·기가수·전산모델명·모델군)를 모델 등록 기준으로 맞춥니다.
+  // 어떤 컬렉션이든 모델 정보(펫네임·모델명·기가수·전산모델명)를 모델 등록 기준으로 맞춥니다.
   const MODEL_SYNC_LABELS = {
     saleRequests: "판매요청", reservations: "예약", inventoryItems: "재고"
   };
@@ -6022,7 +6021,7 @@
       const m = findModelForItem(o);
       if(!m){ noModel.push(o); return; }
       const patch = {};
-      [["petName",m.petName||""],["modelGroup",m.modelGroup||""],["baseModel",m.baseModel||""],
+      [["petName",m.petName||""],["baseModel",m.baseModel||""],
        ["capacity",m.capacity||""],["systemModel",m.systemModel||""]].forEach(([k,v])=>{
         if(String(o[k]||"") !== String(v)) patch[k] = v;
       });
@@ -6077,7 +6076,7 @@
   }
 
   // 주문 품목을 모델 등록 기준으로 최신화합니다.
-  //  · 펫네임·모델군·모델명·기가수·전산모델명을 모델의 현재 값으로 맞춤
+  //  · 펫네임·모델명·기가수·전산모델명을 모델의 현재 값으로 맞춤
   //  · 출고가를 채우고 선할인·타할인%·판매할인을 역산 (입고가·판매가는 그대로)
   window.syncOrderPrices = async function(){
     await fetchModelsCache();
@@ -6095,7 +6094,6 @@
       // 1) 모델 정보 최신화
       const fields = [
         ["petName",    m.petName    || ""],
-        ["modelGroup", m.modelGroup || ""],
         ["baseModel",  m.baseModel  || ""],
         ["capacity",   m.capacity   || ""],
         ["systemModel",m.systemModel|| ""]
@@ -6715,7 +6713,7 @@
       newItemIds.push(ref.id);
       serialById[ref.id] = e.serial;   // 매칭 이력에 일련번호를 남기기 위해
       batch.set(ref, {
-        modelGroup:freshModel.modelGroup, baseModel:freshModel.baseModel, capacity:freshModel.capacity, systemModel:freshModel.systemModel,
+        baseModel:freshModel.baseModel, capacity:freshModel.capacity, systemModel:freshModel.systemModel,
         petName:freshModel.petName||"", manufacturerColor:c.manufacturerColor||"", systemColor:c.systemColor||"", sku:c.sku||"",
         carrier:o.carrier||"", source:o.source||"", manufacturer:"", location:"", destination:o.destination||"",
         listPrice:o.listPrice||null, purchasePrice:o.purchasePrice||null, salePrice:o.salePrice||null,
@@ -6766,7 +6764,7 @@
     }
 
     logAction("주문 도착 일괄등록",
-      (o.petName||o.modelGroup)+" / 수량 "+entries.length
+      docModelLabel(o)+" / 수량 "+entries.length
       + (autoSell ? " / "+(o.destination||"-")+" 판매처리(출고일 "+outDate+")" : "")
       + (srMatched>0 ? " / 판매요청 "+srMatched+"건 매칭" : ""));
     resultEl.innerHTML = '<b>등록 완료 — 수량 '+entries.length+'</b>'
@@ -7155,11 +7153,113 @@
     el.innerHTML = h;
   };
 
+  // 주문별로 출고가·선할인·타할인·입고가 합계를 보여줍니다.
+  // 어느 주문에서 금액이 어긋나는지 바로 찾을 수 있습니다.
+  window.showOrderAmountCheck = async function(){
+    const el = document.getElementById("b2b-orderuse-detail");
+    if(el.style.display !== "none" && el.dataset.mode === "check"){ el.style.display = "none"; return; }
+    el.style.display = "block"; el.dataset.mode = "check";
+    el.innerHTML = '<div class="list-empty">계산 중...</div>';
+
+    await fetchModelsCache();
+    const obSnap = await getDocs(collection(db,"orderBatches"));
+    const ordSnap = await getDocs(collection(db,"orders"));
+    const byBatch = {};
+    ordSnap.forEach(d=>{
+      const o = d.data();
+      if(o.status === "취소") return;
+      if(!byBatch[o.batchId]) byBatch[o.batchId] = [];
+      byBatch[o.batchId].push(o);
+    });
+
+    const rows = [];
+    obSnap.forEach(d=>{
+      const b = d.data();
+      if(b.status === "취소") return;
+      const ls = byBatch[d.id] || [];
+      let qty=0, listSum=0, preSum=0, othSum=0, buySum=0, noList=0, priceDiff=0, modelListSum=0;
+      const wrongModels = [];
+      ls.forEach(o=>{
+        const q = Number(o.quantity)||0; qty += q;
+        const L = Number(o.listPrice)||0;
+        if(!L) noList += q;
+        listSum += L * q;
+        preSum  += (Number(o.preDiscountAmt)||0) * q;
+        othSum  += (Number(o.otherDiscountAmt)||0) * q;
+        buySum  += (Number(o.purchasePrice)||0) * q;
+        // 모델 등록의 출고가와 비교합니다.
+        const m = findModelForItem(o);
+        const ML = m ? (Number(m.priceIncVat)||0) : 0;
+        modelListSum += ML * q;
+        if(ML && L && ML !== L){
+          priceDiff += (ML - L) * q;
+          wrongModels.push((o.systemModel||o.baseModel||"-") + " " + L.toLocaleString() + "→" + ML.toLocaleString());
+        }
+      });
+      rows.push({ id:d.id, b, qty, listSum, preSum, othSum, buySum, noList, modelListSum, priceDiff, wrongModels,
+        credit: Number(b.creditUsed)||0, saved: Number(b.depositRequired)||0 });
+    });
+    if(rows.length === 0){ el.innerHTML = '<div class="list-empty">주문이 없습니다.</div>'; return; }
+
+    let T = { qty:0, list:0, pre:0, oth:0, buy:0, credit:0, saved:0, modelList:0 };
+    let h = '<div style="overflow-x:auto;border:1px solid var(--line);"><table class="data-table" style="min-width:1020px;"><thead><tr>' +
+      '<th>주문일</th><th>매입처</th><th class="ta-right">수량</th>' +
+      '<th class="ta-right">출고가 합계</th><th class="ta-right">모델기준</th>' +
+      '<th class="ta-right">선할인</th><th class="ta-right">타할인</th>' +
+      '<th class="ta-right">입고가 합계</th><th class="ta-right">여신차감</th><th>검산</th>' +
+      '</tr></thead><tbody>';
+    rows.forEach(r=>{
+      T.qty+=r.qty; T.list+=r.listSum; T.pre+=r.preSum; T.oth+=r.othSum; T.buy+=r.buySum;
+      T.credit+=r.credit; T.saved+=r.saved;
+      const calcBuy = r.listSum - r.preSum - r.othSum;
+      const ok = (calcBuy === r.buySum) && (r.buySum === r.saved);
+      let note = ok ? '<span style="color:#2e7d32;">정상</span>' : '';
+      if(!ok){
+        const parts = [];
+        if(calcBuy !== r.buySum) parts.push("입고가 " + (r.buySum - calcBuy).toLocaleString());
+        if(r.buySum !== r.saved) parts.push("저장액 " + (r.saved - r.buySum).toLocaleString());
+        note = '<span style="color:var(--danger);">차이 ' + parts.join(" / ") + '</span>';
+      }
+      if(r.noList) note += '<br><span style="color:var(--danger);font-size:11px;">출고가 없음 ' + r.noList + '대</span>';
+      if(r.priceDiff !== 0){
+        note += '<br><span style="color:var(--danger);font-size:11px;">모델 출고가와 ' + r.priceDiff.toLocaleString() + ' 차이'
+          + (r.wrongModels.length ? '<br>' + r.wrongModels.slice(0,3).map(comboEsc).join('<br>') : '') + '</span>';
+      }
+      T.modelList += r.modelListSum;
+      h += '<tr><td>'+comboEsc(r.b.orderDate||"-")+'</td><td>'+comboEsc(r.b.source||"-")+'</td>' +
+        '<td class="ta-right">'+r.qty+'</td>' +
+        '<td class="ta-right">'+r.listSum.toLocaleString()+'</td>' +
+        '<td class="ta-right"'+(r.priceDiff?' style="color:var(--danger);font-weight:700;"':'')+'>'+r.modelListSum.toLocaleString()+'</td>' +
+        '<td class="ta-right">'+r.preSum.toLocaleString()+'</td>' +
+        '<td class="ta-right">'+r.othSum.toLocaleString()+'</td>' +
+        '<td class="ta-right">'+r.buySum.toLocaleString()+'</td>' +
+        '<td class="ta-right">'+(r.credit?r.credit.toLocaleString():"-")+'</td>' +
+        '<td style="font-size:11.5px;">'+note+'</td></tr>';
+    });
+    h += '<tr style="background:#fafafa;font-weight:700;border-top:2px solid var(--navy);">' +
+      '<td colspan="2">합계</td><td class="ta-right">'+T.qty+'</td>' +
+      '<td class="ta-right">'+T.list.toLocaleString()+'</td>' +
+      '<td class="ta-right"'+(T.modelList!==T.list?' style="color:var(--danger);"':'')+'>'+T.modelList.toLocaleString()+'</td>' +
+      '<td class="ta-right">'+T.pre.toLocaleString()+'</td>' +
+      '<td class="ta-right">'+T.oth.toLocaleString()+'</td>' +
+      '<td class="ta-right">'+T.buy.toLocaleString()+'</td>' +
+      '<td class="ta-right">'+T.credit.toLocaleString()+'</td><td></td></tr>';
+    h += '</tbody></table></div>';
+    h += '<div style="font-size:12px;color:var(--gray);margin-top:8px;line-height:1.9;">' +
+      '· 출고가 합계 = 출고가 × 수량 &nbsp;|&nbsp; 입고가 합계 = 출고가 − 선할인 − 타할인<br>' +
+      '· 여신차감 = 출고가 − <b>선할인만</b> (타할인은 클럽장려금으로 나중에)<br>' +
+      '· <b>모델기준</b>은 모델 등록의 출고가로 다시 계산한 값입니다. 빨간색이면 <b>모델이 잘못 잡힌 주문</b>입니다.<br>' +
+      '· 선할인 비율 ' + (T.list ? (T.pre/T.list*100).toFixed(3) : "0") + '% &nbsp;|&nbsp; ' +
+      '타할인 비율 ' + (T.list ? (T.oth/T.list*100).toFixed(3) : "0") + '% &nbsp;|&nbsp; ' +
+      '합계 ' + (T.list ? ((T.pre+T.oth)/T.list*100).toFixed(3) : "0") + '%</div>';
+    el.innerHTML = h;
+  };
+
   // 주문사용이 어떤 주문에서 나왔는지 하나하나 보여줍니다.
   window.showB2BOrderUseDetail = async function(){
     const el = document.getElementById("b2b-orderuse-detail");
-    if(el.style.display !== "none"){ el.style.display = "none"; return; }
-    el.style.display = "block";
+    if(el.style.display !== "none" && el.dataset.mode === "use"){ el.style.display = "none"; return; }
+    el.style.display = "block"; el.dataset.mode = "use";
     el.innerHTML = '<div class="list-empty">불러오는 중...</div>';
 
     const ledSnap = await getDocs(query(collection(db,"b2bLedger"), where("category","==","order_use")));
@@ -7266,6 +7366,7 @@
       for(const r of toDelete) await deleteDoc(doc(db,"b2bLedger", r.id));
       for(const x of toFix)   await replaceB2BOrderUse(x.bid, x.o.amount, x.o.date, x.o.source);
       for(const x of toAdd)   await replaceB2BOrderUse(x.bid, x.o.amount, x.o.date, x.o.source);
+      for(const r of toDelete){ if(r.fromOrderBatchId){ try{ await updateDoc(doc(db,"orderBatches", r.fromOrderBatchId), { creditUsed: null }); }catch(e){} } }
     }catch(e){
       alert("정리에 실패했습니다.\n" + ((e && e.message) ? e.message : String(e)));
       return;
@@ -7730,7 +7831,7 @@
     for(const l of lines){
       await addDoc(collection(db,"saleRequests"), {
         batchId: batchRef.id,
-        destination: dest, modelId: l.modelId, modelGroup:l.m.modelGroup, baseModel:l.m.baseModel, capacity:l.m.capacity,
+        destination: dest, modelId: l.modelId, baseModel:l.m.baseModel, capacity:l.m.capacity,
         systemModel:l.m.systemModel, petName:l.m.petName||"", carrier: l.carrier,
         quantity: l.quantity, fulfilledCount:0, matchedItemIds:[],
         salePrice: l.salePrice, saleDiscountAmt: l.saleDiscountAmt, saleDiscountPct: l.saleDiscountPct,
@@ -8007,7 +8108,7 @@
     const colorObj = (colorIdx !== "" && m.colors && m.colors[Number(colorIdx)]) ? m.colors[Number(colorIdx)] : null;
 
     const payload = {
-      modelId, modelGroup:m.modelGroup, baseModel:m.baseModel, capacity:m.capacity,
+      modelId, baseModel:m.baseModel, capacity:m.capacity,
       systemModel: m.systemModel||"", petName:m.petName||"",
       kind: resvKind, carrier: resvCarrier,
       listPrice: listPriceVal,
@@ -8277,7 +8378,7 @@
       const srRef = await addDoc(collection(db,"saleRequests"), {
         batchId: srBatchRef.id,
         destination: r.destination,
-        modelId: r.modelId||null, modelGroup: r.modelGroup||"", baseModel: r.baseModel||"",
+        modelId: r.modelId||null, baseModel: r.baseModel||"",
         capacity: r.capacity||"", systemModel: r.systemModel||"", petName: r.petName||"",
         manufacturerColor: r.manufacturerColor||"", systemColor: r.systemColor||"", sku: r.sku||"",
         carrier: r.carrier||"",
@@ -8392,7 +8493,7 @@
     }
     if(errs.length) return { ok:false, rowLabel, reason: errs.join(" / ") };
     return { ok:true, rowLabel, data:{
-      modelId: model.id, modelGroup: model.modelGroup||"", baseModel: model.baseModel||"",
+      modelId: model.id, baseModel: model.baseModel||"",
       capacity: model.capacity||"", systemModel: model.systemModel||"", petName: model.petName||"",
       listPrice: model.priceIncVat || null,
       manufacturerColor: colorObj ? (colorObj.manufacturerColor||"") : "",
@@ -9173,7 +9274,7 @@
   }
 
   // 한 줄에서 모델을 찾습니다.
-  // 순서: 삼성코드(SKU) → 전산모델명 → 모델명 → "모델군/모델명 + 기가수" (예: "플립 256")
+  // 순서: 삼성코드(SKU) → 전산모델명 → 모델명 → "모델명 + 기가수"
   function findModelFromCells(cells){
     const norm = v => String(v||"").trim().toLowerCase();
     // 1) 삼성코드
@@ -9196,27 +9297,40 @@
       const m = modelsCache.find(x=> norm(x.baseModel) === v);
       if(m) return { model:m, colorObj:null, usedCell:c };
     }
-    // 4) "이름 + 기가수" 형태 (예: "플립 256", "폴드 512")
+    // 4) "이름 + 기가수" 형태 (예: "플립8 256", "폴드8울트라 512")
+    //    이름이 여러 모델에 걸리면(예: "폴드"는 폴드8·폴드8울트라 둘 다) 고르지 않고 알려줍니다.
+    const pickByNameCap = (name, cap)=>{
+      const capOk = x => String(x.capacity||"").replace(/\D/g,"") === String(cap);
+      if(!name) return {};
+      // ① 이름이 정확히 같은 것 우선
+      let hits = modelsCache.filter(x=> capOk(x) &&
+        (norm(x.petName) === name || norm(x.baseModel) === name || norm(x.systemModel) === name));
+      if(hits.length === 1) return { ok:hits[0] };
+      if(hits.length > 1) return { ambiguous:hits };
+      // ② 부분 일치
+      hits = modelsCache.filter(x=> capOk(x) &&
+        (norm(x.petName).includes(name) || norm(x.baseModel).includes(name)));
+      if(hits.length === 1) return { ok:hits[0] };
+      if(hits.length > 1) return { ambiguous:hits };
+      return {};
+    };
+
     for(const c of cells){
       const t = String(c||"").trim();
       const mm = t.match(/^(.+?)[\s_-]*(\d{2,4})$/);
       if(!mm) continue;
-      const name = norm(mm[1]), cap = mm[2];
-      const found = modelsCache.find(x=>
-        String(x.capacity||"").replace(/\D/g,"") === cap &&
-        (norm(x.modelGroup).includes(name) || norm(x.petName).includes(name) ||
-         norm(x.baseModel).includes(name) || name.includes(norm(x.modelGroup))));
-      if(found) return { model:found, colorObj:null, usedCell:c };
+      const r = pickByNameCap(norm(mm[1]), mm[2]);
+      if(r.ok) return { model:r.ok, colorObj:null, usedCell:c };
+      if(r.ambiguous) return { ambiguous:r.ambiguous, usedCell:c };
     }
     // 5) 이름과 기가수가 다른 칸에 있는 경우
     const nums = cells.filter(c=> /^\d{2,4}$/.test(String(c).trim()));
     for(const c of cells){
       const name = norm(c); if(!name || /^\d+$/.test(name)) continue;
       for(const cap of nums){
-        const found = modelsCache.find(x=>
-          String(x.capacity||"").replace(/\D/g,"") === String(cap).trim() &&
-          (norm(x.modelGroup).includes(name) || norm(x.petName).includes(name) || name.includes(norm(x.modelGroup))));
-        if(found) return { model:found, colorObj:null, usedCell:c, usedCap:String(cap).trim() };
+        const r = pickByNameCap(name, String(cap).trim());
+        if(r.ok) return { model:r.ok, colorObj:null, usedCell:c, usedCap:String(cap).trim() };
+        if(r.ambiguous) return { ambiguous:r.ambiguous, usedCell:c, usedCap:String(cap).trim() };
       }
     }
     return null;
@@ -9261,6 +9375,13 @@
       // 모델 찾기 (통신사·수량 칸은 제외)
       const modelCells = cells.filter((c, idx)=> idx !== carrierIdx && idx !== qtyIdx);
       const found = findModelFromCells(modelCells);
+      if(found && found.ambiguous){
+        bad.push({ label,
+          reason:"이름이 여러 모델에 걸립니다 → " + found.ambiguous.map(x=>x.systemModel||x.baseModel).join(" / ")
+            + "  (삼성코드나 전산모델명으로 적어주세요)",
+          raw:line });
+        return;
+      }
       if(!found){
         bad.push({ label, reason:"등록되지 않은 모델 — 삼성코드·전산모델명·모델명+기가수 중 하나가 맞아야 합니다", raw:line });
         return;
@@ -9407,7 +9528,7 @@
           const m = r.model;
           bt.set(doc(collection(db,"orders")), {
             batchId: batchRef.id, source, orderDate, expectedArrivalDate: "",
-            modelId: m.id, modelGroup: m.modelGroup||"", baseModel: m.baseModel||"",
+            modelId: m.id, baseModel: m.baseModel||"",
             capacity: m.capacity||"", systemModel: m.systemModel||"", petName: m.petName||"",
             manufacturerColor: r.colorObj ? (r.colorObj.manufacturerColor||"") : "",
             systemColor: r.colorObj ? (r.colorObj.systemColor||"") : (r.colorText||""),
@@ -9565,7 +9686,7 @@
         const f = g[0];
         const srRef = await addDoc(collection(db,"saleRequests"), {
           batchId: batchRef.id, destination: dest,
-          modelId: f.modelId||null, modelGroup: f.modelGroup||"", baseModel: f.baseModel||"",
+          modelId: f.modelId||null, baseModel: f.baseModel||"",
           capacity: f.capacity||"", systemModel: f.systemModel||"", petName: f.petName||"",
           manufacturerColor: f.manufacturerColor||"", systemColor: f.systemColor||"", sku: f.sku||"",
           carrier: f.carrier||"",
@@ -10089,7 +10210,7 @@
         const color = o.systemColor || o.manufacturerColor || "";
         page += '<tr>' +
           '<td class="ta-center">'+(i+1)+'</td>' +
-          '<td>'+esc(o.petName || o.modelGroup || "-")+'</td>' +
+          '<td>'+esc(o.petName || o.systemModel || "-")+'</td>' +
           '<td>'+esc(o.systemModel || o.baseModel || "-")+'</td>' +
           '<td>'+(color ? esc(color) : '<span style="color:var(--danger);">색상 미입력</span>')+'</td>' +
           '<td class="ta-right">'+q+'</td>' +
@@ -10702,7 +10823,7 @@
       for(const {id, o} of group){
         await addDoc(collection(db,"saleRequests"), {
           batchId: srBatchRef.id,
-          destination: dest, modelId: o.modelId, modelGroup:o.modelGroup, baseModel:o.baseModel, capacity:o.capacity,
+          destination: dest, modelId: o.modelId, baseModel:o.baseModel, capacity:o.capacity,
           systemModel:o.systemModel, petName:o.petName||"", carrier: o.carrier||"",
           quantity: o.quantity, fulfilledCount:0, matchedItemIds:[],
           salePrice: o.salePrice, requestDate, status:"대기중",
@@ -10887,7 +11008,7 @@
     await updateDoc(doc(db,"inventoryItems", itemDoc.id), patch);
     logAction("즉시 판매 처리", dest+" / 일련번호 "+serial+(salePrice?" / "+Number(salePrice).toLocaleString():""));
 
-    resultEl.innerHTML = '<b>판매 처리 완료</b> — '+(it.petName||it.modelGroup)+' / '+serial;
+    resultEl.innerHTML = '<b>판매 처리 완료</b> — '+docModelLabel(it)+' / '+serial;
     document.getElementById("instant-sale-serial-input").value = "";
     document.getElementById("instant-sale-model-display").value = "";
     document.getElementById("instant-sale-listprice-display").value = "";
@@ -11048,6 +11169,21 @@
     html += statCard("③ 주문사용 (차감)", orderUseTotal.toLocaleString(), "var(--danger)");
     html += statCard("B2B대출비용 합계 (수수료+이자)", loanCostTotal.toLocaleString(), "var(--danger)");
     html += statCard("잔여여신 = ①+②−③", remainingCredit.toLocaleString(), remainingCredit < 0 ? "var(--danger)" : "#1565c0");
+    // 타할인 = 나중에 클럽장려금으로 받을 금액
+    let pendingRebate = 0;
+    try{
+      const obs = await getDocs(collection(db,"orderBatches"));
+      obs.forEach(dd=>{
+        const bb = dd.data();
+        if(bb.status === "취소") return;
+        const cu = Number(bb.creditUsed)||0, dr = Number(bb.depositRequired)||0;
+        if(cu > dr) pendingRebate += (cu - dr);
+      });
+    }catch(e){}
+    html += statCard("클럽장려금 예정금액 (타할인 누적)", pendingRebate.toLocaleString(), "#b8860b");
+    html += statCard("받은 클럽장려금", clubIncentiveTotal.toLocaleString(), "#6a1b9a");
+    html += statCard("미수령 차액", (pendingRebate - clubIncentiveTotal).toLocaleString(),
+      (pendingRebate - clubIncentiveTotal) > 0 ? "var(--danger)" : "#2e7d32");
     html += statCard("이자지급 수령 합계", interestReceivedTotal.toLocaleString(), "#2e7d32");
     html += statCard("기존 매입-매출 차액 (수익)", baseProfitSum.toLocaleString());
     html += statCard("최종 실제수익 (수익-대출비용+이자수령)", finalProfit.toLocaleString(), "#2e7d32");
@@ -12800,7 +12936,7 @@
         const oldStatus = it.status;
         if(newStatus === oldStatus) return;
         await updateDoc(doc(db,"inventoryItems",it.id), { status:newStatus });
-        logAction("재고 상태 변경", it.modelGroup+" : "+oldStatus+" → "+newStatus);
+        logAction("재고 상태 변경", docModelLabel(it)+" : "+oldStatus+" → "+newStatus);
         it.status = newStatus;
         loadInventoryList();
       };
@@ -12817,7 +12953,7 @@
       delBtn.onclick = async ()=>{
         if(confirm("이 재고 기록을 삭제하시겠습니까?")){
           await deleteDoc(doc(db,"inventoryItems",it.id));
-          logAction("재고 삭제", it.modelGroup+" "+(it.systemColor||it.manufacturerColor||""));
+          logAction("재고 삭제", docModelLabel(it)+" "+(it.systemColor||it.manufacturerColor||""));
           loadInventoryList();
         }
       };
@@ -13168,7 +13304,7 @@
         colorObj = (m.colors||[]).find(c=>c.systemColor===r.colorText || c.manufacturerColor===r.colorText);
       }
       await addDoc(collection(db,"inventoryItems"), {
-        modelGroup:m.modelGroup, baseModel:m.baseModel, capacity:m.capacity, systemModel:m.systemModel,
+        baseModel:m.baseModel, capacity:m.capacity, systemModel:m.systemModel,
         petName:m.petName||"", manufacturerColor:colorObj.manufacturerColor||"", systemColor:colorObj.systemColor||"", sku:colorObj.sku||"",
         carrier, source, manufacturer:"", location:"", destination:dest||"",
         listPrice:m.priceIncVat||null, purchasePrice:m.priceExVat||null, salePrice:null,
@@ -13632,7 +13768,7 @@
       }else{
         batchSerialSet.add(serialNumber);
         validRows.push({
-          modelGroup:model.modelGroup, baseModel:model.baseModel, capacity:model.capacity, systemModel:model.systemModel,
+          baseModel:model.baseModel, capacity:model.capacity, systemModel:model.systemModel,
           petName: model.petName||"", manufacturerColor:colorObj.manufacturerColor||"", systemColor:colorObj.systemColor||"", sku:colorObj.sku||"",
           carrier, source, manufacturer, location, destination:dest,
           listPrice:listPriceNum, purchasePrice:purchasePriceNum,
@@ -13863,7 +13999,6 @@
     await upsertModel({
       systemModel: missingSystemModel, baseModel: baseModel.trim(), capacity: capacity.trim(),
       petName: petName.trim(), priceIncVat, priceExVat,
-      modelGroup: petName.trim() || baseModel.trim() || missingSystemModel
     });
     await fetchModelsCache();
     const model = modelsCache.find(m=>m.systemModel===missingSystemModel);
@@ -13910,7 +14045,6 @@
       await upsertModel({
         systemModel, baseModel: String(baseModel).trim(), capacity: String(capacity).trim(),
         petName: String(baseModel).trim() || systemModel, priceIncVat, priceExVat,
-        modelGroup: String(baseModel).trim() || systemModel
       });
       createdCount++;
 
