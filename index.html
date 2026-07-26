@@ -39,6 +39,14 @@
     line-height:1 !important; height:28px !important; min-height:28px !important;
     display:inline-flex !important; align-items:center !important; justify-content:center !important;
     box-sizing:border-box !important; vertical-align:middle !important; white-space:nowrap; }
+  /* ── 나란히 놓인 버튼 묶음 ──
+     버튼 사이의 빈칸을 없애고, 맞닿는 테두리를 한 줄로 겹쳐 붙입니다.
+     inline-flex 로 감싸면 줄바꿈·띄어쓰기 때문에 생기는 빈칸도 함께 사라집니다. */
+  .btn-row{ display:inline-flex; align-items:center; flex-wrap:wrap; vertical-align:middle; }
+  .btn-row > .btn, .btn-row > button{ margin-right:0 !important; margin-left:0 !important; }
+  .btn-row > .btn + .btn, .btn-row > button + button{ margin-left:-1px !important; }
+  /* 마우스를 올린 버튼의 테두리가 옆 버튼에 가리지 않게 위로 올립니다. */
+  .btn-row > .btn:hover, .btn-row > button:hover{ position:relative; z-index:1; }
   /* 버튼 옆의 선택칸·입력칸도 같은 높이로 맞춰 선이 어긋나지 않게 합니다. */
   .tbar select, .tbar input[type="text"], .tbar input[type="number"], .tbar input[type="date"]{
     height:28px; box-sizing:border-box; vertical-align:middle; }
@@ -297,10 +305,9 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-07-25 v241</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-07-26 v248</span>
       <span id="topbar-username">-</span>
-      <button onclick="openPersonalSettingsModal()">개인설정</button>
-      <button onclick="handleLogout()">로그아웃</button>
+      <span class="btn-row"><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
   </div>
 
@@ -364,7 +371,7 @@
       <div class="card">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
           <h3 style="margin:0;">대시보드</h3>
-          <span>
+          <span class="btn-row">
             <button class="btn small" id="dash-scope-month-btn" style="width:auto;" onclick="setDashboardScope('month')">당월</button>
             <button class="btn small secondary" id="dash-scope-all-btn" style="width:auto;" onclick="setDashboardScope('all')">전체</button>
             <select id="dash-month-picker" onchange="setDashboardCustomMonth(this.value)" style="padding:5px 6px;border:1px solid #c7c7c7;font-size:12.5px;height:28px;"><option value="">월 선택</option></select>
@@ -488,7 +495,7 @@
       <div class="card">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
           <h3 style="margin:0;">판매 관리 <span class="info-tip" title="구매자가 먼저 입금하고, 실제로 어떤 일련번호를 보낼지는 나중에 정해지는 경우 여기 걸어두세요. 입금 체크 후, 재고 매칭으로 보유중인 실제 재고(일련번호)를 연결하면 그 재고가 판매 처리됩니다. 주문 관리에서 판매조건까지 미리 정한 주문은 여기에 자동으로 반영됩니다.">ⓘ</span></h3>
-          <span style="display:inline-flex;align-items:center;">
+          <span class="btn-row" style="display:inline-flex;align-items:center;">
           <button class="btn small secondary" style="width:auto;" onclick="createSaleDepositRequestFromSelected()">입금요청</button>
           <button class="btn small secondary" style="width:auto;" onclick="openInvToSaleReq()">재고에서 판매요청</button>
           <span style="position:relative;">
@@ -528,7 +535,7 @@
       <div class="card" style="max-width:1500px;">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
           <h3 style="margin:0;">예약 목록 <span class="info-tip" title="등록한 예약을 한 줄씩 보여줍니다. 수정·삭제·배정을 여기서 하세요.">ⓘ</span></h3>
-          <span style="display:inline-flex;align-items:center;">
+          <span class="btn-row" style="display:inline-flex;align-items:center;">
           <button class="btn small secondary" style="width:auto;" onclick="openResvBulkAlloc()">일괄매칭</button>
           <button class="btn small secondary" style="width:auto;" onclick="createQuotationFromSelected()">견적서</button>
           <button class="btn small secondary" style="width:auto;" onclick="toggleQuotationList()">견적서 조회</button>
@@ -614,7 +621,7 @@
           <input type="text" id="lgr-to" maxlength="6" inputmode="numeric" placeholder="종료 귀속월 202612" style="width:150px;height:28px;border:1px solid var(--line);padding:0 8px;font-size:12.5px;margin-left:-1px;box-sizing:border-box;">
           <button class="btn small" style="width:auto;margin-left:-1px;" onclick="loadLgRefund()">조회</button>
           <span id="dl-lgr"></span>
-          <span style="margin-left:auto;display:inline-flex;align-items:center;">
+          <span class="btn-row" style="margin-left:auto;display:inline-flex;align-items:center;">
             <button class="btn small secondary" style="width:auto;" onclick="openLgrEntry('refund')">+ 환불금 등록</button>
             <button class="btn small secondary" style="width:auto;" onclick="openLgrEntry('subsidy')">+ 수수료 등록</button>
           </span>
@@ -638,8 +645,7 @@
           <div class="stack-row"><label>귀속월 <span class="info-tip" title="어느 달 개통분에 대한 입금인지 적어주세요. 예: 6월 개통분이면 202606">ⓘ</span></label><input type="text" id="lgr-month" maxlength="6" inputmode="numeric" placeholder="예: 202606"></div>
           <div class="stack-row"><label>메모</label><input type="text" id="lgr-memo" placeholder="예: 1차, 2차 등 (선택)"></div>
         </div>
-        <button class="btn small" style="width:auto;margin-top:12px;" onclick="submitLgrEntry()">저장</button>
-        <button class="btn small secondary" style="width:auto;" onclick="closeLgrEntry()">닫기</button>
+        <span class="btn-row" style="margin-top:12px;"><button class="btn small" style="width:auto;" onclick="submitLgrEntry()">저장</button><button class="btn small secondary" style="width:auto;" onclick="closeLgrEntry()">닫기</button></span>
         <div id="lgr-msg" style="display:none;font-size:12.5px;margin-top:10px;padding:8px 10px;border-left:3px solid var(--navy);background:#f2f2f2;line-height:1.6;"></div>
       </div>
     </div>
@@ -912,8 +918,7 @@
         <h3>메뉴 순서 <span class="info-tip" title="사이드바 메뉴를 끌어서 순서를 바꿉니다. 바꾼 순서는 모든 사용자에게 적용됩니다.">ⓘ</span></h3>
         <p class="desc">순서를 바꾸려면 아래 버튼을 누르고 <b>왼쪽 메뉴를 끌어서</b> 옮기세요. <b>작업 메뉴 ↔ 관리자</b> 사이로도 옮길 수 있습니다.<br>
           권한은 메뉴마다 따로 붙어 있어서 어느 묶음에 두든 영향이 없습니다.</p>
-        <button class="btn small secondary" id="menu-order-btn" style="width:auto;" onclick="toggleMenuOrderMode()">메뉴 순서 바꾸기</button>
-        <button class="btn small secondary" style="width:auto;" onclick="resetMenuOrder()">처음 순서로</button>
+        <span class="btn-row"><button class="btn small secondary" id="menu-order-btn" style="width:auto;" onclick="toggleMenuOrderMode()">메뉴 순서 바꾸기</button><button class="btn small secondary" style="width:auto;" onclick="resetMenuOrder()">처음 순서로</button></span>
         <div id="menu-order-note" style="display:none;border:1px solid var(--navy);background:#f4f7fb;padding:9px 11px;margin-top:8px;font-size:12.5px;line-height:1.8;">
           <b>순서 바꾸기 중입니다.</b> 왼쪽 메뉴를 끌어서 원하는 자리에 놓으세요. 놓는 즉시 저장됩니다.<br>
           <span style="color:var(--gray);">다른 메뉴 <b>위</b>에 놓으면 그 앞으로 들어가고, 묶음의 <b>빈 곳</b>에 놓으면 맨 아래로 갑니다.<br>
@@ -972,9 +977,7 @@
         <p class="desc" style="margin-top:8px;">ⓘ 아이콘을 <b>마우스 오른쪽 버튼</b>으로 누르면 설명 문구를 고치거나 아이콘을 없앨 수 있습니다.</p>
         <h3 style="font-size:13px;margin-top:14px;">숨긴 항목 <span class="info-tip" title="숨긴 버튼·제목과 도움말(ⓘ)이 여기 모입니다. 하나씩 되돌릴 수 있습니다.">ⓘ</span></h3>
         <div id="hidden-items-list" style="margin-bottom:10px;"></div>
-        <button class="btn small secondary" style="width:auto;margin-right:6px;" onclick="renderHiddenList()">목록 새로고침</button>
-        <button class="btn small secondary" style="width:auto;margin-right:6px;" onclick="resetHiddenDashItems()">숨긴 항목 전부 복원</button>
-        <button class="btn small secondary" style="width:auto;" onclick="resetAllTips()">도움말(ⓘ) 전부 복원</button>
+        <span class="btn-row"><button class="btn small secondary" style="width:auto;" onclick="renderHiddenList()">목록 새로고침</button><button class="btn small secondary" style="width:auto;" onclick="resetHiddenDashItems()">숨긴 항목 전부 복원</button><button class="btn small secondary" style="width:auto;" onclick="resetAllTips()">도움말(ⓘ) 전부 복원</button></span>
       </div>
     </div>
 
@@ -1017,12 +1020,11 @@
       <div class="card" style="max-width:1400px;">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
           <h3 style="margin:0;">모델 등록</h3>
-          <span>
-            <button class="btn small secondary" style="width:auto;margin-right:8px;" onclick="openModelExcelModal()">파일 업로드</button>
-            <button class="btn small" style="width:auto;" onclick="openModelSingleModal()">+ 건별 등록</button>
-          </span>
+          <span class="btn-row"><button class="btn small secondary" style="width:auto;" onclick="findModelDups()">중복 정리</button><button class="btn small secondary" style="width:auto;" onclick="openModelExcelModal()">파일 업로드</button><button class="btn small" style="width:auto;" onclick="openModelSingleModal()">+ 건별 등록</button></span>
         </div>
         <div id="model-syscode-notice" style="display:none;font-size:12.5px;padding:9px 11px;margin-bottom:8px;border:1px solid var(--danger);background:#fdecea;line-height:1.7;"></div>
+        <div id="model-dup-warn" style="display:none;font-size:12.5px;padding:10px 12px;margin-bottom:8px;border:1px solid var(--danger);background:#fdecea;line-height:1.8;"></div>
+        <div id="model-dup-box" style="display:none;font-size:12.5px;padding:10px 12px;margin-bottom:8px;border:1px solid var(--navy);background:#f4f7fb;line-height:1.8;"></div>
         <div style="font-size:12.5px;padding:9px 11px;margin-bottom:8px;border:1px solid var(--line);background:#fafafa;line-height:1.7;">
           <b>재고 출고가를 모델 기준으로 맞추기</b>
           <span class="info-tip" title="모델 등록의 출고가(VAT포함)를 기준으로 기존 재고의 출고가를 맞춥니다. 입고가·판매가는 그대로 두고 할인 금액과 비율만 다시 계산합니다.">ⓘ</span>
@@ -1286,8 +1288,7 @@
           <div class="stack-row"><label>전산색상</label><input type="text" id="cm-sys-color-input" placeholder="예: 그레이"></div>
           <div class="stack-row"><label>삼성모델명(SKU)</label><input type="text" id="cm-sku-input" placeholder="선택, 나중에 채워도 됨"></div>
         </div>
-        <button class="btn small" id="cm-submit-btn" style="width:auto;" onclick="submitColorAdd()">색상 추가</button>
-        <button class="btn small secondary" id="cm-cancel-btn" style="width:auto;display:none;margin-left:6px;" onclick="cancelColorEdit()">취소</button>
+        <span class="btn-row"><button class="btn small" id="cm-submit-btn" style="width:auto;" onclick="submitColorAdd()">색상 추가</button><button class="btn small secondary" id="cm-cancel-btn" style="width:auto;display:none;" onclick="cancelColorEdit()">취소</button></span>
       </div>
     </div>
 
@@ -1642,8 +1643,7 @@
           <button class="btn small danger" style="width:auto;" onclick="deleteSelectedInventoryRows()">선택 항목 삭제 (삭제함으로)</button>
           <div style="font-size:11.5px;color:var(--gray);margin-top:6px;line-height:1.6;">삭제하면 목록에서 숨겨지고 집계에서 빠집니다. 목록 위 <b>삭제함</b> 버튼으로 다시 볼 수 있습니다.</div>
           <div style="border-top:1px solid var(--line);margin-top:10px;padding-top:10px;">
-            <button class="btn small secondary" style="width:auto;margin-right:6px;" onclick="restoreSelectedInventoryRows()">되돌리기</button>
-            <button class="btn small danger" style="width:auto;" onclick="purgeSelectedInventoryRows()">완전 삭제</button>
+            <span class="btn-row"><button class="btn small secondary" style="width:auto;" onclick="restoreSelectedInventoryRows()">되돌리기</button><button class="btn small danger" style="width:auto;" onclick="purgeSelectedInventoryRows()">완전 삭제</button></span>
             <div style="font-size:11.5px;color:var(--danger);margin-top:6px;">완전 삭제는 되돌릴 수 없습니다.</div>
           </div>
         </div>
@@ -1656,11 +1656,7 @@
         <button class="no-print" onclick="closeOrderDetailModal()" style="position:absolute;top:12px;right:12px;background:none;border:1px solid var(--navy);width:26px;height:26px;cursor:pointer;font-size:13px;">✕</button>
         <div style="display:flex;justify-content:space-between;align-items:flex-start;">
           <h3 style="margin-top:0;margin-bottom:4px;" id="order-detail-heading">주문 요청서</h3>
-          <span class="no-print" style="margin-right:34px;">
-            <button class="btn small secondary" style="width:auto;margin-right:6px;" id="order-po-btn" onclick="openPoFromDetail()">삼성전자 발주서</button>
-            <button class="btn small secondary" style="width:auto;" id="order-bulkarr-btn" onclick="toggleBulkArrival()">도착 일괄 등록</button>
-            <button class="btn small secondary" style="width:auto;" onclick="printOrderDetail()">인쇄 / PDF 저장</button>
-          </span>
+          <span class="no-print btn-row" style="margin-right:34px;"><button class="btn small secondary" style="width:auto;" id="order-po-btn" onclick="openPoFromDetail()">삼성전자 발주서</button><button class="btn small secondary" style="width:auto;" id="order-bulkarr-btn" onclick="toggleBulkArrival()">도착 일괄 등록</button><button class="btn small secondary" style="width:auto;" onclick="printOrderDetail()">인쇄 / PDF 저장</button></span>
         </div>
         <p class="desc" id="order-detail-title"></p>
         <div id="bulk-arrival-box" class="no-print" style="display:none;border:1px solid var(--navy);background:#f4f7fb;padding:12px 14px;margin-bottom:12px;">
@@ -1678,8 +1674,7 @@
               </select>
             </div>
           </div>
-          <button class="btn small" style="width:auto;margin-top:10px;" onclick="analyzeBulkArrival()">분석하기</button>
-          <button class="btn small secondary" style="width:auto;" onclick="toggleBulkArrival()">닫기</button>
+          <span class="btn-row" style="margin-top:10px;"><button class="btn small" style="width:auto;" onclick="analyzeBulkArrival()">분석하기</button><button class="btn small secondary" style="width:auto;" onclick="toggleBulkArrival()">닫기</button></span>
           <div id="bulk-arrival-result" style="font-size:12.5px;margin-top:10px;"></div>
         </div>
         <div id="order-detail-body"></div>
@@ -1698,14 +1693,12 @@
             <tbody id="arrival-bulk-rows"></tbody>
           </table>
         </div>
-        <button class="btn small secondary" style="width:auto;" onclick="addArrivalRow()">+ 한 대 더</button>
-        <button class="btn small secondary" style="width:auto;" onclick="toggleArrivalPaste()">일련번호 붙여넣기</button>
+        <span class="btn-row"><button class="btn small secondary" style="width:auto;" onclick="addArrivalRow()">+ 한 대 더</button><button class="btn small secondary" style="width:auto;" onclick="toggleArrivalPaste()">일련번호 붙여넣기</button></span>
         <div id="arrival-paste-box" style="display:none;border:1px solid var(--navy);background:#f4f7fb;padding:10px 12px;margin-top:8px;margin-bottom:8px;">
           <div style="font-size:12.5px;font-weight:700;margin-bottom:6px;">일련번호를 그대로 붙여넣으세요</div>
           <textarea id="arrival-paste-text" rows="6" style="width:100%;border:1px solid var(--line);padding:8px;font-size:12.5px;font-family:monospace;box-sizing:border-box;" placeholder="1038307&#10;1038472&#10;1038215&#10;&#10;또는  1038307  그레이&#10;(색상을 함께 적으면 색상도 채워집니다)"></textarea>
           <div style="margin-top:8px;">
-            <button class="btn small" style="width:auto;" onclick="applyArrivalPaste()">넣기</button>
-            <button class="btn small secondary" style="width:auto;" onclick="applyArrivalPaste(true)">기존 줄 지우고 넣기</button>
+            <span class="btn-row"><button class="btn small" style="width:auto;" onclick="applyArrivalPaste()">넣기</button><button class="btn small secondary" style="width:auto;" onclick="applyArrivalPaste(true)">기존 줄 지우고 넣기</button></span>
           </div>
           <div style="font-size:11.5px;color:var(--gray);margin-top:6px;line-height:1.7;">
             한 줄에 하나씩, 또는 <b>일련번호 + 색상</b>을 탭·띄어쓰기로 구분해 적으세요. 색상을 안 적으면 주문의 색상이 들어갑니다.
@@ -1966,8 +1959,7 @@
           <div class="stack-row"><label>비고</label><input type="text" id="quote-opt-note" placeholder="선택"></div>
         </div>
         <div id="quote-opt-preview" style="border:1px solid var(--line);background:#fafafa;padding:9px 11px;margin-top:10px;font-size:12px;color:var(--gray);line-height:1.7;"></div>
-        <button class="btn small" style="width:auto;margin-top:12px;" onclick="submitQuotation()">발행하기</button>
-        <button class="btn small secondary" style="width:auto;" onclick="closeQuoteOpt()">닫기</button>
+        <span class="btn-row" style="margin-top:12px;"><button class="btn small" style="width:auto;" onclick="submitQuotation()">발행하기</button><button class="btn small secondary" style="width:auto;" onclick="closeQuoteOpt()">닫기</button></span>
         <div id="quote-opt-msg" style="display:none;font-size:12.5px;margin-top:10px;padding:8px 10px;border-left:3px solid var(--navy);background:#f2f2f2;line-height:1.6;"></div>
       </div>
     </div>
@@ -2092,8 +2084,7 @@
         </div>
         <div id="rb-pick-area" style="display:none;"></div>
         <textarea id="rb-serials" rows="8" style="width:100%;border:1px solid var(--line);padding:8px;font-size:12.5px;font-family:monospace;box-sizing:border-box;" placeholder="SM-F776N256&#9;1038307&#10;SM-F776N256&#9;1038472&#10;SM-F971N256&#9;1056548&#10;&#10;모델은 전산모델명·모델명·삼성모델명 아무거나 되고, 색상을 함께 적어도 됩니다.&#10;일련번호만 적어도 되지만 겹치면 오류로 알려드립니다."></textarea>
-        <button class="btn small" style="width:auto;margin-top:10px;" onclick="analyzeResvBulk()">분석하기</button>
-        <button class="btn small secondary" style="width:auto;" onclick="closeResvBulkAlloc()">닫기</button>
+        <span class="btn-row" style="margin-top:10px;"><button class="btn small" style="width:auto;" onclick="analyzeResvBulk()">분석하기</button><button class="btn small secondary" style="width:auto;" onclick="closeResvBulkAlloc()">닫기</button></span>
         <div id="rb-result" style="font-size:12.5px;margin-top:10px;"></div>
       </div>
     </div>
@@ -2188,10 +2179,7 @@
         <button onclick="closeItemModal()" style="position:absolute;top:12px;right:12px;background:none;border:1px solid var(--navy);width:26px;height:26px;cursor:pointer;font-size:13px;">✕</button>
         <h3 id="item-modal-title" style="margin-top:0;margin-bottom:4px;">재고 입고 등록</h3>
         <p class="desc">모델·색상을 선택하면 출고가가 자동으로 채워집니다.</p>
-        <button class="btn small secondary" id="item-modal-excel-btn" style="width:auto;margin-bottom:12px;margin-right:6px;" onclick="closeItemModal();openExcelUploadModal();">파일로 여러 건 업로드</button>
-        <button class="btn small secondary" id="item-modal-paste-btn" style="width:auto;margin-bottom:12px;margin-right:6px;" onclick="closeItemModal();openPasteRegisterModal();">텍스트로 붙여넣기 등록</button>
-        <button class="btn small secondary" id="item-modal-bulkdown-btn" style="width:auto;margin-bottom:12px;margin-right:6px;" onclick="downloadBulkEditExcel()">일괄수정용 다운로드</button>
-        <button class="btn small secondary" id="item-modal-bulkup-btn" style="width:auto;margin-bottom:12px;" onclick="closeItemModal();openBulkEditUploadModal();">일괄수정 업로드</button>
+        <span class="btn-row" style="margin-bottom:12px;"><button class="btn small secondary" id="item-modal-excel-btn" style="width:auto;" onclick="closeItemModal();openExcelUploadModal();">파일로 여러 건 업로드</button><button class="btn small secondary" id="item-modal-paste-btn" style="width:auto;" onclick="closeItemModal();openPasteRegisterModal();">텍스트로 붙여넣기 등록</button><button class="btn small secondary" id="item-modal-bulkdown-btn" style="width:auto;" onclick="downloadBulkEditExcel()">일괄수정용 다운로드</button><button class="btn small secondary" id="item-modal-bulkup-btn" style="width:auto;" onclick="closeItemModal();openBulkEditUploadModal();">일괄수정 업로드</button></span>
 
         <div class="stack-form">
           <div class="stack-row"><label>주문일</label><input type="text" id="item-orderdate-input" placeholder="예: 20260724" maxlength="8" inputmode="numeric"></div>
@@ -3404,8 +3392,8 @@
               '<span>휴대폰 <b>'+comboEsc(u.phone||"-")+'</b></span>' +
             '</div>' +
           '</div>' +
-          '<span style="flex-shrink:0;">' +
-            '<button class="btn small" data-approve="'+uid+'" style="width:auto;margin-right:6px;">승인</button>' +
+          '<span class="btn-row" style="flex-shrink:0;">' +
+            '<button class="btn small" data-approve="'+uid+'" style="width:auto;">승인</button>' +
             '<button class="btn small danger" data-ban="'+uid+'" style="width:auto;">추방</button>' +
           '</span>' +
         '</div>' +
@@ -3788,6 +3776,27 @@
   // ---------- 모델(용량 단위) + 색상별 SKU ----------
   // 용량(기가수)은 "256" 처럼 숫자만 쓰기로 정했습니다.
   // GB / 기가 / 공백이 섞여 들어오면 떼어내서 표기를 통일합니다. (예: "256GB" → "256", "1TB" 는 그대로)
+  // 전산모델명·모델명은 대문자로 통일해서 저장합니다.
+  // 소문자로 넣어도 같은 모델로 보고, 중복 줄이 생기지 않게 하기 위한 것입니다.
+  function normalizeModelText(v){
+    return String(v == null ? "" : v).trim().toUpperCase().replace(/\s+/g, "");
+  }
+  // 중복인지 가릴 때 쓰는 열쇠값입니다. 하이픈 종류가 달라도(‐ ‑ – —) 같은 것으로 봅니다.
+  function modelDupKey(v){
+    return normalizeModelText(v).replace(/[\u2010\u2011\u2012\u2013\u2014\u2015\uFF0D]/g, "-");
+  }
+  // 모델이 같은지 가리는 기준은 「전산모델명」 하나입니다.
+  // 전산모델명은 모델명+기가수를 붙인 값이므로(SM-F976N + 256 → SM-F976N256),
+  // 전산모델명 칸이 비어 있으면 모델명+기가수를 붙여 같은 자리에 놓고 비교합니다.
+  // 그래서 조건이 두 갈래로 갈라지지 않고 항상 한 기준으로 판정됩니다. 펫네임은 쓰지 않습니다.
+  function modelCanonKey(o){
+    if(!o) return "";
+    const sys = modelDupKey(o.systemModel);
+    if(sys) return sys;
+    const base = modelDupKey(o.baseModel);
+    const cap = normalizeCapacity(o.capacity);
+    return (base && cap) ? (base + cap) : "";
+  }
   function normalizeCapacity(v){
     let t = String(v == null ? "" : v).trim();
     if(!t) return "";
@@ -4064,7 +4073,231 @@
     });
     document.getElementById("model-pagination").innerHTML = "";
     document.getElementById("model-pagination").replaceChildren(renderPaginationBar("models", modelsCache.length, loadModelAdminList));
+    // 전산모델명이 겹치는 줄이 있으면 화면을 열 때 바로 알려줍니다. (누르지 않아도 보입니다)
+    showModelDupWarning();
   }
+
+  // ---------- 모델 중복 정리 ----------
+  //  · 같은 모델인지 가리는 기준은 전산모델명입니다. (대문자·공백·하이픈 차이는 같은 것으로 봅니다)
+  //  · 전산모델명이 없는 줄은 모델명+기가수로 가립니다.
+  //  · 펫네임은 사람이 보기 위한 표기라 판정에 쓰지 않습니다.
+  //  · 모델 줄을 지워도 재고·주문 기록에는 모델명·전산모델명이 문자열로 남아 있어 기록이 깨지지 않습니다.
+  let modelDupGroups = [];
+
+  // 정보가 가장 많이 채워진 줄을 대표로 남깁니다. 같으면 먼저 만들어진 줄입니다.
+  function modelInfoScore(m){
+    return (m.systemModel?2:0) + (m.baseModel?1:0) + (m.capacity?1:0) + (m.petName?1:0)
+         + (m.priceIncVat?2:0) + (m.manufacturer?1:0) + (m.nickname?1:0)
+         + (Array.isArray(m.colors) ? m.colors.length : 0);
+  }
+  function modelCreatedSec(m){
+    return (m.createdAt && m.createdAt.seconds) ? m.createdAt.seconds : 0;
+  }
+  // 색상 목록을 합칩니다. 제조사색상+전산색상이 같으면 한 개로 보고, SKU가 있는 쪽을 남깁니다.
+  function mergeColorLists(lists){
+    const out = [];
+    const idx = {};
+    lists.forEach(list=>{
+      (Array.isArray(list) ? list : []).forEach(c=>{
+        if(!c) return;
+        const key = String(c.manufacturerColor||"").trim() + "|" + String(c.systemColor||"").trim();
+        if(idx[key] === undefined){
+          idx[key] = out.length;
+          out.push({ manufacturerColor:c.manufacturerColor||"", systemColor:c.systemColor||"", sku:c.sku||"" });
+        }else{
+          const cur = out[idx[key]];
+          if(!cur.sku && c.sku) cur.sku = c.sku;
+        }
+      });
+    });
+    return out;
+  }
+
+  // 목록을 그릴 때마다 전산모델명 중복이 있는지만 빠르게 세어 알려줍니다. (합치지는 않습니다)
+  function showModelDupWarning(){
+    const el = document.getElementById("model-dup-warn");
+    if(!el) return;
+    const cnt = {};
+    modelsCache.forEach(m=>{ const k = modelCanonKey(m); if(k) cnt[k] = (cnt[k]||0) + 1; });
+    const kinds = Object.keys(cnt).filter(k=> cnt[k] > 1);
+    const extraRows = kinds.reduce((n,k)=> n + (cnt[k]-1), 0);
+    if(kinds.length === 0){ el.style.display = "none"; el.innerHTML = ""; return; }
+    el.style.display = "block";
+    el.innerHTML = '<b style="color:var(--danger);">전산모델명이 겹치는 모델 ' + kinds.length + '종류 (여분 ' + extraRows + '줄)</b>'
+      + '<br><span style="color:var(--gray);">같은 모델이 여러 줄로 갈려 있으면 출고가·색상이 갈라져 정산이 어긋납니다. 아래 버튼으로 확인 후 합쳐주세요.</span>'
+      + '<br><button class="btn small" style="width:auto;margin-top:6px;" onclick="findModelDups()">중복 확인하고 합치기</button>';
+  }
+
+  window.findModelDups = async function(){
+    if(!hasPerm(currentUserPerms, "inventorySettings")){ alert("이 기능을 사용할 권한이 없습니다. 관리자에게 요청해주세요."); return; }
+    const box = document.getElementById("model-dup-box");
+    box.style.display = "block";
+    box.innerHTML = "확인 중...";
+    await fetchModelsCache();
+
+    const groups = {};
+    const noKey = [];
+    modelsCache.forEach(m=>{
+      // 전산모델명 기준 한 가지로 묶습니다.
+      // 전산모델명이 빈 줄도 모델명+기가수를 붙여 같은 자리에서 비교하므로,
+      // "SM-F976N256" 줄과 "SM-F976N + 256" 줄이 같은 중복으로 잡힙니다.
+      const key = modelCanonKey(m);
+      if(!key){ noKey.push(m); return; }
+      const kind = m.systemModel ? "전산모델명" : "모델명+기가수 (전산모델명 비어 있음)";
+      if(!groups[key]) groups[key] = { key, kind, rows:[] };
+      groups[key].rows.push(m);
+      if(m.systemModel) groups[key].kind = "전산모델명";
+    });
+
+    modelDupGroups = Object.values(groups).filter(g=> g.rows.length > 1);
+    modelDupGroups.forEach(g=>{
+      g.rows.sort((a,b)=>{
+        const d = modelInfoScore(b) - modelInfoScore(a);
+        if(d !== 0) return d;
+        return modelCreatedSec(a) - modelCreatedSec(b);
+      });
+      g.main = g.rows[0];
+      g.others = g.rows.slice(1);
+    });
+
+    // 소문자로 저장돼 있어 앞으로 중복을 만들 수 있는 줄
+    const lowerRows = modelsCache.filter(m=>
+      (m.systemModel && m.systemModel !== normalizeModelText(m.systemModel)) ||
+      (m.baseModel && m.baseModel !== normalizeModelText(m.baseModel)));
+
+    let html = "<b>모델 " + modelsCache.length + "줄을 확인했습니다.</b>";
+    html += "<br><span style=\"color:var(--gray);\">기준: 전산모델명 (대소문자·공백·하이픈 차이는 같은 것으로 봅니다) · 펫네임은 판정에 쓰지 않습니다.</span>";
+
+    if(lowerRows.length){
+      html += '<div style="margin-top:8px;padding:8px 10px;border:1px solid var(--line);background:#fff;">'
+        + '<b>소문자로 저장된 줄 ' + lowerRows.length + '개</b> — 그대로 두면 앞으로 같은 모델이 또 갈립니다.<br>'
+        + lowerRows.slice(0,8).map(m=>'· ' + comboEsc(m.systemModel||m.baseModel||"-")).join("<br>")
+        + (lowerRows.length>8 ? '<br>... 외 ' + (lowerRows.length-8) + '개' : '')
+        + '<br><button class="btn small secondary" style="width:auto;margin-top:6px;" onclick="fixModelCaseAll()">대문자로 고치기</button>'
+        + '</div>';
+    }
+    if(noKey.length){
+      html += '<div style="margin-top:8px;padding:8px 10px;border:1px solid var(--danger);background:#fdecea;">'
+        + '<b style="color:var(--danger);">전산모델명·기가수가 모두 없어 판정할 수 없는 줄 ' + noKey.length + '개</b><br>'
+        + '<span style="color:var(--gray);">목록에서 <b>수정</b>을 눌러 전산모델명을 채워주세요. 채우기 전에는 중복인지 알 수 없습니다.</span><br>'
+        + noKey.slice(0,8).map(m=>'· ' + comboEsc(docModelLabel(m))).join("<br>")
+        + (noKey.length>8 ? '<br>... 외 ' + (noKey.length-8) + '개' : '')
+        + '</div>';
+    }
+
+    if(modelDupGroups.length === 0){
+      html += '<div style="margin-top:8px;"><b>합칠 중복은 없습니다.</b></div>';
+      box.innerHTML = html;
+      return;
+    }
+
+    const dupRowTotal = modelDupGroups.reduce((n,g)=> n + g.others.length, 0);
+    html += '<div style="margin-top:8px;"><b style="color:var(--danger);">중복 ' + modelDupGroups.length
+      + '종류 · 합치면 ' + dupRowTotal + '줄이 없어집니다.</b> '
+      + '<button class="btn small" style="width:auto;margin-left:6px;" onclick="mergeAllModelDups()">전부 합치기</button></div>';
+    html += '<div style="overflow-x:auto;max-height:320px;overflow-y:auto;border:1px solid var(--line);margin-top:8px;background:#fff;">'
+      + '<table class="data-table"><thead><tr><th>기준</th><th>남길 줄 (대표)</th><th>합쳐질 줄</th><th>색상</th><th></th></tr></thead><tbody>';
+    modelDupGroups.forEach((g, i)=>{
+      const mainColors = Array.isArray(g.main.colors) ? g.main.colors.length : 0;
+      const mergedColors = mergeColorLists(g.rows.map(r=>r.colors)).length;
+      html += '<tr>'
+        + '<td><b>' + comboEsc(g.main.systemModel || (comboEsc(g.main.baseModel)+" "+comboEsc(g.main.capacity))) + '</b>'
+          + '<br><span style="color:var(--gray);font-size:11px;">' + g.kind + '</span></td>'
+        + '<td>' + comboEsc(docModelLabel(g.main))
+          + (g.main.priceIncVat ? '<br><span style="color:var(--gray);font-size:11px;">출고가 ' + Number(g.main.priceIncVat).toLocaleString() + '</span>' : '')
+          + '</td>'
+        + '<td style="color:var(--danger);">' + g.others.map(o=> comboEsc(docModelLabel(o))
+            + (o.priceIncVat ? ' <span style="color:var(--gray);font-size:11px;">('+Number(o.priceIncVat).toLocaleString()+')</span>' : '')).join("<br>") + '</td>'
+        + '<td>' + mainColors + ' → <b>' + mergedColors + '</b></td>'
+        + '<td><button class="btn small secondary" style="width:auto;" onclick="mergeModelDupGroup(' + i + ')">합치기</button></td>'
+        + '</tr>';
+    });
+    html += '</tbody></table></div>';
+    html += '<div style="margin-top:6px;color:var(--gray);">합치면 대표 줄의 <b>빈 칸만</b> 채우고 색상을 모은 뒤, 나머지 줄을 지웁니다. 이미 들어 있는 값은 바꾸지 않습니다.</div>';
+    box.innerHTML = html;
+  };
+
+  // 한 종류 합치기
+  async function doMergeGroup(g){
+    const patch = {};
+    ["systemModel","baseModel","capacity","petName","nickname","manufacturer"].forEach(k=>{
+      if(!g.main[k]){
+        const found = g.others.find(o=> o[k]);
+        if(found) patch[k] = found[k];
+      }
+    });
+    if(!g.main.priceIncVat){
+      const found = g.others.find(o=> o.priceIncVat);
+      if(found){ patch.priceIncVat = found.priceIncVat; patch.priceExVat = found.priceExVat || Math.round(found.priceIncVat/1.1); }
+    }
+    // 대문자로 통일
+    const sysUp = normalizeModelText(patch.systemModel || g.main.systemModel);
+    const baseUp = normalizeModelText(patch.baseModel || g.main.baseModel);
+    if(sysUp) patch.systemModel = sysUp;
+    if(baseUp) patch.baseModel = baseUp;
+    // 색상 합치기
+    const merged = mergeColorLists(g.rows.map(r=>r.colors));
+    patch.colors = merged;
+    patch.updatedAt = serverTimestamp();
+
+    const batch = writeBatch(db);
+    batch.update(doc(db,"inventoryModels", g.main.id), patch);
+    g.others.forEach(o=> batch.delete(doc(db,"inventoryModels", o.id)));
+    await batch.commit();
+    logAction("모델 중복 합치기", docModelLabel(g.main) + " ← " + g.others.length + "줄 정리 / 색상 " + merged.length + "개");
+    return g.others.length;
+  }
+
+  window.mergeModelDupGroup = async function(i){
+    if(!hasPerm(currentUserPerms, "inventorySettings")){ alert("이 기능을 사용할 권한이 없습니다."); return; }
+    const g = modelDupGroups[i];
+    if(!g) return;
+    if(!confirm(docModelLabel(g.main) + " 로 합칩니다.\n\n· 없어지는 줄 " + g.others.length + "개\n· 대표 줄의 빈 칸만 채우고 색상을 모읍니다\n· 재고·주문 기록은 그대로 남습니다\n\n진행할까요?")) return;
+    await doMergeGroup(g);
+    await findModelDups();
+    loadModelAdminList(); loadColorAdminList();
+  };
+
+  window.mergeAllModelDups = async function(){
+    if(!hasPerm(currentUserPerms, "inventorySettings")){ alert("이 기능을 사용할 권한이 없습니다."); return; }
+    const total = modelDupGroups.reduce((n,g)=> n + g.others.length, 0);
+    if(total === 0){ alert("합칠 중복이 없습니다."); return; }
+    if(!confirm("중복 " + modelDupGroups.length + "종류를 한 번에 합칩니다.\n\n· 없어지는 줄 " + total + "개\n· 되돌릴 수 없습니다\n\n진행할까요?")) return;
+    const box = document.getElementById("model-dup-box");
+    let done = 0;
+    for(const g of modelDupGroups){
+      await doMergeGroup(g);
+      done += g.others.length;
+      box.innerHTML = "합치는 중... (" + done + "/" + total + ")";
+    }
+    alert(done + "줄을 정리했습니다.");
+    await findModelDups();
+    loadModelAdminList(); loadColorAdminList();
+  };
+
+  // 소문자로 저장된 전산모델명·모델명을 대문자로 고칩니다. (합치기가 아니라 표기만 고침)
+  window.fixModelCaseAll = async function(){
+    if(!hasPerm(currentUserPerms, "inventorySettings")){ alert("이 기능을 사용할 권한이 없습니다."); return; }
+    const targets = modelsCache.filter(m=>
+      (m.systemModel && m.systemModel !== normalizeModelText(m.systemModel)) ||
+      (m.baseModel && m.baseModel !== normalizeModelText(m.baseModel)));
+    if(targets.length === 0){ alert("고칠 줄이 없습니다."); return; }
+    if(!confirm(targets.length + "줄의 전산모델명·모델명을 대문자로 고칩니다.\n\n진행할까요?")) return;
+    for(let i=0;i<targets.length;i+=450){
+      const batch = writeBatch(db);
+      targets.slice(i,i+450).forEach(m=>{
+        const patch = { updatedAt: serverTimestamp() };
+        if(m.systemModel) patch.systemModel = normalizeModelText(m.systemModel);
+        if(m.baseModel) patch.baseModel = normalizeModelText(m.baseModel);
+        batch.update(doc(db,"inventoryModels", m.id), patch);
+      });
+      await batch.commit();
+    }
+    logAction("모델 대소문자 정리", targets.length + "줄");
+    alert(targets.length + "줄을 고쳤습니다.");
+    await findModelDups();
+    loadModelAdminList(); loadColorAdminList();
+  };
 
   // ---------- 모델 수정 팝업 ----------
   let currentEditingModelId = null;
@@ -4581,13 +4814,17 @@
 
   // 모델을 찾거나(전산모델명 우선, 없으면 모델명+용량) 새로 만들고, 색상들을 누적 병합
   async function upsertModel(fields){
-    let existing = null;
-    if(fields.systemModel){
-      existing = modelsCache.find(m => m.systemModel && m.systemModel === fields.systemModel);
-    }
-    if(!existing && fields.baseModel && fields.capacity){
-      existing = modelsCache.find(m => m.baseModel === fields.baseModel && m.capacity === fields.capacity);
-    }
+    // 전산모델명·모델명은 대문자로 통일해서 비교하고 저장합니다.
+    // 소문자·공백·하이픈 차이 때문에 같은 모델이 여러 줄로 갈리는 것을 막습니다.
+    // 펫네임은 사람이 보기 위한 표기라 중복 판정에 쓰지 않습니다.
+    fields = Object.assign({}, fields, {
+      systemModel: normalizeModelText(fields.systemModel),
+      baseModel:   normalizeModelText(fields.baseModel),
+      capacity:    normalizeCapacity(fields.capacity)
+    });
+    // 판정은 전산모델명 기준 한 가지로만 합니다. (예전에는 조건이 두 갈래여서 엉뚱한 줄에 합쳐질 수 있었습니다)
+    const key = modelCanonKey(fields);
+    let existing = key ? modelsCache.find(m => modelCanonKey(m) === key) : null;
 
     if(existing){
       const patch = {};
@@ -4596,6 +4833,13 @@
         if(!existing[k] && fields[k]) patch[k] = fields[k];
       });
       if(!existing.priceIncVat && fields.priceIncVat){ patch.priceIncVat = fields.priceIncVat; patch.priceExVat = fields.priceExVat; }
+      // 기존 줄이 소문자로 저장돼 있으면 이 기회에 대문자로 고쳐둡니다.
+      if(existing.systemModel && existing.systemModel !== normalizeModelText(existing.systemModel)){
+        patch.systemModel = normalizeModelText(existing.systemModel);
+      }
+      if(existing.baseModel && existing.baseModel !== normalizeModelText(existing.baseModel)){
+        patch.baseModel = normalizeModelText(existing.baseModel);
+      }
       if(Object.keys(patch).length>0){ patch.updatedAt = serverTimestamp(); await updateDoc(doc(db,"inventoryModels", existing.id), patch); }
       logAction("모델 누적 업데이트", (fields.systemModel || existing.systemModel || existing.baseModel || "-"));
       return { created:false };
@@ -4634,8 +4878,8 @@
 
   window.submitModelSingle = async function(){
     const petName = document.getElementById("ms-pet-input").value.trim();
-    const systemModel = document.getElementById("ms-system-input").value.trim();
-    const baseModel = document.getElementById("ms-base-input").value.trim();
+    const systemModel = normalizeModelText(document.getElementById("ms-system-input").value);
+    const baseModel = normalizeModelText(document.getElementById("ms-base-input").value);
     const capacity = normalizeCapacity(document.getElementById("ms-capacity-input").value);
     const priceInput = document.getElementById("ms-price-input").value;
     const nickname = document.getElementById("ms-nick-input").value.trim();
@@ -5364,8 +5608,8 @@
         '<td style="color:var(--gray);">'+(startIndex+i+1)+'</td>' +
         '<td style="white-space:nowrap;">' +
           (!canEditCompany ? '<span style="color:var(--gray);">' + (Number(c.sortOrder)||"-") + '</span>' :
-          '<button class="btn small secondary" style="width:auto;margin-right:2px;" title="위로 옮기기" data-co-up="'+(startIndex+i)+'"'+((startIndex+i)===0?' disabled style="opacity:.35;width:auto;"':'')+'>▲</button>' +
-          '<button class="btn small secondary" style="width:auto;" title="아래로 옮기기" data-co-down="'+(startIndex+i)+'"'+((startIndex+i)===arr.length-1?' disabled':'')+'>▼</button>') +
+          '<span class="btn-row"><button class="btn small secondary" style="width:auto;" title="위로 옮기기" data-co-up="'+(startIndex+i)+'"'+((startIndex+i)===0?' disabled style="opacity:.35;width:auto;"':'')+'>▲</button>' +
+          '<button class="btn small secondary" style="width:auto;" title="아래로 옮기기" data-co-down="'+(startIndex+i)+'"'+((startIndex+i)===arr.length-1?' disabled':'')+'>▼</button></span>') +
         '</td>' +
         '<td>'+(c.needsReview
             ? '<input type="checkbox" data-review-co="'+c.id+'" style="accent-color:var(--danger);width:16px;height:16px;cursor:pointer;" title="확인했으면 체크하세요 (파일 업로드로 자동 등록된 항목)">'
