@@ -279,7 +279,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-07-25 v133</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-07-25 v137</span>
       <span id="topbar-username">-</span>
       <button onclick="openPersonalSettingsModal()">개인설정</button>
       <button onclick="handleLogout()">로그아웃</button>
@@ -1692,7 +1692,8 @@
         <h3 style="margin-top:0;margin-bottom:4px;">주문 텍스트로 붙여넣기</h3>
         <p class="desc">엑셀·메모장에서 복사한 내용을 그대로 붙여넣으세요. 주문은 <b>수량 단위</b>입니다.<br>
           탭이나 2칸 이상 띄어쓰기로 구분하면 <b>칸 순서가 달라도</b> 알아서 찾습니다. 머리글 줄은 건너뜁니다.<br>
-          <span style="color:var(--gray);">모델은 <b>삼성코드(SKU)</b> · <b>전산모델명</b> · <b>모델명</b> · <b>"모델명 기가수"(예: SM-F776N 256)</b> 중 아무거나 되고, 통신사는 U+ / LG / SK / KT 로 적으세요.</span></p>
+          <span style="color:var(--gray);">모델은 <b>전산모델명</b>이 기준입니다. <b>삼성모델명(SKU)</b>을 적어주시면 전산모델명을 알아서 찾고, 그 코드가 색상에 자동으로 저장됩니다.
+          펫네임·모델군은 사람이 보기 위한 것이라 매칭에 쓰지 않습니다. 통신사는 U+ / LG / SK / KT 로 적으세요.</span></p>
         <textarea id="order-paste-text" rows="9" style="width:100%;border:1px solid #c7c7c7;padding:8px;font-size:12.5px;font-family:monospace;box-sizing:border-box;" placeholder="SM-F976NZKPKOD&#9;그라파이트&#9;U+&#9;6&#10;SM-F976NZYPKOD&#9;바이올렛쉐도우&#9;U+&#9;5"></textarea>
         <div class="stack-form" style="max-width:520px;margin-top:10px;">
           <div class="stack-row"><label>매입처</label><select id="order-paste-source"><option value="">선택</option></select></div>
@@ -3333,14 +3334,16 @@
   }
 
   // 대시보드·요청서 등 표시용 = "전산모델명/펫네임"
+  // 펫네임이 없거나 앞부분과 같으면 슬래시 없이 하나만 보여줍니다.
   function docModelLabel(o){
     if(!o) return "-";
     const sys  = String(o.systemModel||"").trim();
     const base = String(o.baseModel||"").trim();
     const cap  = String(o.capacity||"").trim();
     const pet  = String(o.petName||"").trim();
-    const head = sys || (base ? (base + cap) : (String(o.petName||"").trim() || "-"));
-    return head + "/" + (pet || "-");
+    const head = sys || (base ? (base + cap) : (pet || "-"));
+    if(!pet || pet === head) return head;
+    return head + "/" + pet;
   }
 
   let lineSelectSeq = 0;   // 주문·판매요청 줄에 붙는 선택칸 고유번호
@@ -9356,7 +9359,7 @@
       const colorName = r.colorObj
         ? (r.colorObj.systemColor || r.colorObj.manufacturerColor || "")
         : (r.colorText || "");
-      if(!colorName) return;
+      if(!colorName) return;   // 색상 이름이 없으면 어디에 넣을지 알 수 없습니다
       if(!byModel[r.model.id]) byModel[r.model.id] = [];
       byModel[r.model.id].push({ colorName, sku: r.skuCand });
     });
@@ -9450,12 +9453,12 @@
       if(!name) return {};
       // ① 이름이 정확히 같은 것 우선
       let hits = modelsCache.filter(x=> capOk(x) &&
-        (norm(x.petName) === name || norm(x.baseModel) === name || norm(x.systemModel) === name));
+        (norm(x.baseModel) === name || norm(x.systemModel) === name));   // 펫네임은 기준 아님
       if(hits.length === 1) return { ok:hits[0] };
       if(hits.length > 1) return { ambiguous:hits };
       // ② 부분 일치
       hits = modelsCache.filter(x=> capOk(x) &&
-        (norm(x.petName).includes(name) || norm(x.baseModel).includes(name)));
+        (norm(x.baseModel).includes(name) || norm(x.systemModel).includes(name)));   // 펫네임은 기준 아님
       if(hits.length === 1) return { ok:hits[0] };
       if(hits.length > 1) return { ambiguous:hits };
       return {};
@@ -9550,7 +9553,11 @@
         colorText = cand.length ? cand[cand.length-1] : "";
       }
 
-      ok.push({ label, model, colorObj, carrier, qty, colorText });
+      // 삼성모델명(SKU)을 찾아둡니다. 색상에 없으면 등록할 때 자동으로 채워집니다.
+      const skuCand = modelCells.find(c=> /^SM-[A-Z0-9]{8,}$/i.test(String(c).trim()));
+      ok.push({ label, model, colorObj, carrier, qty, colorText,
+        skuCand: skuCand ? String(skuCand).trim().toUpperCase() : "",
+        skuMissing: !!(skuCand && (!colorObj || !String(colorObj.sku||"").trim())) });
     });
 
     orderPasteRows = ok;
@@ -9562,7 +9569,7 @@
     }
     if(ok.length){
       h += '<div style="border:1px solid var(--line);max-height:260px;overflow-y:auto;margin-bottom:10px;">'
-        + '<table class="data-table" style="min-width:720px;"><thead><tr><th>모델 (전산모델명)</th><th>제조사색상</th><th>전산색상</th><th>통신사</th><th class="ta-right">수량</th><th class="ta-right">출고가</th><th>삼성모델명(SKU)</th></tr></thead><tbody>'
+        + '<table class="data-table" style="min-width:840px;"><thead><tr><th style="min-width:150px;">전산모델명</th><th>제조사색상</th><th>전산색상</th><th>통신사</th><th class="ta-right">수량</th><th class="ta-right">출고가</th><th>삼성모델명(SKU)</th></tr></thead><tbody>'
         + ok.map(r=>'<tr><td>'+comboEsc(modelOptionLabel(r.model))+'</td>'
             + '<td>'+comboEsc(r.colorObj ? (r.colorObj.manufacturerColor || r.colorText || "-") : (r.colorText||"-"))+'</td>'
             + '<td>'+comboEsc(r.colorObj ? (r.colorObj.systemColor || r.colorText || "-") : (r.colorText||"-"))+'</td>'
@@ -14814,9 +14821,14 @@
 
       // 새로고침이면 보던 화면으로, 새로 로그인했으면 대시보드로 갑니다.
       const back = lastTab();
-      const backBtn = back ? document.getElementById("tabbtn-" + back.replace("tab-","")) : null;
-      const backPanel = back ? document.getElementById(back) : null;
-      const backOk = backPanel && (!backBtn || backBtn.dataset.permHidden !== "1");
+      let backOk = false;
+      if(back){
+        const backPanel = document.getElementById(back);
+        // 이 탭을 열 권한이 있는지 확인합니다. (버튼이 숨겨져 있으면 안 됨)
+        const btn = document.querySelector('.tab-btn[data-tab="' + back + '"]');
+        const hiddenByPerm = btn && btn.dataset.permHidden === "1";
+        backOk = !!backPanel && !hiddenByPerm;
+      }
       if(backOk){
         switchTab(back);
       }else if(showDashboard) switchTab("tab-dashboard");
