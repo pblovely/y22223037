@@ -291,7 +291,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-07-25 v218</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-07-25 v227</span>
       <span id="topbar-username">-</span>
       <button onclick="openPersonalSettingsModal()">개인설정</button>
       <button onclick="handleLogout()">로그아웃</button>
@@ -318,6 +318,7 @@
           <button class="tab-btn" data-tab="tab-notices" data-label-key="tab-notices" id="tabbtn-notices" onclick="switchTab('tab-notices')" style="display:none;"><span class="tab-label-text">공지사항</span> <span id="notice-unread-dot" style="display:none;width:8px;height:8px;border-radius:50%;background:var(--danger);margin-left:2px;"></span></button>
           <button class="tab-btn" data-tab="tab-dashboard" data-label-key="tab-dashboard" id="tabbtn-dashboard" onclick="switchTab('tab-dashboard')" style="display:none;"><span class="tab-label-text">대시보드</span></button>
           <button class="tab-btn" data-tab="tab-inv-work" data-label-key="tab-inv-work" id="tabbtn-inv-work" onclick="switchTab('tab-inv-work')" style="display:none;"><span class="tab-label-text">재고 등록</span></button>
+          <button class="tab-btn" data-tab="tab-itemhistory" data-label-key="tab-itemhistory" id="tabbtn-itemhistory" onclick="switchTab('tab-itemhistory')" style="display:none;"><span class="tab-label-text">단말 이력</span></button>
           <button class="tab-btn" data-tab="tab-orders" data-label-key="tab-orders" id="tabbtn-orders" onclick="switchTab('tab-orders')" style="display:none;"><span class="tab-label-text">주문 관리</span></button>
           <button class="tab-btn" data-tab="tab-salereq" data-label-key="tab-salereq" id="tabbtn-salereq" onclick="switchTab('tab-salereq')" style="display:none;"><span class="tab-label-text">판매 관리</span></button>
           <button class="tab-btn" data-tab="tab-reservation" data-label-key="tab-reservation" id="tabbtn-reservation" onclick="switchTab('tab-reservation')" style="display:none;"><span class="tab-label-text">예약 관리</span></button>
@@ -332,7 +333,6 @@
           <button class="tab-btn" data-tab="tab-users" data-label-key="tab-users" id="tabbtn-users" onclick="switchTab('tab-users')" style="display:none;"><span class="tab-label-text">사용자 관리</span> <span id="user-admin-badge" style="display:none;background:var(--danger);color:#fff;font-size:10px;padding:1px 6px;margin-left:4px;">0</span></button>
           <button class="tab-btn" data-tab="tab-settlement" data-label-key="tab-settlement" id="tabbtn-settlement" onclick="switchTab('tab-settlement')" style="display:none;"><span class="tab-label-text">정산 관리</span></button>
           <button class="tab-btn" data-tab="tab-lgrefund" data-label-key="tab-lgrefund" id="tabbtn-lgrefund" onclick="switchTab('tab-lgrefund')" style="display:none;"><span class="tab-label-text">LG 환불·수수료</span></button>
-          <button class="tab-btn" data-tab="tab-itemhistory" data-label-key="tab-itemhistory" id="tabbtn-itemhistory" onclick="switchTab('tab-itemhistory')" style="display:none;"><span class="tab-label-text">단말 이력</span></button>
           <button class="tab-btn" data-tab="tab-datacheck" data-label-key="tab-datacheck" id="tabbtn-datacheck" onclick="switchTab('tab-datacheck')" style="display:none;"><span class="tab-label-text">데이터 점검</span></button>
           <button class="tab-btn" data-tab="tab-ledger" data-label-key="tab-ledger" id="tabbtn-ledger" onclick="switchTab('tab-ledger')" style="display:none;"><span class="tab-label-text">거래처 정산</span></button>
           <button class="tab-btn" data-tab="tab-b2b" data-label-key="tab-b2b" id="tabbtn-b2b" onclick="switchTab('tab-b2b')" style="display:none;"><span class="tab-label-text">삼성 B2B 여신</span></button>
@@ -655,9 +655,10 @@
           <h3 style="margin:0;">거래처 정산 <span class="info-tip" title="한 거래처의 받을 돈(판매)과 줄 돈(매입)을 한 화면에서 보고, 서로 상계 처리합니다.">ⓘ</span></h3>
           <button class="btn small secondary" style="width:auto;" onclick="toggleVoucherList()">발행한 상계 전표</button>
         </div>
-        <p class="desc" style="margin-top:0;">거래처를 고르면 <b>미수(받을 돈)</b>와 <b>미지급(줄 돈)</b>이 나란히 나옵니다. 상계할 건을 양쪽에서 체크하고 <b>상계 처리</b>를 누르면 전표가 만들어집니다.</p>
+        <p class="desc" style="margin-top:0;">기본은 <b>전체 거래처</b>입니다. 거래처를 고르면 그 거래처만 보이고 <b>상계 처리</b>를 할 수 있습니다.<br>
+          상계할 건을 양쪽에서 체크하고 <b>상계 처리</b>를 누르면 전표가 만들어집니다.</p>
         <div class="stack-form" style="max-width:520px;margin-bottom:12px;">
-          <div class="stack-row"><label>거래처</label><select id="ledger-company-select" onchange="loadLedger()"><option value="">거래처를 선택하세요</option></select></div>
+          <div class="stack-row"><label>거래처</label><select id="ledger-company-select" onchange="loadLedger()"><option value="">전체 거래처를 선택하세요</option></select></div>
         </div>
         <div id="ledger-cards" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px;"></div>
         <div id="voucher-list-area" style="display:none;margin-bottom:14px;"></div>
@@ -845,6 +846,19 @@
         </label>
         <div id="page-sizes-msg" style="font-size:12px;color:var(--navy);display:none;margin-top:8px;">저장되었습니다.</div>
       </div>
+      <div class="card">
+        <h3>메뉴 순서 <span class="info-tip" title="사이드바 메뉴를 끌어서 순서를 바꿉니다. 바꾼 순서는 모든 사용자에게 적용됩니다.">ⓘ</span></h3>
+        <p class="desc">순서를 바꾸려면 아래 버튼을 누르고 <b>왼쪽 메뉴를 끌어서</b> 옮기세요. <b>작업 메뉴 ↔ 관리자</b> 사이로도 옮길 수 있습니다.<br>
+          권한은 메뉴마다 따로 붙어 있어서 어느 묶음에 두든 영향이 없습니다.</p>
+        <button class="btn small secondary" id="menu-order-btn" style="width:auto;" onclick="toggleMenuOrderMode()">메뉴 순서 바꾸기</button>
+        <button class="btn small secondary" style="width:auto;" onclick="resetMenuOrder()">처음 순서로</button>
+        <div id="menu-order-note" style="display:none;border:1px solid var(--navy);background:#f4f7fb;padding:9px 11px;margin-top:8px;font-size:12.5px;line-height:1.8;">
+          <b>순서 바꾸기 중입니다.</b> 왼쪽 메뉴를 끌어서 원하는 자리에 놓으세요. 놓는 즉시 저장됩니다.<br>
+          <span style="color:var(--gray);">다른 메뉴 <b>위</b>에 놓으면 그 앞으로 들어가고, 묶음의 <b>빈 곳</b>에 놓으면 맨 아래로 갑니다.<br>
+          작업 메뉴와 관리자 사이로도 옮길 수 있습니다. 끝나면 위 버튼을 다시 눌러 종료해주세요.</span>
+        </div>
+      </div>
+
       <div class="card">
         <h3>시작 화면 <span class="info-tip" title="로그인하면 어느 화면부터 보여줄지 정합니다. 새로고침할 때는 보던 화면이 그대로 유지됩니다.">ⓘ</span></h3>
         <p class="desc">로그인 후 처음 열릴 화면을 고르세요. 권한이 없는 화면을 고르면 자동으로 다른 화면이 열립니다.</p>
@@ -1276,6 +1290,11 @@
         <h3>정산 — 입출금 현황</h3>
         <p class="desc">구매(입고) 쪽 입금, 판매 쪽 입금, 실제 완료된 매입·매출을 한 화면에서 확인합니다.</p>
         <div id="settlement-stat-cards" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px;"></div>
+        <div style="display:flex;gap:0;align-items:center;margin-bottom:8px;">
+          <button class="btn small" id="settle-f-wait" style="width:auto;border:1px solid var(--navy);" onclick="setSettleFilter('wait')">입금 대기중</button>
+          <button class="btn small secondary" id="settle-f-done" style="width:auto;border:1px solid var(--navy);margin-left:-1px;" onclick="setSettleFilter('done')">입금 완료</button>
+          <button class="btn small secondary" id="settle-f-all" style="width:auto;border:1px solid var(--navy);margin-left:-1px;" onclick="setSettleFilter('all')">전체</button>
+        </div>
         <div style="display:flex;gap:16px;flex-wrap:wrap;">
           <div style="flex:1;min-width:300px;">
             <h3 id="settlement-purchase-title" style="font-size:13px;">구매주문 입금 대기중</h3>
@@ -2218,6 +2237,9 @@
     dashboard:"대시보드 조회",
     menuInvWork:"메뉴: 재고 등록", menuInvUpload:"　└ 재고 등록 내 업로드 (파일/텍스트 붙여넣기)",
     menuOrders:"메뉴: 주문 관리", menuSaleReq:"메뉴: 판매 관리", menuDataUpload:"메뉴: 자료업로드",
+    menuReservation:"메뉴: 예약 관리", menuCompany:"메뉴: 업체정보",
+    menuItemHistory:"메뉴: 단말 이력", menuLgRefund:"메뉴: LG 환불·수수료",
+    menuLedger:"메뉴: 거래처 정산", menuDataCheck:"메뉴: 데이터 점검",
     excelExport:"엑셀 다운로드",
     bulkEdit:"재고 일괄수정 (다운로드/업로드로 기존 재고 값 변경)",
     bulkModelApply:"⚠ 같은 모델 전체 일괄변경 (위험 — 승인자만)",
@@ -2233,7 +2255,7 @@
   };
   // 권한을 성격별로 묶어서 보여줍니다 (화면에서 찾기 쉽게)
   const PERMISSION_GROUPS = [
-    { title:"화면 메뉴", keys:["dashboard","menuInvWork","menuInvUpload","menuOrders","menuSaleReq","menuDataUpload"] },
+    { title:"화면 메뉴", keys:["dashboard","menuInvWork","menuInvUpload","menuOrders","menuSaleReq","menuReservation","menuCompany","menuDataUpload","menuItemHistory","menuLgRefund","menuLedger","menuDataCheck"] },
     { title:"기능", keys:["excelExport","bulkEdit","bulkModelApply","companyEdit","listPriceOverride","cancelDelete","accountView","depositApprove","uiCustomize"] },
     { title:"관리자", keys:["userApproval","permissionManage","teamManage","inventorySettings","settlementSettings","siteSettings","dataReset"] }
   ];
@@ -2320,10 +2342,9 @@
     { key:"systemColor", label:"전산색상", get:it=>it.systemColor||"-" },
     { key:"sku", label:"삼성모델명(SKU)", get:it=>it.sku||"-" },
     { key:"serialNumber", label:"일련번호",
-      get:it=> (it.entryType==="imei" && it.serialNumber)
-        ? '<span class="ih-link" data-serial="'+comboEsc(it.serialNumber)+'" style="cursor:pointer;color:var(--navy);text-decoration:underline;font-weight:700;" title="단말 이력 보기">'+comboEsc(it.serialNumber)+'</span>'
-        : "-",
-      getRaw: it=> it.serialNumber||"" },
+      get:it=> (it.entryType==="imei" && it.serialNumber) ? it.serialNumber : "-",
+      getRaw: it=> it.serialNumber||"",
+      link: it=> (it.entryType==="imei" && it.serialNumber) ? it.serialNumber : "" },
     { key:"quantity", label:"수량", get:it=> it.entryType==="imei" ? "1" : (it.quantity != null ? String(it.quantity) : "-") },
     { key:"imei", label:"IMEI", get:it=>it.imei||"-" },
     { key:"listPrice", label:"출고가", get:it=>it.listPrice?Number(it.listPrice).toLocaleString():"-", getRaw:it=>it.listPrice!=null?Number(it.listPrice):"" },
@@ -3137,7 +3158,7 @@
     closePersonalSettingsModal();
   };
 
-  const ALL_PERM_KEYS = ["dashboard","menuInvWork","menuInvUpload","menuOrders","menuSaleReq","menuDataUpload","excelExport","bulkEdit","bulkModelApply","companyEdit","listPriceOverride","cancelDelete","accountView","depositApprove","uiCustomize","userApproval","permissionManage","teamManage","inventorySettings","settlementSettings","siteSettings","dataReset"];
+  const ALL_PERM_KEYS = ["dashboard","menuInvWork","menuInvUpload","menuOrders","menuSaleReq","menuDataUpload","menuReservation","menuCompany","menuItemHistory","menuLgRefund","menuLedger","menuDataCheck","excelExport","bulkEdit","bulkModelApply","companyEdit","listPriceOverride","cancelDelete","accountView","depositApprove","uiCustomize","userApproval","permissionManage","teamManage","inventorySettings","settlementSettings","siteSettings","dataReset"];
 
   async function loadUserAdminList(){
     const listEl = document.getElementById("user-admin-list");
@@ -12633,14 +12654,15 @@
     const payEl  = document.getElementById("ledger-pay");
     const cardEl = document.getElementById("ledger-cards");
     document.getElementById("ledger-offset-box").style.display = "none";
-    if(!company){
-      recvEl.innerHTML = payEl.innerHTML = '<div class="list-empty">거래처를 먼저 선택해주세요.</div>';
-      cardEl.innerHTML = ""; return;
-    }
     recvEl.innerHTML = payEl.innerHTML = '<div class="list-empty">불러오는 중...</div>';
 
+    // 거래처를 안 고르면 전체를 봅니다.
+    const all = !company;
+
     // 받을 돈 = 판매요청 묶음 (입금 안 받은 것)
-    const srSnap = await getDocs(query(collection(db,"saleRequestBatches"), where("destination","==",company)));
+    const srSnap = all
+      ? await getDocs(collection(db,"saleRequestBatches"))
+      : await getDocs(query(collection(db,"saleRequestBatches"), where("destination","==",company)));
     ledgerRecvRows = [];
     srSnap.forEach(d=>{
       const b = d.data();
@@ -12649,7 +12671,9 @@
       ledgerRecvRows.push({ id:d.id, b, remain: remainOf(b) });
     });
     // 줄 돈 = 주문 묶음 (이체 안 한 것)
-    const obSnap = await getDocs(query(collection(db,"orderBatches"), where("source","==",company)));
+    const obSnap = all
+      ? await getDocs(collection(db,"orderBatches"))
+      : await getDocs(query(collection(db,"orderBatches"), where("source","==",company)));
     ledgerPayRows = [];
     obSnap.forEach(d=>{
       const b = d.data();
@@ -12682,7 +12706,8 @@
       if(rows.length === 0) return '<div class="list-empty">남은 건이 없습니다.</div>';
       let h = '<div style="border:1px solid var(--line);max-height:340px;overflow-y:auto;">' +
         '<table class="data-table"><thead><tr>' +
-        '<th style="width:34px;"><input type="checkbox" onclick="toggleLedgerAll(\''+side+'\', this)"></th>' +
+        (all ? '' : '<th style="width:34px;"><input type="checkbox" onclick="toggleLedgerAll(\''+side+'\', this)"></th>') +
+        (all ? '<th>거래처</th>' : '') +
         '<th>일자</th><th class="ta-right">금액</th><th class="ta-right">기상계</th><th class="ta-right">남은 금액</th>' +
         '</tr></thead><tbody>';
       rows.forEach(r=>{
@@ -14184,6 +14209,16 @@
   };
 
   // ---------- 정산 탭 ----------
+  let settleFilter = "wait";   // wait | done | all
+  window.setSettleFilter = function(f){
+    settleFilter = f;
+    ["wait","done","all"].forEach(k=>{
+      const b = document.getElementById("settle-f-"+k);
+      if(b) b.className = "btn small" + (k===f ? "" : " secondary");
+    });
+    loadSettlementTab();
+  };
+
   async function loadSettlementTab(){
     const statEl = document.getElementById("settlement-stat-cards");
     const purchasePendingEl = document.getElementById("settlement-purchase-pending");
@@ -14195,17 +14230,38 @@
     let unpaidTotal = 0, unpaidCount = 0;
     purchasePendingEl.innerHTML = "";
     let purchaseHtml = "";
+    const wantWait = (settleFilter !== "done");
+    const wantDone = (settleFilter !== "wait");
     batchSnap.forEach(d=>{
       const b = d.data();
       if(b.status==="취소") return;
+      if(b.depositPaid && wantDone){
+        purchaseHtml += '<div class="list-row compact"><span>'+comboEsc(b.source||"-")+' · '+comboEsc(b.orderDate||"-")
+          + ' · <span style="color:#2e7d32;font-weight:700;">'
+          + (b.paymentMethod === "b2b_credit" ? "여신결제" : "결제완료") + '</span>'
+          + (b.depositPaidDate ? ' <span style="color:var(--gray);">' + comboEsc(b.depositPaidDate) + '</span>' : '')
+          + '</span><span style="font-weight:700;">'+(Number(b.depositRequired)||0).toLocaleString()+'</span></div>';
+      }
       if(!b.depositPaid){
         unpaidTotal += (b.depositRequired||0); unpaidCount++;
+        if(!wantWait) return;
         purchaseHtml += '<div class="list-row compact"><span>'+(b.source||"-")+' · '+(b.orderDate||"-")+(b.paymentRequestId?' · <span style="color:var(--navy);">출금요청됨</span>':'')+'</span><span style="font-weight:700;">'+(b.depositRequired||0).toLocaleString()+'</span></div>';
       }
     });
-    purchasePendingEl.innerHTML = purchaseHtml || '<div class="list-empty">입금 대기중인 구매주문이 없습니다.</div>';
+    let pDoneCnt = 0, pDoneAmt = 0;
+    batchSnap.forEach(d=>{
+      const b = d.data();
+      if(b.status === "취소") return;
+      if(b.depositPaid){ pDoneCnt++; pDoneAmt += Number(b.depositRequired)||0; }
+    });
+    purchasePendingEl.innerHTML = purchaseHtml || ('<div class="list-empty">'
+      + (settleFilter === "done" ? "결제완료된 구매주문이 없습니다." : "입금 대기중인 구매주문이 없습니다.")
+      + (settleFilter === "wait" && pDoneCnt ? '<br><span style="color:#2e7d32;">결제완료 ' + pDoneCnt + '건 · ' + pDoneAmt.toLocaleString() + '</span>' : '')
+      + '</div>');
     const pTitle = document.getElementById("settlement-purchase-title");
-    if(pTitle) pTitle.innerHTML = '구매주문 입금 대기중 <span style="font-weight:400;color:var(--gray);font-size:12px;">' + unpaidCount + '건</span>';
+    const pLabel = settleFilter === "done" ? "구매주문 결제완료" : (settleFilter === "all" ? "구매주문 전체" : "구매주문 입금 대기중");
+    if(pTitle) pTitle.innerHTML = pLabel + ' <span style="font-weight:400;color:var(--gray);font-size:12px;">'
+      + (settleFilter === "done" ? pDoneCnt : unpaidCount) + '건</span>';
 
     // 판매요청은 품목이 아니라 묶음 단위로 셉니다. (금액도 묶음에 있습니다)
     const saleSnap = await getDocs(collection(db,"saleRequestBatches"));
@@ -14214,16 +14270,37 @@
     saleSnap.forEach(d=>{
       const b = d.data();
       if(b.status==="취소") return;
+      if(b.depositReceived && wantDone){
+        saleHtml += '<div class="list-row compact"><span>'+comboEsc(b.destination||"-")+' · '+comboEsc(b.requestDate||"-")
+          + ' · <span style="color:#2e7d32;font-weight:700;">입금완료</span>'
+          + (b.depositReceivedDate ? ' <span style="color:var(--gray);">' + comboEsc(b.depositReceivedDate) + '</span>' : '')
+          + ((Number(b.receivedAmount)||0) > 0 && (Number(b.receivedAmount)||0) < (Number(b.depositRequired)||0)
+              ? ' <span style="color:#b8860b;">부분 ' + (Number(b.receivedAmount)||0).toLocaleString() + '</span>' : '')
+          + '</span><span style="font-weight:700;">'+(Number(b.depositRequired)||0).toLocaleString()+'</span></div>';
+      }
       if(!b.depositReceived){
         receivableTotal += (Number(b.depositRequired)||0); receivableCount++;
+        if(!wantWait) return;
         saleHtml += '<div class="list-row compact"><span>'+comboEsc(b.destination||"-")+' · '+comboEsc(b.requestDate||"-")
           + (b.depositRequestId ? ' · <span style="color:#b8860b;">입금요청됨</span>' : '')
           + '</span><span style="font-weight:700;">'+(Number(b.depositRequired)||0).toLocaleString()+'</span></div>';
       }
     });
-    salePendingEl.innerHTML = saleHtml || '<div class="list-empty">입금 대기중인 판매요청이 없습니다.</div>';
+    // 입금이 끝난 건도 알려줍니다. (대기중이 0이어도 상황을 알 수 있게)
+    let doneCnt = 0, doneAmt = 0;
+    saleSnap.forEach(d=>{
+      const b = d.data();
+      if(b.status === "취소") return;
+      if(b.depositReceived){ doneCnt++; doneAmt += Number(b.depositRequired)||0; }
+    });
+    salePendingEl.innerHTML = saleHtml || ('<div class="list-empty">'
+      + (settleFilter === "done" ? "입금완료된 판매요청이 없습니다." : "입금 대기중인 판매요청이 없습니다.")
+      + (settleFilter === "wait" && doneCnt ? '<br><span style="color:#2e7d32;">입금완료 ' + doneCnt + '건 · ' + doneAmt.toLocaleString() + '</span>' : '')
+      + '</div>');
     const sTitle = document.getElementById("settlement-sale-title");
-    if(sTitle) sTitle.innerHTML = '판매요청 입금 대기중 <span style="font-weight:400;color:var(--gray);font-size:12px;">' + receivableCount + '건</span>';
+    const sLabel = settleFilter === "done" ? "판매요청 입금완료" : (settleFilter === "all" ? "판매요청 전체" : "판매요청 입금 대기중");
+    if(sTitle) sTitle.innerHTML = sLabel + ' <span style="font-weight:400;color:var(--gray);font-size:12px;">'
+      + (settleFilter === "done" ? doneCnt : receivableCount) + '건</span>';
 
     function statCard(label, value, color){
       const k = cardKeyOf("settle", label);
@@ -15637,6 +15714,103 @@
   };
 
   // 시작 화면 고르기 — 화면이 늘어나면 자동으로 목록에 나옵니다.
+  // ================= 메뉴 순서 바꾸기 (드래그) =================
+  // 관리자가 사이드바 버튼을 끌어 순서를 바꾸면 저장하고 모두에게 적용합니다.
+  let menuDragMode = false;
+
+  window.toggleMenuOrderMode = function(){
+    menuDragMode = !menuDragMode;
+    const btn = document.getElementById("menu-order-btn");
+    if(btn){
+      btn.textContent = menuDragMode ? "순서 바꾸기 끝내기" : "메뉴 순서 바꾸기";
+      btn.className = "btn small" + (menuDragMode ? "" : " secondary");
+    }
+    const note = document.getElementById("menu-order-note");
+    if(note) note.style.display = menuDragMode ? "block" : "none";
+    applyMenuDrag();
+  };
+
+  function applyMenuDrag(){
+    // 묶음(그룹) 빈 곳에도 놓을 수 있게 합니다.
+    document.querySelectorAll("#app-sidebar > div, #inv-admin-submenu").forEach(group=>{
+      if(!menuDragMode){ group.ondragover = null; group.ondrop = null; return; }
+      group.ondragover = (e)=> e.preventDefault();
+      group.ondrop = (e)=>{
+        e.preventDefault();
+        const fromId = e.dataTransfer.getData("text/plain");
+        if(!fromId) return;
+        const from = document.getElementById(fromId);
+        if(!from) return;
+        // 버튼 위가 아니라 묶음 빈 곳에 놓으면 맨 아래로 붙입니다.
+        if(e.target === group){
+          group.appendChild(from);
+          saveMenuOrder();
+        }
+      };
+    });
+    document.querySelectorAll("#app-sidebar .tab-btn").forEach(btn=>{
+      btn.draggable = menuDragMode;
+      btn.style.cursor = menuDragMode ? "grab" : "";
+      btn.style.opacity = "";
+      if(!menuDragMode){
+        btn.ondragstart = null; btn.ondragover = null; btn.ondrop = null; btn.ondragend = null;
+        return;
+      }
+      btn.ondragstart = (e)=>{
+        e.dataTransfer.setData("text/plain", btn.id);
+        btn.style.opacity = "0.4";
+      };
+      btn.ondragend = ()=>{ btn.style.opacity = ""; };
+      btn.ondragover = (e)=>{ e.preventDefault(); };
+      btn.ondrop = (e)=>{
+        e.preventDefault();
+        const fromId = e.dataTransfer.getData("text/plain");
+        if(!fromId || fromId === btn.id) return;
+        const from = document.getElementById(fromId);
+        if(!from) return;
+        // 다른 묶음으로도 옮길 수 있습니다. 권한은 버튼마다 따로 붙어 있어 위치와 무관합니다.
+        btn.parentElement.insertBefore(from, btn);
+        saveMenuOrder();
+      };
+    });
+  }
+
+  async function saveMenuOrder(){
+    const order = {};
+    document.querySelectorAll("#app-sidebar > div").forEach(group=>{
+      const gid = group.id || "root";
+      order[gid] = Array.from(group.querySelectorAll(":scope > .tab-btn")).map(b=>b.id);
+    });
+    try{
+      await setDoc(doc(db,"settings","general"), { menuOrder: order }, { merge:true });
+      currentSettings.menuOrder = order;
+      logAction("메뉴 순서 변경", "-");
+    }catch(e){ alert("순서 저장에 실패했습니다."); }
+  }
+
+  window.applyMenuOrder = function(){
+    const order = (currentSettings && currentSettings.menuOrder) || null;
+    if(!order) return;
+    Object.keys(order).forEach(gid=>{
+      const group = (gid === "root") ? document.getElementById("app-sidebar") : document.getElementById(gid);
+      if(!group) return;
+      (order[gid]||[]).forEach(id=>{
+        const el = document.getElementById(id);
+        if(el && el.parentElement === group) group.appendChild(el);
+      });
+    });
+  };
+
+  window.resetMenuOrder = async function(){
+    if(!confirm("메뉴 순서를 처음 상태로 되돌리시겠습니까?")) return;
+    try{
+      await setDoc(doc(db,"settings","general"), { menuOrder: null }, { merge:true });
+      currentSettings.menuOrder = null;
+      logAction("메뉴 순서 초기화", "-");
+      alert("되돌렸습니다. 새로고침하면 원래 순서로 보입니다.");
+    }catch(e){ alert("실패했습니다."); }
+  };
+
   window.renderStartTabSelect = function(){
     const sel = document.getElementById("start-tab-select");
     if(!sel) return;
@@ -15757,6 +15931,7 @@
       await setDoc(doc(db,"settings","general"), { cacheTargets: m }, { merge:true });
       currentSettings.cacheTargets = m;
       clearAllCaches();
+      clearDashCache();
       const on = Object.keys(m).filter(k=>m[k]);
       logAction("읽기 절약 설정 변경", on.length ? on.join(", ") : "전부 끄기");
       flashMsg("dash-cache-msg");
@@ -15769,6 +15944,8 @@
   };
   window.clearDashCache = function(){
     dashItemsCache = null; dashCacheAt = null;
+    const st = document.getElementById("dash-cache-stamp");
+    if(st) st.innerHTML = "";
   };
   window.refreshDashboard = function(){
     clearDashCache(); clearCache("inventory");
@@ -15794,6 +15971,7 @@
       allItems = [];
       snap.forEach(d=>{ const it = d.data(); if(it.deleted !== true) allItems.push(it); });   // 삭제함 제외
       if(useCache){ dashItemsCache = allItems; dashCacheAt = new Date(); }
+      else { dashItemsCache = null; dashCacheAt = null; }   // 꺼져 있으면 기준 시각도 지웁니다
     }
 
     const normDate = v=> String(v||"").replace(/\D/g,"");
@@ -16296,6 +16474,18 @@
       visibleCols.forEach(c=>{
         const td = document.createElement("td");
         td.textContent = c.get(it);
+        // 링크가 지정된 컬럼(일련번호)은 눌러서 단말 이력을 볼 수 있게 합니다.
+        if(c.link){
+          const sn = c.link(it);
+          if(sn){
+            td.style.cursor = "pointer";
+            td.style.color = "var(--navy)";
+            td.style.textDecoration = "underline";
+            td.style.fontWeight = "700";
+            td.title = "단말 이력 보기";
+            td.onclick = ()=> openItemHistory(sn);
+          }
+        }
         if(c.getRaw) td.className = "ta-right";   // 금액·율 컬럼은 오른쪽 정렬
         tr.appendChild(td);
       });
@@ -16345,10 +16535,6 @@
     });
     table.appendChild(tbody);
     listEl.appendChild(table);
-    // 일련번호를 누르면 단말 이력이 열립니다.
-    table.querySelectorAll(".ih-link").forEach(el=>{
-      el.onclick = ()=> openItemHistory(el.dataset.serial);
-    });
     listEl.prepend(renderPaginationBar("inventory", items.length, loadInventoryList, false));
     applyCustomTabLabels();
     syncInvPageSizeSelect();
@@ -17699,7 +17885,13 @@
       const showOrders = hasPerm(perms,"menuOrders");
       const showSaleReq = hasPerm(perms,"menuSaleReq");
       const showDataUpload = hasPerm(perms,"menuDataUpload");
-      const showAnyWorkMenu = (showInvWork||showOrders||showSaleReq||showDataUpload);
+      const showResv = hasPerm(perms,"menuReservation");
+      const showCompany = hasPerm(perms,"menuCompany");
+      const showItemHist = hasPerm(perms,"menuItemHistory");
+      const showLgRefund = hasPerm(perms,"menuLgRefund");
+      const showLedger = hasPerm(perms,"menuLedger");
+      const showDataCheck = hasPerm(perms,"menuDataCheck");
+      const showAnyWorkMenu = (showInvWork||showOrders||showSaleReq||showDataUpload||showResv||showCompany);
       if(showUsers) updateUserAdminBadge();
 
       // 권한에 따라 메뉴를 보이거나 숨깁니다.
@@ -17717,18 +17909,20 @@
       setMenu("tabbtn-users", showUsers);
       setMenu("tabbtn-settlement", showSettlement);
       setMenu("tabbtn-b2b", showSettlement);
-      setMenu("tabbtn-ledger", showSettlement);
-      setMenu("tabbtn-datacheck", showSettlement);
-      setMenu("tabbtn-itemhistory", showAnyWorkMenu);
-      setMenu("tabbtn-lgrefund", showSettlement);
+      setMenu("tabbtn-ledger", showLedger || showSettlement);
+      setMenu("tabbtn-datacheck", showDataCheck || showSettlement);
+      setMenu("tabbtn-itemhistory", showItemHist || showAnyWorkMenu);
+      setMenu("tabbtn-lgrefund", showLgRefund || showSettlement);
       setMenu("tabbtn-logs", showLogs);
       setMenu("tabbtn-dashboard", showDashboard);
       setMenu("tabbtn-inv-work", showInvWork);
       setMenu("tabbtn-data-upload", showDataUpload);
       setMenu("tabbtn-orders", showOrders);
       setMenu("tabbtn-salereq", showSaleReq);
-      setMenu("tabbtn-reservation", showSaleReq);
-      setMenu("tabbtn-company", showAnyWorkMenu);
+      setMenu("tabbtn-reservation", showResv || showSaleReq);
+      setMenu("tabbtn-company", showCompany || showAnyWorkMenu);
+      // 저장된 메뉴 순서를 적용합니다.
+      if(typeof applyMenuOrder === "function") applyMenuOrder();
 
       const hasAnyAdmin = (showSite||showTeam||showInvAdmin||showUsers||showSettlement||showLogs);
       const admBtn = document.getElementById("admin-toggle-btn");
