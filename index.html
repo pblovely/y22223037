@@ -309,7 +309,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-07-26 v261</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-07-26 v262</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -18595,11 +18595,12 @@
       if(m) missingModelSet.add(m[1]);
     });
     if(missingModelSet.size>0){
-      quickFixHtml += '<div style="background:#fff8e1;border:1px solid #e0c46c;padding:10px;margin-bottom:8px;font-size:12.5px;">';
-      quickFixHtml += '<b>🆕 등록 안 된 모델 '+missingModelSet.size+'개</b> — 파일에 있는 출고가·색상·삼성코드 정보를 그대로 사용해서 한 번에 등록할 수 있어요.<br>';
-      quickFixHtml += '<button class="btn small" style="width:auto;padding:5px 12px;margin:6px 6px 6px 0;" id="bulk-create-models-btn">등록 안 된 모델 '+missingModelSet.size+'개 한번에 등록</button><br>';
+      // 여기서는 모델을 만들지 않습니다. 무엇을 등록해야 하는지만 알려드립니다.
+      quickFixHtml += '<div style="background:#fdecea;border:1px solid var(--danger);padding:10px;margin-bottom:8px;font-size:12.5px;line-height:1.9;">';
+      quickFixHtml += '<b style="color:var(--danger);">등록 안 된 모델 '+missingModelSet.size+'개 — 이 행들은 등록되지 않습니다.</b><br>';
+      quickFixHtml += '<span style="color:var(--gray);">모델은 이 화면에서 만들지 않습니다. <b>재고설정 → 모델 등록</b>에서 먼저 등록한 뒤 다시 올려주세요.</span><br>';
       Array.from(missingModelSet).forEach(sm=>{
-        quickFixHtml += '<button class="btn small secondary" style="width:auto;margin:4px 6px 0 0;" data-quick-model="'+sm.replace(/"/g,'&quot;')+'">"'+sm+'" 모델 개별 등록</button>';
+        quickFixHtml += '· <b>' + comboEsc(sm) + '</b><br>';
       });
       quickFixHtml += '</div>';
     }
@@ -18636,15 +18637,6 @@
     }
     resultEl.innerHTML = html;
 
-    // 빠른 모델 등록 버튼 연결
-    resultEl.querySelectorAll('[data-quick-model]').forEach(btn=>{
-      btn.onclick = ()=> quickCreateModelAndRetry(btn.dataset.quickModel, rawRows);
-    });
-    // 모델 일괄등록 버튼 연결
-    const bulkCreateBtn = document.getElementById("bulk-create-models-btn");
-    if(bulkCreateBtn){
-      bulkCreateBtn.onclick = ()=> bulkCreateMissingModelsAndRetry(Array.from(missingModelSet), rawRows);
-    }
     // 일괄 채우기 버튼 연결
     resultEl.querySelectorAll('[data-fill-btn]').forEach(btn=>{
       btn.onclick = ()=>{
@@ -18762,115 +18754,6 @@
     }
   }
 
-  async function quickCreateModelAndRetry(missingSystemModel, rawRows){
-    const petName = prompt('펫네임 (모델을 부르는 이름)', missingSystemModel);
-    if(petName===null) return;
-    const baseModel = prompt('모델명 (예: SM-A245N)', missingSystemModel);
-    if(baseModel===null) return;
-    const capacity = prompt('용량 (선택, 예: 256 — GB 없이 숫자만)', '');
-    if(capacity===null) return;
-    const priceInput = prompt('출고가 (VAT포함, 선택)', '');
-    if(priceInput===null) return;
-    const priceIncVat = priceInput ? Number(priceInput) : null;
-    const priceExVat = priceIncVat ? Math.round(priceIncVat/1.1) : null;
-
-    await fetchModelsCache();
-    // 새로 만들었는지(created) 확인해 둡니다. 이미 있던 모델은 건드리지 않습니다.
-    const upRes = await upsertModel({
-      systemModel: missingSystemModel, baseModel: baseModel.trim(), capacity: capacity.trim(),
-      petName: petName.trim(), priceIncVat, priceExVat,
-    });
-    const wasCreated = !(upRes && upRes.created === false);
-    await fetchModelsCache();
-    const model = modelsCache.find(m=> m.systemModel && modelDupKey(m.systemModel) === modelDupKey(missingSystemModel));
-
-    if(!wasCreated){
-      // 이미 등록돼 있던 모델입니다. 검수 표시도 색상도 손대지 않습니다.
-      logAction("엑셀 업로드 중 모델 확인", missingSystemModel + " — 이미 등록된 모델이라 그대로 두었습니다");
-      await fetchModelsCache();
-      alert(missingSystemModel + ' 은 이미 등록된 모델입니다.\n\n검수 표시와 색상은 그대로 두었습니다. 다시 검증할게요.');
-      await processExcelRows(lastExcelRows);
-      return;
-    }
-    if(model){
-      await updateDoc(doc(db,"inventoryModels", model.id), { needsReview: true });
-      const colorsUsed = new Set();
-      rawRows.forEach(r=>{
-        if(String(r["전산모델명"]||"").trim()===missingSystemModel){
-          const c = String(r["색상"]||"").trim();
-          if(c) colorsUsed.add(c);
-        }
-      });
-      for(const c of colorsUsed){
-        const already = (model.colors||[]).some(x=>x.manufacturerColor===c || x.systemColor===c);
-        if(!already){
-          await updateDoc(doc(db,"inventoryModels", model.id), { colors: arrayUnion({ manufacturerColor:c, systemColor:c, sku:"", needsReview:true }) });
-        }
-      }
-      logAction("엑셀 업로드 중 모델 빠른등록", missingSystemModel + (colorsUsed.size>0 ? " (색상 "+colorsUsed.size+"개 포함, 최종검수 필요)" : " (최종검수 필요)"));
-    }
-    await fetchModelsCache();
-    alert(missingSystemModel+' 모델을 등록했습니다. (최종검수 필요 표시됨) 다시 검증할게요.');
-    await processExcelRows(lastExcelRows);
-  }
-
-  async function bulkCreateMissingModelsAndRetry(missingModels, rawRows){
-    if(missingModels.length===0) return;
-    if(!confirm(missingModels.length+"개 모델을 파일에 있는 정보(모델명·용량·출고가·색상·삼성코드) 그대로 한번에 등록하시겠습니까?")) return;
-
-    await fetchModelsCache();
-    let createdCount = 0, colorCount = 0, skippedCount = 0;
-
-    for(const systemModel of missingModels){
-      const matchRows = rawRows.filter(r => String(r["전산모델명"]||"").trim()===systemModel);
-
-      // 파일에서 모델명/용량/출고가는 값이 있는 첫 행 기준으로 사용
-      const baseModel = (matchRows.find(r=>String(r["모델명"]||"").trim())||{})["모델명"] || systemModel;
-      const capacity = (matchRows.find(r=>String(r["기가수"]||"").trim())||{})["기가수"] || "";
-      const listPriceRaw = (matchRows.find(r=>r["출고가"])||{})["출고가"];
-      const priceIncVat = listPriceRaw ? Number(listPriceRaw) : null;
-      const priceExVat = priceIncVat ? Math.round(priceIncVat/1.1) : null;
-
-      const upRes2 = await upsertModel({
-        systemModel, baseModel: String(baseModel).trim(), capacity: String(capacity).trim(),
-        petName: String(baseModel).trim() || systemModel, priceIncVat, priceExVat,
-      });
-      // 이미 있던 모델이면 아무것도 하지 않고 넘어갑니다. (검수 표시·색상 그대로)
-      if(upRes2 && upRes2.created === false){ skippedCount++; continue; }
-      createdCount++;
-
-      // 색상 + 삼성코드(있으면 해당 행 기준으로 SKU 매칭)
-      await fetchModelsCache();
-      const model = modelsCache.find(m=> m.systemModel && modelDupKey(m.systemModel) === modelDupKey(systemModel));
-      if(model){
-        await updateDoc(doc(db,"inventoryModels", model.id), { needsReview: true });
-        const colorMap = {}; // colorName -> sku
-        matchRows.forEach(r=>{
-          const c = String(r["색상"]||"").trim();
-          if(!c) return;
-          const sku = String(r["삼성코드"]||"").trim();
-          if(colorMap[c] === undefined) colorMap[c] = "";
-          if(sku && !colorMap[c]) colorMap[c] = sku;
-        });
-        for(const c of Object.keys(colorMap)){
-          const already = (model.colors||[]).some(x=>x.manufacturerColor===c || x.systemColor===c);
-          if(!already){
-            await updateDoc(doc(db,"inventoryModels", model.id), { colors: arrayUnion({ manufacturerColor:c, systemColor:c, sku:colorMap[c]||"", needsReview:true }) });
-            colorCount++;
-          }
-        }
-      }
-    }
-    logAction("엑셀 업로드 중 모델 일괄등록", createdCount+"개 모델 / 색상 "+colorCount+"개 (파일 정보 반영)"
-      + (skippedCount ? " / 이미 있어서 건너뜀 "+skippedCount+"개" : ""));
-    await fetchModelsCache();
-    alert(createdCount+"개 모델을 등록했습니다."
-      + (skippedCount ? "\n이미 등록돼 있던 "+skippedCount+"개는 그대로 두었습니다." : "")
-      + "\n다시 검증할게요.");
-    await processExcelRows(lastExcelRows);
-  }
-
-  // ---------- 이력 ----------
   async function loadLogs(){
     const listEl = document.getElementById("log-list");
     listEl.innerHTML = '<div class="list-empty">불러오는 중...</div>';
