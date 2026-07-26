@@ -292,7 +292,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-07-25 v228</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-07-25 v230</span>
       <span id="topbar-username">-</span>
       <button onclick="openPersonalSettingsModal()">개인설정</button>
       <button onclick="handleLogout()">로그아웃</button>
@@ -469,6 +469,7 @@
           <button class="btn small secondary" id="order-filter-cancel" style="width:auto;border:1px solid var(--navy);margin-left:-1px;" onclick="setOrderListFilter('cancel')">취소</button>
           <button class="btn small secondary" id="order-filter-all" style="width:auto;border:1px solid var(--navy);margin-left:-1px;" onclick="setOrderListFilter('all')">전체</button>
           <button class="btn small secondary" style="width:auto;margin-left:-1px;" onclick="toggleColPicker('order')">보기 설정</button>
+          <span id="dl-orders"></span>
           <span id="order-wait-summary" style="margin-left:12px;font-size:12.5px;"></span>
         </div>
         <div id="order-col-picker" style="display:none;border:1px solid var(--navy);background:#fafafa;padding:10px 12px;margin-bottom:8px;"></div>
@@ -505,6 +506,7 @@
           <button class="btn small secondary" id="sale-filter-cancel" style="width:auto;border:1px solid var(--navy);margin-left:-1px;" onclick="setSaleFilter('cancel')">취소</button>
           <button class="btn small secondary" id="sale-filter-all" style="width:auto;border:1px solid var(--navy);margin-left:-1px;" onclick="setSaleFilter('all')">전체</button>
           <button class="btn small secondary" style="width:auto;margin-left:-1px;" onclick="toggleColPicker('sale')">보기 설정</button>
+          <span id="dl-sales"></span>
           <span id="sale-wait-summary" style="margin-left:12px;font-size:12.5px;"></span>
           </div>
         <div id="sale-col-picker" style="display:none;border:1px solid var(--navy);background:#fafafa;padding:10px 12px;margin-bottom:8px;"></div>
@@ -544,6 +546,7 @@
           <button class="btn small secondary" id="resvs-open" style="width:auto;border:1px solid var(--navy);margin-left:-1px;" onclick="setResvStateFilter('open')">진행중</button>
           <button class="btn small secondary" id="resvs-part" style="width:auto;border:1px solid var(--navy);margin-left:-1px;" onclick="setResvStateFilter('part')">일부배정</button>
           <button class="btn small secondary" id="resvs-done" style="width:auto;border:1px solid var(--navy);margin-left:-1px;" onclick="setResvStateFilter('done')">배정완료</button>
+          <span id="dl-reservation" style="margin-left:10px;"></span>
         </div>
         <div id="quotation-list-area" style="display:none;margin-bottom:10px;"></div>
         <div id="resv-model-notice" style="display:none;font-size:12.5px;padding:9px 11px;margin-bottom:8px;border:1px solid var(--danger);background:#fdecea;line-height:1.7;"></div>
@@ -575,6 +578,7 @@
           <input type="text" id="lgr-from" maxlength="6" inputmode="numeric" placeholder="시작 귀속월 202601" style="width:150px;height:28px;border:1px solid var(--line);padding:0 8px;font-size:12.5px;box-sizing:border-box;">
           <input type="text" id="lgr-to" maxlength="6" inputmode="numeric" placeholder="종료 귀속월 202612" style="width:150px;height:28px;border:1px solid var(--line);padding:0 8px;font-size:12.5px;margin-left:-1px;box-sizing:border-box;">
           <button class="btn small" style="width:auto;margin-left:-1px;" onclick="loadLgRefund()">조회</button>
+          <span id="dl-lgr"></span>
           <span style="margin-left:auto;display:inline-flex;align-items:center;">
             <button class="btn small secondary" style="width:auto;" onclick="openLgrEntry('refund')">+ 환불금 등록</button>
             <button class="btn small secondary" style="width:auto;" onclick="openLgrEntry('subsidy')">+ 수수료 등록</button>
@@ -609,19 +613,22 @@
     <div id="tab-itemhistory" class="tab-panel">
       <div class="card" style="max-width:1400px;">
         <h3 style="margin:0 0 6px 0;">단말 이력 조회 <span class="info-tip" title="단말기 한 대가 지나온 모든 기록을 봅니다. 입고·위치이동·판매·개통·개통취소·반품·금액변경이 시간순으로 쌓입니다.">ⓘ</span></h3>
-        <p class="desc" style="margin-top:0;">일련번호를 넣으면 그 단말기의 모든 기록이 시간순으로 나옵니다. 재고 목록에서 <b>일련번호를 눌러도</b> 같은 화면이 열립니다.</p>
+        <p class="desc" style="margin-top:0;">일련번호를 넣으면 그 단말기의 모든 기록이 시간순으로 나옵니다. 재고 목록에서 <b>일련번호를 눌러도</b> 같은 화면이 열립니다.<br>
+          <b>다른 모델에 같은 일련번호가 있을 수 있어</b> 전산모델명을 함께 넣으시면 정확히 찾습니다.</p>
         <div style="display:flex;gap:0;flex-wrap:wrap;align-items:center;margin-bottom:10px;">
           <select id="ih-field" style="height:28px;border:1px solid var(--line);padding:0 6px;font-size:12.5px;box-sizing:border-box;">
             <option value="serialNumber">일련번호</option>
             <option value="all">전체 기록</option>
           </select>
-          <input type="text" id="ih-serial" placeholder="일련번호" style="width:180px;height:28px;border:1px solid var(--line);padding:0 8px;font-size:12.5px;margin-left:-1px;box-sizing:border-box;">
+          <input type="text" id="ih-model" placeholder="전산모델명 (선택)" style="width:170px;height:28px;border:1px solid var(--line);padding:0 8px;font-size:12.5px;margin-left:-1px;box-sizing:border-box;">
+          <input type="text" id="ih-serial" placeholder="일련번호" style="width:150px;height:28px;border:1px solid var(--line);padding:0 8px;font-size:12.5px;margin-left:-1px;box-sizing:border-box;">
           <input type="text" id="ih-from" placeholder="시작일 20260701" maxlength="8" style="width:130px;height:28px;border:1px solid var(--line);padding:0 8px;font-size:12.5px;margin-left:-1px;box-sizing:border-box;">
           <input type="text" id="ih-to" placeholder="종료일 20260731" maxlength="8" style="width:130px;height:28px;border:1px solid var(--line);padding:0 8px;font-size:12.5px;margin-left:-1px;box-sizing:border-box;">
           <select id="ih-type" style="height:28px;border:1px solid var(--line);padding:0 6px;font-size:12.5px;margin-left:-1px;box-sizing:border-box;"><option value="">전체 종류</option></select>
           <select id="ih-user" style="height:28px;border:1px solid var(--line);padding:0 6px;font-size:12.5px;margin-left:-1px;box-sizing:border-box;"><option value="">전체 처리자</option></select>
           <button class="btn small" style="width:auto;margin-left:-1px;" onclick="loadItemHistory()">조회</button>
           <button class="btn small secondary" style="width:auto;" onclick="clearItemHistory()">비우기</button>
+          <span id="dl-itemhistory" style="margin-left:auto;"></span>
         </div>
         <div id="ih-summary" style="display:none;border:1px solid var(--navy);background:#f4f7fb;padding:10px 12px;margin-bottom:10px;font-size:12.5px;line-height:1.8;"></div>
         <div id="ih-result"><div class="list-empty">일련번호를 넣고 <b>조회</b>를 눌러주세요.</div></div>
@@ -661,6 +668,7 @@
         <div class="stack-form" style="max-width:520px;margin-bottom:12px;">
           <div class="stack-row"><label>거래처</label><select id="ledger-company-select" onchange="loadLedger()"><option value="">전체 거래처를 선택하세요</option></select></div>
         </div>
+        <div style="margin-bottom:8px;"><span id="dl-ledger"></span></div>
         <div id="ledger-cards" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px;"></div>
         <div id="voucher-list-area" style="display:none;margin-bottom:14px;"></div>
         <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:flex-start;">
@@ -1273,7 +1281,8 @@
       <div class="card">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
           <h3 style="margin:0;">통장 입금 등록 <span class="info-tip" title="통장에 들어온 입금을 먼저 등록해두면, 담당자가 배정할 때 목록에서 골라 쓸 수 있습니다. 쓴 만큼 잔액이 줄어듭니다.">ⓘ</span></h3>
-          <button class="btn small" style="width:auto;" onclick="openDepositEntry()">+ 입금 등록</button>
+<span id="dl-deposit"></span>
+                    <button class="btn small" style="width:auto;" onclick="openDepositEntry()">+ 입금 등록</button>
         </div>
         <p class="desc" style="margin-top:0;">받은 입금을 먼저 등록해두면 배정할 때 <b>목록에서 골라</b> 쓸 수 있습니다. 등록하지 않아도 배정 화면에서 직접 입력할 수 있습니다.</p>
         <div id="deposit-entry-list"></div>
@@ -1306,6 +1315,7 @@
           <button class="btn small" id="settle-f-wait" style="width:auto;border:1px solid var(--navy);" onclick="setSettleFilter('wait')">입금 대기중</button>
           <button class="btn small secondary" id="settle-f-done" style="width:auto;border:1px solid var(--navy);margin-left:-1px;" onclick="setSettleFilter('done')">입금 완료</button>
           <button class="btn small secondary" id="settle-f-all" style="width:auto;border:1px solid var(--navy);margin-left:-1px;" onclick="setSettleFilter('all')">전체</button>
+          <span id="dl-settle" style="margin-left:10px;"></span>
         </div>
         <div style="display:flex;gap:16px;flex-wrap:wrap;">
           <div style="flex:1;min-width:300px;">
@@ -1374,6 +1384,7 @@
 
       <div class="card">
         <h3>거래 내역</h3>
+        <div style="margin-bottom:8px;"><span id="dl-b2b"></span></div>
         <div id="b2b-ledger-list"></div>
       </div>
     </div>
@@ -1389,6 +1400,7 @@
           </label>
           <button class="btn small danger" onclick="deleteSelectedLogs()">선택 삭제</button>
         </div>
+        <div style="margin-bottom:8px;"><span id="dl-logs"></span></div>
         <div id="log-list"></div>
       </div>
     </div>
@@ -5137,7 +5149,7 @@
       }
       const newItemRef = await addDoc(collection(db,"inventoryItems"), { ...base, entryType:"imei", quantity:1, serialNumber });
       clearDashCache(); clearCache("inventory"); logAction("재고 입고(일련번호)", docModelLabel(m)+" "+colorLabel+" / "+carrier+" / 일련번호 "+serialNumber);
-      logItem(ref.id, serialNumber, "inbound", "포피플 입고 · " + (source||"-") + (location ? " · " + location : ""));
+      logItem(ref.id, serialNumber, "inbound", "포피플 입고 · " + (source||"-") + (location ? " · " + location : ""), { systemModel: m.systemModel||"" });
 
       if(currentOrderLinkId){
         await advanceOrderFulfillment(currentOrderLinkId, newItemRef.id);
@@ -6644,6 +6656,8 @@
 
     listEl.prepend(renderPaginationBar("orders", visibleBatches.length, loadOrderList));
     applyCustomTabLabels();
+  
+    addDownloadBtn("dl-orders", "order-list", "주문목록");
   }
 
   // 어떤 컬렉션이든 모델 정보(펫네임·모델명·기가수·전산모델명)를 모델 등록 기준으로 맞춥니다.
@@ -8071,7 +8085,7 @@
         const items = list.map(x=>({ id:x.item.id, serialNumber:x.sn }));
         await writeMatchLogs(srRef.id, { destination:r.destination, systemModel:r.systemModel, petName:r.petName, salePrice:price },
           items, "예약 일괄 배정", outDate);
-        await logItems(items, "outbound", (r.destination||"-") + " · 예약 배정 · " + outDate);
+        await logItems(items.map(x=>({...x, systemModel:r.systemModel||""})), "outbound", (r.destination||"-") + " · 예약 배정 · " + outDate);
         done += qty;
       }
       // 예약별 배정 합계를 한 번에 저장합니다.
@@ -8273,12 +8287,12 @@
           linkedItemIds: [...(o.linkedItemIds||[]), ...ids.map(x=>x.id)],
           status: nf >= (Number(o.quantity)||0) ? "도착완료" : "부분도착"
         });
-        await logItems(ids, "inbound", "포피플 입고 · " + (o.source||"-") + (location ? " · " + location : ""));
+        await logItems(ids.map(x=>({...x, systemModel:o.systemModel||""})), "inbound", "포피플 입고 · " + (o.source||"-") + (location ? " · " + location : ""));
 
         // 판매처리한 경우 연결된 판매요청도 매칭
         if(sell){
           soldCnt += ids.length;
-          await logItems(ids, "outbound", (o.destination||"-") + " · " + outDate);
+          await logItems(ids.map(x=>({...x, systemModel:o.systemModel||""})), "outbound", (o.destination||"-") + " · " + outDate);
           try{
             const srSnap = await getDocs(query(collection(db,"saleRequests"), where("fromOrderId","==",oid)));
             let pool = ids.map(x=>x.id);
@@ -9449,6 +9463,8 @@
     el.innerHTML = h;
     el.querySelectorAll("[data-dep-del]").forEach(b=> b.onclick = ()=> deleteDepositEntry(b.dataset.depDel));
     el.querySelectorAll("[data-dep-use]").forEach(b=> b.onclick = ()=> showDepositUses(b.dataset.depUse));
+  
+    addDownloadBtn("dl-deposit", "deposit-entry-list", "통장입금");
   };
 
   window.showDepositUses = async function(id){
@@ -12286,6 +12302,8 @@
       recEl.innerHTML = h2;
       recEl.querySelectorAll("[data-lgr-del]").forEach(b=> b.onclick = ()=> deleteLgrEntry(b.dataset.lgrDel));
     }
+  
+    addDownloadBtn("dl-lgr", "lgr-table", "LG환불");
   };
 
   window.deleteLgrEntry = async function(id){
@@ -12322,6 +12340,7 @@
     try{
       await addDoc(collection(db,"itemHistory"), {
         itemId: itemId || "", serialNumber: String(serial||""),
+        systemModel: (extra && extra.systemModel) ? extra.systemModel : "",
         type, detail: String(detail||""),
         ...(extra||{}),
         date: todayStr(),
@@ -12339,6 +12358,7 @@
         list.slice(i, i+300).forEach(x=>{
           bt.set(doc(collection(db,"itemHistory")), {
             itemId: x.id||"", serialNumber: String(x.serialNumber||""),
+            systemModel: String(x.systemModel || (extra && extra.systemModel) || ""),
             type, detail: String(detail||""),
             ...(extra||{}),
             date: todayStr(),
@@ -12372,7 +12392,7 @@
   };
 
   window.clearItemHistory = function(){
-    ["ih-serial","ih-from","ih-to"].forEach(id=>{ const el=document.getElementById(id); if(el) el.value=""; });
+    ["ih-serial","ih-model","ih-from","ih-to"].forEach(id=>{ const el=document.getElementById(id); if(el) el.value=""; });
     document.getElementById("ih-type").value = "";
     document.getElementById("ih-user").value = "";
     document.getElementById("ih-summary").style.display = "none";
@@ -12382,6 +12402,7 @@
   window.loadItemHistory = async function(){
     const mode   = document.getElementById("ih-field").value;
     const serial = document.getElementById("ih-serial").value.trim();
+    const modelQ = (document.getElementById("ih-model").value||"").trim().toLowerCase();
     const from   = (document.getElementById("ih-from").value||"").replace(/\D/g,"");
     const to     = (document.getElementById("ih-to").value||"").replace(/\D/g,"");
     const type   = document.getElementById("ih-type").value;
@@ -12408,6 +12429,8 @@
     if(to)   rows = rows.filter(r=> String(r.date||"") <= to);
     if(type) rows = rows.filter(r=> r.type === type);
     if(user) rows = rows.filter(r=> r.by === user);
+    // 전산모델명으로도 좁힙니다. (같은 일련번호가 여러 모델에 있을 때)
+    if(modelQ) rows = rows.filter(r=> String(r.systemModel||"").toLowerCase().includes(modelQ));
     rows.sort((a,b)=> ((b.at&&b.at.seconds)||0) - ((a.at&&a.at.seconds)||0));
 
     document.getElementById("ih-summary").style.display = "none";
@@ -12416,6 +12439,7 @@
       return;
     }
     el.innerHTML = renderItemHistoryTable(rows, mode === "serialNumber");
+    addDownloadBtn("dl-itemhistory", "ih-result", "단말이력");
 
     // 일련번호 조회면 현재 재고 상태도 함께 보여줍니다.
     if(mode === "serialNumber"){
@@ -12444,13 +12468,15 @@
     const ts = v => (v && v.seconds)
       ? new Date(v.seconds*1000).toLocaleString("ko-KR", { year:"2-digit", month:"2-digit", day:"2-digit", hour:"2-digit", minute:"2-digit" })
       : "-";
-    let h = '<div style="overflow-x:auto;"><table class="data-table" style="min-width:'+(hideSerial?760:900)+'px;"><thead><tr>' +
+    let h = '<div style="overflow-x:auto;"><table class="data-table" style="min-width:'+(hideSerial?860:1000)+'px;"><thead><tr>' +
       '<th>일시</th>' + (hideSerial ? '' : '<th>일련번호</th>') +
+      '<th>전산모델명</th>' +
       '<th>종류</th><th class="ta-left">내용</th><th>처리자</th></tr></thead><tbody>';
     rows.forEach(r=>{
       const t = IH_TYPES[r.type] || { label:r.type, color:"var(--navy)" };
       h += '<tr><td>'+ts(r.at)+'</td>' +
         (hideSerial ? '' : '<td><b>'+comboEsc(r.serialNumber||"-")+'</b></td>') +
+        '<td>'+comboEsc(r.systemModel||"-")+'</td>' +
         '<td><span style="color:'+t.color+';font-weight:700;">'+comboEsc(t.label)+'</span></td>' +
         '<td class="ta-left">'+comboEsc(r.detail||"-")+'</td>' +
         '<td>'+comboEsc(r.by||"-")+'</td></tr>';
@@ -12474,7 +12500,7 @@
       const nv = String(v).trim();
       if(nv === cur){ alert("위치가 같습니다."); return; }
       await updateDoc(doc(db,"inventoryItems", itemId), { location: nv });
-      await logItem(itemId, serial, "location", (cur||"없음") + " → " + (nv||"없음"));
+      await logItem(itemId, serial, "location", (cur||"없음") + " → " + (nv||"없음"), { systemModel: it.systemModel||"" });
       logAction("위치 이동", serial + " : " + (cur||"-") + " → " + (nv||"-"));
       alert("옮겼습니다."); openItemHistory(serial); clearDashCache(); clearCache("inventory");
       return;
@@ -12486,7 +12512,7 @@
       if(d === null) return;
       const date = String(d).replace(/\D/g,"") || todayStr();
       await updateDoc(doc(db,"inventoryItems", itemId), { status:"개통", activateDate: date });
-      await logItem(itemId, serial, "activate", "개통일 " + date + (it.carrier ? " · " + it.carrier : ""));
+      await logItem(itemId, serial, "activate", "개통일 " + date + (it.carrier ? " · " + it.carrier : ""), { systemModel: it.systemModel||"" });
       logAction("개통 처리", serial + " / " + date);
       alert("개통 처리했습니다."); openItemHistory(serial); clearDashCache(); clearCache("inventory");
       return;
@@ -12520,7 +12546,7 @@
         status:"보유중", outDate:"", activateDate:"", saleRequestId: null,
         deactivateDate: date, deactivateReason: String(reason).trim()
       });
-      await logItem(itemId, serial, "deactivate", date + " · 사유: " + String(reason).trim() + " · 재판매 가능");
+      await logItem(itemId, serial, "deactivate", date + " · 사유: " + String(reason).trim() + " · 재판매 가능", { systemModel: it.systemModel||"" });
       logAction("개통취소", serial + " / " + String(reason).trim());
       alert("개통취소 처리했습니다. 다시 판매할 수 있습니다.");
       openItemHistory(serial); clearDashCache(); clearCache("inventory");
@@ -12539,7 +12565,7 @@
         status:"반품", returnDate: date, returnReason: String(reason||"").trim()
       });
       await logItem(itemId, serial, "returned", date + " · 사유: " + (String(reason||"").trim()||"-")
-        + " · 출고가 " + (Number(it.listPrice)||0).toLocaleString());
+        + " · 출고가 " + (Number(it.listPrice)||0).toLocaleString(), { systemModel: it.systemModel||"" });
       logAction("삼성 반품", serial + " / " + String(reason||"").trim());
       alert("반품 처리했습니다.\n교체품을 받으시면 재고 등록에서 <신품입고>로 넣어주세요.");
       openItemHistory(serial); clearDashCache(); clearCache("inventory");
@@ -12556,7 +12582,7 @@
       const patch = { salePrice: nv };
       if(it.purchasePrice) patch.profit = nv - Number(it.purchasePrice);
       await updateDoc(doc(db,"inventoryItems", itemId), patch);
-      await logItem(itemId, serial, "price", "판매가 " + cur.toLocaleString() + " → " + nv.toLocaleString() + (memo ? " · " + memo : ""));
+      await logItem(itemId, serial, "price", "판매가 " + cur.toLocaleString() + " → " + nv.toLocaleString() + (memo ? " · " + memo : ""), { systemModel: it.systemModel||"" });
       logAction("판매가 변경", serial + " : " + cur.toLocaleString() + " → " + nv.toLocaleString());
       alert("바꿨습니다."); openItemHistory(serial); clearDashCache(); clearCache("inventory");
       return;
@@ -12785,6 +12811,8 @@
     recvEl.querySelectorAll(".ledger-cb-recv").forEach(cb=> cb.onchange = updateOffsetBox);
     payEl.querySelectorAll(".ledger-cb-pay").forEach(cb=> cb.onchange = updateOffsetBox);
     updateOffsetBox();
+  
+    addDownloadBtn("dl-ledger", "ledger-recv", "거래처정산");
   };
 
   window.toggleLedgerAll = function(side, cb){
@@ -13766,6 +13794,8 @@
     el.innerHTML = html;
     applyCustomTabLabels();   // 저장해 둔 글씨 크기·색상을 표에 다시 적용
     loadReservationList();
+  
+    addDownloadBtn("dl-reservation", "reservation-table-area", "예약목록");
   }
 
   let saleListFilter = "ing";   // ing | done | cancel | all  (기본: 진행중만)
@@ -13989,6 +14019,8 @@
     });
     listEl.prepend(renderPaginationBar("saleRequests", visibleSale.length, loadSaleRequestList));
     applyCustomTabLabels();
+  
+    addDownloadBtn("dl-sales", "sale-request-list", "판매목록");
   }
 
   function openSaleReqBatchDetailModal(batchId, b, lines, isLegacy){
@@ -14388,6 +14420,7 @@
     }
     await loadSaleDepositRequestList();
     if(typeof loadDepositEntryList === "function") loadDepositEntryList();
+    addDownloadBtn("dl-settle", "tab-settlement", "정산목록");
   }
 
   // ---------- 삼성 B2B 여신 관리 ----------
@@ -16565,7 +16598,7 @@
         if(newStatus === oldStatus) return;
         await updateDoc(doc(db,"inventoryItems",it.id), { status:newStatus });
         logAction("재고 상태 변경", docModelLabel(it)+" : "+oldStatus+" → "+newStatus);
-          logItem(id, it.serialNumber, "status", oldStatus + " → " + newStatus);
+          logItem(id, it.serialNumber, "status", oldStatus + " → " + newStatus, { systemModel: it.systemModel||"" });
         it.status = newStatus;
         loadInventoryList();
       };
@@ -16597,6 +16630,80 @@
     applyCustomTabLabels();
     syncInvPageSizeSelect();
   }
+
+  // ================= 화면 표를 그대로 엑셀로 =================
+  // 어느 화면이든 표가 있으면 보이는 그대로 내려받습니다.
+  // 숨긴 열은 파일에도 들어가지 않습니다.
+  window.downloadVisibleTable = function(containerId, fileLabel){
+    if(!hasPerm(currentUserPerms, "excelExport")){ alert("엑셀 다운로드 권한이 없습니다."); return; }
+    const box = document.getElementById(containerId);
+    if(!box){ alert("표를 찾을 수 없습니다."); return; }
+    const tables = Array.from(box.querySelectorAll("table"));
+    if(tables.length === 0){ alert("내려받을 표가 없습니다."); return; }
+
+    const wb = XLSX.utils.book_new();
+    let total = 0;
+    tables.forEach((tb, ti)=>{
+      const aoa = [];
+      Array.from(tb.rows).forEach(tr=>{
+        const cells = Array.from(tr.cells);
+        // 체크박스·버튼만 있는 칸은 건너뜁니다.
+        const row = cells.map(td=>{
+          if(td.querySelector("input[type=checkbox]") && !td.textContent.trim()) return "";
+          if(td.querySelector("button") && !td.textContent.replace(/\s/g,"")) return "";
+          // 버튼 글자는 빼고 값만 남깁니다.
+          const c = td.cloneNode(true);
+          c.querySelectorAll("button, input, select").forEach(x=> x.remove());
+          let t = (c.textContent || "").replace(/\s+/g," ").trim();
+          // 숫자는 숫자로 넣어 엑셀에서 합계가 되게 합니다.
+          if(/^-?[\d,]+$/.test(t) && t.replace(/[^\d]/g,"").length > 0){
+            const n = Number(t.replace(/,/g,""));
+            if(!isNaN(n)) return n;
+          }
+          return t;
+        });
+        // 전부 빈 줄은 넣지 않습니다.
+        if(row.some(x=> String(x).trim() !== "")) aoa.push(row);
+      });
+      if(aoa.length === 0) return;
+      total += Math.max(0, aoa.length - 1);
+      const ws = XLSX.utils.aoa_to_sheet(aoa);
+      // 열 폭을 내용에 맞춰 잡아줍니다.
+      const widths = [];
+      const cn = Math.max(...aoa.map(r=>r.length));
+      for(let c=0; c<cn; c++){
+        let w = 8;
+        aoa.forEach(r=>{
+          const v = String(r[c] == null ? "" : r[c]);
+          // 한글은 폭을 넓게 봅니다.
+          const len = v.replace(/[가-힣]/g,"aa").length;
+          if(len + 2 > w) w = Math.min(len + 2, 42);
+        });
+        widths.push({ wch: w });
+      }
+      ws["!cols"] = widths;
+      const nm = (tables.length === 1) ? fileLabel : (fileLabel + "_" + (ti+1));
+      XLSX.utils.book_append_sheet(wb, ws, String(nm).slice(0,31));
+    });
+    if(wb.SheetNames.length === 0){ alert("내려받을 내용이 없습니다."); return; }
+    XLSX.writeFile(wb, fileLabel + "_" + todayStr() + ".xlsx");
+    logAction("화면 목록 엑셀 다운로드", fileLabel + " / " + total + "건");
+  };
+
+  // 버튼을 만들어 넣습니다. (권한이 없으면 안 만듭니다)
+  window.addDownloadBtn = function(slotId, containerId, fileLabel){
+    const slot = document.getElementById(slotId);
+    if(!slot) return;
+    if(!hasPerm(currentUserPerms, "excelExport")){ slot.innerHTML = ""; return; }
+    slot.innerHTML = "";
+    const b = document.createElement("button");
+    b.className = "btn small secondary";
+    b.style.width = "auto";
+    b.textContent = "엑셀다운";
+    b.title = "지금 화면에 보이는 목록을 그대로 내려받습니다";
+    b.onclick = ()=> downloadVisibleTable(containerId, fileLabel);
+    slot.appendChild(b);
+  };
 
   window.downloadInventoryExcel = function(){
     if(!lastRenderedItems || lastRenderedItems.length===0){ alert("다운로드할 재고가 없습니다."); return; }
