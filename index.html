@@ -279,7 +279,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-07-25 v126</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-07-25 v130</span>
       <span id="topbar-username">-</span>
       <button onclick="openPersonalSettingsModal()">개인설정</button>
       <button onclick="handleLogout()">로그아웃</button>
@@ -1511,10 +1511,10 @@
                 <th style="padding:6px;border:1px solid var(--line);">통신사</th>
                 <th style="padding:6px;border:1px solid var(--line);">수량</th>
                 <th style="padding:6px;border:1px solid var(--line);">출고가</th>
-                <th style="padding:6px;border:1px solid var(--line);">입고가(계산됨)</th>
+                <th style="padding:6px;border:1px solid var(--line);">입고가<br><span style="font-weight:400;font-size:10px;color:var(--gray);">(선·타할인 반영)</span></th>
                 <th style="padding:6px;border:1px solid var(--line);">선할인</th>
                 <th style="padding:6px;border:1px solid var(--line);">선할인%</th>
-                <th style="padding:6px;border:1px solid var(--line);">타할인</th>
+                <th style="padding:6px;border:1px solid var(--line);">타할인<br><span style="font-weight:400;font-size:10px;color:var(--gray);">(후할인·선반영)</span></th>
                 <th style="padding:6px;border:1px solid var(--line);">타할인%</th>
                 <th style="padding:6px;border:1px solid var(--line);">입고할인</th>
                 <th style="padding:6px;border:1px solid var(--line);">판매처</th>
@@ -1837,7 +1837,7 @@
           <div class="stack-row"><label>선할인%</label><input type="number" step="0.01" id="item-purchasediscount-input" placeholder="예: 0.20" oninput="onPurchaseDiscountInput()"></div>
           <div class="stack-row"><label>타할인</label><input type="number" id="item-otherdiscountamt-input" placeholder="여신 등 추가 할인" oninput="onOtherDiscountAmtInput()"></div>
           <div class="stack-row"><label>타할인%</label><input type="number" step="0.01" id="item-otherdiscountpct-input" oninput="onOtherDiscountPctInput()"></div>
-          <div class="stack-row"><label>입고할인</label><input type="text" id="item-totaldiscount-display" disabled style="background:#f2f2f2;"></div>
+          <div class="stack-row"><label>할인 내역 <span class="info-tip" title="선할인은 주문 시 즉시 받습니다. 타할인은 3개월 뒤 클럽장려금으로 받지만 거래처에도 미리 깎아 넘기므로 입고가에 함께 반영합니다. 다만 여신에서는 선할인까지만 차감됩니다.">ⓘ</span></label><input type="text" id="item-totaldiscount-display" disabled style="background:#f2f2f2;"></div>
           <div class="stack-row"><label>판매처 (선택)</label><select id="item-dest-select"><option value="">해당없음</option></select></div>
           <div class="stack-row"><label>판매가 (선택)</label><input type="number" id="item-saleprice-input" oninput="onSalePriceInput()"></div>
           <div class="stack-row"><label>판매할인</label><input type="number" id="item-salediscountamt-input" placeholder="예: 10000" oninput="onSaleDiscountAmtInput()"></div>
@@ -4325,8 +4325,9 @@
   function updateTotalDiscountDisplay(){
     const preAmt = Number(document.getElementById("item-purchasediscountamt-input").value) || 0;
     const otherAmt = Number(document.getElementById("item-otherdiscountamt-input").value) || 0;
+    // 선할인은 즉시 반영, 타할인은 3개월 뒤 클럽장려금으로 받는 후할인입니다.
     document.getElementById("item-totaldiscount-display").value =
-      preAmt.toLocaleString()+" / "+otherAmt.toLocaleString()+" = "+(preAmt+otherAmt).toLocaleString();
+      "선 " + preAmt.toLocaleString() + " / 타 " + otherAmt.toLocaleString() + " = " + (preAmt+otherAmt).toLocaleString();
   }
   window.onPurchaseDiscountInput = function(){
     const listPrice = Number(document.getElementById("item-listprice-input").value) || 0;
@@ -4362,6 +4363,8 @@
     const preAmt = Number(document.getElementById("item-purchasediscountamt-input").value) || 0;
     const otherAmt = Number(document.getElementById("item-otherdiscountamt-input").value) || 0;
     if(listPrice){
+      // 입고가 = 출고가 − 선할인 − 타할인
+      // 타할인은 3개월 뒤 클럽장려금으로 받지만, 거래처에도 미리 깎아 넘기므로 입고가에 반영합니다.
       document.getElementById("item-purchaseprice-input").value = listPrice - preAmt - otherAmt;
     }
     document.getElementById("item-otherdiscountpct-input").value =
@@ -5759,8 +5762,10 @@
           "\n\n그래도 등록하시겠습니까?")) return;
       }catch(e){}
     }
+    // 여신 차감액 = 출고가 − 선할인 (타할인은 아직 안 받았으므로 차감 대상 아님)
     const creditUse = lines.reduce((n,l)=>{
-      const unit = (Number(l.listPrice)||0) ? ((Number(l.listPrice)||0) - (Number(l.preDiscountAmt)||0))
+      const L = Number(l.listPrice)||0;
+      const unit = L ? (L - (Number(l.preDiscountAmt)||0))
         : ((Number(l.purchasePrice)||0) + (Number(l.otherDiscountAmt)||0));
       return n + unit * (Number(l.quantity)||0);
     }, 0);
@@ -6524,8 +6529,8 @@
       '</div>' +
       '<div id="order-sale-link" style="margin-bottom:10px;"></div>';
 
-    let html = head + '<div style="overflow-x:auto;"><table class="data-table" style="min-width:1260px;"><thead><tr>' +
-      '<th>모델 (전산모델명)</th><th>기가수</th><th>통신사</th>' +
+    let html = head + '<div style="overflow-x:auto;"><table class="data-table" style="min-width:1360px;"><thead><tr>' +
+      '<th>모델 (전산모델명)</th><th>색상</th><th>기가수</th><th>통신사</th>' +
       '<th class="ta-right">주문수량</th>' +
       '<th class="ta-right">출고가</th>' +
       '<th class="ta-right">선할인</th><th class="ta-right">선할인%</th>' +
@@ -6555,6 +6560,9 @@
       if(o.status==="취소") tr.style.color = "var(--gray)";
       tr.innerHTML =
         '<td>'+comboEsc(docModelLabel(o))+'</td>' +
+        '<td>'+(o.systemColor || o.manufacturerColor
+          ? comboEsc(o.systemColor || o.manufacturerColor)
+          : '<span style="color:var(--danger);">미입력</span>')+'</td>' +
         '<td>'+comboEsc(o.capacity||"-")+'</td>' +
         '<td>'+comboEsc(o.carrier||"-")+'</td>' +
         '<td class="ta-right">'+qty+'</td>' +
@@ -6589,7 +6597,7 @@
 
     document.getElementById("order-detail-tfoot").innerHTML =
       '<tr style="border-top:2px solid var(--navy);font-weight:700;background:#fafafa;">' +
-      '<td colspan="3">합계 (품목 '+lines.length+'건)</td>' +
+      '<td colspan="4">합계 (품목 '+lines.length+'건)</td>' +
       '<td class="ta-right">'+sumQty+'</td>' +
       '<td colspan="5"></td>' +
       '<td class="ta-right">'+sumPurchase.toLocaleString()+'</td>' +
