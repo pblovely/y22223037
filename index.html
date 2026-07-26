@@ -285,7 +285,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-07-25 v151</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-07-25 v154</span>
       <span id="topbar-username">-</span>
       <button onclick="openPersonalSettingsModal()">개인설정</button>
       <button onclick="handleLogout()">로그아웃</button>
@@ -740,19 +740,10 @@
       <div class="card">
         <h3>읽기 절약 설정 <span class="info-tip" title="Firestore는 하루 5만 건까지 무료로 읽을 수 있습니다. 대시보드는 한 번 열 때 재고 전체를 읽으므로, 켜두면 읽어둔 값을 다시 써서 읽기를 크게 줄입니다.">ⓘ</span></h3>
         <p class="desc">데이터가 많아지면 하루 읽기 한도에 걸릴 수 있습니다. 아래를 켜두면 크게 줄어듭니다.</p>
-        <div class="stack-form" style="max-width:640px;">
-          <div class="stack-row"><label>대시보드 재고 캐시</label>
-            <select id="dash-cache-select" onchange="saveDashCacheOption()">
-              <option value="on">켜기 — 한 번 읽은 값을 다시 씁니다 (권장)</option>
-              <option value="off">끄기 — 열 때마다 새로 읽습니다</option>
-            </select>
-          </div>
-        </div>
-        <div style="border:1px solid var(--line);background:#fafafa;padding:9px 11px;margin-top:8px;font-size:12px;line-height:1.8;color:var(--gray);">
-          <b>켜면</b> 대시보드를 여러 번 열어도 처음 한 번만 읽습니다. 기간 버튼을 눌러도 다시 읽지 않습니다.<br>
-          최신 숫자가 필요하면 대시보드의 <b>지금 다시 계산</b>을 누르시면 됩니다.<br>
-          <b>끄면</b> 항상 최신이지만, 열 때마다 재고 전체(현재 <span id="dash-cache-count">-</span>건)를 읽습니다.
-        </div>
+        <p class="desc">체크한 화면은 <b>한 번 읽은 값을 다시 씁니다.</b> 데이터를 고치면 자동으로 다시 읽으니 신경 쓰지 않으셔도 됩니다.</p>
+        <div id="cache-target-list" style="display:flex;flex-wrap:wrap;gap:10px 20px;font-size:12.5px;margin-bottom:10px;"></div>
+        <button class="btn small" style="width:auto;" onclick="saveCacheTargets()">저장</button>
+        <button class="btn small secondary" style="width:auto;" onclick="clearAllCaches()">지금 전부 다시 읽기</button>
         <div id="dash-cache-msg" class="msg info" style="margin-top:8px;">저장되었습니다.</div>
       </div>
 
@@ -2168,7 +2159,7 @@
         el.style.display = customHiddenKeys[key] ? "none" : "";
       }
     });
-    document.querySelectorAll("button:not([data-label-key]), h3:not([data-label-key]), h4:not([data-label-key]), p:not([data-label-key]), label:not([data-label-key]), .menu-item:not([data-label-key]), .desc:not([data-label-key]), th:not([data-label-key])").forEach(el=>{
+    document.querySelectorAll("button:not([data-label-key]), h3:not([data-label-key]), h4:not([data-label-key]), p:not([data-label-key]), label:not([data-label-key]), .menu-item:not([data-label-key]), .desc:not([data-label-key]), th:not([data-label-key]), .list-empty:not([data-label-key]), .stat-card:not([data-label-key]), .dash-stat-card:not([data-label-key])").forEach(el=>{
       if(!el.dataset.origText){
         const t = (el.textContent||"").replace(/\s+/g," ").trim();
         if(!t) return;
@@ -2196,16 +2187,23 @@
       customHiddenKeys[key] = value;
       // 무엇을 숨겼는지 나중에 알아볼 수 있게 이름을 함께 남깁니다.
       if(value === true){
-        let nm = "";
+        let nm = "", where = "";
         if(key.startsWith("btn:")){
           nm = key.slice(4);
         }else{
           const el = document.querySelector('[data-label-key="'+key+'"]');
           const span = el ? el.querySelector(".tab-label-text") : null;
           nm = span ? span.textContent : (el ? (el.textContent||"").trim() : "");
+          // 어느 화면의 것인지도 남깁니다.
+          if(el){
+            const panel = el.closest(".tab-panel");
+            const pid = panel ? panel.id : "";
+            const tb = pid ? document.querySelector('.tab-btn[data-tab="'+pid+'"]') : null;
+            if(tb) where = (tb.querySelector(".tab-label-text")||tb).textContent.trim();
+          }
         }
         nm = String(nm).replace(/\s+/g," ").slice(0, 40);
-        hiddenLabels[key] = nm || key;
+        hiddenLabels[key] = (where ? "["+where+"] " : "") + (nm || key);
       }else{
         delete hiddenLabels[key];
       }
@@ -2412,7 +2410,9 @@
     if(tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || e.target.isContentEditable) return;
 
     const keyedEl = e.target.closest("[data-label-key]");
-    const genericEl = keyedEl ? null : e.target.closest("button, h3, h4, p, label, .menu-item, .desc, .list-empty, .stat-card, .dash-stat-card, td, th");
+    // 표의 내용 칸(td)은 값이 매번 바뀌어 숨김이 유지되지 않으므로 대상에서 뺍니다.
+    // 열 전체를 감추려면 목록의 <보기 설정>을 쓰시면 됩니다.
+    const genericEl = keyedEl ? null : e.target.closest("button, h3, h4, p, label, .menu-item, .desc, .list-empty, .stat-card, .dash-stat-card, th");
     const targetEl = keyedEl || genericEl;
     if(!targetEl) return;
     const key = getElKey(targetEl);
@@ -2433,9 +2433,9 @@
     }
     let h = '<div style="border:1px solid var(--line);">';
     hKeys.forEach(k=>{
+      const nm = hiddenLabels[k] || (k.startsWith("btn:") ? k.slice(4) : k);
       h += '<div class="list-row"><span><span style="background:var(--navy);color:#fff;font-size:10.5px;padding:1px 6px;margin-right:6px;">항목</span>'
-        + '<b>' + comboEsc(hiddenLabels[k] || k) + '</b>'
-        + ' <span style="color:var(--gray);font-size:11px;">' + comboEsc(k) + '</span></span>'
+        + '<b>' + comboEsc(nm) + '</b></span>'
         + '<span><button class="btn small secondary" style="width:auto;" data-unhide="'+comboEsc(k)+'">다시 보이기</button></span></div>';
     });
     tKeys.forEach(k=>{
@@ -13012,13 +13012,48 @@
   let dashItemsCache = null;
   let dashCacheAt = null;
 
-  window.saveDashCacheOption = async function(){
-    const on = document.getElementById("dash-cache-select").value === "on";
+  // 캐시를 켤 수 있는 화면 목록 — 나중에 화면이 늘어도 여기만 추가하면 됩니다.
+  const CACHE_TARGETS = [
+    { key:"dashboard", label:"대시보드",     note:"재고 전체" },
+    { key:"inventory", label:"재고 목록",    note:"재고 전체" },
+    { key:"orders",    label:"주문 관리",    note:"주문 전체" },
+    { key:"sales",     label:"판매 관리",    note:"판매요청 전체" },
+    { key:"models",    label:"모델·색상",    note:"모델 목록" },
+    { key:"companies", label:"업체정보",     note:"업체 목록" }
+  ];
+  const dataCache = {};   // key → { at, data }
+
+  function cacheOn(key){
+    const m = (currentSettings && currentSettings.cacheTargets) || null;
+    if(!m) return key === "dashboard";     // 기본은 대시보드만 켜짐
+    return m[key] === true;
+  }
+  window.clearCache = function(key){ delete dataCache[key]; };
+  window.clearAllCaches = function(){
+    Object.keys(dataCache).forEach(k=> delete dataCache[k]);
+    clearDashCache();
+    alert("모든 화면이 다음에 열 때 새로 읽습니다.");
+  };
+
+  window.renderCacheTargets = function(){
+    const el = document.getElementById("cache-target-list");
+    if(!el) return;
+    el.innerHTML = CACHE_TARGETS.map(t=>
+      '<label style="display:flex;align-items:center;gap:5px;white-space:nowrap;">'
+      + '<input type="checkbox" class="cache-target-cb" value="'+t.key+'"'+(cacheOn(t.key)?' checked':'')+'>'
+      + comboEsc(t.label) + ' <span style="color:var(--gray);font-size:11px;">'+comboEsc(t.note)+'</span></label>').join("");
+  };
+
+  window.saveCacheTargets = async function(){
+    const m = {};
+    CACHE_TARGETS.forEach(t=> m[t.key] = false);
+    document.querySelectorAll(".cache-target-cb:checked").forEach(cb=> m[cb.value] = true);
     try{
-      await setDoc(doc(db,"settings","general"), { dashCacheOn: on }, { merge:true });
-      currentSettings.dashCacheOn = on;
-      clearDashCache();
-      logAction("대시보드 캐시 " + (on ? "켜기" : "끄기"), "-");
+      await setDoc(doc(db,"settings","general"), { cacheTargets: m }, { merge:true });
+      currentSettings.cacheTargets = m;
+      clearAllCaches();
+      const on = Object.keys(m).filter(k=>m[k]);
+      logAction("읽기 절약 설정 변경", on.length ? on.join(", ") : "전부 끄기");
       flashMsg("dash-cache-msg");
     }catch(e){ alert("저장에 실패했습니다."); }
   };
@@ -13041,7 +13076,7 @@
     statEl.innerHTML = '<div class="list-empty">불러오는 중...</div>';
 
     // 캐시가 켜져 있고 이미 읽어둔 값이 있으면 그것을 씁니다. (Firestore 읽기 절약)
-    const useCache = (currentSettings && currentSettings.dashCacheOn !== false);
+    const useCache = cacheOn("dashboard");
     let allItems;
     if(useCache && dashItemsCache){
       allItems = dashItemsCache;
@@ -14817,15 +14852,8 @@
     if(tabId==="tab-datacheck" && typeof runDataCheck === "function") runDataCheck();
     if(tabId==="tab-b2b" && typeof loadLoanList === "function") loadLoanList();
     if(tabId==="tab-site" && typeof renderHiddenList === "function") renderHiddenList();
-    if(tabId==="tab-site"){
-      const cEl = document.getElementById("dash-cache-count");
-      if(cEl && cEl.textContent === "-"){
-        // 건수만 세는 것도 읽기가 드니, 이미 읽어둔 값이 있을 때만 보여줍니다.
-        if(typeof lastRenderedItems !== "undefined" && lastRenderedItems && lastRenderedItems.length){
-          cEl.textContent = "약 " + lastRenderedItems.length;
-        }else{ cEl.textContent = "수천"; }
-      }
-    }
+    if(tabId==="tab-site" && typeof renderCacheTargets === "function") renderCacheTargets();
+
     if(tabId==="tab-inv-carrier") loadCarrierList();
     if(tabId==="tab-inv-manufacturer") loadManufacturerList();
     if(tabId==="tab-inv-location") loadLocationList();
@@ -14985,8 +15013,7 @@
       if(showDashboard||showAnyWorkMenu) delete wg.dataset.permHidden; else wg.dataset.permHidden = "1";
 
       if(showSite){
-        const dcSel = document.getElementById("dash-cache-select");
-        if(dcSel) dcSel.value = (currentSettings.dashCacheOn === false) ? "off" : "on";
+        renderCacheTargets();
         document.getElementById("site-name-input").value = currentSettings.siteName || DEFAULT_SITE_NAME;
         document.getElementById("pending-title-input").value = currentSettings.pendingTitle || DEFAULT_PENDING_TITLE;
         document.getElementById("pending-desc-input").value = currentSettings.pendingDesc || DEFAULT_PENDING_DESC;
