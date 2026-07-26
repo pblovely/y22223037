@@ -291,7 +291,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-07-25 v181</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-07-25 v187</span>
       <span id="topbar-username">-</span>
       <button onclick="openPersonalSettingsModal()">개인설정</button>
       <button onclick="handleLogout()">로그아웃</button>
@@ -679,20 +679,23 @@
         <div style="border:1px solid var(--navy);background:#f4f7fb;padding:10px 12px;margin-bottom:10px;">
           <div style="font-size:12.5px;font-weight:700;margin-bottom:6px;">재고 찾기</div>
           <div style="display:flex;gap:0;flex-wrap:wrap;align-items:center;">
-            <select id="i2s-field" style="height:28px;border:1px solid var(--line);padding:0 6px;font-size:12.5px;box-sizing:border-box;">
+            <select id="i2s-field" onchange="onI2sFieldChange()" style="height:28px;border:1px solid var(--line);padding:0 6px;font-size:12.5px;box-sizing:border-box;">
+              <option value="destination">업체 (저장된 판매처)</option>
               <option value="serialNumber">일련번호</option>
               <option value="imei">IMEI</option>
               <option value="systemModel">전산모델명</option>
-              <option value="destination">저장된 판매처</option>
               <option value="carrier">통신사</option>
               <option value="location">위치</option>
+              <option value="all">전체 (판매요청 없는 재고 모두)</option>
             </select>
-            <input type="text" id="i2s-search" placeholder="검색어 (여러 개는 줄바꿈·쉼표로)" style="width:280px;height:28px;border:1px solid var(--line);padding:0 8px;font-size:12.5px;margin-left:-1px;box-sizing:border-box;">
+            <select id="i2s-pick" style="width:200px;height:28px;border:1px solid var(--line);padding:0 6px;font-size:12.5px;margin-left:-1px;box-sizing:border-box;"><option value="">선택</option></select>
+            <input type="text" id="i2s-search" placeholder="검색어 (여러 개는 줄바꿈·쉼표로)" style="display:none;width:280px;height:28px;border:1px solid var(--line);padding:0 8px;font-size:12.5px;margin-left:-1px;box-sizing:border-box;">
             <button class="btn small" style="width:auto;margin-left:-1px;" onclick="loadInvToSaleReqList()">찾기</button>
             <button class="btn small secondary" style="width:auto;" onclick="clearI2sSearch()">비우기</button>
           </div>
           <div style="font-size:11.5px;color:var(--gray);margin-top:6px;line-height:1.7;">
-            일련번호를 여러 개 붙여넣으면 한 번에 찾습니다. <b>다른 거래처에 있던 재고도 찾아서</b> 이 판매처로 판매요청을 만들 수 있습니다.
+            <b>업체</b>로 찾으면 그 거래처의 재고가 한 번에 나와 전체 체크로 묶기 편합니다.
+            <b>일련번호</b>는 여러 개를 붙여넣으면 한 번에 찾습니다. 다른 거래처에 있던 재고도 찾아 이 판매처로 만들 수 있습니다.
           </div>
         </div>
         <div id="i2s-list"><div class="list-empty">검색어를 넣고 <b>찾기</b>를 눌러주세요.</div></div>
@@ -1739,6 +1742,37 @@
       </div>
     </div>
 
+    <!-- 견적서 발행 옵션 -->
+    <div id="quote-opt-modal-overlay" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.55);z-index:1020;align-items:center;justify-content:center;">
+      <div style="background:#fff;border:2px solid var(--navy);max-width:540px;width:95%;max-height:92vh;overflow-y:auto;padding:22px;position:relative;">
+        <button onclick="closeQuoteOpt()" style="position:absolute;top:12px;right:12px;background:none;border:1px solid var(--navy);width:26px;height:26px;cursor:pointer;font-size:13px;">✕</button>
+        <h3 style="margin-top:0;margin-bottom:4px;">견적서 발행</h3>
+        <p class="desc" id="quote-opt-target"></p>
+        <div class="stack-form">
+          <div class="stack-row"><label>할인 표시 <span class="info-tip" title="기본은 단가와 금액만 보여줍니다. 할인을 보여주려면 골라주세요. 할인을 보여주면 출고가도 함께 표시됩니다.">ⓘ</span></label>
+            <select id="quote-opt-disc" onchange="onQuoteOptChange()">
+              <option value="none">표시 안 함 — 단가·금액만 (기본)</option>
+              <option value="pct">할인율(%) 표시</option>
+              <option value="amt">할인금액 표시</option>
+              <option value="both">할인율 + 할인금액 모두</option>
+            </select>
+          </div>
+          <div class="stack-row" id="quote-opt-list-row" style="display:none;"><label>출고가</label>
+            <select id="quote-opt-list">
+              <option value="yes">함께 표시 (할인 계산 근거)</option>
+              <option value="no">표시 안 함</option>
+            </select>
+          </div>
+          <div class="stack-row"><label>유효기간</label><input type="text" id="quote-opt-valid" maxlength="8" inputmode="numeric" placeholder="예: 20260731 (비우면 표시 안 함)"></div>
+          <div class="stack-row"><label>비고</label><input type="text" id="quote-opt-note" placeholder="선택"></div>
+        </div>
+        <div id="quote-opt-preview" style="border:1px solid var(--line);background:#fafafa;padding:9px 11px;margin-top:10px;font-size:12px;color:var(--gray);line-height:1.7;"></div>
+        <button class="btn small" style="width:auto;margin-top:12px;" onclick="submitQuotation()">발행하기</button>
+        <button class="btn small secondary" style="width:auto;" onclick="closeQuoteOpt()">닫기</button>
+        <div id="quote-opt-msg" style="display:none;font-size:12.5px;margin-top:10px;padding:8px 10px;border-left:3px solid var(--navy);background:#f2f2f2;line-height:1.6;"></div>
+      </div>
+    </div>
+
     <!-- 견적서 보기 -->
     <div id="quotation-view-modal-overlay" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.55);z-index:1050;align-items:center;justify-content:center;">
       <div id="quotation-sheet" class="print-sheet" style="background:#fff;border:2px solid var(--navy);max-width:720px;width:96%;max-height:90vh;overflow-y:auto;padding:24px;position:relative;">
@@ -1834,8 +1868,11 @@
       <div style="background:#fff;border:2px solid var(--navy);max-width:960px;width:96%;max-height:92vh;overflow-y:auto;padding:22px;position:relative;">
         <button onclick="closeResvBulkAlloc()" style="position:absolute;top:12px;right:12px;background:none;border:1px solid var(--navy);width:26px;height:26px;cursor:pointer;font-size:13px;">✕</button>
         <h3 style="margin-top:0;margin-bottom:4px;">일련번호로 일괄 배정</h3>
-        <p class="desc">보유중인 재고를 붙여넣으면 <b>알맞은 예약에 자동으로 배정</b>하고 판매처리까지 합니다. 전체가 아니어도, 일부만 있어도 됩니다.<br>
-          <b>모델과 일련번호를 함께</b> 적어주세요. 일련번호가 겹치는 경우가 있어 모델까지 보고 정확히 찾습니다.</p>
+        <p class="desc" id="rb-desc"></p>
+        <div style="display:flex;gap:0;align-items:center;margin-bottom:10px;">
+          <button type="button" class="btn small" id="rb-mode-serial" onclick="setRbMode('serial')">일련번호로 (재고 있음)</button>
+          <button type="button" class="btn small secondary" id="rb-mode-color" onclick="setRbMode('color')">색상·수량으로 (재고 없음)</button>
+        </div>
         <div class="stack-form" style="max-width:560px;margin-bottom:10px;">
           <div class="stack-row"><label>거래처 <span class="info-tip" title="비워두면 일련번호에 맞는 예약을 거래처 상관없이 찾습니다. 특정 거래처로 좁히려면 골라주세요.">ⓘ</span></label><select id="rb-dest"><option value="">전체 거래처</option></select></div>
           <div class="stack-row"><label>요청일</label><input type="text" id="rb-date" maxlength="8" inputmode="numeric" placeholder="예: 20260726"></div>
@@ -7059,10 +7096,33 @@
     document.getElementById("rb-paid").value = "no";
     document.getElementById("rb-paiddate").value = "";
     onRbPaidChange();
+    setRbMode("serial");
+    document.getElementById("resv-bulk-modal-overlay").style.display = "flex";
+  };
+
+  // 두 가지 방식 — 일련번호로(재고 있음) / 색상·수량으로(재고 없음)
+  let rbMode = "serial";
+  window.setRbMode = function(m){
+    rbMode = m;
+    document.getElementById("rb-mode-serial").className = "btn small" + (m==="serial" ? "" : " secondary");
+    document.getElementById("rb-mode-color").className  = "btn small" + (m==="color"  ? "" : " secondary");
+    const ta = document.getElementById("rb-serials");
+    const desc = document.getElementById("rb-desc");
+    const outRow = document.getElementById("rb-outdate") ? document.getElementById("rb-outdate").closest(".stack-row") : null;
+    if(m === "serial"){
+      desc.innerHTML = '보유중인 재고를 붙여넣으면 <b>알맞은 예약에 배정</b>하고 <b>판매처리까지</b> 합니다.<br>'
+        + '<b>모델과 일련번호를 함께</b> 적어주세요. 일련번호가 겹치는 경우가 있어 모델까지 보고 정확히 찾습니다.';
+      ta.placeholder = "SM-F776N256\t1038307\nSM-F776N256\t1038472\nSM-F971N256\t1056548\n\n모델은 전산모델명·모델명·삼성모델명 아무거나 되고, 색상을 함께 적어도 됩니다.";
+      if(outRow) outRow.style.display = "";
+    }else{
+      desc.innerHTML = '재고가 아직 없을 때 씁니다. <b>색상과 수량만</b> 적으면 예약을 찾아 <b>판매요청만</b> 만듭니다.<br>'
+        + '단말기가 들어오면 도착 등록·매칭으로 채우시면 됩니다.';
+      ta.placeholder = "SM-F976N512\t크림\t12\nSM-F976N512\t바이올렛쉐도우\t8\nSM-F971N256\t라벤더\t10\n\n모델  색상  수량  순서로 적어주세요. 거래처를 함께 적어도 됩니다.";
+      if(outRow) outRow.style.display = "none";
+    }
     document.getElementById("rb-serials").value = "";
     document.getElementById("rb-result").innerHTML = "";
     rbPlan = [];
-    document.getElementById("resv-bulk-modal-overlay").style.display = "flex";
   };
 
   window.onRbPaidChange = function(){
@@ -7074,6 +7134,7 @@
   };
 
   window.analyzeResvBulk = async function(){
+    if(rbMode === "color"){ return analyzeResvBulkColor(); }
     const el = document.getElementById("rb-result");
     const dest = document.getElementById("rb-dest").value;
     const raw  = document.getElementById("rb-serials").value;
@@ -7197,12 +7258,159 @@
         + '</tbody></table></div>';
       const noPrice = Object.keys(groups).filter(k=> !groups[k].resv.salePrice).length;
       if(noPrice) h += '<div style="color:var(--danger);margin-bottom:8px;">판매가가 없는 예약 '+noPrice+'건이 있습니다. 예약을 먼저 수정해주세요.</div>';
-      h += '<button class="btn small" style="width:auto;" onclick="submitResvBulk()">이대로 배정하고 판매처리 ('+ok.length+'대)</button>';
+      h += '<button class="btn small" style="width:auto;" onclick="submitResvBulkSerial()">이대로 배정하고 판매처리 ('+ok.length+'대)</button>';
     }
     el.innerHTML = h;
   };
 
-  window.submitResvBulk = async function(){
+  // 색상·수량만으로 판매요청을 만듭니다. (재고 없이)
+  window.analyzeResvBulkColor = async function(){
+    const el = document.getElementById("rb-result");
+    const dest = document.getElementById("rb-dest").value;
+    const raw = document.getElementById("rb-serials").value;
+    const lines = raw.split(/\r?\n/).map(x=>x.trim()).filter(Boolean);
+    if(lines.length === 0){ el.innerHTML = '<span style="color:var(--danger);">붙여넣은 내용이 없습니다.</span>'; return; }
+    el.innerHTML = '<div style="color:var(--gray);">찾는 중...</div>';
+    await fetchModelsCache();
+
+    const resvSnap = await getDocs(collection(db,"reservations"));
+    const resvs = [];
+    resvSnap.forEach(d=>{
+      const r = { id:d.id, ...d.data() };
+      if(r.kind === "buy") return;
+      const left = (Number(r.orderedQty)||Number(r.quantity)||0) - (Number(r.allocatedQty)||0);
+      if(left <= 0) return;
+      if(dest && String(r.destination||"").trim() !== dest) return;
+      r._left = left;
+      resvs.push(r);
+    });
+
+    const norm = v => String(v||"").trim().toLowerCase();
+    const ok = [], bad = [];
+    lines.forEach((line, i)=>{
+      const label = (i+1) + "번째 줄";
+      const c = line.split(/\t|\s{2,}|\s/).map(x=>x.trim()).filter(Boolean);
+      const qtyCell = c.find(x=> /^[0-9]{1,3}$/.test(x));
+      const qty = Number(qtyCell)||0;
+      if(qty <= 0){ bad.push({ label, raw:line, reason:"수량을 찾지 못했습니다 (모델 색상 수량 순서로 적어주세요)" }); return; }
+      const hints = c.filter(x=> x !== qtyCell);
+      if(hints.length === 0){ bad.push({ label, raw:line, reason:"모델을 적어주세요" }); return; }
+
+      let cands = resvs.filter(r=> r._left > 0);
+      hints.forEach(t=>{
+        const tl = norm(t);
+        const narrowed = cands.filter(r=>
+          norm(r.systemModel) === tl || norm(r.baseModel) === tl ||
+          norm(r.destination) === tl || norm(r.carrier) === tl ||
+          norm(r.systemColor) === tl || norm(r.manufacturerColor) === tl);
+        if(narrowed.length > 0) cands = narrowed;
+      });
+      if(cands.length === 0){ bad.push({ label, raw:line, reason:"맞는 예약이 없습니다 (남은 수량 확인)" }); return; }
+      if(cands.length > 1){
+        bad.push({ label, raw:line,
+          reason:"예약이 여러 개입니다 → " + cands.slice(0,3).map(r=> (r.destination||"-")+" "+(r.systemModel||"-")).join(" / ") + "  (거래처를 함께 적어주세요)" });
+        return;
+      }
+      const r = cands[0];
+      if(qty > r._left){ bad.push({ label, raw:line, reason:"남은 수량("+r._left+")보다 많습니다" }); return; }
+      if(!r.salePrice){ bad.push({ label, raw:line, reason:"이 예약에 판매가가 없습니다 — 예약을 먼저 수정해주세요" }); return; }
+
+      const colorHint = hints.find(t=>{
+        const tl = norm(t);
+        return tl !== norm(r.systemModel) && tl !== norm(r.baseModel)
+          && tl !== norm(r.destination) && tl !== norm(r.carrier);
+      }) || (r.systemColor || r.manufacturerColor || "");
+
+      r._left -= qty;
+      ok.push({ resv:r, qty, color:colorHint });
+    });
+
+    rbPlan = ok;
+    let h = '<div style="font-weight:700;margin-bottom:8px;">분석 결과 — 판매요청 '+ok.length+'건 / 오류 '+bad.length+'줄</div>';
+    if(bad.length){
+      h += '<div style="border:1px solid var(--danger);background:#fdecea;padding:8px 10px;margin-bottom:10px;max-height:200px;overflow-y:auto;">'
+        + bad.map(b=>'· '+comboEsc(b.label)+' — '+comboEsc(b.reason)
+            +'<br><span style="color:var(--gray);font-size:11px;">'+comboEsc(b.raw)+'</span>').join('<br>') + '</div>';
+    }
+    if(ok.length){
+      let totQ = 0, totAmt = 0;
+      h += '<div style="border:1px solid var(--line);max-height:280px;overflow-y:auto;margin-bottom:10px;">'
+        + '<table class="data-table" style="min-width:720px;"><thead><tr><th>거래처</th><th>모델</th><th>색상</th><th>통신사</th><th class="ta-right">수량</th><th class="ta-right">판매가</th><th class="ta-right">금액</th></tr></thead><tbody>'
+        + ok.map(x=>{
+            const amt = (Number(x.resv.salePrice)||0) * x.qty;
+            totQ += x.qty; totAmt += amt;
+            return '<tr><td>'+comboEsc(x.resv.destination||"-")+'</td>'
+              + '<td>'+comboEsc(docModelLabel(x.resv))+'</td>'
+              + '<td>'+comboEsc(x.color||"-")+'</td>'
+              + '<td>'+comboEsc(x.resv.carrier||"-")+'</td>'
+              + '<td class="ta-right"><b>'+x.qty+'</b></td>'
+              + '<td class="ta-right">'+(Number(x.resv.salePrice)||0).toLocaleString()+'</td>'
+              + '<td class="ta-right">'+amt.toLocaleString()+'</td></tr>';
+          }).join("")
+        + '<tr style="background:#fafafa;font-weight:700;"><td colspan="4">합계</td>'
+        + '<td class="ta-right">'+totQ+'</td><td></td><td class="ta-right">'+totAmt.toLocaleString()+'</td></tr>'
+        + '</tbody></table></div>'
+        + '<button class="btn small" style="width:auto;" onclick="submitResvBulkColor()">이대로 판매요청 만들기 ('+totQ+'대)</button>';
+    }
+    el.innerHTML = h;
+  };
+
+  window.submitResvBulkColor = async function(){
+    if(rbPlan.length === 0){ alert("만들 내용이 없습니다."); return; }
+    const date = (document.getElementById("rb-date").value||"").replace(/\D/g,"") || todayStr();
+    const prePaidSel = document.getElementById("rb-paid").value === "yes";
+    const paidDate = (document.getElementById("rb-paiddate").value||"").replace(/\D/g,"") || date;
+    const totQ = rbPlan.reduce((n,x)=> n + x.qty, 0);
+
+    if(!confirm("판매요청 " + rbPlan.length + "건 (" + totQ + "대)을 만듭니다.\n\n"
+      + "· 재고 매칭은 나중에 도착 등록·매칭으로 채우면 됩니다.\n"
+      + (prePaidSel ? "· 입금완료로 처리됩니다.\n" : "· 예약에 선입금이 있으면 입금완료로 처리됩니다.\n")
+      + "\n진행하시겠습니까?")) return;
+
+    const el = document.getElementById("rb-result");
+    el.innerHTML = '<div style="color:var(--gray);">만드는 중입니다...</div>';
+    let made = 0;
+    try{
+      for(const x of rbPlan){
+        const r = x.resv, qty = x.qty, price = Number(r.salePrice)||0;
+        const paid = prePaidSel || (Number(r.prepaidAmount)||0) > 0;
+        const srBatch = await addDoc(collection(db,"saleRequestBatches"), {
+          destination: r.destination, requestDate: date,
+          depositRequired: price * qty,
+          depositReceived: paid, depositReceivedDate: paid ? (prePaidSel ? paidDate : (r.prepaidDate || date)) : "",
+          lineCount: 1, status:"대기중", fromReservationId: r.id,
+          createdBy: currentUser.name, createdByUsername: currentUser.username, createdAt: serverTimestamp()
+        });
+        await addDoc(collection(db,"saleRequests"), {
+          batchId: srBatch.id, destination: r.destination,
+          modelId: r.modelId||null, baseModel: r.baseModel||"", capacity: r.capacity||"",
+          systemModel: r.systemModel||"", petName: r.petName||"",
+          manufacturerColor: x.color||"", systemColor: x.color||"", sku: r.sku||"",
+          carrier: r.carrier||"",
+          quantity: qty, fulfilledCount: 0, matchedItemIds: [],
+          salePrice: price,
+          saleDiscountAmt: r.saleDiscountAmt!=null ? r.saleDiscountAmt : null,
+          saleDiscountPct: r.saleDiscountPct!=null ? r.saleDiscountPct : null,
+          listPrice: r.listPrice || null,
+          requestDate: date, status:"대기중", fromReservationId: r.id,
+          createdBy: currentUser.name, createdByUsername: currentUser.username, createdAt: serverTimestamp()
+        });
+        await updateDoc(doc(db,"reservations", r.id), { allocatedQty: (Number(r.allocatedQty)||0) + qty });
+        made += qty;
+      }
+    }catch(e){
+      el.innerHTML = '<span style="color:var(--danger);">실패했습니다.<br>' + comboEsc((e&&e.message)?e.message:String(e)) + '</span>';
+      return;
+    }
+    logAction("예약 색상별 판매요청 생성", made + "대 / " + rbPlan.length + "건");
+    alert("판매요청을 만들었습니다. (" + made + "대)\n재고가 들어오면 도착 등록·매칭으로 채워주세요.");
+    rbPlan = [];
+    closeResvBulkAlloc();
+    loadReservationTable();
+    if(typeof loadSaleRequestList === "function") loadSaleRequestList();
+  };
+
+  window.submitResvBulkSerial = async function(){
     if(rbPlan.length === 0){ alert("배정할 내용이 없습니다."); return; }
     const date = (document.getElementById("rb-date").value||"").replace(/\D/g,"") || todayStr();
     const outDate = (document.getElementById("rb-outdate").value||"").replace(/\D/g,"") || date;
@@ -8526,6 +8734,7 @@
     const reqRef = await addDoc(collection(db,"saleDepositRequests"), {
       saleBatchRefs: batchRefs, otherAmount, totalAmount: total,
       requestDate: todayStr(), depositCompleted:false, depositCompleteDate:"",
+      receivedAmount: 0, receipts: [],                 // 부분입금 누적
       taxInvoiceIssued:false, taxInvoiceDate:"",
       status:"요청중", createdBy: currentUser.name, createdByUsername: currentUser.username, createdAt: serverTimestamp()
     });
@@ -8537,6 +8746,62 @@
     document.getElementById("sale-payment-other-amount-input").value = "";
     loadSaleRequestList();
     loadSettlementTab();
+  };
+
+  // 입금 내역을 한 건 추가합니다. (부분입금 지원)
+  window.addReceiptRecord = async function(reqId, p){
+    const already = Number(p.receivedAmount)||0;
+    const total = Number(p.totalAmount)||0;
+    const remain = Math.max(0, total - already);
+
+    const amtIn = prompt(
+      "이번에 받은 금액을 입력하세요.\n\n" +
+      "  요청액 " + total.toLocaleString() + "\n" +
+      (already ? "  기입금 " + already.toLocaleString() + "\n" : "") +
+      "  남은 금액 " + remain.toLocaleString(),
+      String(remain));
+    if(amtIn === null) return;
+    const amt = Number(String(amtIn).replace(/[^0-9]/g,"")) || 0;
+    if(amt <= 0){ alert("금액을 입력해주세요."); return; }
+
+    const dateIn = prompt("입금일 (예: 20260728)", todayStr());
+    if(dateIn === null) return;
+    const date = String(dateIn).replace(/\D/g,"") || todayStr();
+
+    const nameIn = prompt("입금자명 (통장에 찍히는 이름)", "");
+    if(nameIn === null) return;
+    const payer = String(nameIn).trim();
+
+    const newRecv = already + amt;
+    const full = newRecv >= total;
+    if(!full && !confirm(
+      "부분입금으로 기록합니다.\n\n"
+      + "  이번 " + amt.toLocaleString() + "\n"
+      + "  누적 " + newRecv.toLocaleString() + " / " + total.toLocaleString() + "\n"
+      + "  남은 금액 " + (total - newRecv).toLocaleString() + "\n\n"
+      + "남은 금액은 미수로 남습니다. 진행하시겠습니까?")) return;
+
+    try{
+      const receipts = [...(p.receipts||[]), { amount: amt, date, payer, by: currentUser.name }];
+      await updateDoc(doc(db,"saleDepositRequests", reqId), {
+        receivedAmount: newRecv, receipts,
+        depositCompleted: full,
+        depositCompleteDate: full ? date : "",
+        status: full ? "입금완료" : "부분입금"
+      });
+      if(full){
+        for(const b of (p.saleBatchRefs||[])){
+          const col = b.isLegacy ? "saleRequests" : "saleRequestBatches";
+          await updateDoc(doc(db, col, b.id), { depositReceived:true, depositReceivedDate: date, status:"입금완료" });
+        }
+      }
+    }catch(e){
+      alert("저장에 실패했습니다.\n" + ((e && e.message) ? e.message : String(e)));
+      return;
+    }
+    logAction(full ? "판매 입금완료" : "판매 부분입금",
+      amt.toLocaleString() + " / " + date + (payer ? " / " + payer : "") + " / 누적 " + newRecv.toLocaleString());
+    loadSaleDepositRequestList(); loadSaleRequestList(); loadSettlementTab();
   };
 
   async function loadSaleDepositRequestList(){
@@ -8555,26 +8820,45 @@
       row.innerHTML =
         '<span style="font-size:12.5px;">' +
         '<b>'+(p.totalAmount||0).toLocaleString()+'</b> · 판매요청 '+p.saleBatchRefs.length+'건'+(p.otherAmount?' + 기타 '+p.otherAmount.toLocaleString():'')+' · 요청일 '+p.requestDate+' · 상태 <b>'+p.status+'</b><br>' +
+        // 입금 내역 (부분입금 포함)
+        ((p.receipts && p.receipts.length)
+          ? '<br>' + p.receipts.map(x=>
+              '<span style="color:#2e7d32;">입금 ' + comboEsc(x.date||"-") + ' &nbsp;<b>' + (Number(x.amount)||0).toLocaleString() + '</b>'
+              + (x.payer ? ' &nbsp;' + comboEsc(x.payer) : '') + '</span>').join('<br>')
+          : '') +
+        ((Number(p.receivedAmount)||0) > 0 && !p.depositCompleted
+          ? '<br><span style="color:var(--danger);font-weight:700;">남은 금액 '
+            + ((Number(p.totalAmount)||0) - (Number(p.receivedAmount)||0)).toLocaleString() + '</span>'
+            + ' <span style="color:var(--gray);">(누적 ' + (Number(p.receivedAmount)||0).toLocaleString() + ')</span>'
+          : '') +
+        '<br>' +
         '<label style="margin-right:12px;"><input type="checkbox" class="sdr-deposit-cb" data-id="'+d.id+'" '+(p.depositCompleted?'checked':'')+' '+(p.status==='취소'?'disabled':'')+'> 입금완료</label>' +
         '<label><input type="checkbox" class="sdr-tax-cb" data-id="'+d.id+'" '+(p.taxInvoiceIssued?'checked':'')+' '+(p.status==='취소'?'disabled':'')+'> 세금계산서 발행완료</label>' +
         '</span>' +
+        (p.status!=='취소' && !p.depositCompleted
+          ? '<button class="btn small secondary" style="width:auto;" data-add-receipt="'+d.id+'">입금 기록 추가</button>' : '') +
         (p.status!=='취소' ? '<button class="btn small danger" style="width:auto;" data-cancel-sdr="'+d.id+'">요청 취소</button>' : '<span style="color:var(--gray);">취소됨</span>');
       el.appendChild(row);
 
       const depositCb = row.querySelector(".sdr-deposit-cb");
       depositCb.onchange = async ()=>{
-        const checked = depositCb.checked;
-        const dateStr = checked ? (prompt("입금일 (예: 20260724)", todayStr())||todayStr()) : "";
-        await updateDoc(doc(db,"saleDepositRequests", d.id), { depositCompleted:checked, depositCompleteDate:dateStr });
-        if(checked){
+        if(!depositCb.checked){
+          if(!confirm("입금 기록을 모두 지우고 미입금으로 되돌리시겠습니까?")){ depositCb.checked = true; return; }
+          await updateDoc(doc(db,"saleDepositRequests", d.id), {
+            depositCompleted:false, depositCompleteDate:"", receivedAmount:0, receipts:[] });
           for(const b of p.saleBatchRefs){
             const col = b.isLegacy ? "saleRequests" : "saleRequestBatches";
-            await updateDoc(doc(db, col, b.id), { depositReceived:true, depositReceivedDate: dateStr, status:"입금완료" });
+            await updateDoc(doc(db, col, b.id), { depositReceived:false, depositReceivedDate:"", status:"대기중" });
           }
-          logAction("판매 입금요청 입금완료 처리", (p.totalAmount||0).toLocaleString()+" / "+p.saleBatchRefs.length+"건");
+          logAction("판매 입금요청 입금 해제", (p.totalAmount||0).toLocaleString());
+          loadSaleDepositRequestList(); loadSaleRequestList(); loadSettlementTab();
+          return;
         }
-        loadSaleDepositRequestList(); loadSaleRequestList(); loadSettlementTab();
+        depositCb.checked = false;   // 실제 처리는 아래 입력을 마쳐야 반영
+        await addReceiptRecord(d.id, p);
       };
+      const addRcpBtn = row.querySelector('[data-add-receipt]');
+      if(addRcpBtn) addRcpBtn.onclick = ()=> addReceiptRecord(d.id, p);
       const taxCb = row.querySelector(".sdr-tax-cb");
       taxCb.onchange = async ()=>{
         const checked = taxCb.checked;
@@ -9730,13 +10014,49 @@
     if(items.length === 0){ alert("담을 예약이 없습니다."); return; }
     if(noPrice > 0 && !confirm("판매가가 없는 예약이 "+noPrice+"건 있습니다.\n금액 0으로 들어갑니다. 계속하시겠습니까?")) return;
 
+    // 발행 옵션 창으로 넘깁니다.
+    pendingQuote = { quoteKind, destination, items };
+    document.getElementById("quote-opt-target").innerHTML =
+      '<b>' + comboEsc(destination) + '</b> · 품목 ' + items.length + '건 · '
+      + items.reduce((n,x)=> n + x.qty, 0) + '대'
+      + (quoteKind === "buy" ? ' · <b>매입 견적서</b>' : '');
+    document.getElementById("quote-opt-disc").value = (quoteKind === "buy") ? "both" : "none";
+    document.getElementById("quote-opt-list").value = "yes";
+    document.getElementById("quote-opt-valid").value = "";
+    document.getElementById("quote-opt-note").value = "";
+    document.getElementById("quote-opt-msg").style.display = "none";
+    onQuoteOptChange();
+    document.getElementById("quote-opt-modal-overlay").style.display = "flex";
+  };
+
+  let pendingQuote = null;
+  window.closeQuoteOpt = function(){ document.getElementById("quote-opt-modal-overlay").style.display = "none"; };
+
+  window.onQuoteOptChange = function(){
+    const d = document.getElementById("quote-opt-disc").value;
+    document.getElementById("quote-opt-list-row").style.display = (d === "none") ? "none" : "";
+    const showList = (d !== "none") && document.getElementById("quote-opt-list").value === "yes";
+    const cols = ["#","모델","색상","통신사","수량"];
+    if(showList) cols.push("출고가");
+    if(d === "pct" || d === "both") cols.push("할인율");
+    if(d === "amt" || d === "both") cols.push("할인금액");
+    cols.push("단가", "금액");
+    document.getElementById("quote-opt-preview").innerHTML =
+      '견적서에 나올 칸 — <b>' + cols.join(" · ") + '</b>';
+  };
+
+  window.submitQuotation = async function(){
+    if(!pendingQuote){ alert("발행할 내용이 없습니다."); return; }
+    const msg = (t, err)=> showModelMsg("quote-opt-msg", t, err);
+    const { quoteKind, destination, items } = pendingQuote;
+
+    const discMode = document.getElementById("quote-opt-disc").value;
+    const showList = (discMode !== "none") && document.getElementById("quote-opt-list").value === "yes";
+    const validUntil = (document.getElementById("quote-opt-valid").value||"").replace(/\D/g,"");
+    const note = document.getElementById("quote-opt-note").value.trim();
+
     const totalQty = items.reduce((n,x)=> n + x.qty, 0);
     const totalAmount = items.reduce((n,x)=> n + x.amount, 0);
-    const validUntil = prompt("견적 유효기간을 입력하세요. (예: 20260731 / 비우면 표시 안 함)", "");
-    if(validUntil === null) return;
-    const note = prompt("비고 (선택)", "") || "";
-
-    // 견적번호: Q-날짜-순번
     const today = todayStr();
     const qSnap = await getDocs(collection(db,"quotations"));
     let seq = 1;
@@ -9746,7 +10066,8 @@
     try{
       const ref = await withTimeout(addDoc(collection(db,"quotations"), {
         code, kind: quoteKind, destination, issueDate: today,
-        validUntil: String(validUntil||"").replace(/\D/g,""),
+        validUntil,
+        discMode, showListPrice: showList,      // 할인 표시 방식
         note, items, totalQty, totalAmount, status:"발행",
         createdBy: currentUser.name, createdByUsername: currentUser.username, createdAt: serverTimestamp()
       }), 12000, "견적서 발행");
@@ -9755,11 +10076,13 @@
       items.forEach(it=> batch.update(doc(db,"reservations", it.reservationId), { quotationId: ref.id, quotationCode: code }));
       await batch.commit();
       logAction("견적서 발행", code + " / " + destination + " / " + totalQty + "개 / " + totalAmount.toLocaleString());
+      pendingQuote = null;
+      closeQuoteOpt();
       alert("견적서를 발행했습니다.\n" + code);
       loadReservationTable();
       openQuotationView(ref.id);
     }catch(e){
-      alert("발행에 실패했습니다.\n" + ((e && e.message) ? e.message : String(e)));
+      msg("<b>발행에 실패했습니다.</b><br>" + comboEsc((e && e.message) ? e.message : String(e)), true);
     }
   };
 
@@ -10674,29 +10997,51 @@
     syncSearchableSelect("i2s-dest");
     document.getElementById("i2s-date").value = todayStr();
     document.getElementById("i2s-search").value = "";
-    document.getElementById("i2s-field").value = "serialNumber";
-    document.getElementById("i2s-list").innerHTML = '<div class="list-empty">검색어를 넣고 <b>찾기</b>를 눌러주세요.</div>';
+    document.getElementById("i2s-field").value = "destination";
+    await onI2sFieldChange();
+    document.getElementById("i2s-list").innerHTML = '<div class="list-empty">기준을 고르고 <b>찾기</b>를 눌러주세요.</div>';
     document.getElementById("i2s-sum").style.display = "none";
     document.getElementById("inv2sr-modal-overlay").style.display = "flex";
   };
 
+  // 검색 기준에 따라 드롭다운 또는 글자 입력칸을 보여줍니다.
+  window.onI2sFieldChange = async function(){
+    const f = document.getElementById("i2s-field").value;
+    const pick = document.getElementById("i2s-pick");
+    const text = document.getElementById("i2s-search");
+    const useList = (f === "destination" || f === "carrier" || f === "location");
+    pick.style.display = useList ? "" : "none";
+    text.style.display = (f === "all") ? "none" : (useList ? "none" : "");
+    if(!useList) return;
+    const col = f === "destination" ? "outboundDestinations" : (f === "carrier" ? "carriers" : "locations");
+    const names = await fetchNamesList(col);
+    pick.innerHTML = '<option value="">선택</option>' + names.map(n=>'<option value="'+comboEsc(n)+'">'+comboEsc(n)+'</option>').join("");
+  };
+
   window.clearI2sSearch = function(){
     document.getElementById("i2s-search").value = "";
-    document.getElementById("i2s-list").innerHTML = '<div class="list-empty">검색어를 넣고 <b>찾기</b>를 눌러주세요.</div>';
+    const pk = document.getElementById("i2s-pick");
+    if(pk) pk.value = "";
+    document.getElementById("i2s-list").innerHTML = '<div class="list-empty">기준을 고르고 <b>찾기</b>를 눌러주세요.</div>';
     document.getElementById("i2s-sum").style.display = "none";
     i2sRows = [];
   };
 
   window.loadInvToSaleReqList = async function(){
     const field = document.getElementById("i2s-field").value;
-    const raw   = document.getElementById("i2s-search").value.trim();
+    const useList = (field === "destination" || field === "carrier" || field === "location");
+    const picked = useList ? document.getElementById("i2s-pick").value.trim() : "";
+    const raw    = document.getElementById("i2s-search").value.trim();
     const el = document.getElementById("i2s-list");
     document.getElementById("i2s-sum").style.display = "none";
-    if(!raw){ el.innerHTML = '<div class="list-empty">검색어를 넣어주세요.</div>'; return; }
+
+    if(field !== "all"){
+      if(useList && !picked){ el.innerHTML = '<div class="list-empty">목록에서 골라주세요.</div>'; return; }
+      if(!useList && !raw){ el.innerHTML = '<div class="list-empty">검색어를 넣어주세요.</div>'; return; }
+    }
     el.innerHTML = '<div class="list-empty">찾는 중...</div>';
 
-    // 여러 개를 한 번에 찾을 수 있게 줄바꿈·쉼표·공백으로 나눕니다.
-    const terms = raw.split(/[\n,\s]+/).map(x=>x.trim()).filter(Boolean);
+    const terms = useList ? [picked] : raw.split(/[\n,\s]+/).map(x=>x.trim()).filter(Boolean);
     const lower = terms.map(t=>t.toLowerCase());
 
     const snap = await getDocs(collection(db,"inventoryItems"));
@@ -10706,9 +11051,11 @@
       const it = { id:d.id, ...d.data() };
       if(it.deleted === true) return;
       if(it.saleRequestId) return;                    // 이미 판매요청에 연결된 건 제외
+      if(field === "all"){ i2sRows.push(it); return; }
       const v = String(it[field]||"").trim().toLowerCase();
       if(!v) return;
-      const hit = lower.find(t=> v === t || v.includes(t));
+      // 업체·통신사·위치는 정확히 같은 것만, 글자 검색은 부분 일치도 봅니다.
+      const hit = useList ? lower.find(t=> v === t) : lower.find(t=> v === t || v.includes(t));
       if(hit){ i2sRows.push(it); notFound.delete(hit); }
     });
 
@@ -11932,13 +12279,19 @@
       '</div>';
 
     const isBuy = q.kind === "buy";
-    // 구매 견적서(사올 때 승인용)는 출고가·할인율·할인금액·입고가를 모두 보여줍니다.
-    h += '<div style="overflow-x:auto;"><table class="data-table" style="min-width:'+(isBuy?"760px":"640px")+';"><thead><tr>' +
+    // 할인 표시 방식 — 발행할 때 고른 값을 씁니다. (옛 견적서는 구매=모두, 판매=표시안함)
+    const dm = q.discMode || (isBuy ? "both" : "none");
+    const showPct = (dm === "pct" || dm === "both");
+    const showAmt = (dm === "amt" || dm === "both");
+    const showList = (dm !== "none") && (q.showListPrice !== false);
+    const extraCols = (showList?1:0) + (showPct?1:0) + (showAmt?1:0);
+    h += '<div style="overflow-x:auto;"><table class="data-table" style="min-width:'+(600 + extraCols*90)+'px;"><thead><tr>' +
       '<th>#</th><th>모델 (전산모델명/펫네임)</th><th>색상</th><th>통신사</th>' +
       '<th class="ta-right">수량</th>' +
-      (isBuy
-        ? '<th class="ta-right">출고가</th><th class="ta-right">할인율</th><th class="ta-right">할인금액</th><th class="ta-right">입고가</th>'
-        : '<th class="ta-right">단가</th>') +
+      (showList ? '<th class="ta-right">출고가</th>' : '') +
+      (showPct  ? '<th class="ta-right">할인율</th>' : '') +
+      (showAmt  ? '<th class="ta-right">할인금액</th>' : '') +
+      '<th class="ta-right">'+(isBuy ? "입고가" : "단가")+'</th>' +
       '<th class="ta-right">금액</th>' +
       '</tr></thead><tbody>';
     (q.items||[]).forEach((it,i)=>{
@@ -11952,12 +12305,10 @@
         '<td>'+comboEsc(it.color||"-")+'</td>' +
         '<td>'+comboEsc(it.carrier||"-")+'</td>' +
         '<td class="ta-right">'+(it.qty||0)+'</td>' +
-        (isBuy
-          ? '<td class="ta-right">'+(lp!=null ? lp.toLocaleString() : "-")+'</td>' +
-            '<td class="ta-right">'+(dPct!=null ? dPct.toFixed(2)+"%" : "-")+'</td>' +
-            '<td class="ta-right">'+(dAmt!=null ? dAmt.toLocaleString() : "-")+'</td>' +
-            '<td class="ta-right"><b>'+(price!=null ? price.toLocaleString() : '<span style="color:var(--danger);">미입력</span>')+'</b></td>'
-          : '<td class="ta-right">'+(price!=null ? price.toLocaleString() : '<span style="color:var(--danger);">미입력</span>')+'</td>') +
+        (showList ? '<td class="ta-right">'+(lp!=null ? lp.toLocaleString() : "-")+'</td>' : '') +
+        (showPct  ? '<td class="ta-right">'+(dPct!=null ? dPct.toFixed(2)+"%" : "-")+'</td>' : '') +
+        (showAmt  ? '<td class="ta-right">'+(dAmt!=null ? dAmt.toLocaleString() : "-")+'</td>' : '') +
+        '<td class="ta-right"><b>'+(price!=null ? price.toLocaleString() : '<span style="color:var(--danger);">미입력</span>')+'</b></td>' +
         '<td class="ta-right">'+(Number(it.amount)||0).toLocaleString()+'</td></tr>';
     });
     const vat = Math.round((Number(q.totalAmount)||0) / 11);
@@ -11965,11 +12316,10 @@
     const avgPct = totListAmt ? ((totListAmt - (Number(q.totalAmount)||0)) / totListAmt * 100) : null;
     h += '<tr style="background:#fafafa;font-weight:700;border-top:2px solid var(--navy);">' +
       '<td colspan="4">합계</td><td class="ta-right">'+(q.totalQty||0)+'</td>' +
-      (isBuy
-        ? '<td class="ta-right">'+totListAmt.toLocaleString()+'</td>' +
-          '<td class="ta-right">'+(avgPct!=null ? avgPct.toFixed(2)+"%" : "-")+'</td>' +
-          '<td class="ta-right">'+(totListAmt-(Number(q.totalAmount)||0)).toLocaleString()+'</td><td></td>'
-        : '<td></td>') +
+      (showList ? '<td class="ta-right">'+totListAmt.toLocaleString()+'</td>' : '') +
+      (showPct  ? '<td class="ta-right">'+(avgPct!=null ? avgPct.toFixed(2)+"%" : "-")+'</td>' : '') +
+      (showAmt  ? '<td class="ta-right">'+(totListAmt-(Number(q.totalAmount)||0)).toLocaleString()+'</td>' : '') +
+      '<td></td>' +
       '<td class="ta-right">'+(Number(q.totalAmount)||0).toLocaleString()+'</td></tr>';
     h += '</tbody></table></div>';
     h += '<div style="margin-top:10px;font-size:12.5px;line-height:1.9;">' +
