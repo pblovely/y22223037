@@ -289,7 +289,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-07-25 v163</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-07-25 v165</span>
       <span id="topbar-username">-</span>
       <button onclick="openPersonalSettingsModal()">개인설정</button>
       <button onclick="handleLogout()">로그아웃</button>
@@ -1288,7 +1288,8 @@
             <button class="btn small secondary" id="inv-sort-toggle-btn" onclick="toggleInventorySortField()">정렬: 판매일 ▾</button>
             <button class="btn small secondary" onclick="toggleViewPanel()">보기 설정</button>
             <button class="btn small secondary" id="inv-deleted-toggle-btn" style="display:none;" onclick="toggleDeletedInventory()">삭제함</button>
-            <button class="btn small secondary push" onclick="downloadInventoryExcel()">엑셀다운</button>
+            <button class="btn small secondary" onclick="refreshInventoryList()">새로 읽기</button>
+          <button class="btn small secondary push" onclick="downloadInventoryExcel()">엑셀다운</button>
             <select id="inv-page-size-select" onchange="onInvPageSizeChange()"></select>
           </div>
         </div>
@@ -4816,7 +4817,7 @@
         showModelMsg("item-result-msg", "<b>저장에 실패했습니다.</b><br>" + comboEsc((e && e.message) ? e.message : String(e)), true);
         return;
       }
-      clearDashCache(); logAction("재고 수정", docModelLabel(m)+" "+colorLabel+" / "+carrier);
+      clearDashCache(); clearCache("inventory"); logAction("재고 수정", docModelLabel(m)+" "+colorLabel+" / "+carrier);
       showModelMsg("item-result-msg", "저장되었습니다.", false);
       loadInventoryList();
       setTimeout(closeItemModal, 600);
@@ -4840,7 +4841,7 @@
         return;
       }
       const newItemRef = await addDoc(collection(db,"inventoryItems"), { ...base, entryType:"imei", quantity:1, serialNumber });
-      clearDashCache(); logAction("재고 입고(일련번호)", docModelLabel(m)+" "+colorLabel+" / "+carrier+" / 일련번호 "+serialNumber);
+      clearDashCache(); clearCache("inventory"); logAction("재고 입고(일련번호)", docModelLabel(m)+" "+colorLabel+" / "+carrier+" / 일련번호 "+serialNumber);
       logItem(ref.id, serialNumber, "inbound", "포피플 입고 · " + (source||"-") + (location ? " · " + location : ""));
 
       if(currentOrderLinkId){
@@ -10406,7 +10407,7 @@
       await updateDoc(doc(db,"inventoryItems", itemId), { location: nv });
       await logItem(itemId, serial, "location", (cur||"없음") + " → " + (nv||"없음"));
       logAction("위치 이동", serial + " : " + (cur||"-") + " → " + (nv||"-"));
-      alert("옮겼습니다."); openItemHistory(serial); clearDashCache();
+      alert("옮겼습니다."); openItemHistory(serial); clearDashCache(); clearCache("inventory");
       return;
     }
 
@@ -10418,7 +10419,7 @@
       await updateDoc(doc(db,"inventoryItems", itemId), { status:"개통", activateDate: date });
       await logItem(itemId, serial, "activate", "개통일 " + date + (it.carrier ? " · " + it.carrier : ""));
       logAction("개통 처리", serial + " / " + date);
-      alert("개통 처리했습니다."); openItemHistory(serial); clearDashCache();
+      alert("개통 처리했습니다."); openItemHistory(serial); clearDashCache(); clearCache("inventory");
       return;
     }
 
@@ -10453,7 +10454,7 @@
       await logItem(itemId, serial, "deactivate", date + " · 사유: " + String(reason).trim() + " · 재판매 가능");
       logAction("개통취소", serial + " / " + String(reason).trim());
       alert("개통취소 처리했습니다. 다시 판매할 수 있습니다.");
-      openItemHistory(serial); clearDashCache();
+      openItemHistory(serial); clearDashCache(); clearCache("inventory");
       if(typeof loadSaleRequestList === "function") loadSaleRequestList();
       return;
     }
@@ -10472,7 +10473,7 @@
         + " · 출고가 " + (Number(it.listPrice)||0).toLocaleString());
       logAction("삼성 반품", serial + " / " + String(reason||"").trim());
       alert("반품 처리했습니다.\n교체품을 받으시면 재고 등록에서 <신품입고>로 넣어주세요.");
-      openItemHistory(serial); clearDashCache();
+      openItemHistory(serial); clearDashCache(); clearCache("inventory");
       return;
     }
 
@@ -10488,7 +10489,7 @@
       await updateDoc(doc(db,"inventoryItems", itemId), patch);
       await logItem(itemId, serial, "price", "판매가 " + cur.toLocaleString() + " → " + nv.toLocaleString() + (memo ? " · " + memo : ""));
       logAction("판매가 변경", serial + " : " + cur.toLocaleString() + " → " + nv.toLocaleString());
-      alert("바꿨습니다."); openItemHistory(serial); clearDashCache();
+      alert("바꿨습니다."); openItemHistory(serial); clearDashCache(); clearCache("inventory");
       return;
     }
   };
@@ -12788,7 +12789,7 @@
       showModelMsg("multi-edit-msg", "<b>저장에 실패했습니다.</b><br>" + comboEsc((e && e.message) ? e.message : String(e)), true);
       return;
     }
-    clearDashCache(); logAction("재고 일괄 수정(다중항목)", ids.length + "건 / " + changed.length + "개 항목");
+    clearDashCache(); clearCache("inventory"); logAction("재고 일괄 수정(다중항목)", ids.length + "건 / " + changed.length + "개 항목");
     showModelMsg("multi-edit-msg", ids.length + "건에 적용했습니다.", false);
     document.getElementById("bulk-select-all").checked = false;
     loadInventoryList();
@@ -13496,7 +13497,11 @@
     { key:"orders",    label:"주문 관리",    note:"주문 전체" },
     { key:"sales",     label:"판매 관리",    note:"판매요청 전체" },
     { key:"models",    label:"모델·색상",    note:"모델 목록" },
-    { key:"companies", label:"업체정보",     note:"업체 목록" }
+    { key:"companies", label:"업체정보",     note:"업체 목록" },
+    { key:"masterstock",label:"자료업로드",   note:"마스터재고 전체" },
+    { key:"reservation",label:"예약 관리",    note:"예약 전체" },
+    { key:"ledger",     label:"거래처 정산",   note:"주문·판매 전체" },
+    { key:"itemhistory",label:"단말 이력",    note:"이력 전체" }
   ];
   const dataCache = {};   // key → { at, data }
 
@@ -13506,9 +13511,18 @@
     return m[key] === true;
   }
   window.clearCache = function(key){ delete dataCache[key]; };
+  // 캐시가 켜져 있으면 저장된 값을, 아니면 새로 읽습니다.
+  async function readCached(key, colName){
+    if(cacheOn(key) && dataCache[key]) return dataCache[key];
+    const snap = await getDocs(collection(db, colName));
+    const rows = [];
+    snap.forEach(d=> rows.push({ id:d.id, ...d.data() }));
+    if(cacheOn(key)) dataCache[key] = rows;
+    return rows;
+  }
   window.clearAllCaches = function(){
     Object.keys(dataCache).forEach(k=> delete dataCache[k]);
-    clearDashCache();
+    clearDashCache(); clearCache("inventory");
     alert("모든 화면이 다음에 열 때 새로 읽습니다.");
   };
 
@@ -13535,11 +13549,15 @@
     }catch(e){ alert("저장에 실패했습니다."); }
   };
 
+  window.refreshInventoryList = function(){
+    clearCache("inventory");
+    if(typeof loadInventoryList === "function") loadInventoryList();
+  };
   window.clearDashCache = function(){
     dashItemsCache = null; dashCacheAt = null;
   };
   window.refreshDashboard = function(){
-    clearDashCache();
+    clearDashCache(); clearCache("inventory");
     loadDashboard();
   };
 
@@ -13882,8 +13900,17 @@
     const listEl = document.getElementById("inventory-list");
     listEl.innerHTML = "";
     populatePrimaryCondField();
-    const snap = await getDocs(query(collection(db,"inventoryItems"), orderBy("createdAt","desc")));
-    if(snap.empty){
+    // 캐시가 켜져 있으면 읽어둔 값을 다시 씁니다.
+    let allRows;
+    if(cacheOn("inventory") && dataCache.inventory){
+      allRows = dataCache.inventory;
+    }else{
+      const snap = await getDocs(query(collection(db,"inventoryItems"), orderBy("createdAt","desc")));
+      allRows = [];
+      snap.forEach(d=> allRows.push({ id:d.id, ...d.data() }));
+      if(cacheOn("inventory")) dataCache.inventory = allRows;
+    }
+    if(allRows.length === 0){
       listEl.innerHTML = '<div class="list-empty">등록된 재고가 없습니다.</div>';
       lastRenderedItems = [];
       return;
@@ -13894,8 +13921,7 @@
     const filterType = document.getElementById("filter-date-type").value;
     const normDate = (v)=> String(v||"").replace(/\D/g,"");
 
-    let items = [];
-    snap.forEach(d=> items.push({ id:d.id, ...d.data() }));
+    let items = allRows.slice();
 
     // "삭제함" 표시된 재고는 기본으로 숨깁니다. 보기 버튼으로 켜서 볼 수 있습니다.
     const deletedCount = items.filter(it=> it.deleted === true).length;
