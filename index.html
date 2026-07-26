@@ -305,7 +305,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-07-26 v251</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-07-26 v253</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -574,6 +574,7 @@
           <button class="btn small secondary" style="width:auto;" onclick="toggleResvStats()">접기/펼치기</button>
         </div>
         <div id="reservation-stat-cards" class="dash-cards" style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-start;margin-bottom:14px;"></div>
+        <div id="resv-dest-cards" style="margin-bottom:14px;"></div>
         <div id="reservation-table-area"></div>
       </div>
     </div>
@@ -14114,9 +14115,16 @@
       if(r.salePrice) sumSaleAmt += Number(r.salePrice) * q; else noPriceCount++;
     });
     const statEl = document.getElementById("reservation-stat-cards");
+    // 카드 모양을 한 곳에서 만듭니다. 전체 합계 카드와 업체별 카드가 같은 모양이 되게 합니다.
+    // 대시보드 카드와 같은 구조 — 우클릭으로 글씨 크기·색상 변경, 숨기기 가능
+    // 글씨 크기는 원래 크기로 고정합니다. (라벨 11px / 값 16px)
+    const resvCard = (label, value, color, note, key)=>
+        '<div data-label-key="resv-'+key+'-card" style="border:1px solid var(--line);padding:9px 12px;min-width:150px;background:#fff;">' +
+        '<div data-label-key="resv-'+key+'" style="font-size:11px;color:var(--gray);"><span class="tab-label-text">'+label+'</span></div>' +
+        '<div data-label-key="resv-'+key+'-value" style="font-size:16px;font-weight:700;'+(color?('color:'+color+';'):'')+'">'+value+'</div>' +
+        (note ? '<div data-label-key="resv-'+key+'-note" style="font-size:10.5px;color:var(--gray);">'+note+'</div>' : '') +
+        '</div>';
     if(statEl){
-      // 대시보드 카드와 같은 구조 — 우클릭으로 글씨 크기·색상 변경, 숨기기 가능
-      // 글씨 크기는 원래 크기로 고정합니다. (라벨 11px / 값 16px)
       const card = (label, value, color, note, key)=>
         '<div data-label-key="resv-'+key+'-card" style="border:1px solid var(--line);padding:9px 12px;min-width:150px;background:#fff;">' +
         '<div data-label-key="resv-'+key+'" style="font-size:11px;color:var(--gray);"><span class="tab-label-text">'+label+'</span></div>' +
@@ -14255,6 +14263,38 @@
     html += '<p class="desc" style="margin-top:10px;">모델 바로 오른쪽이 <b>전체 합계</b>이고, 그 뒤로 업체별 칸이 굵은 세로선으로 구분됩니다. 아래 세 줄은 <b>업체별 금액</b>입니다. 표 위에서 <b>마우스 오른쪽 버튼</b>을 누르면 글씨 크기와 색상을 바꿀 수 있습니다. 수정·배정은 위 <b>예약 목록</b>에서 하세요.</p>';
 
     el.innerHTML = html;
+
+    // ===== 업체별 지표 카드 =====
+    // 위쪽 전체 카드와 같은 모양으로, 업체마다 한 줄씩 보여줍니다.
+    // 값은 아래 표에서 쓴 계산값(colTotals)을 그대로 쓰므로 표와 카드가 반드시 일치합니다.
+    const destCardEl = document.getElementById("resv-dest-cards");
+    if(destCardEl){
+      if(destKeys.length === 0){
+        destCardEl.innerHTML = "";
+      }else{
+        let dh = '';
+        destKeys.forEach((dk, idx)=>{
+          const c = colTotals[idx];
+          const remain = Math.max(0, c.ordered - c.allocated);
+          const diff = c.saleAmt - c.listAmt;
+          const pct = c.listAmt ? ((c.listAmt - c.saleAmt) / c.listAmt * 100) : null;
+          dh += '<div style="border:1px solid var(--navy);padding:8px 10px;margin-bottom:8px;background:#fafafa;">'
+            + '<div style="font-size:12.5px;font-weight:700;color:var(--navy);margin-bottom:6px;">' + comboEsc(dk) + '</div>'
+            + '<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-start;">'
+            + resvCard("예약 수량", c.ordered, null, null, "d-qty")
+            + resvCard("배정", c.allocated, "#2e7d32", null, "d-alloc")
+            + resvCard("잔여", remain, "var(--danger)", null, "d-remain")
+            + resvCard("출고가 금액", c.listAmt.toLocaleString(), null, "출고가 × 예약수량", "d-listamt")
+            + resvCard("판매가 금액", c.saleAmt.toLocaleString(), "#1565c0",
+                 c.noPrice>0 ? ("판매가 미입력 "+c.noPrice+"건 제외") : null, "d-saleamt")
+            + resvCard("할인%", (pct==null ? "-" : pct.toFixed(2)+"%"), null, "(출고가−판매가) ÷ 출고가", "d-discpct")
+            + resvCard("예상 차액", diff.toLocaleString(), diff>=0 ? "#2e7d32" : "var(--danger)", "판매가 − 출고가", "d-diff")
+            + '</div></div>';
+        });
+        destCardEl.innerHTML = '<div style="font-size:12.5px;font-weight:700;margin-bottom:6px;">업체별 지표</div>' + dh;
+      }
+    }
+
     applyCustomTabLabels();   // 저장해 둔 글씨 크기·색상을 표에 다시 적용
     loadReservationList();
   
@@ -18468,8 +18508,14 @@
     await ensureDefaultStatuses();
     const statusNames = await fetchNames("statusOptions");
 
+    // ★ 자동 등록 금지 ★
+    //  사용자 요청: 모델·색상·입고처 등이 등록돼 있지 않으면 프로그램이 스스로 만들지 않습니다.
+    //  대신 그 줄을 "오류"로 표시해 등록을 막고, 무엇을 먼저 등록해야 하는지 알려줍니다.
+    const NO_AUTO_CREATE = true;
+
     // 파일에 있지만 마스터 목록에 없는 값은 등록 예정 목록에 담아둠 (검수필요 표시는 실제 등록 시 적용됨). 통신사는 SK/KT/LG 고정값이라 제외.
     function markMissingForCreate(fieldLabel, collectionName, namesArr){
+      if(NO_AUTO_CREATE) return 0;   // 스스로 만들지 않습니다 — 아래 검증에서 오류로 걸립니다
       const missing = new Set();
       rows.forEach(r=>{
         const v = String(r[fieldLabel]||"").trim();
@@ -18490,7 +18536,7 @@
 
     // 입고처가 빈 칸인 행이 있으면 "미확인"으로 대체 예정 — 등록을 막지 않고 나중에 검수하도록 함
     const hasBlankSource = rows.some(r=> !String(r["입고처"]||"").trim());
-    if(hasBlankSource && !sourceNames.includes("미확인")){
+    if(!NO_AUTO_CREATE && hasBlankSource && !sourceNames.includes("미확인")){
       pendingMasterCreates.push({ collectionName:"inboundSources", name:"미확인" });
       sourceNames.push("미확인");
       autoCreated["입고처"] = (autoCreated["입고처"]||0) + 1;
@@ -18498,6 +18544,7 @@
 
     // 파일에 있는 색상이 매칭된 모델에 없으면 등록 예정 목록에 담아둠
     function markMissingColorsForCreate(){
+      if(NO_AUTO_CREATE) return 0;   // 색상도 스스로 만들지 않습니다 — 없으면 오류로 막습니다
       const seen = new Set(); let count = 0;
       rows.forEach(r=>{
         const colorName = String(r["색상"]||"").trim();
@@ -18583,6 +18630,7 @@
         }
         if(!carrier) errs.push("통신사 인식 불가('"+carrierRaw+"') — "+carrierNames.join("/")+" 중 하나로 입력해주세요");
       }
+      if(!source) errs.push("입고처 비어있음 — 파일에 입고처를 넣어주세요");
       if(source && !sourceNames.includes(source)) errs.push("미등록 입고처('"+source+"') — 관리자 페이지에서 먼저 등록 필요");
       if(manufacturer && !manufacturerNames.includes(manufacturer)) errs.push("미등록 제조사('"+manufacturer+"')");
       if(location && !locationNames.includes(location)) errs.push("미등록 위치('"+location+"')");
