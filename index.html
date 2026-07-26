@@ -279,7 +279,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-07-25 v124</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-07-25 v126</span>
       <span id="topbar-username">-</span>
       <button onclick="openPersonalSettingsModal()">개인설정</button>
       <button onclick="handleLogout()">로그아웃</button>
@@ -319,6 +319,7 @@
           <button class="tab-btn" data-label-key="inv-admin" id="tabbtn-inv-admin" onclick="openInvAdminSection()" style="display:none;"><span class="tab-label-text">재고 기초설정</span></button>
           <button class="tab-btn" data-tab="tab-users" data-label-key="tab-users" id="tabbtn-users" onclick="switchTab('tab-users')" style="display:none;"><span class="tab-label-text">사용자 관리</span> <span id="user-admin-badge" style="display:none;background:var(--danger);color:#fff;font-size:10px;padding:1px 6px;margin-left:4px;">0</span></button>
           <button class="tab-btn" data-tab="tab-settlement" data-label-key="tab-settlement" id="tabbtn-settlement" onclick="switchTab('tab-settlement')" style="display:none;"><span class="tab-label-text">정산 관리</span></button>
+          <button class="tab-btn" data-tab="tab-datacheck" data-label-key="tab-datacheck" id="tabbtn-datacheck" onclick="switchTab('tab-datacheck')" style="display:none;"><span class="tab-label-text">데이터 점검</span></button>
           <button class="tab-btn" data-tab="tab-ledger" data-label-key="tab-ledger" id="tabbtn-ledger" onclick="switchTab('tab-ledger')" style="display:none;"><span class="tab-label-text">거래처 정산</span></button>
           <button class="tab-btn" data-tab="tab-b2b" data-label-key="tab-b2b" id="tabbtn-b2b" onclick="switchTab('tab-b2b')" style="display:none;"><span class="tab-label-text">삼성 B2B 여신</span></button>
           <button class="tab-btn" data-tab="tab-logs" data-label-key="tab-logs" id="tabbtn-logs" onclick="switchTab('tab-logs')" style="display:none;"><span class="tab-label-text">이력</span></button>
@@ -538,6 +539,18 @@
         </div>
         <div id="reservation-stat-cards" class="dash-cards" style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-start;margin-bottom:14px;"></div>
         <div id="reservation-table-area"></div>
+      </div>
+    </div>
+
+    <!-- ===== 관리자: 데이터 점검 ===== -->
+    <div id="tab-datacheck" class="tab-panel">
+      <div class="card" style="max-width:1200px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+          <h3 style="margin:0;">데이터 점검 <span class="info-tip" title="주문·판매요청·재고·여신이 서로 어긋난 곳을 한 번에 찾아 정리합니다. 이상하다 싶을 때 여기부터 보세요.">ⓘ</span></h3>
+          <button class="btn small" style="width:auto;" onclick="runDataCheck()">전체 점검</button>
+        </div>
+        <p class="desc" style="margin-top:0;">데이터가 서로 어긋난 곳을 찾습니다. 정리는 <b>뒤에서부터</b> — 재고 매칭 → 판매요청 → 주문 순서로 푸는 것이 안전합니다.</p>
+        <div id="datacheck-result"><div class="list-empty">위 <b>전체 점검</b>을 눌러주세요.</div></div>
       </div>
     </div>
 
@@ -8828,11 +8841,41 @@
       linked += ((kind === "order") ? (l.linkedItemIds||[]) : (l.matchedItemIds||[])).length;
     });
 
+    // 주문을 지우면 여기서 만들어진 판매요청이 붕 뜹니다. 미리 찾아서 함께 정리합니다.
+    let linkedSR = [], srQty = 0, srMatched = 0;
+    if(kind === "order"){
+      const orderIds = (lines||[]).map(l=>l.id);
+      const srSnap = await getDocs(collection(db,"saleRequests"));
+      srSnap.forEach(d=>{
+        const sr = { id:d.id, ...d.data() };
+        if(sr.status === "취소") return;
+        if(sr.fromOrderId && orderIds.includes(sr.fromOrderId)){
+          linkedSR.push(sr);
+          srQty += Number(sr.quantity)||0;
+          if((Number(sr.fulfilledCount)||0) > 0) srMatched++;
+        }
+      });
+    }
+
     if(!confirm(label + "을(를) 완전히 삭제합니다.\n\n"
       + "  " + party + " · 품목 " + (lines||[]).length + "개\n"
       + "  취소 사유: " + (b.cancelReason || "(없음)") + "\n\n"
-      + (linked > 0 ? "※ 연결된 재고 " + linked + "건이 있습니다. 재고는 지워지지 않고 연결만 끊깁니다.\n\n" : "")
-      + "되돌릴 수 없습니다. 진행하시겠습니까?")) return;
+      + (linked > 0 ? "※ 연결된 재고 " + linked + "건이 있습니다. 재고는 지워지지 않고 연결만 끊깁니다.\n" : "")
+      + (linkedSR.length > 0 ? "※ 이 주문에서 만들어진 판매요청 " + linkedSR.length + "줄 (" + srQty + "대)이 있습니다.\n" : "")
+      + "\n되돌릴 수 없습니다. 진행하시겠습니까?")) return;
+
+    // 판매요청 처리 방법을 고르게 합니다.
+    let deleteSR = false;
+    if(linkedSR.length > 0){
+      const cleanCnt = linkedSR.length - srMatched;
+      deleteSR = confirm(
+        "이 주문에서 만들어진 판매요청을 어떻게 할까요?\n\n"
+        + "  전체 " + linkedSR.length + "줄 (" + srQty + "대)\n"
+        + (srMatched ? "  그중 재고 매칭된 " + srMatched + "줄은 지우지 않습니다.\n" : "")
+        + "\n[확인] 매칭 안 된 " + cleanCnt + "줄을 함께 지웁니다 (권장)\n"
+        + "[취소] 판매요청은 그대로 둡니다\n\n"
+        + "그대로 두면 주문을 다시 등록할 때 판매요청이 중복으로 생깁니다.");
+    }
     if(!confirm("다시 확인합니다. 정말 지우시겠습니까?")) return;
 
     try{
@@ -8845,13 +8888,29 @@
         await bt.commit();
       }
       await deleteDoc(doc(db, batchCol, id));
+
+      // 함께 정리하기로 했다면 판매요청도 지웁니다. (매칭된 줄은 남깁니다)
+      if(deleteSR && linkedSR.length){
+        const clean = linkedSR.filter(x=> (Number(x.fulfilledCount)||0) === 0);
+        const srBatchIds = new Set();
+        for(let i=0; i<clean.length; i+=300){
+          const bt = writeBatch(db);
+          clean.slice(i, i+300).forEach(x=>{ if(x.batchId) srBatchIds.add(x.batchId); bt.delete(doc(db,"saleRequests", x.id)); });
+          await bt.commit();
+        }
+        for(const bid of srBatchIds){
+          const left = await getDocs(query(collection(db,"saleRequests"), where("batchId","==",bid)));
+          if(left.empty){ try{ await deleteDoc(doc(db,"saleRequestBatches", bid)); }catch(e){} }
+        }
+      }
     }catch(e){
       alert("삭제에 실패했습니다.\n" + ((e && e.message) ? e.message : String(e)));
       return;
     }
     logAction(label + " 삭제(취소건)", party + " / 품목 " + (lines||[]).length + "개 / 사유: " + (b.cancelReason||"-"));
-    alert("삭제했습니다.");
+    alert("삭제했습니다." + (deleteSR ? "\n연결된 판매요청도 함께 정리했습니다." : ""));
     if(kind === "order") loadOrderList(); else loadSaleRequestList();
+    if(typeof loadSaleRequestList === "function" && kind === "order") loadSaleRequestList();
   };
 
   // 취소된 건은 사유를 함께 보여줍니다.
@@ -10034,6 +10093,150 @@
     if(typeof loadSaleRequestList === "function") loadSaleRequestList();
     loadOrderList();
     openVoucherByNo(voucherNo);
+  };
+
+  // ================= 데이터 점검 =================
+  // 서로 어긋난 데이터를 한 곳에서 찾고 정리합니다.
+  window.runDataCheck = async function(){
+    const el = document.getElementById("datacheck-result");
+    if(!el) return;
+    el.innerHTML = '<div class="list-empty">점검 중입니다. 잠시만 기다려주세요...</div>';
+
+    try{
+      await fetchModelsCache();
+      await fetchCompanies();
+      const [ordSnap, srSnap, invSnap, obSnap, ledSnap] = await Promise.all([
+        getDocs(collection(db,"orders")),
+        getDocs(collection(db,"saleRequests")),
+        getDocs(collection(db,"inventoryItems")),
+        getDocs(collection(db,"orderBatches")),
+        getDocs(query(collection(db,"b2bLedger"), where("category","==","order_use")))
+      ]);
+      const orders = {}, batches = {}, items = {};
+      ordSnap.forEach(d=> orders[d.id] = d.data());
+      obSnap.forEach(d=> batches[d.id] = d.data());
+      invSnap.forEach(d=> items[d.id] = d.data());
+
+      const issues = [];
+
+      // ① 주문이 지워졌는데 남은 판매요청
+      let orphanSR = 0, orphanQty = 0;
+      srSnap.forEach(d=>{
+        const sr = d.data();
+        if(sr.status === "취소") return;
+        if(sr.fromOrderId && !orders[sr.fromOrderId]){ orphanSR++; orphanQty += Number(sr.quantity)||0; }
+      });
+      issues.push({ n:"주문이 없는 판매요청", cnt:orphanSR, unit:orphanQty+"대",
+        why:"주문을 지웠는데 판매요청이 남았습니다. 두면 재등록 시 중복이 생깁니다.",
+        fix: orphanSR ? "showOrphanSaleList()" : null, fixLabel:"확인하고 정리" });
+
+      // ② 매칭 숫자가 실제 재고와 다른 판매요청
+      let matchWrong = 0;
+      srSnap.forEach(d=>{
+        const sr = d.data();
+        if(sr.status === "취소") return;
+        const ids = sr.matchedItemIds || [];
+        const alive = ids.filter(x=> items[x]).length;
+        if(alive !== (Number(sr.fulfilledCount)||0)) matchWrong++;
+      });
+      issues.push({ n:"매칭 숫자가 안 맞는 판매요청", cnt:matchWrong, unit:"줄",
+        why:"연결된 재고가 지워졌거나 따로 판매처리해서 숫자가 어긋났습니다.",
+        fix: matchWrong ? "recalcSaleMatching()" : null, fixLabel:"다시 계산" });
+
+      // ③ 판매요청 없이 판매 상태인 재고
+      let soldNoSR = 0;
+      Object.keys(items).forEach(id=>{
+        const it = items[id];
+        if(it.deleted === true) return;
+        if(it.status === "판매" && !it.saleRequestId) soldNoSR++;
+      });
+      issues.push({ n:"판매요청 없는 판매 재고", cnt:soldNoSR, unit:"건",
+        why:"판매처리는 됐는데 판매요청이 없어 입금 대사가 안 됩니다.",
+        fix: soldNoSR ? "goToSaleTab()" : null, fixLabel:"판매 관리로 이동" });
+
+      // ④ 출고가가 비어 있는 주문 품목
+      let noPrice = 0;
+      Object.keys(orders).forEach(id=>{
+        const o = orders[id];
+        if(o.status === "취소") return;
+        if(!Number(o.listPrice)) noPrice++;
+      });
+      issues.push({ n:"출고가 없는 주문 품목", cnt:noPrice, unit:"줄",
+        why:"출고가가 없으면 할인·여신 계산이 어긋납니다.",
+        fix: noPrice ? "syncOrderPrices()" : null, fixLabel:"모델 기준으로 채우기" });
+
+      // ⑤ 모델 등록과 다른 펫네임
+      let nameDiff = 0;
+      [["orders",orders],["saleRequests",null]].forEach(()=>{});
+      Object.keys(orders).forEach(id=>{
+        const o = orders[id];
+        if(o.status === "취소") return;
+        const m = findModelForItem(o);
+        if(m && String(o.petName||"") !== String(m.petName||"")) nameDiff++;
+      });
+      issues.push({ n:"모델과 다른 주문 품목", cnt:nameDiff, unit:"줄",
+        why:"모델 이름을 바꾼 뒤 주문에 반영되지 않았습니다.",
+        fix: nameDiff ? "syncOrderPrices()" : null, fixLabel:"모델 기준으로 최신화" });
+
+      // ⑥ 여신 기록 불일치
+      let creditWrong = 0;
+      const ledByBatch = {};
+      ledSnap.forEach(d=>{
+        const e = d.data();
+        if(!e.fromOrderBatchId) return;
+        ledByBatch[e.fromOrderBatchId] = (ledByBatch[e.fromOrderBatchId]||0) + (Number(e.amount)||0);
+      });
+      for(const bid of Object.keys(batches)){
+        const b = batches[bid];
+        const isCredit = b.paymentMethod === "b2b_credit" && b.status !== "취소";
+        const rec = ledByBatch[bid] || 0;
+        if(!isCredit && rec > 0){ creditWrong++; continue; }
+        if(isCredit && rec === 0){ creditWrong++; continue; }
+      }
+      Object.keys(ledByBatch).forEach(bid=>{ if(!batches[bid]) creditWrong++; });
+      issues.push({ n:"여신 주문사용 기록 불일치", cnt:creditWrong, unit:"건",
+        why:"여신 결제가 아닌데 기록이 있거나, 여신인데 기록이 없습니다.",
+        fix: creditWrong ? "repairB2BOrderUse()" : null, fixLabel:"주문사용 정리" });
+
+      // ⑦ 업체정보에 없는 거래처명
+      const known = new Set(companiesCache.map(c=>String(c.name||"").trim()).filter(Boolean));
+      const unknownNames = new Set();
+      Object.keys(orders).forEach(id=>{
+        const o = orders[id];
+        [o.source, o.destination].forEach(v=>{ const t=String(v||"").trim(); if(t && !known.has(t)) unknownNames.add(t); });
+      });
+      issues.push({ n:"업체정보에 없는 거래처명", cnt:unknownNames.size, unit:"개",
+        why:"이름이 바뀌었거나 정리되어 기록과 다릅니다.",
+        fix: unknownNames.size ? "cleanupOrphanCompanyNames()" : null, fixLabel:"옛 업체명 정리" });
+
+      const bad = issues.filter(x=>x.cnt>0);
+      let h = '<div style="border:1px solid '+(bad.length?'var(--danger)':'#2e7d32')+';background:'+(bad.length?'#fdecea':'#f1f8f1')+';padding:11px 13px;margin-bottom:12px;font-size:13px;">'
+        + (bad.length
+          ? '<b style="color:var(--danger);">정리가 필요한 항목 ' + bad.length + '가지</b><br><span style="color:var(--gray);font-size:12px;">아래 순서대로 처리하시면 안전합니다. 재고 → 판매요청 → 주문 순입니다.</span>'
+          : '<b style="color:#2e7d32;">모든 데이터가 정상입니다.</b>')
+        + '</div>';
+      h += '<div style="overflow-x:auto;"><table class="data-table" style="min-width:860px;"><thead><tr>' +
+        '<th style="width:40px;">순서</th><th>점검 항목</th><th class="ta-right">건수</th><th>설명</th><th class="ta-right">정리</th>' +
+        '</tr></thead><tbody>';
+      issues.forEach((x,i)=>{
+        const ok = x.cnt === 0;
+        h += '<tr'+(ok?' style="color:var(--gray);"':'')+'>' +
+          '<td>'+(i+1)+'</td>' +
+          '<td><b>'+comboEsc(x.n)+'</b></td>' +
+          '<td class="ta-right"'+(ok?'':' style="color:var(--danger);font-weight:700;"')+'>'+(ok?'정상':(x.cnt+' '+x.unit))+'</td>' +
+          '<td style="font-size:11.5px;">'+(ok?'':comboEsc(x.why))+'</td>' +
+          '<td class="ta-right">'+(x.fix?'<button class="btn small secondary" style="width:auto;" onclick="'+x.fix+'">'+x.fixLabel+'</button>':'')+'</td>' +
+          '</tr>';
+      });
+      h += '</tbody></table></div>';
+      h += '<div style="font-size:12px;color:var(--gray);margin-top:10px;line-height:1.9;">' +
+        '<b>기억해두실 것</b> — 데이터는 <b>주문 → 판매요청 → 재고 매칭</b> 순으로 이어집니다.<br>' +
+        '무언가를 지우거나 되돌릴 때는 <b>뒤에서부터</b> 푸세요. 앞을 먼저 지우면 뒤가 붕 뜹니다.<br>' +
+        '· 주문을 다시 등록하려면 → 재고 매칭 해제 → 판매요청 정리 → 주문 삭제 → 재등록</div>';
+      el.innerHTML = h;
+    }catch(e){
+      el.innerHTML = '<div style="color:var(--danger);font-size:12.5px;">점검에 실패했습니다.<br>' + comboEsc((e&&e.message)?e.message:String(e)) + '</div>';
+    }
   };
 
   // 주문이 지워졌는데 남아 있는 판매요청을 찾아 알려줍니다.
@@ -14302,6 +14505,7 @@
     if(tabId==="tab-inv-color") loadColorAdminList();
     if(tabId==="tab-inv-company") loadCompanyList();
     if(tabId==="tab-ledger") initLedgerTab();
+    if(tabId==="tab-datacheck" && typeof runDataCheck === "function") runDataCheck();
     if(tabId==="tab-b2b" && typeof loadLoanList === "function") loadLoanList();
     if(tabId==="tab-site" && typeof renderHiddenList === "function") renderHiddenList();
     if(tabId==="tab-inv-carrier") loadCarrierList();
@@ -14441,6 +14645,7 @@
       setMenu("tabbtn-settlement", showSettlement);
       setMenu("tabbtn-b2b", showSettlement);
       setMenu("tabbtn-ledger", showSettlement);
+      setMenu("tabbtn-datacheck", showSettlement);
       setMenu("tabbtn-logs", showLogs);
       setMenu("tabbtn-dashboard", showDashboard);
       setMenu("tabbtn-inv-work", showInvWork);
