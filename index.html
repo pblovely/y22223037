@@ -291,7 +291,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-07-25 v193</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-07-25 v195</span>
       <span id="topbar-username">-</span>
       <button onclick="openPersonalSettingsModal()">개인설정</button>
       <button onclick="handleLogout()">로그아웃</button>
@@ -797,6 +797,20 @@
         </label>
         <div id="page-sizes-msg" style="font-size:12px;color:var(--navy);display:none;margin-top:8px;">저장되었습니다.</div>
       </div>
+      <div class="card">
+        <h3>시작 화면 <span class="info-tip" title="로그인하면 어느 화면부터 보여줄지 정합니다. 새로고침할 때는 보던 화면이 그대로 유지됩니다.">ⓘ</span></h3>
+        <p class="desc">로그인 후 처음 열릴 화면을 고르세요. 권한이 없는 화면을 고르면 자동으로 다른 화면이 열립니다.</p>
+        <div class="stack-form" style="max-width:520px;">
+          <div class="stack-row"><label>첫 화면</label>
+            <select id="start-tab-select">
+              <option value="">자동 (권한에 따라)</option>
+            </select>
+          </div>
+        </div>
+        <button class="btn small" style="width:auto;margin-top:8px;" onclick="saveStartTab()">저장</button>
+        <div id="start-tab-msg" class="msg info" style="margin-top:8px;">저장되었습니다.</div>
+      </div>
+
       <div class="card">
         <h3>읽기 절약 설정 <span class="info-tip" title="Firestore는 하루 5만 건까지 무료로 읽을 수 있습니다. 대시보드는 한 번 열 때 재고 전체를 읽으므로, 켜두면 읽어둔 값을 다시 써서 읽기를 크게 줄입니다.">ⓘ</span></h3>
         <p class="desc">데이터가 많아지면 하루 읽기 한도에 걸릴 수 있습니다. 아래를 켜두면 크게 줄어듭니다.</p>
@@ -7178,40 +7192,65 @@
     rows.sort((a,b)=> String(a.systemModel||"").localeCompare(String(b.systemModel||"")));
 
     // 예약에 색상이 없으면 모델의 색상 목록을 고를 수 있게 합니다.
-    let h = '<div style="overflow-x:auto;border:1px solid var(--line);max-height:360px;overflow-y:auto;">'
-      + '<table class="data-table" style="min-width:820px;"><thead><tr>'
+    // 예약에 색상이 없으면 그 모델의 색상마다 줄을 만들어 각각 수량을 받습니다.
+    let h = '<div style="overflow-x:auto;border:1px solid var(--line);max-height:400px;overflow-y:auto;">'
+      + '<table class="data-table" style="min-width:860px;"><thead><tr>'
       + '<th>요청일</th><th>모델</th><th>색상</th><th>통신사</th>'
       + '<th class="ta-right">예약</th><th class="ta-right">배정</th><th class="ta-right">남음</th>'
       + '<th class="ta-right">판매가</th><th class="ta-right" style="width:90px;">넘길 수량</th>'
       + '</tr></thead><tbody>';
     rows.forEach(r=>{
-      const hasColor = !!(r.systemColor || r.manufacturerColor);
-      let colorCell;
-      if(hasColor){
-        colorCell = comboEsc(r.systemColor || r.manufacturerColor);
-      }else{
-        const m = modelsCache.find(x=> x.id === r.modelId)
-          || modelsCache.find(x=> String(x.systemModel||"") === String(r.systemModel||""));
-        const colors = m ? (m.colors||[]) : [];
-        colorCell = colors.length
-          ? '<select class="rb-pick-color" style="width:130px;font-size:11.5px;padding:3px;border:1px solid var(--line);">'
-            + '<option value="">색상 선택</option>'
-            + colors.map(c=>'<option value="'+comboEsc(c.systemColor||c.manufacturerColor||"")+'">'+comboEsc(c.systemColor||c.manufacturerColor||"-")+'</option>').join("")
-            + '</select>'
-          : '<span style="color:var(--danger);">색상 없음</span>';
+      const fixed = r.systemColor || r.manufacturerColor || "";
+      const priceCell = r.salePrice ? Number(r.salePrice).toLocaleString() : '<span style="color:var(--danger);">미입력</span>';
+
+      if(fixed){
+        // 색상이 정해진 예약 — 한 줄
+        h += '<tr data-rb-resv="'+r.id+'" data-rb-color="'+comboEsc(fixed)+'">'
+          + '<td>'+comboEsc(r.requestDate||"-")+'</td>'
+          + '<td>'+comboEsc(docModelLabel(r))+'</td>'
+          + '<td>'+comboEsc(fixed)+'</td>'
+          + '<td>'+comboEsc(r.carrier||"-")+'</td>'
+          + '<td class="ta-right">'+(Number(r.orderedQty)||0)+'</td>'
+          + '<td class="ta-right">'+(Number(r.allocatedQty)||0)+'</td>'
+          + '<td class="ta-right"><b>'+r._left+'</b></td>'
+          + '<td class="ta-right">'+priceCell+'</td>'
+          + '<td class="ta-right"><input type="number" class="rb-pick-qty" min="0" max="'+r._left+'" placeholder="0" '
+          + 'style="width:70px;font-size:12px;padding:3px;border:1px solid var(--line);text-align:right;"></td>'
+          + '</tr>';
+        return;
       }
-      h += '<tr data-rb-resv="'+r.id+'">'
-        + '<td>'+comboEsc(r.requestDate||"-")+'</td>'
-        + '<td>'+comboEsc(docModelLabel(r))+'</td>'
-        + '<td>'+colorCell+'</td>'
-        + '<td>'+comboEsc(r.carrier||"-")+'</td>'
-        + '<td class="ta-right">'+(Number(r.orderedQty)||0)+'</td>'
-        + '<td class="ta-right">'+(Number(r.allocatedQty)||0)+'</td>'
-        + '<td class="ta-right"><b>'+r._left+'</b></td>'
-        + '<td class="ta-right">'+(r.salePrice ? Number(r.salePrice).toLocaleString() : '<span style="color:var(--danger);">미입력</span>')+'</td>'
-        + '<td class="ta-right"><input type="number" class="rb-pick-qty" min="0" max="'+r._left+'" placeholder="0" '
-        + 'style="width:70px;font-size:12px;padding:3px;border:1px solid var(--line);text-align:right;"></td>'
-        + '</tr>';
+
+      // 색상이 없는 예약 — 등록된 색상마다 줄
+      const m = modelsCache.find(x=> x.id === r.modelId)
+        || modelsCache.find(x=> String(x.systemModel||"") === String(r.systemModel||""));
+      const colors = (m ? (m.colors||[]) : []).map(c=> c.systemColor || c.manufacturerColor || "").filter(Boolean);
+      if(colors.length === 0){
+        h += '<tr data-rb-resv="'+r.id+'" data-rb-color="">'
+          + '<td>'+comboEsc(r.requestDate||"-")+'</td>'
+          + '<td>'+comboEsc(docModelLabel(r))+'</td>'
+          + '<td><span style="color:var(--danger);">색상 없음 — 모델에 색상을 먼저 등록해주세요</span></td>'
+          + '<td>'+comboEsc(r.carrier||"-")+'</td>'
+          + '<td class="ta-right">'+(Number(r.orderedQty)||0)+'</td>'
+          + '<td class="ta-right">'+(Number(r.allocatedQty)||0)+'</td>'
+          + '<td class="ta-right"><b>'+r._left+'</b></td>'
+          + '<td class="ta-right">'+priceCell+'</td><td></td></tr>';
+        return;
+      }
+      colors.forEach((cn, ci)=>{
+        h += '<tr data-rb-resv="'+r.id+'" data-rb-color="'+comboEsc(cn)+'"'
+          + (ci > 0 ? ' style="border-top:1px dotted var(--line);"' : '') + '>'
+          + '<td>'+(ci===0 ? comboEsc(r.requestDate||"-") : '')+'</td>'
+          + '<td>'+(ci===0 ? comboEsc(docModelLabel(r)) : '<span style="color:var(--gray);">〃</span>')+'</td>'
+          + '<td>'+comboEsc(cn)+'</td>'
+          + '<td>'+(ci===0 ? comboEsc(r.carrier||"-") : '')+'</td>'
+          + '<td class="ta-right">'+(ci===0 ? (Number(r.orderedQty)||0) : '')+'</td>'
+          + '<td class="ta-right">'+(ci===0 ? (Number(r.allocatedQty)||0) : '')+'</td>'
+          + '<td class="ta-right">'+(ci===0 ? '<b>'+r._left+'</b>' : '<span style="color:var(--gray);">공유</span>')+'</td>'
+          + '<td class="ta-right">'+(ci===0 ? priceCell : '')+'</td>'
+          + '<td class="ta-right"><input type="number" class="rb-pick-qty" min="0" max="'+r._left+'" placeholder="0" '
+          + 'style="width:70px;font-size:12px;padding:3px;border:1px solid var(--line);text-align:right;"></td>'
+          + '</tr>';
+      });
     });
     h += '</tbody></table></div>'
       + '<div style="margin-top:8px;">'
@@ -7224,10 +7263,16 @@
 
   let rbPickRows = [];
   window.fillRbPickAll = function(){
+    // 색상이 여러 줄인 예약은 첫 줄에만 남은 수량을 넣습니다. (합계가 넘지 않도록)
+    const done = new Set();
     document.querySelectorAll("#rb-pick-area tr[data-rb-resv]").forEach(tr=>{
-      const r = rbPickRows.find(x=> x.id === tr.dataset.rbResv);
+      const id = tr.dataset.rbResv;
+      const r = rbPickRows.find(x=> x.id === id);
       const q = tr.querySelector(".rb-pick-qty");
-      if(r && q) q.value = r._left;
+      if(!r || !q) return;
+      if(done.has(id)){ q.value = ""; return; }
+      q.value = r._left;
+      done.add(id);
     });
   };
   window.clearRbPickAll = function(){
@@ -7384,24 +7429,35 @@
     if(trs.length === 0){ el.innerHTML = '<span style="color:var(--danger);">거래처를 먼저 골라주세요.</span>'; return; }
 
     const ok = [], bad = [];
+    const sumByResv = {};      // 예약별 합계 — 남은 수량을 넘지 않는지 봅니다
     trs.forEach(tr=>{
       const r = rbPickRows.find(x=> x.id === tr.dataset.rbResv);
       if(!r) return;
       const qEl = tr.querySelector(".rb-pick-qty");
       const qty = Number(qEl ? qEl.value : 0) || 0;
       if(qty <= 0) return;                                  // 안 넣은 줄은 건너뜁니다
-      const label = docModelLabel(r);
-      if(qty > r._left){ bad.push({ label, reason:"남은 수량("+r._left+")보다 많습니다" }); return; }
+      const color = String(tr.dataset.rbColor||"").trim();
+      const label = docModelLabel(r) + (color ? " " + color : "");
+      if(!color){ bad.push({ label, reason:"색상이 없습니다 — 모델에 색상을 먼저 등록해주세요" }); return; }
       if(!r.salePrice){ bad.push({ label, reason:"판매가가 없습니다 — 예약을 먼저 수정해주세요" }); return; }
-      // 색상 결정
-      let color = r.systemColor || r.manufacturerColor || "";
-      if(!color){
-        const cs = tr.querySelector(".rb-pick-color");
-        color = cs ? cs.value.trim() : "";
-        if(!color){ bad.push({ label, reason:"색상을 골라주세요" }); return; }
-      }
-      ok.push({ resv:r, qty, color });
+      sumByResv[r.id] = (sumByResv[r.id]||0) + qty;
+      ok.push({ resv:r, qty, color, label });
     });
+    // 예약별 합계가 남은 수량을 넘으면 알려줍니다.
+    Object.keys(sumByResv).forEach(id=>{
+      const r = rbPickRows.find(x=> x.id === id);
+      if(r && sumByResv[id] > r._left){
+        bad.push({ label: docModelLabel(r), reason:"색상별 합계 " + sumByResv[id] + "대가 남은 수량(" + r._left + ")보다 많습니다" });
+      }
+    });
+    if(bad.length){
+      // 합계 초과가 있으면 그 예약의 줄을 모두 뺍니다.
+      const badIds = new Set(Object.keys(sumByResv).filter(id=>{
+        const r = rbPickRows.find(x=> x.id === id);
+        return r && sumByResv[id] > r._left;
+      }));
+      for(let i=ok.length-1; i>=0; i--){ if(badIds.has(ok[i].resv.id)) ok.splice(i,1); }
+    }
 
     if(ok.length === 0 && bad.length === 0){
       el.innerHTML = '<span style="color:var(--danger);">넘길 수량을 하나 이상 넣어주세요.</span>'; return;
@@ -14720,6 +14776,36 @@
     alert("모든 화면이 다음에 열 때 새로 읽습니다.");
   };
 
+  // 시작 화면 고르기 — 화면이 늘어나면 자동으로 목록에 나옵니다.
+  window.renderStartTabSelect = function(){
+    const sel = document.getElementById("start-tab-select");
+    if(!sel) return;
+    const cur = (currentSettings && currentSettings.startTab) || "";
+    const opts = [];
+    document.querySelectorAll(".tab-btn[data-tab]").forEach(btn=>{
+      const id = btn.dataset.tab;
+      if(!id) return;
+      const nm = (btn.querySelector(".tab-label-text") || btn).textContent.trim();
+      if(!nm) return;
+      opts.push({ id, nm });
+    });
+    sel.innerHTML = '<option value="">자동 (권한에 따라)</option>'
+      + opts.map(o=>'<option value="'+o.id+'"'+(o.id===cur?' selected':'')+'>'+comboEsc(o.nm)+'</option>').join("");
+  };
+
+  window.saveStartTab = async function(){
+    const v = document.getElementById("start-tab-select").value;
+    try{
+      await setDoc(doc(db,"settings","general"), { startTab: v }, { merge:true });
+      currentSettings.startTab = v;
+      const nm = v ? (document.querySelector('.tab-btn[data-tab="'+v+'"]')
+        ? (document.querySelector('.tab-btn[data-tab="'+v+'"]').querySelector(".tab-label-text")
+            || document.querySelector('.tab-btn[data-tab="'+v+'"]')).textContent.trim() : v) : "자동";
+      logAction("시작 화면 변경", nm);
+      flashMsg("start-tab-msg");
+    }catch(e){ alert("저장에 실패했습니다."); }
+  };
+
   window.renderCacheTargets = function(){
     const el = document.getElementById("cache-target-list");
     if(!el) return;
@@ -16556,6 +16642,7 @@
     if(tabId==="tab-b2b" && typeof loadLoanList === "function") loadLoanList();
     if(tabId==="tab-site" && typeof renderHiddenList === "function") renderHiddenList();
     if(tabId==="tab-site" && typeof renderCacheTargets === "function") renderCacheTargets();
+    if(tabId==="tab-site" && typeof renderStartTabSelect === "function") renderStartTabSelect();
 
     if(tabId==="tab-inv-carrier") loadCarrierList();
     if(tabId==="tab-inv-manufacturer") loadManufacturerList();
@@ -16717,6 +16804,7 @@
       if(showDashboard||showAnyWorkMenu) delete wg.dataset.permHidden; else wg.dataset.permHidden = "1";
 
       if(showSite){
+        renderStartTabSelect();
         renderCacheTargets();
         document.getElementById("site-name-input").value = currentSettings.siteName || DEFAULT_SITE_NAME;
         document.getElementById("pending-title-input").value = currentSettings.pendingTitle || DEFAULT_PENDING_TITLE;
@@ -16734,18 +16822,19 @@
         document.getElementById("issuer-account-input").value = currentSettings.issuerAccount || "";
       }
 
-      // 새로고침이면 보던 화면으로, 새로 로그인했으면 대시보드로 갑니다.
+      // 새로고침이면 보던 화면으로, 새로 로그인했으면 설정한 시작 화면으로 갑니다.
+      const canOpen = (id)=>{
+        if(!id) return false;
+        if(!document.getElementById(id)) return false;
+        const btn = document.querySelector('.tab-btn[data-tab="' + id + '"]');
+        return !(btn && btn.dataset.permHidden === "1");
+      };
       const back = lastTab();
-      let backOk = false;
-      if(back){
-        const backPanel = document.getElementById(back);
-        // 이 탭을 열 권한이 있는지 확인합니다. (버튼이 숨겨져 있으면 안 됨)
-        const btn = document.querySelector('.tab-btn[data-tab="' + back + '"]');
-        const hiddenByPerm = btn && btn.dataset.permHidden === "1";
-        backOk = !!backPanel && !hiddenByPerm;
-      }
-      if(backOk){
+      const start = (currentSettings && currentSettings.startTab) || "";
+      if(canOpen(back)){
         switchTab(back);
+      }else if(canOpen(start)){
+        switchTab(start);
       }else if(showDashboard) switchTab("tab-dashboard");
       else if(showInvWork) switchTab("tab-inv-work");
       else if(showInvAdmin) openInvAdminSection();
