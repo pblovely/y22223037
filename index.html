@@ -305,7 +305,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-07-26 v248</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-07-26 v251</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -655,14 +655,14 @@
       <div class="card" style="max-width:1400px;">
         <h3 style="margin:0 0 6px 0;">단말 이력 조회 <span class="info-tip" title="단말기 한 대가 지나온 모든 기록을 봅니다. 입고·위치이동·판매·개통·개통취소·반품·금액변경이 시간순으로 쌓입니다.">ⓘ</span></h3>
         <p class="desc" style="margin-top:0;">일련번호를 넣으면 그 단말기의 모든 기록이 시간순으로 나옵니다. 재고 목록에서 <b>일련번호를 눌러도</b> 같은 화면이 열립니다.<br>
-          <b>다른 모델에 같은 일련번호가 있을 수 있어</b> 전산모델명을 함께 넣으시면 정확히 찾습니다.</p>
+          <b>일련번호만 넣으면 됩니다.</b> 뒤의 전산모델명 칸은 <b>비워두셔도 됩니다</b> — 같은 일련번호가 다른 모델에도 있을 때만 구분용으로 넣으세요.</p>
         <div style="display:flex;gap:0;flex-wrap:wrap;align-items:center;margin-bottom:10px;">
           <select id="ih-field" style="height:28px;border:1px solid var(--line);padding:0 6px;font-size:12.5px;box-sizing:border-box;">
             <option value="serialNumber">일련번호</option>
             <option value="all">전체 기록</option>
           </select>
-          <input type="text" id="ih-model" placeholder="전산모델명 (선택)" style="width:170px;height:28px;border:1px solid var(--line);padding:0 8px;font-size:12.5px;margin-left:-1px;box-sizing:border-box;">
           <input type="text" id="ih-serial" placeholder="일련번호" style="width:150px;height:28px;border:1px solid var(--line);padding:0 8px;font-size:12.5px;margin-left:-1px;box-sizing:border-box;">
+          <input type="text" id="ih-model" placeholder="전산모델명 (선택)" style="width:190px;height:28px;border:1px solid var(--line);padding:0 8px;font-size:12.5px;margin-left:-1px;box-sizing:border-box;" title="같은 일련번호가 다른 모델에도 있을 때 구분하기 위한 칸입니다. 보통은 비워두셔도 됩니다.">
           <input type="text" id="ih-from" placeholder="시작일 20260701" maxlength="8" style="width:130px;height:28px;border:1px solid var(--line);padding:0 8px;font-size:12.5px;margin-left:-1px;box-sizing:border-box;">
           <input type="text" id="ih-to" placeholder="종료일 20260731" maxlength="8" style="width:130px;height:28px;border:1px solid var(--line);padding:0 8px;font-size:12.5px;margin-left:-1px;box-sizing:border-box;">
           <select id="ih-type" style="height:28px;border:1px solid var(--line);padding:0 6px;font-size:12.5px;margin-left:-1px;box-sizing:border-box;"><option value="">전체 종류</option></select>
@@ -946,6 +946,12 @@
 
       <div class="card">
         <h3>자동 정리 설정 <span class="info-tip" title="화면을 열 때 어긋난 숫자를 알아서 맞춥니다. 켜두면 버튼을 누르지 않아도 되고, 끄면 필요할 때 버튼으로 하실 수 있습니다.">ⓘ</span></h3>
+        <div style="border:1px solid var(--danger);background:#fdecea;padding:9px 11px;margin-bottom:8px;font-size:12.5px;line-height:1.8;">
+          <b style="color:var(--danger);">자동 정리는 전면 중지되어 있습니다.</b><br>
+          아래를 체크하고 저장해도 <b>프로그램이 스스로 데이터를 바꾸지 않습니다.</b>
+          각 화면에 <b>「정리」 버튼</b>이 나타나므로, 확인하신 뒤 직접 누르셔야 반영됩니다.<br>
+          바꾼 내용은 모두 이력에 <b>[자동 정리]</b> 로 남습니다.
+        </div>
         <p class="desc">체크한 항목은 <b>화면을 열 때 알아서 맞춰집니다.</b> 끄면 그 화면에 정리 버튼이 나타나서 직접 누르시면 됩니다.<br>
           숫자만 맞추는 것은 켜두시는 게 편하고, <span style="color:var(--danger);">금액이 바뀌는 항목</span>은 확인하고 켜세요.</p>
         <div id="autofix-list" style="display:flex;flex-wrap:wrap;gap:10px 20px;font-size:12.5px;margin-bottom:10px;"></div>
@@ -2442,6 +2448,12 @@
   let currentViewSettings = DEFAULT_VIEW_SETTINGS.slice();
   let modelsCache = [];
 
+  // 자동 정리(프로그램이 스스로 고친 것)를 이력에 남깁니다.
+  // 사람이 한 것과 구별되도록 앞에 [자동 정리] 를 붙입니다.
+  // 값을 실제로 바꾼 경우에만 남기므로, 화면을 열 때마다 쌓이지 않습니다.
+  async function logAutoFix(label, detail){
+    try{ await logAction("[자동 정리] " + label, detail); }catch(e){}
+  }
   async function logAction(action, detail){
     try{
       await addDoc(collection(db, "activityLogs"), {
@@ -3549,7 +3561,8 @@
   function loadManufacturerList(){
     (async ()=>{
       const snap = await getDocs(collection(db,"manufacturers"));
-      if(snap.empty){ await addDoc(collection(db,"manufacturers"), { name:"삼성전자" }); }
+      // 예전에는 목록이 비면 "삼성전자"를 자동으로 만들어 넣었습니다.
+      // 묻지 않고 데이터를 만드는 것이라 없앴습니다. 필요하면 아래 입력칸에서 직접 추가해주세요.
       renderEditableList({
         collectionName:"manufacturers", listElId:"manufacturer-list", label:"제조사",
         reload: loadManufacturerList,
@@ -6915,6 +6928,8 @@
         if(!ledByBatch[e.fromOrderBatchId]) ledByBatch[e.fromOrderBatchId] = [];
         ledByBatch[e.fromOrderBatchId].push(e);
       });
+      let afFixed = 0, afDeleted = 0;
+      const afDetail = [];
       for(const bd of batchSnap.docs){
         const b = bd.data();
         const isCredit = b.paymentMethod === "b2b_credit" && b.status !== "취소";
@@ -6930,13 +6945,25 @@
         }, 0) : 0;
         if(sum !== want || recs.length > 1){
           await replaceB2BOrderUse(bd.id, want, b.depositPaidDate || b.orderDate || todayStr(), b.source || "-");
+          afFixed++;
+          if(afDetail.length < 6){
+            afDetail.push((b.source||"-") + " " + sum.toLocaleString() + "→" + want.toLocaleString());
+          }
         }
       }
       // 주문이 없어진 기록도 지웁니다.
       const aliveB = new Set(batchSnap.docs.map(x=>x.id));
       for(const bid of Object.keys(ledByBatch)){
         if(aliveB.has(bid)) continue;
-        for(const r of ledByBatch[bid]){ try{ await deleteDoc(doc(db,"b2bLedger", r.id)); }catch(e){} }
+        for(const r of ledByBatch[bid]){ try{ await deleteDoc(doc(db,"b2bLedger", r.id)); afDeleted++; }catch(e){} }
+      }
+      // 프로그램이 스스로 바꾼 내용을 이력에 남깁니다. (기록 없이 금액이 바뀌지 않게)
+      if(afFixed > 0 || afDeleted > 0){
+        logAutoFix("여신 주문사용",
+          (afFixed ? "금액 맞춤 " + afFixed + "건" : "")
+          + (afFixed && afDeleted ? " / " : "")
+          + (afDeleted ? "없어진 주문 기록 삭제 " + afDeleted + "건" : "")
+          + (afDetail.length ? " — " + afDetail.join(", ") + (afFixed > 6 ? " 외" : "") : ""));
       }
     }catch(e){}
 
@@ -14028,6 +14055,16 @@
         wrongList.slice(x, x+300).forEach(w=> bt.update(doc(db,"reservations", w.id), { allocatedQty: w.real }));
         await bt.commit();
       }
+      // 무엇을 몇 개에서 몇 개로 바꿨는지 남깁니다. (배정이 0이 되는 일이 기록 없이 일어나지 않게)
+      if(wrongList.length > 0){
+        const detail = wrongList.length + "건 — " + wrongList.slice(0,6).map(w=>{
+          const d0 = snap.docs.find(x=> x.id === w.id);
+          const before = d0 ? (Number(d0.data().allocatedQty)||0) : "?";
+          const who = d0 ? (d0.data().destination || "-") : "-";
+          return who + " " + before + "→" + w.real;
+        }).join(", ") + (wrongList.length>6 ? " 외" : "");
+        logAutoFix("예약 배정 수량", detail);
+      }
     }catch(e){}
 
     if(resvListFilter === "sale") rows = rows.filter(r=> r.kind !== "buy");
@@ -14300,6 +14337,9 @@
               status: real >= q ? "매칭완료" : (real > 0 ? "부분매칭" : "대기중") });
           }
         });
+        if(fix.length > 0){
+          logAutoFix("판매 매칭 현황", fix.length + "건 — " + fix.slice(0,6).map(f=> f.real + "대/" + f.status).join(", ") + (fix.length>6 ? " 외" : ""));
+        }
         for(let i=0; i<fix.length; i+=300){
           const bt = writeBatch(db);
           fix.slice(i, i+300).forEach(f=> bt.update(doc(db,"saleRequests", f.id),
@@ -16403,9 +16443,18 @@
       ex:"출고가가 없는 예약에 2,830,300을 채우고, 판매가가 2,773,694면 할인을 2.00%로 계산합니다.",
       risk:"<b>주의 — 금액이 바뀝니다.</b> 판매가와 수량은 건드리지 않습니다.", read:"예약 1회" }
   ];
-  const AUTOFIX_DEFAULT = { resvAlloc:true, saleMatch:true, creditUse:true, modelSync:true, orderPrice:false, resvPrice:false };
+  // 기본값은 전부 꺼짐입니다.
+  // 사람이 사이트 설정에서 직접 켠 항목만 동작합니다. (시키지 않은 변경이 일어나지 않게)
+  const AUTOFIX_DEFAULT = { resvAlloc:false, saleMatch:false, creditUse:false, modelSync:false, orderPrice:false, resvPrice:false };
 
+  // ★ 자동 정리 전면 중지 ★
+  //  사용자 요청: 프로그램이 스스로 판단해서 데이터를 바꾸지 않습니다.
+  //  설정에 "켜짐"으로 저장돼 있어도 항상 꺼진 것으로 봅니다.
+  //  그래서 각 화면은 "맞출 것이 있습니다 + [정리] 버튼" 안내만 보여주고,
+  //  사람이 버튼을 눌러 확인해야 비로소 바뀝니다.
+  const AUTOFIX_FORCE_OFF = true;
   function autoFixOn(key){
+    if(AUTOFIX_FORCE_OFF) return false;
     const m = (currentSettings && currentSettings.autoFix) || null;
     if(!m) return AUTOFIX_DEFAULT[key] === true;
     return m[key] === true;
