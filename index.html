@@ -291,7 +291,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-07-25 v199</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-07-25 v205</span>
       <span id="topbar-username">-</span>
       <button onclick="openPersonalSettingsModal()">개인설정</button>
       <button onclick="handleLogout()">로그아웃</button>
@@ -538,6 +538,11 @@
           <button class="btn small" id="resvf-all" style="width:auto;border:1px solid var(--navy);" onclick="setResvListFilter('all')">전체</button>
           <button class="btn small secondary" id="resvf-sale" style="width:auto;border:1px solid var(--navy);margin-left:-1px;" onclick="setResvListFilter('sale')">판매</button>
           <button class="btn small secondary" id="resvf-buy" style="width:auto;border:1px solid var(--navy);margin-left:-1px;" onclick="setResvListFilter('buy')">구매</button>
+          <span style="width:10px;"></span>
+          <button class="btn small" id="resvs-all" style="width:auto;border:1px solid var(--navy);" onclick="setResvStateFilter('all')">전체</button>
+          <button class="btn small secondary" id="resvs-open" style="width:auto;border:1px solid var(--navy);margin-left:-1px;" onclick="setResvStateFilter('open')">진행중</button>
+          <button class="btn small secondary" id="resvs-part" style="width:auto;border:1px solid var(--navy);margin-left:-1px;" onclick="setResvStateFilter('part')">일부배정</button>
+          <button class="btn small secondary" id="resvs-done" style="width:auto;border:1px solid var(--navy);margin-left:-1px;" onclick="setResvStateFilter('done')">배정완료</button>
         </div>
         <div id="quotation-list-area" style="display:none;margin-bottom:10px;"></div>
         <div id="resv-model-notice" style="display:none;font-size:12.5px;padding:9px 11px;margin-bottom:8px;border:1px solid var(--danger);background:#fdecea;line-height:1.7;"></div>
@@ -1175,6 +1180,34 @@
 
     <!-- ===== 관리자: 정산 설정 (준비중) ===== -->
     <div id="tab-settlement" class="tab-panel">
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+          <h3 style="margin:0;">통장 입금 등록 <span class="info-tip" title="통장에 들어온 입금을 먼저 등록해두면, 담당자가 배정할 때 목록에서 골라 쓸 수 있습니다. 쓴 만큼 잔액이 줄어듭니다.">ⓘ</span></h3>
+          <button class="btn small" style="width:auto;" onclick="openDepositEntry()">+ 입금 등록</button>
+        </div>
+        <p class="desc" style="margin-top:0;">받은 입금을 먼저 등록해두면 배정할 때 <b>목록에서 골라</b> 쓸 수 있습니다. 등록하지 않아도 배정 화면에서 직접 입력할 수 있습니다.</p>
+        <div id="deposit-entry-list"></div>
+      </div>
+
+      <!-- 통장 입금 등록 팝업 -->
+      <div id="dep-modal-overlay" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.55);z-index:1030;align-items:center;justify-content:center;">
+        <div style="background:#fff;border:2px solid var(--navy);max-width:520px;width:95%;max-height:92vh;overflow-y:auto;padding:22px;position:relative;">
+          <button onclick="closeDepositEntry()" style="position:absolute;top:12px;right:12px;background:none;border:1px solid var(--navy);width:26px;height:26px;cursor:pointer;font-size:13px;">✕</button>
+          <h3 style="margin-top:0;margin-bottom:4px;">입금 등록</h3>
+          <p class="desc">통장에 들어온 입금을 그대로 적어주세요.</p>
+          <div class="stack-form">
+            <div class="stack-row"><label>입금일</label><input type="text" id="dep-date" maxlength="8" inputmode="numeric" placeholder="예: 20260722"></div>
+            <div class="stack-row"><label>금액</label><input type="number" id="dep-amount" placeholder="예: 245218050"></div>
+            <div class="stack-row"><label>입금자명</label><input type="text" id="dep-payer" placeholder="통장에 찍힌 이름"></div>
+            <div class="stack-row"><label>거래처 <span class="info-tip" title="어느 거래처의 입금인지 알면 골라주세요. 몰라도 비워두면 담당자가 배정할 때 쓸 수 있습니다.">ⓘ</span></label><select id="dep-company"><option value="">모름 (나중에 연결)</option></select></div>
+            <div class="stack-row"><label>메모</label><input type="text" id="dep-memo" placeholder="선택"></div>
+          </div>
+          <button class="btn small" style="width:auto;margin-top:12px;" onclick="submitDepositEntry()">저장</button>
+          <button class="btn small secondary" style="width:auto;" onclick="closeDepositEntry()">닫기</button>
+          <div id="dep-msg" style="display:none;font-size:12.5px;margin-top:10px;padding:8px 10px;border-left:3px solid var(--navy);background:#f2f2f2;line-height:1.6;"></div>
+        </div>
+      </div>
+
       <div class="card">
         <h3>정산 — 입출금 현황</h3>
         <p class="desc">구매(입고) 쪽 입금, 판매 쪽 입금, 실제 완료된 매입·매출을 한 화면에서 확인합니다.</p>
@@ -1897,6 +1930,9 @@
               <option value="no">입금대기 — 나중에 입금요청으로 묶기</option>
               <option value="yes">입금완료 — 이미 받았음</option>
             </select>
+          </div>
+          <div class="stack-row" id="rb-deppick-row" style="display:none;"><label>등록된 입금 <span class="info-tip" title="정산 관리에서 미리 등록해둔 입금을 고르면 금액·날짜·입금자명이 자동으로 채워집니다. 쓴 만큼 잔액이 줄어듭니다.">ⓘ</span></label>
+            <select id="rb-deppick" onchange="onRbDepPick()"><option value="">직접 입력</option></select>
           </div>
           <div class="stack-row" id="rb-paiddate-row" style="display:none;"><label>입금일</label><input type="text" id="rb-paiddate" maxlength="8" inputmode="numeric" placeholder="예: 20260724"></div>
           <div class="stack-row" id="rb-paidamt-row" style="display:none;"><label>받은 총금액 <span class="info-tip" title="실제로 받은 전체 금액을 적어주세요. 만들어지는 판매요청 금액과 비교해서 남거나 모자란 금액을 알려드립니다.">ⓘ</span></label><input type="number" id="rb-paidamt" placeholder="예: 100000000"></div>
@@ -7117,6 +7153,7 @@
     document.getElementById("rb-paiddate").value = "";
     document.getElementById("rb-paidamt").value = "";
     document.getElementById("rb-payer").value = "";
+    const dp = document.getElementById("rb-deppick"); if(dp) dp.value = "";
     onRbPaidChange();
     setRbMode("serial");
     document.getElementById("resv-bulk-modal-overlay").style.display = "flex";
@@ -7164,6 +7201,7 @@
 
   window.onRbDestChange = function(){
     if(rbMode === "pick") loadRbPickList();
+    if(document.getElementById("rb-paid").value === "yes") onRbPaidChange();
   };
 
   // 예약중인 모델·색상을 표로 보여주고 수량만 받습니다.
@@ -7281,14 +7319,35 @@
     document.querySelectorAll("#rb-pick-area .rb-pick-qty").forEach(q=> q.value = "");
   };
 
-  window.onRbPaidChange = function(){
+  window.onRbPaidChange = async function(){
     const on = document.getElementById("rb-paid").value === "yes";
-    ["rb-paiddate-row","rb-paidamt-row","rb-payer-row"].forEach(id=>{
+    ["rb-deppick-row","rb-paiddate-row","rb-paidamt-row","rb-payer-row"].forEach(id=>{
       const el = document.getElementById(id); if(el) el.style.display = on ? "" : "none";
     });
-    if(on && !document.getElementById("rb-paiddate").value){
+    if(!on) return;
+    if(!document.getElementById("rb-paiddate").value){
       document.getElementById("rb-paiddate").value = document.getElementById("rb-date").value || todayStr();
     }
+    // 등록된 입금 목록을 채웁니다. (거래처가 정해져 있으면 그 거래처 것 우선)
+    const sel = document.getElementById("rb-deppick");
+    const dest = document.getElementById("rb-dest").value;
+    try{
+      const rows = await fetchOpenDeposits("");
+      const mine = dest ? rows.filter(x=> !x.company || String(x.company).trim() === dest) : rows;
+      sel.innerHTML = '<option value="">직접 입력</option>'
+        + mine.map(x=>'<option value="'+x.id+'" data-left="'+x.left+'" data-date="'+comboEsc(x.date||"")+'" data-payer="'+comboEsc(x.payer||"")+'">'
+            + comboEsc(x.date||"-") + ' · ' + comboEsc(x.payer||"-") + ' · 잔액 ' + x.left.toLocaleString() + '</option>').join("");
+    }catch(e){ sel.innerHTML = '<option value="">직접 입력</option>'; }
+  };
+
+  // 등록된 입금을 고르면 금액·날짜·입금자명을 채웁니다.
+  window.onRbDepPick = function(){
+    const sel = document.getElementById("rb-deppick");
+    const op = sel.options[sel.selectedIndex];
+    if(!sel.value){ return; }
+    document.getElementById("rb-paidamt").value = op.dataset.left || "";
+    document.getElementById("rb-paiddate").value = op.dataset.date || "";
+    document.getElementById("rb-payer").value = op.dataset.payer || "";
   };
 
   window.analyzeResvBulk = async function(){
@@ -7665,6 +7724,14 @@
       el.innerHTML = '<span style="color:var(--danger);">실패했습니다.<br>' + comboEsc((e&&e.message)?e.message:String(e)) + '</span>';
       return;
     }
+    // 등록된 입금을 골랐으면 쓴 만큼 차감합니다.
+    try{
+      const dp = document.getElementById("rb-deppick");
+      if(dp && dp.value && prePaidSel !== false){
+        const used = Math.min(Number(dp.options[dp.selectedIndex].dataset.left)||0, planTot);
+        await useDeposit(dp.value, used, document.getElementById("rb-dest").value || "");
+      }
+    }catch(e){}
     logAction("예약 판매요청 생성", made + "대 / " + rbPlan.length + "건");
     alert("판매요청을 만들었습니다. (" + made + "대)\n재고가 들어오면 도착 등록·매칭으로 채워주세요.");
     rbPlan = [];
@@ -7788,6 +7855,14 @@
       el.innerHTML = '<span style="color:var(--danger);">처리에 실패했습니다.<br>' + comboEsc((e&&e.message)?e.message:String(e)) + '</span>';
       return;
     }
+    // 등록된 입금을 골랐으면 쓴 만큼 차감합니다.
+    try{
+      const dp = document.getElementById("rb-deppick");
+      if(dp && dp.value && prePaid !== false){
+        const used = Math.min(Number(dp.options[dp.selectedIndex].dataset.left)||0, planTotal);
+        await useDeposit(dp.value, used, document.getElementById("rb-dest").value || "");
+      }
+    }catch(e){}
     logAction("예약 일련번호 일괄 배정", done + "대 / 예약 " + Object.keys(groups).length + "건");
     clearDashCache(); clearCache("inventory");
     alert(done + "대를 배정하고 판매처리했습니다.");
@@ -9051,6 +9126,160 @@
     loadSettlementTab();
   };
 
+  // ================= 통장 입금 등록 =================
+  // 정산팀이 받은 입금을 먼저 등록해두면, 배정할 때 목록에서 골라 씁니다.
+  window.closeDepositEntry = function(){ document.getElementById("dep-modal-overlay").style.display = "none"; };
+
+  window.openDepositEntry = async function(){
+    document.getElementById("dep-date").value = todayStr();
+    document.getElementById("dep-amount").value = "";
+    document.getElementById("dep-payer").value = "";
+    document.getElementById("dep-memo").value = "";
+    document.getElementById("dep-msg").style.display = "none";
+    const sel = document.getElementById("dep-company");
+    if(sel.options.length <= 1){
+      sel.innerHTML = '<option value="">모름 (나중에 연결)</option>'
+        + (await fetchNamesList("outboundDestinations")).map(n=>'<option value="'+comboEsc(n)+'">'+comboEsc(n)+'</option>').join("");
+    }
+    sel.value = "";
+    document.getElementById("dep-modal-overlay").style.display = "flex";
+  };
+
+  window.submitDepositEntry = async function(){
+    const msg = (t, err)=> showModelMsg("dep-msg", t, err);
+    const date = (document.getElementById("dep-date").value||"").replace(/\D/g,"");
+    const amount = Number(document.getElementById("dep-amount").value)||0;
+    const payer = document.getElementById("dep-payer").value.trim();
+    const company = document.getElementById("dep-company").value;
+    const memo = document.getElementById("dep-memo").value.trim();
+
+    if(date.length !== 8){ msg("입금일을 8자리로 입력해주세요. (예: 20260722)", true); return; }
+    if(amount <= 0){ msg("금액을 입력해주세요.", true); return; }
+
+    try{
+      msg("저장 중...", false);
+      await addDoc(collection(db,"bankDeposits"), {
+        date, amount, payer, company, memo,
+        usedAmount: 0, uses: [],
+        createdBy: currentUser.name, createdByUsername: currentUser.username, createdAt: serverTimestamp()
+      });
+    }catch(e){
+      msg("<b>저장에 실패했습니다.</b><br>" + comboEsc((e && e.message) ? e.message : String(e)), true); return;
+    }
+    logAction("통장 입금 등록", amount.toLocaleString() + " / " + date + (payer ? " / " + payer : ""));
+    msg("등록했습니다.", false);
+    loadDepositEntryList();
+    setTimeout(closeDepositEntry, 700);
+  };
+
+  window.loadDepositEntryList = async function(){
+    const el = document.getElementById("deposit-entry-list");
+    if(!el) return;
+    el.innerHTML = '<div class="list-empty">불러오는 중...</div>';
+    const snap = await getDocs(query(collection(db,"bankDeposits"), orderBy("date","desc")));
+    if(snap.empty){
+      el.innerHTML = '<div class="list-empty">등록된 입금이 없습니다. <b>+ 입금 등록</b>으로 추가해주세요.</div>';
+      return;
+    }
+    let totAmt = 0, totUsed = 0;
+    let h = '<div style="overflow-x:auto;"><table class="data-table" style="min-width:900px;"><thead><tr>'
+      + '<th>입금일</th><th>입금자명</th><th>거래처</th>'
+      + '<th class="ta-right">금액</th><th class="ta-right">사용</th><th class="ta-right">잔액</th>'
+      + '<th>상태</th><th class="ta-left">메모</th><th class="ta-right">관리</th></tr></thead><tbody>';
+    snap.forEach(d=>{
+      const x = { id:d.id, ...d.data() };
+      const amt = Number(x.amount)||0, used = Number(x.usedAmount)||0;
+      const left = amt - used;
+      totAmt += amt; totUsed += used;
+      const state = left <= 0 ? '<span style="color:#2e7d32;font-weight:700;">사용완료</span>'
+        : (used > 0 ? '<span style="color:#b8860b;font-weight:700;">일부사용</span>'
+                    : '<span style="color:var(--navy);font-weight:700;">미사용</span>');
+      h += '<tr'+(left<=0?' style="color:var(--gray);"':'')+'>'
+        + '<td>'+comboEsc(x.date||"-")+'</td>'
+        + '<td>'+comboEsc(x.payer||"-")+'</td>'
+        + '<td>'+comboEsc(x.company||"-")+'</td>'
+        + '<td class="ta-right">'+amt.toLocaleString()+'</td>'
+        + '<td class="ta-right">'+used.toLocaleString()+'</td>'
+        + '<td class="ta-right"><b>'+left.toLocaleString()+'</b></td>'
+        + '<td>'+state+'</td>'
+        + '<td class="ta-left" style="font-size:11px;color:var(--gray);">'+comboEsc(x.memo||"")+'</td>'
+        + '<td class="ta-right" style="white-space:nowrap;">'
+        + ((x.uses||[]).length ? '<button class="btn small secondary" style="width:auto;" data-dep-use="'+x.id+'">사용 내역</button>' : '')
+        + (used === 0 ? '<button class="btn small danger" style="width:auto;" data-dep-del="'+x.id+'">삭제</button>' : '')
+        + '</td></tr>';
+    });
+    h += '<tr style="background:#fafafa;font-weight:700;border-top:2px solid var(--navy);">'
+      + '<td colspan="3">합계</td>'
+      + '<td class="ta-right">'+totAmt.toLocaleString()+'</td>'
+      + '<td class="ta-right">'+totUsed.toLocaleString()+'</td>'
+      + '<td class="ta-right">'+(totAmt-totUsed).toLocaleString()+'</td>'
+      + '<td colspan="3"></td></tr>';
+    h += '</tbody></table></div><div id="dep-use-area" style="margin-top:10px;"></div>';
+    el.innerHTML = h;
+    el.querySelectorAll("[data-dep-del]").forEach(b=> b.onclick = ()=> deleteDepositEntry(b.dataset.depDel));
+    el.querySelectorAll("[data-dep-use]").forEach(b=> b.onclick = ()=> showDepositUses(b.dataset.depUse));
+  };
+
+  window.showDepositUses = async function(id){
+    const area = document.getElementById("dep-use-area");
+    const snap = await getDoc(doc(db,"bankDeposits", id));
+    if(!snap.exists()) return;
+    const x = snap.data();
+    const uses = x.uses || [];
+    area.innerHTML = '<div style="border:1px solid var(--navy);padding:10px 12px;">'
+      + '<b>' + comboEsc(x.date||"-") + ' · ' + (Number(x.amount)||0).toLocaleString()
+      + (x.payer ? ' · ' + comboEsc(x.payer) : '') + '</b>'
+      + (uses.length
+        ? '<table class="data-table" style="margin-top:8px;"><thead><tr><th>일자</th><th>거래처</th><th class="ta-right">사용액</th><th>처리자</th></tr></thead><tbody>'
+          + uses.map(u=>'<tr><td>'+comboEsc(u.date||"-")+'</td><td>'+comboEsc(u.destination||"-")+'</td>'
+            + '<td class="ta-right">'+(Number(u.amount)||0).toLocaleString()+'</td><td>'+comboEsc(u.by||"-")+'</td></tr>').join("")
+          + '</tbody></table>'
+        : '<div style="margin-top:6px;color:var(--gray);font-size:12px;">사용 내역이 없습니다.</div>')
+      + '<button class="btn small secondary" style="width:auto;margin-top:8px;" data-dep-close="1">닫기</button></div>';
+    const cb = area.querySelector("[data-dep-close]");
+    if(cb) cb.onclick = ()=> { area.innerHTML = ""; };
+  };
+
+  window.deleteDepositEntry = async function(id){
+    const snap = await getDoc(doc(db,"bankDeposits", id));
+    if(!snap.exists()) return;
+    const x = snap.data();
+    if((Number(x.usedAmount)||0) > 0){ alert("이미 사용한 입금은 지울 수 없습니다."); return; }
+    if(!confirm("이 입금 기록을 지우시겠습니까?\n\n  " + (Number(x.amount)||0).toLocaleString() + " · " + (x.date||"-"))) return;
+    await deleteDoc(doc(db,"bankDeposits", id));
+    logAction("통장 입금 삭제", (Number(x.amount)||0).toLocaleString() + " / " + (x.date||"-"));
+    loadDepositEntryList();
+  };
+
+  // 배정 화면에서 쓸 — 잔액이 남은 입금 목록
+  window.fetchOpenDeposits = async function(company){
+    const snap = await getDocs(query(collection(db,"bankDeposits"), orderBy("date","desc")));
+    const rows = [];
+    snap.forEach(d=>{
+      const x = { id:d.id, ...d.data() };
+      const left = (Number(x.amount)||0) - (Number(x.usedAmount)||0);
+      if(left <= 0) return;
+      if(company && x.company && String(x.company).trim() !== company) return;
+      rows.push({ ...x, left });
+    });
+    return rows;
+  };
+
+  // 입금을 쓴 만큼 차감합니다.
+  window.useDeposit = async function(id, amount, destination){
+    if(!id || !(amount > 0)) return;
+    try{
+      const snap = await getDoc(doc(db,"bankDeposits", id));
+      if(!snap.exists()) return;
+      const x = snap.data();
+      await updateDoc(doc(db,"bankDeposits", id), {
+        usedAmount: (Number(x.usedAmount)||0) + Number(amount),
+        uses: [...(x.uses||[]), { amount: Number(amount), date: todayStr(), destination: destination||"", by: currentUser.name }],
+        ...(x.company ? {} : { company: destination||"" })
+      });
+    }catch(e){ console.error("입금 차감 실패", e); }
+  };
+
   // 입금·이체 기록 한 줄을 승인 상태와 함께 보여줍니다.
   function recordLine(x, i, kind, reqId){
     const amt = (Number(x.amount)||0).toLocaleString();
@@ -9596,6 +9825,15 @@
   let resvCarrier = "LG";       // 기본 LG
 
   let resvListFilter = "all";   // all | sale | buy
+  let resvStateFilter = "all";  // all | open(배정 없음) | part(일부) | done(완료)
+  window.setResvStateFilter = function(f){
+    resvStateFilter = f;
+    ["all","open","part","done"].forEach(k=>{
+      const b = document.getElementById("resvs-"+k);
+      if(b) b.className = "btn small" + (k===f ? "" : " secondary");
+    });
+    loadReservationTable();
+  };
   // 예약 목록에 선입금을 표시할 때 씁니다.
   function prepaidBadge(r){
     const pa = Number(r.prepaidAmount)||0;
@@ -9937,19 +10175,29 @@
     const snap = await getDocs(query(collection(db,"saleRequests"), where("fromReservationId","==",reservationId)));
     if(snap.empty){ el.innerHTML = '<div style="font-size:12px;color:var(--gray);">아직 배정한 내역이 없습니다.</div>'; return; }
 
-    let html = '<div style="font-size:11px;font-weight:700;color:var(--gray);margin-bottom:4px;">배정 내역 (판매요청)</div>'
-      + '<div style="border:1px solid var(--line);">';
     const rows = [];
     snap.forEach(d=> rows.push({ id:d.id, ...d.data() }));
     rows.sort((a,b)=> String(b.requestDate||"").localeCompare(String(a.requestDate||"")));
+    const live = rows.filter(x=> x.status !== "취소");
+    const alcQty = live.reduce((n,x)=> n + (Number(x.quantity)||0), 0);
+    const alcAmt = live.reduce((n,x)=> n + (Number(x.salePrice)||0) * (Number(x.quantity)||0), 0);
+    const paidSum = live.filter(x=>x.depositReceived).reduce((n,x)=> n + (Number(x.salePrice)||0) * (Number(x.quantity)||0), 0);
+    let html = '<div style="font-size:11px;font-weight:700;color:var(--gray);margin-bottom:4px;">배정 내역 (판매요청) — '
+      + '배정 ' + alcQty + '대 · 금액 ' + alcAmt.toLocaleString()
+      + (paidSum ? ' · <span style="color:#2e7d32;">입금완료 ' + paidSum.toLocaleString() + '</span>' : '')
+      + '</div>'
+      + '<div style="border:1px solid var(--line);">';
     rows.forEach(sr=>{
       const cancelled = sr.status === "취소";
       html += '<div style="display:flex;align-items:center;gap:8px;padding:6px 9px;border-top:1px solid var(--line);font-size:12px;'
         + (cancelled ? 'color:var(--gray);background:#fafafa;' : '') + '">'
         + '<span style="flex:1;">' + comboEsc(sr.requestDate||"-") + ' · '
+        + comboEsc(sr.systemColor || sr.manufacturerColor || "색상 없음") + ' · '
         + '<b>' + (Number(sr.quantity)||0) + '개</b> · 판매가 ' + (Number(sr.salePrice)||0).toLocaleString()
         + ' · 매칭 ' + (Number(sr.fulfilledCount)||0) + '/' + (Number(sr.quantity)||0)
-        + ' · ' + comboEsc(sr.status||"-") + '</span>'
+        + ' · ' + comboEsc(sr.status||"-")
+        + (sr.depositReceived ? ' · <span style="color:#2e7d32;font-weight:700;">입금완료</span>' : '')
+        + '</span>'
         + (cancelled ? '<span style="font-size:11px;">취소됨</span>'
                      : '<button class="btn small danger" style="width:auto;" data-cancel-alloc="'+sr.id+'">배정 취소</button>')
         + '</div>';
@@ -12774,6 +13022,17 @@
     let rows = []; snap.forEach(d=> rows.push({ id:d.id, ...d.data() }));
     if(resvListFilter === "sale") rows = rows.filter(r=> r.kind !== "buy");
     if(resvListFilter === "buy")  rows = rows.filter(r=> r.kind === "buy");
+    // 배정 진행 상태로도 걸러줍니다.
+    if(resvStateFilter !== "all"){
+      rows = rows.filter(r=>{
+        const ord = Number(r.orderedQty)||Number(r.quantity)||0;
+        const alc = Number(r.allocatedQty)||0;
+        if(resvStateFilter === "open") return alc === 0;
+        if(resvStateFilter === "part") return alc > 0 && alc < ord;
+        if(resvStateFilter === "done") return ord > 0 && alc >= ord;
+        return true;
+      });
+    }
 
     renderModelSyncNotice("resv-model-notice", "reservations");
 
@@ -12819,8 +13078,12 @@
         '<td>'+comboEsc(docModelLabel(r))+'</td>' +
         '<td>'+comboEsc(r.systemColor || r.manufacturerColor || "-")+'</td>' +
         '<td class="ta-right">'+ordered+'</td>' +
-        '<td class="ta-right"><span style="cursor:pointer;color:var(--navy);text-decoration:underline;" title="클릭하면 배정 창이 열립니다" data-resv-alloc="'+r.id+'">'+allocated+'</span></td>' +
-        '<td class="ta-right">'+(remain>0 ? remain : '<span style="color:#2e7d32;font-weight:700;">완료</span>')+'</td>' +
+        '<td class="ta-right"><span style="cursor:pointer;color:var(--navy);text-decoration:underline;font-weight:700;" title="클릭하면 배정 창이 열립니다. 배정 내역도 함께 볼 수 있습니다." data-resv-alloc="'+r.id+'">'+allocated+'</span></td>' +
+        '<td class="ta-right">'+(remain>0
+            ? (allocated>0
+                ? '<b>'+remain+'</b> <span style="color:#b8860b;font-size:10px;">일부</span>'
+                : remain)
+            : '<span style="color:#2e7d32;font-weight:700;">완료</span>')+'</td>' +
         '<td class="ta-right">'+fmt(r.listPrice)+'</td>' +
         '<td class="ta-right">'+fmt(sale)+'</td>' +
         '<td class="ta-right">'+(amount!=null ? amount.toLocaleString() : '<span style="color:var(--gray);">-</span>')+'</td>' +
@@ -12852,6 +13115,17 @@
     let rows = []; snap.forEach(d=> rows.push({ id:d.id, ...d.data() }));
     if(resvListFilter === "sale") rows = rows.filter(r=> r.kind !== "buy");
     if(resvListFilter === "buy")  rows = rows.filter(r=> r.kind === "buy");
+    // 배정 진행 상태로도 걸러줍니다.
+    if(resvStateFilter !== "all"){
+      rows = rows.filter(r=>{
+        const ord = Number(r.orderedQty)||Number(r.quantity)||0;
+        const alc = Number(r.allocatedQty)||0;
+        if(resvStateFilter === "open") return alc === 0;
+        if(resvStateFilter === "part") return alc > 0 && alc < ord;
+        if(resvStateFilter === "done") return ord > 0 && alc >= ord;
+        return true;
+      });
+    }
 
     // 모델(펫네임/모델명/용량) × 거래처 로 묶기
     const modelKeys = []; // 순서 유지
@@ -13547,6 +13821,7 @@
       statEl.parentElement.appendChild(wrap2);
     }
     await loadSaleDepositRequestList();
+    if(typeof loadDepositEntryList === "function") loadDepositEntryList();
   }
 
   // ---------- 삼성 B2B 여신 관리 ----------
