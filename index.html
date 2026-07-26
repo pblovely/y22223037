@@ -17404,8 +17404,16 @@
     { header:"비고2", key:"note2", type:"text" }
   ];
 
-  window.downloadBulkEditExcel = function(){
+  window.downloadBulkEditExcel = async function(){
     if(!hasPerm(currentUserPerms, "bulkEdit")){ alert("이 기능을 사용할 권한이 없습니다. 관리자에게 요청해주세요."); return; }
+    // 내려받기 직전에 목록을 다시 조회합니다.
+    // 이 버튼은 재고 등록 팝업 안에 있어서, 팝업을 열어도 목록은 자동으로 다시 조회되지 않습니다.
+    // 그대로 두면 정렬·조건을 바꾼 뒤 조회를 안 눌렀을 때 "마지막 조회 시점 순서"로 내려가
+    // 화면과 파일 순서가 어긋납니다. 여기서 한 번 다시 조회해 반드시 같게 만듭니다.
+    if(typeof loadInventoryList === "function"){
+      try{ await loadInventoryList(); }
+      catch(e){ alert("목록을 다시 조회하는 중 문제가 생겼습니다. 재고 목록에서 조회를 먼저 눌러주세요."); return; }
+    }
     if(!lastRenderedItems || lastRenderedItems.length===0){ alert("다운로드할 재고가 없습니다. 재고 목록을 먼저 조회해주세요."); return; }
     // 순번 = 화면 재고 목록의 # 번호와 같은 번호입니다. 눈으로 대조할 때 씁니다. (업로드 시 무시)
     const headers = ["순번", "확인", "일련번호", ...BULK_EDIT_DOWNLOAD_FIELDS.map(f=>f.header)];
@@ -17534,6 +17542,10 @@
 
     const previewRows = [];
     let matchedCount = 0, changedFieldsTotal = 0;
+    // 날짜 칸 — 엑셀이 날짜 서식으로 바꿔버려도 20260723 형태로 되돌립니다.
+    const DATE_KEYS = new Set(["orderDate","inDate","expectedSaleDate","outDate"]);
+    // 숫자로 읽을 수 없는 칸은 저장하지 않고 여기 모아 경고로 보여줍니다.
+    const badCells = [];
     rows.forEach(r=>{
       const serial = String(r["일련번호"]||"").trim();
       if(!serial) return;
@@ -17543,7 +17555,21 @@
         if(f.readonly) return;   // 참고용 칸(전산모델명·모델명·기가수·펫네임)은 반영하지 않습니다
         const raw = r[f.header];
         if(raw!==undefined && raw!==null && String(raw).trim()!==""){
-          const value = f.type==="number" ? Number(raw) : String(raw).trim();
+          let value;
+          if(f.type==="number"){
+            // 콤마·원·공백이 섞여 있어도 숫자로 읽습니다. (예: "2,830,300 원" → 2830300)
+            const cleaned = String(raw).replace(/[^0-9.\-]/g, "");
+            value = Number(cleaned);
+            // 숫자로 읽을 수 없으면 저장하지 않습니다. (NaN 이 그대로 들어가는 것을 막습니다)
+            if(cleaned === "" || !isFinite(value)){
+              badCells.push({ sn:serial, label:f.header, shown:String(raw) });
+              return;
+            }
+          }else if(DATE_KEYS.has(f.key)){
+            value = excelDateToStr(raw);       // Date 객체·2026-07-23 형태를 20260723 으로
+          }else{
+            value = String(raw).trim();
+          }
           changes.push({ key:f.key, value, label:f.header, display:String(raw) });
         }
       });
@@ -17559,6 +17585,14 @@
       otherDiscountPct:"타할인%", otherDiscountAmt:"타할인", purchasePrice:"입고가",
       saleDiscount:"판매할인%", saleDiscountAmt:"판매할인", salePrice:"판매가", profit:"수익" };
     let html = "";
+    if(badCells.length){
+      html += '<div style="border:1px solid var(--danger);background:#fdecea;padding:10px 12px;margin-bottom:10px;font-size:12.5px;line-height:1.8;">'
+        + '<b style="color:var(--danger);">숫자로 읽을 수 없어 반영하지 않는 칸 ' + badCells.length + '개</b><br>'
+        + '<span style="color:var(--gray);">금액·율 칸에는 숫자만 넣어주세요. 콤마는 자동으로 걷어내지만, 글자가 섞이면 반영하지 않습니다.</span><br>'
+        + badCells.slice(0,6).map(b=>'· <b>'+comboEsc(b.sn)+'</b> — '+comboEsc(b.label)+' : "'+comboEsc(b.shown)+'"').join("<br>")
+        + (badCells.length>6 ? '<br>... 외 ' + (badCells.length-6) + '개' : '')
+        + '</div>';
+    }
     if(dupSerials.length){
       html += '<div style="border:1px solid var(--danger);background:#fdecea;padding:10px 12px;margin-bottom:10px;font-size:12.5px;line-height:1.8;">'
         + '<b style="color:var(--danger);">같은 일련번호가 여러 모델에 있어 가릴 수 없는 ' + dupSerials.length + '건</b><br>'
