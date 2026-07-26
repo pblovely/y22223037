@@ -279,7 +279,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-07-25 v130</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-07-25 v133</span>
       <span id="topbar-username">-</span>
       <button onclick="openPersonalSettingsModal()">개인설정</button>
       <button onclick="handleLogout()">로그아웃</button>
@@ -356,6 +356,7 @@
           <button class="btn small secondary" id="subsidy-basis-sale" style="width:auto;padding:0 12px;height:26px;border:1px solid var(--navy);margin-left:-1px;" onclick="setSubsidyBasis('sale')">판매월</button>
           <span class="info-tip" style="margin-left:6px;" title="귀속월 = 공시지원금 귀속월 칸 기준 / 판매월 = 출고일 기준. 포피플 직영채널 판매분처럼 환수가 판매한 달에 잡혀야 하면 판매월을 쓰세요.">ⓘ</span>
         </div>
+        <div id="dash-cache-stamp" style="font-size:12px;margin-bottom:4px;text-align:right;"></div>
         <div id="dash-scope-note" style="font-size:12px;color:var(--gray);margin-bottom:8px;"></div>
         <div id="dash-stat-cards" style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-start;margin-bottom:16px;"></div>
         <div>
@@ -729,6 +730,25 @@
         </label>
         <div id="page-sizes-msg" style="font-size:12px;color:var(--navy);display:none;margin-top:8px;">저장되었습니다.</div>
       </div>
+      <div class="card">
+        <h3>읽기 절약 설정 <span class="info-tip" title="Firestore는 하루 5만 건까지 무료로 읽을 수 있습니다. 대시보드는 한 번 열 때 재고 전체를 읽으므로, 켜두면 읽어둔 값을 다시 써서 읽기를 크게 줄입니다.">ⓘ</span></h3>
+        <p class="desc">데이터가 많아지면 하루 읽기 한도에 걸릴 수 있습니다. 아래를 켜두면 크게 줄어듭니다.</p>
+        <div class="stack-form" style="max-width:640px;">
+          <div class="stack-row"><label>대시보드 재고 캐시</label>
+            <select id="dash-cache-select" onchange="saveDashCacheOption()">
+              <option value="on">켜기 — 한 번 읽은 값을 다시 씁니다 (권장)</option>
+              <option value="off">끄기 — 열 때마다 새로 읽습니다</option>
+            </select>
+          </div>
+        </div>
+        <div style="border:1px solid var(--line);background:#fafafa;padding:9px 11px;margin-top:8px;font-size:12px;line-height:1.8;color:var(--gray);">
+          <b>켜면</b> 대시보드를 여러 번 열어도 처음 한 번만 읽습니다. 기간 버튼을 눌러도 다시 읽지 않습니다.<br>
+          최신 숫자가 필요하면 대시보드의 <b>지금 다시 계산</b>을 누르시면 됩니다.<br>
+          <b>끄면</b> 항상 최신이지만, 열 때마다 재고 전체(현재 <span id="dash-cache-count">-</span>건)를 읽습니다.
+        </div>
+        <div id="dash-cache-msg" class="msg info" style="margin-top:8px;">저장되었습니다.</div>
+      </div>
+
       <div class="card">
         <h3>화면 커스터마이징</h3>
         <p class="desc">버튼·제목·대시보드 카드를 마우스 오른쪽 버튼으로 눌러서 이름·색상·글씨크기를 바꾸거나 숨길 수 있습니다. 숨긴 항목은 여기서 되돌릴 수 있어요.</p>
@@ -4712,7 +4732,7 @@
         showModelMsg("item-result-msg", "<b>저장에 실패했습니다.</b><br>" + comboEsc((e && e.message) ? e.message : String(e)), true);
         return;
       }
-      logAction("재고 수정", docModelLabel(m)+" "+colorLabel+" / "+carrier);
+      clearDashCache(); logAction("재고 수정", docModelLabel(m)+" "+colorLabel+" / "+carrier);
       showModelMsg("item-result-msg", "저장되었습니다.", false);
       loadInventoryList();
       setTimeout(closeItemModal, 600);
@@ -4736,7 +4756,7 @@
         return;
       }
       const newItemRef = await addDoc(collection(db,"inventoryItems"), { ...base, entryType:"imei", quantity:1, serialNumber });
-      logAction("재고 입고(일련번호)", docModelLabel(m)+" "+colorLabel+" / "+carrier+" / 일련번호 "+serialNumber);
+      clearDashCache(); logAction("재고 입고(일련번호)", docModelLabel(m)+" "+colorLabel+" / "+carrier+" / 일련번호 "+serialNumber);
 
       if(currentOrderLinkId){
         await advanceOrderFulfillment(currentOrderLinkId, newItemRef.id);
@@ -5716,6 +5736,7 @@
       }
       lines.push({
         modelId, m,
+        lineNo: lines.length + 1,   // 입력한 순서를 그대로 남깁니다
         colorObj: cObj,
         lineCarrier: tr.querySelector(".ol-carrier") ? tr.querySelector(".ol-carrier").value : "",
         quantity: Number(tr.querySelector(".ol-qty").value) || 1,
@@ -5784,6 +5805,7 @@
         batchId: batchRef.id,
         modelId: l.modelId, baseModel: l.m.baseModel, capacity: l.m.capacity,
         systemModel: l.m.systemModel, petName: l.m.petName||"",
+        lineNo: l.lineNo || 0,
         // 색상은 줄마다 다르므로 줄에서 고른 값을 저장합니다.
         manufacturerColor: l.colorObj ? (l.colorObj.manufacturerColor||"") : "",
         systemColor: l.colorObj ? (l.colorObj.systemColor||"") : "",
@@ -5824,6 +5846,7 @@
           batchId: srBatchRef.id,
           destination: dest, modelId: l.modelId, baseModel:l.m.baseModel, capacity:l.m.capacity,
           systemModel:l.m.systemModel, petName:l.m.petName||"",
+          lineNo: l.lineNo || 0,
           manufacturerColor: l.colorObj ? (l.colorObj.manufacturerColor||"") : "",
           systemColor: l.colorObj ? (l.colorObj.systemColor||"") : "",
           sku: l.colorObj ? (l.colorObj.sku||"") : "",
@@ -5895,6 +5918,15 @@
       if(!ordersByBatch[o.batchId]) ordersByBatch[o.batchId] = [];
       ordersByBatch[o.batchId].push({ id:d.id, ...o });
     });
+    // 입력한 순서대로 보이게 정렬합니다. (줄번호 → 만든 시각 순)
+    const byLineNo = (a,b)=>{
+      const la = Number(a.lineNo)||0, lb = Number(b.lineNo)||0;
+      if(la && lb && la !== lb) return la - lb;
+      const ta = (a.createdAt && a.createdAt.seconds) || 0;
+      const tb = (b.createdAt && b.createdAt.seconds) || 0;
+      return ta - tb;
+    };
+    Object.keys(ordersByBatch).forEach(k=> ordersByBatch[k].sort(byLineNo));
     orderBatchLinesCache = ordersByBatch;
 
     // 요약: 도착대기 · 이체대기 (필터와 무관하게 전체 기준)
@@ -6216,6 +6248,14 @@
       holder.innerHTML = '<span style="color:var(--gray);">이 주문에서 만들어진 판매요청이 없습니다. (주문에 판매처·판매가를 넣으면 자동으로 생깁니다)</span>';
       return;
     }
+    // 주문 품목과 같은 순서로 보이게 정렬합니다.
+    found.sort((a,b)=>{
+      const la = Number(a.lineNo)||0, lb = Number(b.lineNo)||0;
+      if(la && lb && la !== lb) return la - lb;
+      const ta = (a.createdAt && a.createdAt.seconds) || 0;
+      const tb = (b.createdAt && b.createdAt.seconds) || 0;
+      return ta - tb;
+    });
     const totQ = found.reduce((n,x)=> n + (Number(x.quantity)||0), 0);
     const totF = found.reduce((n,x)=> n + (Number(x.fulfilledCount)||0), 0);
     const allDone = totQ>0 && totF >= totQ;
@@ -6225,7 +6265,9 @@
       ' <span style="color:var(--gray);">(단말기를 도착 등록하면 자동으로 채워집니다)</span>';
     found.forEach(sr=>{
       const done = (Number(sr.fulfilledCount)||0) >= (Number(sr.quantity)||0);
+      const srColor = sr.systemColor || sr.manufacturerColor || "";
       h += '<br>· ' + comboEsc(sr.destination||"-") + ' · ' + comboEsc(docModelLabel(sr))
+        + ' · ' + (srColor ? comboEsc(srColor) : '<span style="color:var(--danger);">색상 미입력</span>')
         + ' · ' + (Number(sr.quantity)||0) + '개 · 판매가 ' + (Number(sr.salePrice)||0).toLocaleString()
         + ' · <b style="color:'+(done ? '#2e7d32' : 'var(--danger)')+';">' + comboEsc(sr.status||"-")
         + ' ' + (Number(sr.fulfilledCount)||0) + '/' + (Number(sr.quantity)||0) + '</b>';
@@ -10952,6 +10994,15 @@
         legacyLines.push({ id:d.id, ...s });
       }
     });
+    // 판매요청도 입력 순서대로 보이게 정렬합니다.
+    const srByLineNo = (a,b)=>{
+      const la = Number(a.lineNo)||0, lb = Number(b.lineNo)||0;
+      if(la && lb && la !== lb) return la - lb;
+      const ta = (a.createdAt && a.createdAt.seconds) || 0;
+      const tb = (b.createdAt && b.createdAt.seconds) || 0;
+      return ta - tb;
+    };
+    Object.keys(linesByBatch).forEach(k=> linesByBatch[k].sort(srByLineNo));
     saleReqBatchLinesCache = linesByBatch;
 
     if(batchSnap.empty && legacyLines.length===0){
@@ -11090,7 +11141,7 @@
     document.getElementById("order-detail-title").textContent = (b.destination||"-") + " · 요청일 " + (b.requestDate||"-");
     let html = '<div id="order-sale-link" style="margin-bottom:10px;"></div>' +
       '<div style="overflow-x:auto;"><table class="data-table" style="min-width:850px;"><thead><tr>' +
-      '<th>모델 (전산모델명/펫네임)</th><th>기가수</th><th>통신사</th><th class="ta-right">요청수량</th><th class="ta-right">판매가</th><th class="ta-right">판매할인</th><th class="ta-right">매칭</th><th>상태</th><th class="ta-right">관리</th>' +
+      '<th>모델 (전산모델명/펫네임)</th><th>색상</th><th>기가수</th><th>통신사</th><th class="ta-right">요청수량</th><th class="ta-right">판매가</th><th class="ta-right">판매할인</th><th class="ta-right">매칭</th><th>상태</th><th class="ta-right">관리</th>' +
       '</tr></thead><tbody id="order-detail-tbody"></tbody></table></div>';
     document.getElementById("order-detail-body").innerHTML = html;
     const tbody = document.getElementById("order-detail-tbody");
@@ -11099,6 +11150,9 @@
       const tr = document.createElement("tr");
       tr.innerHTML =
         '<td>'+comboEsc(docModelLabel(s))+'</td>' +
+        '<td>'+(s.systemColor || s.manufacturerColor
+          ? comboEsc(s.systemColor || s.manufacturerColor)
+          : '<span style="color:var(--danger);">미입력</span>')+'</td>' +
         '<td>'+(s.capacity||"-")+'</td>' +
         '<td>'+(s.carrier||"-")+'</td>' +
         '<td class="ta-right">'+(s.quantity||0)+'</td>' +
@@ -12066,7 +12120,7 @@
       showModelMsg("multi-edit-msg", "<b>저장에 실패했습니다.</b><br>" + comboEsc((e && e.message) ? e.message : String(e)), true);
       return;
     }
-    logAction("재고 일괄 수정(다중항목)", ids.length + "건 / " + changed.length + "개 항목");
+    clearDashCache(); logAction("재고 일괄 수정(다중항목)", ids.length + "건 / " + changed.length + "개 항목");
     showModelMsg("multi-edit-msg", ids.length + "건에 적용했습니다.", false);
     document.getElementById("bulk-select-all").checked = false;
     loadInventoryList();
@@ -12763,6 +12817,29 @@
     loadDashboard();
   };
 
+  // 대시보드 재고 캐시 — 켜두면 한 번 읽은 재고를 다시 쓰므로 읽기가 크게 줄어듭니다.
+  let dashItemsCache = null;
+  let dashCacheAt = null;
+
+  window.saveDashCacheOption = async function(){
+    const on = document.getElementById("dash-cache-select").value === "on";
+    try{
+      await setDoc(doc(db,"settings","general"), { dashCacheOn: on }, { merge:true });
+      currentSettings.dashCacheOn = on;
+      clearDashCache();
+      logAction("대시보드 캐시 " + (on ? "켜기" : "끄기"), "-");
+      flashMsg("dash-cache-msg");
+    }catch(e){ alert("저장에 실패했습니다."); }
+  };
+
+  window.clearDashCache = function(){
+    dashItemsCache = null; dashCacheAt = null;
+  };
+  window.refreshDashboard = function(){
+    clearDashCache();
+    loadDashboard();
+  };
+
   async function loadDashboard(){
     const statEl = document.getElementById("dash-stat-cards");
     const carrierEl = document.getElementById("dash-carrier-list");
@@ -12772,9 +12849,17 @@
     const discountEl = document.getElementById("dash-manufacturer-discount-cards");
     statEl.innerHTML = '<div class="list-empty">불러오는 중...</div>';
 
-    const snap = await getDocs(collection(db,"inventoryItems"));
-    const allItems = [];
-    snap.forEach(d=>{ const it = d.data(); if(it.deleted !== true) allItems.push(it); });   // 삭제함 제외
+    // 캐시가 켜져 있고 이미 읽어둔 값이 있으면 그것을 씁니다. (Firestore 읽기 절약)
+    const useCache = (currentSettings && currentSettings.dashCacheOn !== false);
+    let allItems;
+    if(useCache && dashItemsCache){
+      allItems = dashItemsCache;
+    }else{
+      const snap = await getDocs(collection(db,"inventoryItems"));
+      allItems = [];
+      snap.forEach(d=>{ const it = d.data(); if(it.deleted !== true) allItems.push(it); });   // 삭제함 제외
+      if(useCache){ dashItemsCache = allItems; dashCacheAt = new Date(); }
+    }
 
     const normDate = v=> String(v||"").replace(/\D/g,"");
     const thisMonth = dashboardCustomMonth || todayStr().slice(0,6); // YYYYMM
@@ -12813,6 +12898,18 @@
         : (thisMonth.slice(0,4)+"년 "+thisMonth.slice(4,6)+"월"));
     const noDateCount = allItems.filter(it=> !normDate(it.inDate) && !normDate(it.outDate)).length;
     const subsidyLabel = (subsidyBasis === "sale") ? "판매월(출고일)" : "귀속월";
+    // 언제 읽어온 값인지 화면에 보여줍니다.
+    const stampEl = document.getElementById("dash-cache-stamp");
+    if(stampEl){
+      if(useCache && dashCacheAt){
+        const t = dashCacheAt;
+        const hh = String(t.getHours()).padStart(2,"0") + ":" + String(t.getMinutes()).padStart(2,"0");
+        stampEl.innerHTML = '<span style="color:var(--gray);">집계 기준 ' + hh + '</span>'
+          + ' <button class="btn small secondary" style="width:auto;margin-left:6px;" onclick="refreshDashboard()">지금 다시 계산</button>';
+      }else{
+        stampEl.innerHTML = '<span style="color:var(--gray);">열 때마다 새로 읽습니다</span>';
+      }
+    }
     const noteEl = document.getElementById("dash-scope-note");
     if(noteEl){
       noteEl.textContent = "표시 기간: " + scopeLabel + " (입고일·출고일 기준) · 전체 재고 "
@@ -14479,7 +14576,20 @@
     document.getElementById("inv-admin-submenu").style.display = "block";
     switchTab("tab-inv-model");
   };
+  // 새로고침해도 보던 화면이 유지되도록 마지막 탭을 기억합니다.
+  // (브라우저 탭을 닫으면 지워집니다. 로그인할 때도 지웁니다.)
+  function rememberTab(tabId){
+    try{ sessionStorage.setItem("lastTab", tabId); }catch(e){}
+  }
+  function lastTab(){
+    try{ return sessionStorage.getItem("lastTab") || ""; }catch(e){ return ""; }
+  }
+  window.clearLastTab = function(){
+    try{ sessionStorage.removeItem("lastTab"); }catch(e){}
+  };
+
   window.switchTab = function(tabId){
+    rememberTab(tabId);
     document.querySelectorAll(".tab-panel").forEach(el=>el.classList.remove("active"));
     document.querySelectorAll(".tab-btn").forEach(el=>el.classList.remove("active"));
     document.getElementById(tabId).classList.add("active");
@@ -14516,6 +14626,15 @@
     if(tabId==="tab-datacheck" && typeof runDataCheck === "function") runDataCheck();
     if(tabId==="tab-b2b" && typeof loadLoanList === "function") loadLoanList();
     if(tabId==="tab-site" && typeof renderHiddenList === "function") renderHiddenList();
+    if(tabId==="tab-site"){
+      const cEl = document.getElementById("dash-cache-count");
+      if(cEl && cEl.textContent === "-"){
+        // 건수만 세는 것도 읽기가 드니, 이미 읽어둔 값이 있을 때만 보여줍니다.
+        if(typeof lastRenderedItems !== "undefined" && lastRenderedItems && lastRenderedItems.length){
+          cEl.textContent = "약 " + lastRenderedItems.length;
+        }else{ cEl.textContent = "수천"; }
+      }
+    }
     if(tabId==="tab-inv-carrier") loadCarrierList();
     if(tabId==="tab-inv-manufacturer") loadManufacturerList();
     if(tabId==="tab-inv-location") loadLocationList();
@@ -14573,6 +14692,7 @@
     const username = document.getElementById("login-username").value.trim();
     const pw = document.getElementById("login-password").value;
     if(!username||!pw){ showMsg("login-msg","아이디와 비밀번호를 입력해주세요."); return; }
+    clearLastTab();   // 새로 로그인하면 대시보드부터 보여줍니다
     try{ await signInWithEmailAndPassword(auth, toEmail(username), pw); }
     catch(err){ showMsg("login-msg","아이디 또는 비밀번호가 올바르지 않습니다."); }
   };
@@ -14674,6 +14794,8 @@
       if(showDashboard||showAnyWorkMenu) delete wg.dataset.permHidden; else wg.dataset.permHidden = "1";
 
       if(showSite){
+        const dcSel = document.getElementById("dash-cache-select");
+        if(dcSel) dcSel.value = (currentSettings.dashCacheOn === false) ? "off" : "on";
         document.getElementById("site-name-input").value = currentSettings.siteName || DEFAULT_SITE_NAME;
         document.getElementById("pending-title-input").value = currentSettings.pendingTitle || DEFAULT_PENDING_TITLE;
         document.getElementById("pending-desc-input").value = currentSettings.pendingDesc || DEFAULT_PENDING_DESC;
@@ -14690,7 +14812,14 @@
         document.getElementById("issuer-account-input").value = currentSettings.issuerAccount || "";
       }
 
-      if(showDashboard) switchTab("tab-dashboard");
+      // 새로고침이면 보던 화면으로, 새로 로그인했으면 대시보드로 갑니다.
+      const back = lastTab();
+      const backBtn = back ? document.getElementById("tabbtn-" + back.replace("tab-","")) : null;
+      const backPanel = back ? document.getElementById(back) : null;
+      const backOk = backPanel && (!backBtn || backBtn.dataset.permHidden !== "1");
+      if(backOk){
+        switchTab(back);
+      }else if(showDashboard) switchTab("tab-dashboard");
       else if(showInvWork) switchTab("tab-inv-work");
       else if(showInvAdmin) openInvAdminSection();
       else if(showSite) switchTab("tab-site");
