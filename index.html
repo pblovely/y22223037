@@ -279,7 +279,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-07-25 v123</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-07-25 v124</span>
       <span id="topbar-username">-</span>
       <button onclick="openPersonalSettingsModal()">개인설정</button>
       <button onclick="handleLogout()">로그아웃</button>
@@ -492,6 +492,7 @@
           <span id="sale-wait-summary" style="margin-left:12px;font-size:12.5px;"></span>
           <button class="btn small secondary" style="width:auto;margin-left:12px;" title="재고에서 이미 판매처리된 건을 찾아 판매요청의 매칭 현황을 다시 계산합니다" onclick="recalcSaleMatching()">매칭 현황 다시 계산</button>
         </div>
+        <div id="sale-orphan-notice" style="display:none;font-size:12.5px;padding:9px 11px;margin-bottom:8px;border:1px solid var(--danger);background:#fdecea;line-height:1.7;"></div>
         <div id="sale-model-notice" style="display:none;font-size:12.5px;padding:9px 11px;margin-bottom:8px;border:1px solid var(--danger);background:#fdecea;line-height:1.7;"></div>
         <div id="sale-request-list"></div>
       </div>
@@ -10035,6 +10036,85 @@
     openVoucherByNo(voucherNo);
   };
 
+  // 주문이 지워졌는데 남아 있는 판매요청을 찾아 알려줍니다.
+  // 그대로 두면 새로 주문을 등록할 때 판매요청이 중복으로 생깁니다.
+  async function renderOrphanSaleNotice(){
+    const el = document.getElementById("sale-orphan-notice");
+    if(!el) return;
+    try{
+      const srSnap = await getDocs(collection(db,"saleRequests"));
+      const ordSnap = await getDocs(collection(db,"orders"));
+      const alive = new Set(); ordSnap.forEach(d=> alive.add(d.id));
+      let cnt = 0, qty = 0;
+      srSnap.forEach(d=>{
+        const sr = d.data();
+        if(sr.status === "취소") return;
+        if(!sr.fromOrderId) return;                 // 직접 만든 건은 대상 아님
+        if(alive.has(sr.fromOrderId)) return;       // 주문이 살아 있으면 정상
+        cnt++; qty += Number(sr.quantity)||0;
+      });
+      if(cnt === 0){ el.style.display = "none"; el.innerHTML = ""; return; }
+      el.style.display = "block";
+      el.innerHTML = '<b>주문이 지워졌는데 남아 있는 판매요청 ' + cnt + '줄 (' + qty + '대)</b>이 있습니다.'
+        + '<br><span style="color:var(--gray);">그대로 두고 주문을 다시 등록하면 판매요청이 <b>중복으로 생깁니다</b>. 아래에서 정리해주세요.</span>'
+        + '<br><button class="btn small" style="width:auto;margin-top:6px;" onclick="showOrphanSaleList()">확인하고 정리하기</button>';
+    }catch(e){ el.style.display = "none"; }
+  }
+
+  window.showOrphanSaleList = async function(){
+    const srSnap = await getDocs(collection(db,"saleRequests"));
+    const ordSnap = await getDocs(collection(db,"orders"));
+    const alive = new Set(); ordSnap.forEach(d=> alive.add(d.id));
+    const orphans = [];
+    srSnap.forEach(d=>{
+      const sr = { id:d.id, ...d.data() };
+      if(sr.status === "취소") return;
+      if(!sr.fromOrderId || alive.has(sr.fromOrderId)) return;
+      orphans.push(sr);
+    });
+    if(orphans.length === 0){ alert("정리할 판매요청이 없습니다."); loadSaleRequestList(); return; }
+
+    // 매칭된 재고가 있는지 확인 — 있으면 지우면 안 됩니다.
+    const hasMatch = orphans.filter(x=> (Number(x.fulfilledCount)||0) > 0);
+    const clean = orphans.filter(x=> (Number(x.fulfilledCount)||0) === 0);
+
+    const preview = orphans.slice(0,10).map(x=>
+      "· " + (x.destination||"-") + " " + (x.systemModel||x.baseModel||"-") +
+      " " + (x.quantity||0) + "대" +
+      ((Number(x.fulfilledCount)||0) > 0 ? "  ※ 재고 " + x.fulfilledCount + "대 매칭됨" : "")).join("\n");
+
+    const msg = "주문이 지워진 판매요청 " + orphans.length + "줄을 찾았습니다.\n\n" + preview
+      + (orphans.length>10 ? "\n... 외 " + (orphans.length-10) + "줄" : "")
+      + "\n\n"
+      + (hasMatch.length
+        ? "※ 재고가 매칭된 " + hasMatch.length + "줄은 지우지 않습니다. (실제 판매 기록이라 남겨둡니다)\n\n"
+        : "")
+      + "매칭되지 않은 " + clean.length + "줄을 지울까요?\n"
+      + "지우면 주문을 다시 등록할 때 판매요청이 새로 만들어집니다.";
+    if(clean.length === 0){ alert(msg.replace("매칭되지 않은 0줄을 지울까요?\n지우면 주문을 다시 등록할 때 판매요청이 새로 만들어집니다.", "지울 대상이 없습니다.")); return; }
+    if(!confirm(msg)) return;
+
+    try{
+      // 줄을 지우고, 남은 줄이 없는 묶음도 함께 지웁니다.
+      const batchIds = new Set();
+      for(let i=0; i<clean.length; i+=300){
+        const bt = writeBatch(db);
+        clean.slice(i, i+300).forEach(x=>{ if(x.batchId) batchIds.add(x.batchId); bt.delete(doc(db,"saleRequests", x.id)); });
+        await bt.commit();
+      }
+      for(const bid of batchIds){
+        const left = await getDocs(query(collection(db,"saleRequests"), where("batchId","==",bid)));
+        if(left.empty){ try{ await deleteDoc(doc(db,"saleRequestBatches", bid)); }catch(e){} }
+      }
+    }catch(e){
+      alert("정리에 실패했습니다.\n" + ((e && e.message) ? e.message : String(e)));
+      return;
+    }
+    logAction("연결 끊긴 판매요청 정리", clean.length + "줄 삭제");
+    alert(clean.length + "줄을 정리했습니다.\n이제 주문을 다시 등록하시면 됩니다.");
+    loadSaleRequestList();
+  };
+
   // 재고를 기준으로 판매요청의 매칭 현황을 다시 계산합니다.
   // 재고 수정·즉시판매 등으로 따로 판매처리한 건이 판매요청에 반영되지 않은 경우를 바로잡습니다.
   window.recalcSaleMatching = async function(){
@@ -10636,6 +10716,7 @@
     if(!listEl) return;
     listEl.innerHTML = '<div class="list-empty">불러오는 중...</div>';
 
+    renderOrphanSaleNotice();
     renderModelSyncNotice("sale-model-notice", "saleRequests");
 
     // 자동 정리 단계에서 오류가 나도 목록은 그려지도록 감싸둡니다.
