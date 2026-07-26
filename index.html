@@ -87,9 +87,14 @@
   #admin-toggle-btn:hover{ background:#e6e6e6; }
   #admin-group.tabbar{ margin-bottom:4px; }
   .content-wrap{ flex:1; min-width:0; }
-  .tab-panel{ display:none; padding:14px 16px; }
+  .tab-panel{ display:none; padding:12px 10px; }
+  /* 표를 아주 촘촘하게 (보기 설정 → 아주 좁게) */
+  .vc-tiny .data-table th, .vc-tiny .data-table td{ padding:0 3px !important; height:19px !important; font-size:11.5px !important; line-height:1.15 !important; }
+  .vc-tight .data-table th, .vc-tight .data-table td{ padding:1px 4px !important; height:22px !important; line-height:1.2 !important; }
+  /* 화면에 꽉 채우기 */
+  .vc-full .data-table{ min-width:100% !important; width:100% !important; }
   .tab-panel.active{ display:block; }
-  .card{ background:#fff; border:1px solid var(--line); padding:14px 16px; margin-bottom:10px; max-width:1600px; }
+  .card{ background:#fff; border:1px solid var(--line); padding:12px 12px; margin-bottom:9px; max-width:1900px; }
   .card h3{ margin:0 0 6px 0; font-size:14px; color:var(--navy); }
   .card p.desc{ font-size:12.5px; color:var(--gray); margin:0 0 12px 0; }
   .info-tip{ display:inline-flex; align-items:center; justify-content:center; width:15px; height:15px; border-radius:50%; border:1px solid var(--gray); color:var(--gray); font-size:10.5px; cursor:help; vertical-align:middle; }
@@ -292,7 +297,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-07-25 v230</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-07-25 v238</span>
       <span id="topbar-username">-</span>
       <button onclick="openPersonalSettingsModal()">개인설정</button>
       <button onclick="handleLogout()">로그아웃</button>
@@ -333,6 +338,7 @@
           <button class="tab-btn" data-label-key="inv-admin" id="tabbtn-inv-admin" onclick="openInvAdminSection()" style="display:none;"><span class="tab-label-text">재고 기초설정</span></button>
           <button class="tab-btn" data-tab="tab-users" data-label-key="tab-users" id="tabbtn-users" onclick="switchTab('tab-users')" style="display:none;"><span class="tab-label-text">사용자 관리</span> <span id="user-admin-badge" style="display:none;background:var(--danger);color:#fff;font-size:10px;padding:1px 6px;margin-left:4px;">0</span></button>
           <button class="tab-btn" data-tab="tab-settlement" data-label-key="tab-settlement" id="tabbtn-settlement" onclick="switchTab('tab-settlement')" style="display:none;"><span class="tab-label-text">정산 관리</span></button>
+          <button class="tab-btn" data-tab="tab-paycheck" data-label-key="tab-paycheck" id="tabbtn-paycheck" onclick="switchTab('tab-paycheck')" style="display:none;"><span class="tab-label-text">단말기 입금 대조</span></button>
           <button class="tab-btn" data-tab="tab-lgrefund" data-label-key="tab-lgrefund" id="tabbtn-lgrefund" onclick="switchTab('tab-lgrefund')" style="display:none;"><span class="tab-label-text">LG 환불·수수료</span></button>
           <button class="tab-btn" data-tab="tab-datacheck" data-label-key="tab-datacheck" id="tabbtn-datacheck" onclick="switchTab('tab-datacheck')" style="display:none;"><span class="tab-label-text">데이터 점검</span></button>
           <button class="tab-btn" data-tab="tab-ledger" data-label-key="tab-ledger" id="tabbtn-ledger" onclick="switchTab('tab-ledger')" style="display:none;"><span class="tab-label-text">거래처 정산</span></button>
@@ -562,6 +568,35 @@
         </div>
         <div id="reservation-stat-cards" class="dash-cards" style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-start;margin-bottom:14px;"></div>
         <div id="reservation-table-area"></div>
+      </div>
+    </div>
+
+    <!-- ===== 단말기 입금 대조 ===== -->
+    <div id="tab-paycheck" class="tab-panel">
+      <div class="card" style="max-width:1900px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+          <h3 style="margin:0;">단말기 입금 대조 <span class="info-tip" title="나간 단말기 하나하나가 입금을 받았는지 확인합니다. 재고 → 판매요청 → 입금요청 연결을 따라가 판정합니다.">ⓘ</span></h3>
+          <span>
+            <span id="dl-paycheck"></span>
+            <button class="btn small secondary" style="width:auto;" onclick="loadPayCheck(true)">새로 읽기</button>
+          </span>
+        </div>
+        <p class="desc" style="margin-top:0;">나간 단말기 하나하나가 <b>입금을 받았는지</b> 확인합니다. 미입금만 골라 엑셀로 내려 거래처에 보내실 수 있습니다.</p>
+        <div id="pc-cards" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px;"></div>
+        <div style="display:flex;gap:0;align-items:center;flex-wrap:wrap;margin-bottom:8px;">
+          <button class="btn small" id="pcf-all" style="width:auto;border:1px solid var(--navy);" onclick="setPayCheckFilter('all')">전체</button>
+          <button class="btn small secondary" id="pcf-unpaid" style="width:auto;border:1px solid var(--navy);margin-left:-1px;" onclick="setPayCheckFilter('unpaid')">미입금</button>
+          <button class="btn small secondary" id="pcf-part" style="width:auto;border:1px solid var(--navy);margin-left:-1px;" onclick="setPayCheckFilter('part')">부분입금</button>
+          <button class="btn small secondary" id="pcf-done" style="width:auto;border:1px solid var(--navy);margin-left:-1px;" onclick="setPayCheckFilter('done')">입금완료</button>
+          <button class="btn small secondary" id="pcf-none" style="width:auto;border:1px solid var(--navy);margin-left:-1px;" onclick="setPayCheckFilter('none')">판매요청 없음</button>
+          <button class="btn small secondary" id="pcf-notax" style="width:auto;border:1px solid var(--navy);margin-left:-1px;" onclick="setPayCheckFilter('notax')">세금계산서 미발행</button>
+          <select id="pc-dest" onchange="loadPayCheck()" style="height:28px;border:1px solid var(--line);padding:0 6px;font-size:12.5px;margin-left:10px;box-sizing:border-box;"><option value="">전체 거래처</option></select>
+          <input type="text" id="pc-from" maxlength="8" inputmode="numeric" placeholder="출고 시작일" style="width:120px;height:28px;border:1px solid var(--line);padding:0 8px;font-size:12.5px;margin-left:6px;box-sizing:border-box;">
+          <input type="text" id="pc-to" maxlength="8" inputmode="numeric" placeholder="출고 종료일" style="width:120px;height:28px;border:1px solid var(--line);padding:0 8px;font-size:12.5px;margin-left:-1px;box-sizing:border-box;">
+          <button class="btn small" style="width:auto;margin-left:-1px;" onclick="loadPayCheck()">조회</button>
+        </div>
+        <div id="pc-dest-summary" style="margin-bottom:10px;"></div>
+        <div id="pc-list"></div>
       </div>
     </div>
 
@@ -1046,11 +1081,7 @@
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
           <h3 style="margin:0;">업체정보 <span class="info-tip" title="매입처(입고처)와 판매처(출고처)를 한 곳에서 관리합니다. 구분을 체크한 업체만 해당 드롭다운에 나타납니다.">ⓘ</span></h3>
           <span>
-            <span id="company-admin-buttons">
-              <button class="btn small secondary" style="width:auto;margin-right:6px;" onclick="cleanupOrphanCompanyNames()">기록의 옛 업체명 정리</button>
-              <button class="btn small secondary" style="width:auto;margin-right:6px;" onclick="mergeDuplicateCompanies()">중복 업체 정리</button>
-              <button class="btn small secondary" style="width:auto;margin-right:6px;" onclick="importLegacyCompanies()">기존 입고처·출고처 가져오기</button>
-            </span>
+            <span id="company-admin-buttons"></span>
             <button class="btn small" style="width:auto;" onclick="openCompanyModal()">+ 업체 등록</button>
           </span>
         </div>
@@ -1060,13 +1091,14 @@
           <button class="btn small" id="company-filter-all" style="width:auto;border:1px solid var(--navy);" onclick="setCompanyFilter('all')">전체</button>
           <button class="btn small secondary" id="company-filter-source" style="width:auto;border:1px solid var(--navy);margin-left:-1px;" onclick="setCompanyFilter('source')">매입처</button>
           <button class="btn small secondary" id="company-filter-dest" style="width:auto;border:1px solid var(--navy);margin-left:-1px;" onclick="setCompanyFilter('dest')">판매처</button>
+          <span id="dl-company" style="margin-left:10px;"></span>
         </div>
         <div id="company-perm-notice" style="display:none;font-size:12.5px;padding:8px 11px;margin-bottom:8px;border:1px solid var(--line);background:#fafafa;line-height:1.7;">
           업체 <b>추가</b>는 누구나 할 수 있습니다. <b>수정·삭제·순서 변경</b>은 권한이 필요합니다.
           <span style="color:var(--gray);">필요하시면 개인설정 → 권한 요청에서 <b>업체 정보 수정·삭제</b>를 신청해주세요.</span>
         </div>
         <div id="company-pagination"></div>
-        <div style="overflow-x:auto;">
+        <div id="company-list-wrap" style="overflow-x:auto;">
         <table class="data-table" style="min-width:1400px;">
           <thead>
             <tr>
@@ -2386,6 +2418,19 @@
     { key:"subsidyStatus", label:"공시지원금 상태", get:it=>it.subsidyStatus||"-" },
     { key:"clawbackAmount", label:"환수액", get:it=> (it.clawbackAmount!=null)?Number(it.clawbackAmount).toLocaleString():"-", getRaw:it=>it.clawbackAmount!=null?Number(it.clawbackAmount):"" },
     { key:"subsidyAccrualMonth", label:"공시지원금 귀속월", get:it=>it.subsidyAccrualMonth||"-" },
+    { key:"payState", label:"입금",
+      get:it=>{
+        const p = payStatusOf(it);
+        if(!p) return (it.status === "판매" || it.status === "개통") ? "판매요청 없음" : "-";
+        return p.label + (p.state === "part" ? " " + (p.received||0).toLocaleString() : "");
+      },
+      getRaw:it=>{ const p = payStatusOf(it); return p ? p.label : ((it.status==="판매"||it.status==="개통") ? "판매요청 없음" : ""); } },
+    { key:"payDate", label:"입금일",
+      get:it=>{ const p = payStatusOf(it); return (p && p.state === "done") ? (p.reqDate||"-") : "-"; },
+      getRaw:it=>{ const p = payStatusOf(it); return (p && p.state === "done") ? (p.reqDate||"") : ""; } },
+    { key:"taxState", label:"세금계산서",
+      get:it=>{ const p = payStatusOf(it); return p ? (p.taxDone ? "발행완료" : "미발행") : "-"; },
+      getRaw:it=>{ const p = payStatusOf(it); return p ? (p.taxDone ? "발행완료" : "미발행") : ""; } },
     { key:"note1", label:"비고1", get:it=>it.note1||"-", getRaw:it=>it.note1||"" },
     { key:"note2", label:"비고2", get:it=>it.note2||"-", getRaw:it=>it.note2||"" },
     { key:"profit", label:"수익", get:it=> (it.profit!=null)?Number(it.profit).toLocaleString():"-", getRaw:it=>it.profit!=null?Number(it.profit):"" }
@@ -5225,6 +5270,8 @@
     const canEditCompany = hasPerm(currentUserPerms, "companyEdit");
     const coBtnBar = document.getElementById("company-admin-buttons");
     if(coBtnBar) coBtnBar.style.display = canEditCompany ? "" : "none";
+    // 정리할 게 있을 때만 버튼이 나타납니다.
+    if(canEditCompany) refreshCompanyAdminButtons();
     const coNotice = document.getElementById("company-perm-notice");
     if(coNotice) coNotice.style.display = canEditCompany ? "none" : "block";
     const bodyEl = document.getElementById("company-table-body");
@@ -5303,6 +5350,8 @@
     const pagEl = document.getElementById("company-pagination");
     pagEl.innerHTML = "";
     pagEl.replaceChildren(renderPaginationBar("companies", arr.length, loadCompanyList));
+  
+    addDownloadBtn("dl-company", "company-list-wrap", "업체정보"); addViewCfgBtn("dl-company", "company-list-wrap");
   }
 
   const CO_FIELDS = [
@@ -5458,6 +5507,50 @@
 
   // 같은 이름의 업체 문서가 여러 개면 하나로 합칩니다.
   // 구분(매입처/판매처)과 채워진 정보는 살리고, 나머지 문서는 삭제합니다.
+  // 정리할 게 있을 때만 버튼을 보여줍니다. (없으면 아무것도 안 보임)
+  window.refreshCompanyAdminButtons = async function(){
+    const slot = document.getElementById("company-admin-buttons");
+    if(!slot) return;
+    slot.innerHTML = "";
+    if(!hasPerm(currentUserPerms, "companyEdit")) return;
+    try{
+      const comps = await getDocs(collection(db,"companies"));
+      const names = new Set(), dupNames = new Set();
+      comps.forEach(d=>{
+        const nm = String(d.data().name||"").trim();
+        if(!nm) return;
+        if(names.has(nm)) dupNames.add(nm); else names.add(nm);
+      });
+      // 기록에만 있고 업체정보에 없는 이름 찾기
+      const used = new Set();
+      for(const [col, key] of [["orderBatches","source"],["saleRequestBatches","destination"]]){
+        const snap = await getDocs(collection(db, col));
+        snap.forEach(d=>{
+          const v = String(d.data()[key]||"").trim();
+          if(v) used.add(v);
+        });
+      }
+      const orphan = [...used].filter(x=> !names.has(x));
+
+      if(dupNames.size){
+        const b = document.createElement("button");
+        b.className = "btn small secondary"; b.style.width = "auto";
+        b.textContent = "중복 업체 정리 " + dupNames.size + "건";
+        b.title = "같은 이름이 두 번 등록된 업체를 합칩니다";
+        b.onclick = mergeDuplicateCompanies;
+        slot.appendChild(b);
+      }
+      if(orphan.length){
+        const b2 = document.createElement("button");
+        b2.className = "btn small secondary"; b2.style.width = "auto";
+        b2.textContent = "옛 업체명 정리 " + orphan.length + "건";
+        b2.title = "주문·판매 기록에 있는데 업체정보에 없는 이름입니다: " + orphan.slice(0,5).join(", ");
+        b2.onclick = cleanupOrphanCompanyNames;
+        slot.appendChild(b2);
+      }
+    }catch(e){}
+  };
+
   window.mergeDuplicateCompanies = async function(){
     await fetchCompanies();
     const groups = {};
@@ -6658,6 +6751,7 @@
     applyCustomTabLabels();
   
     addDownloadBtn("dl-orders", "order-list", "주문목록");
+    applyViewCfg("order-list");
   }
 
   // 어떤 컬렉션이든 모델 정보(펫네임·모델명·기가수·전산모델명)를 모델 등록 기준으로 맞춥니다.
@@ -9465,6 +9559,7 @@
     el.querySelectorAll("[data-dep-use]").forEach(b=> b.onclick = ()=> showDepositUses(b.dataset.depUse));
   
     addDownloadBtn("dl-deposit", "deposit-entry-list", "통장입금");
+    addViewCfgBtn("dl-deposit", "deposit-entry-list");
   };
 
   window.showDepositUses = async function(id){
@@ -12304,6 +12399,7 @@
     }
   
     addDownloadBtn("dl-lgr", "lgr-table", "LG환불");
+    addViewCfgBtn("dl-lgr", "lgr-table");
   };
 
   window.deleteLgrEntry = async function(id){
@@ -12440,6 +12536,7 @@
     }
     el.innerHTML = renderItemHistoryTable(rows, mode === "serialNumber");
     addDownloadBtn("dl-itemhistory", "ih-result", "단말이력");
+    addViewCfgBtn("dl-itemhistory", "ih-result");
 
     // 일련번호 조회면 현재 재고 상태도 함께 보여줍니다.
     if(mode === "serialNumber"){
@@ -12813,6 +12910,7 @@
     updateOffsetBox();
   
     addDownloadBtn("dl-ledger", "ledger-recv", "거래처정산");
+    addViewCfgBtn("dl-ledger", "ledger-recv");
   };
 
   window.toggleLedgerAll = function(side, cb){
@@ -13520,6 +13618,17 @@
       '<th class="ta-right">출고가</th><th class="ta-right">판매가</th><th class="ta-right">예약금액</th>' +
       '<th class="ta-right">관리</th></tr></thead><tbody>';
 
+    // 기본 정렬 — 거래처 → 모델명 낮은 숫자 → 기가수 낮은 순
+    rows.sort((a, b)=>{
+      const d = String(a.destination||"").localeCompare(String(b.destination||""));
+      if(d !== 0) return d;
+      const c = cmpModel(a, b);
+      if(c !== 0) return c;
+      const col = String(a.systemColor||a.manufacturerColor||"").localeCompare(String(b.systemColor||b.manufacturerColor||""));
+      if(col !== 0) return col;
+      return String(a.requestDate||"").localeCompare(String(b.requestDate||""));
+    });
+
     const { pageItems, startIndex } = paginateSlice(rows, "reservations");
     pageItems.forEach((r,i)=>{
       const ordered = Number(r.orderedQty)||0;
@@ -13702,6 +13811,15 @@
     let colTotals = destKeys.map(()=>({ordered:0, allocated:0, listAmt:0, saleAmt:0, noPrice:0}));
     let grandOrdered=0, grandAllocated=0, grandListAmt=0, grandSaleAmt=0, grandNoPrice=0;
 
+    // 모델명 낮은 숫자 → 기가수 낮은 순으로 정렬합니다.
+    modelKeys.sort((x, y)=>{
+      const rx = (grid[x] && Object.values(grid[x])[0] && Object.values(grid[x])[0].entries[0]) || {};
+      const ry = (grid[y] && Object.values(grid[y])[0] && Object.values(grid[y])[0].entries[0]) || {};
+      const c = cmpModel(rx, ry);
+      if(c !== 0) return c;
+      return String(x).localeCompare(String(y));
+    });
+
     modelKeys.forEach(mk=>{
       // 한 줄에서 먼저 합계를 구한 뒤, 합계를 왼쪽에 붙이고 업체별을 뒤에 붙입니다.
       let rowOrdered=0, rowAllocated=0;
@@ -13796,6 +13914,7 @@
     loadReservationList();
   
     addDownloadBtn("dl-reservation", "reservation-table-area", "예약목록");
+    addViewCfgBtn("dl-reservation", "reservation-table-area");
   }
 
   let saleListFilter = "ing";   // ing | done | cancel | all  (기본: 진행중만)
@@ -14021,6 +14140,7 @@
     applyCustomTabLabels();
   
     addDownloadBtn("dl-sales", "sale-request-list", "판매목록");
+    applyViewCfg("sale-request-list");
   }
 
   function openSaleReqBatchDetailModal(batchId, b, lines, isLegacy){
@@ -14555,6 +14675,9 @@
       listEl.innerHTML = tbl;
       listEl.prepend(renderPaginationBar("b2bLedger", entries.length, loadB2BTab));
     }
+  
+    addDownloadBtn("dl-b2b", "b2b-ledger-list", "여신내역");
+    addViewCfgBtn("dl-b2b", "b2b-ledger-list");
   }
 
   window.clearDateFilter = function(){
@@ -16398,6 +16521,9 @@
       lastRenderedItems = [];
       return;
     }
+    // 입금 열을 보고 있으면 상태를 계산해둡니다. (안 보면 계산도 안 해서 읽기를 아낍니다)
+    const needPay = ["payState","payDate","taxState"].some(k=> currentViewSettings.includes(k));
+    if(needPay) await buildPayStatusMap();
 
     const filterDateFrom = document.getElementById("filter-date-from-native").value.replace(/-/g,"");
     const filterDateTo = document.getElementById("filter-date-to-native").value.replace(/-/g,"");
@@ -16631,6 +16757,402 @@
     syncInvPageSizeSelect();
   }
 
+  // ================= 단말기별 입금 여부 =================
+  // 재고 → 판매요청 → 묶음 → 입금요청 을 따라가 입금 상태를 알아냅니다.
+  let payStatusMap = null;      // { saleRequestId: {state, label, color, amount, received, reqDate, taxDone, batchId} }
+  let payStatusAt = 0;
+
+  window.buildPayStatusMap = async function(force){
+    // 5분 안에 만든 것이면 다시 만들지 않습니다. (읽기 절약)
+    if(!force && payStatusMap && (Date.now() - payStatusAt) < 5*60*1000) return payStatusMap;
+    const map = {};
+    try{
+      const [srSnap, bSnap, dSnap] = await Promise.all([
+        getDocs(collection(db,"saleRequests")),
+        getDocs(collection(db,"saleRequestBatches")),
+        getDocs(collection(db,"saleDepositRequests"))
+      ]);
+      // 묶음 정보
+      const batches = {};
+      bSnap.forEach(d=> batches[d.id] = { id:d.id, ...d.data() });
+      // 입금요청 정보 (묶음 → 요청)
+      const reqByBatch = {};
+      dSnap.forEach(d=>{
+        const r = { id:d.id, ...d.data() };
+        (r.saleBatchRefs||[]).forEach(x=>{ reqByBatch[x.id] = r; });
+      });
+      // 판매요청별 판정
+      srSnap.forEach(d=>{
+        const sr = { id:d.id, ...d.data() };
+        const b = sr.batchId ? batches[sr.batchId] : null;
+        const req = sr.batchId ? reqByBatch[sr.batchId] : null;
+        const need = Number((b ? b.depositRequired : sr.salePrice) )||0;
+        let state = "none", label = "판매요청 없음", color = "var(--gray)";
+        let received = 0, reqDate = "", taxDone = false, reqId = "";
+
+        if(sr.status === "취소"){ state="cancel"; label="취소"; color="var(--gray)"; }
+        else if(req){
+          reqId = req.id;
+          received = Number(req.receivedAmount)||0;
+          reqDate = req.depositCompleteDate || req.requestDate || "";
+          taxDone = req.taxInvoiceIssued === true;
+          if(req.depositCompleted){ state="done"; label="입금완료"; color="#2e7d32"; }
+          else if(received > 0){ state="part"; label="부분입금"; color="#b8860b"; }
+          else { state="wait"; label="입금요청중"; color="#1565c0"; }
+        }else if(b){
+          received = Number(b.receivedAmount)||0;
+          reqDate = b.depositReceivedDate || "";
+          if(b.depositReceived){ state="done"; label="입금완료"; color="#2e7d32"; }
+          else if(received > 0){ state="part"; label="부분입금"; color="#b8860b"; }
+          else { state="unpaid"; label="미입금"; color="var(--danger)"; }
+        }
+        map[sr.id] = { state, label, color, need, received, reqDate, taxDone, reqId,
+                       batchId: sr.batchId||"", destination: sr.destination||"" };
+      });
+    }catch(e){ console.error("입금 상태 계산 실패", e); }
+    payStatusMap = map;
+    payStatusAt = Date.now();
+    return map;
+  };
+
+  // 재고 한 건의 입금 상태를 돌려줍니다.
+  function payStatusOf(it){
+    if(!payStatusMap) return null;
+    if(!it || !it.saleRequestId) return null;
+    return payStatusMap[it.saleRequestId] || null;
+  }
+
+  // ---------- 단말기 입금 대조 화면 ----------
+  let payCheckFilter = "all";
+  window.setPayCheckFilter = function(f){
+    payCheckFilter = f;
+    ["all","unpaid","part","done","none","notax"].forEach(k=>{
+      const b = document.getElementById("pcf-"+k);
+      if(b) b.className = "btn small" + (k===f ? "" : " secondary");
+    });
+    loadPayCheck();
+  };
+
+  window.loadPayCheck = async function(force){
+    const listEl = document.getElementById("pc-list");
+    const cardEl = document.getElementById("pc-cards");
+    const sumEl  = document.getElementById("pc-dest-summary");
+    if(!listEl) return;
+    listEl.innerHTML = '<div class="list-empty">불러오는 중...</div>';
+
+    // 거래처 목록 채우기
+    const destSel = document.getElementById("pc-dest");
+    if(destSel && destSel.options.length <= 1){
+      destSel.innerHTML = '<option value="">전체 거래처</option>'
+        + (await fetchNamesList("outboundDestinations")).map(n=>'<option value="'+comboEsc(n)+'">'+comboEsc(n)+'</option>').join("");
+    }
+    const destQ = destSel ? destSel.value : "";
+    const from = (document.getElementById("pc-from").value||"").replace(/\D/g,"");
+    const to   = (document.getElementById("pc-to").value||"").replace(/\D/g,"");
+
+    await buildPayStatusMap(force === true);
+
+    // 재고 읽기
+    let items = [];
+    try{
+      if(!force && cacheOn("inventory") && dataCache.inventory) items = dataCache.inventory;
+      else{
+        const snap = await getDocs(collection(db,"inventoryItems"));
+        items = []; snap.forEach(d=> items.push({ id:d.id, ...d.data() }));
+        if(cacheOn("inventory")) dataCache.inventory = items;
+      }
+    }catch(e){}
+
+    // 나간 단말기만 대상
+    let rows = items.filter(it=>{
+      if(it.deleted === true) return false;
+      if(it.entryType !== "imei") return false;
+      const gone = (it.status === "판매" || it.status === "개통") || !!it.outDate;
+      if(!gone) return false;
+      if(destQ && String(it.destination||"").trim() !== destQ) return false;
+      const od = String(it.outDate||"").replace(/\D/g,"");
+      if(from && (!od || od < from)) return false;
+      if(to && (!od || od > to)) return false;
+      return true;
+    }).map(it=>{
+      const p = payStatusOf(it);
+      const state = p ? p.state : "none";
+      return { it, p, state };
+    });
+
+    // 요약 카드
+    const cnt = { all:rows.length, done:0, part:0, unpaid:0, none:0, notax:0 };
+    const amt = { all:0, done:0, part:0, unpaid:0, none:0 };
+    rows.forEach(r=>{
+      const v = Number(r.it.salePrice)||0;
+      amt.all += v;
+      const k = (r.state === "wait") ? "unpaid" : r.state;
+      if(cnt[k] !== undefined){ cnt[k]++; amt[k] = (amt[k]||0) + v; }
+      if(r.p && !r.p.taxDone && r.state !== "none") cnt.notax++;
+    });
+    const card = (label, c, a, color)=>
+      '<div style="flex:1;min-width:150px;border:1px solid var(--line);background:#fff;padding:10px 14px;">'
+      + '<div style="font-size:11.5px;color:var(--gray);margin-bottom:4px;">'+label+'</div>'
+      + '<div style="font-size:19px;font-weight:800;color:'+color+';">'+c+'<span style="font-size:12px;font-weight:400;">대</span></div>'
+      + '<div style="font-size:10.5px;color:var(--gray);margin-top:3px;">'+(a||0).toLocaleString()+'</div></div>';
+    cardEl.innerHTML =
+      card("나간 단말기", cnt.all, amt.all, "var(--navy)") +
+      card("입금완료", cnt.done, amt.done, "#2e7d32") +
+      card("부분입금", cnt.part, amt.part, "#b8860b") +
+      card("미입금", cnt.unpaid, amt.unpaid, "var(--danger)") +
+      card("판매요청 없음", cnt.none, amt.none, "var(--gray)") +
+      card("세금계산서 미발행", cnt.notax, 0, "#6a1b9a");
+
+    // 거래처별 요약
+    const byDest = {};
+    rows.forEach(r=>{
+      const d = String(r.it.destination||"미지정");
+      if(!byDest[d]) byDest[d] = { cnt:0, amt:0, unpaid:0, unpaidAmt:0 };
+      const v = Number(r.it.salePrice)||0;
+      byDest[d].cnt++; byDest[d].amt += v;
+      if(r.state === "unpaid" || r.state === "wait" || r.state === "none"){ byDest[d].unpaid++; byDest[d].unpaidAmt += v; }
+    });
+    const dkeys = Object.keys(byDest).sort();
+    sumEl.innerHTML = dkeys.length
+      ? '<div style="overflow-x:auto;"><table class="data-table" style="min-width:640px;"><thead><tr>'
+        + '<th>거래처</th><th class="ta-right">나간 대수</th><th class="ta-right">판매금액</th>'
+        + '<th class="ta-right">미입금 대수</th><th class="ta-right">미입금 금액</th></tr></thead><tbody>'
+        + dkeys.map(d=>'<tr><td><b>'+comboEsc(d)+'</b></td>'
+            + '<td class="ta-right">'+byDest[d].cnt+'</td>'
+            + '<td class="ta-right">'+byDest[d].amt.toLocaleString()+'</td>'
+            + '<td class="ta-right"'+(byDest[d].unpaid?' style="color:var(--danger);font-weight:700;"':'')+'>'+byDest[d].unpaid+'</td>'
+            + '<td class="ta-right"'+(byDest[d].unpaidAmt?' style="color:var(--danger);font-weight:700;"':'')+'>'+byDest[d].unpaidAmt.toLocaleString()+'</td></tr>').join("")
+        + '</tbody></table></div>'
+      : "";
+
+    // 필터
+    if(payCheckFilter === "unpaid") rows = rows.filter(r=> r.state === "unpaid" || r.state === "wait");
+    else if(payCheckFilter === "part") rows = rows.filter(r=> r.state === "part");
+    else if(payCheckFilter === "done") rows = rows.filter(r=> r.state === "done");
+    else if(payCheckFilter === "none") rows = rows.filter(r=> r.state === "none");
+    else if(payCheckFilter === "notax") rows = rows.filter(r=> r.p && !r.p.taxDone);
+
+    // 정렬 — 거래처 → 모델 → 일련번호
+    rows.sort((a,b)=>{
+      const d = String(a.it.destination||"").localeCompare(String(b.it.destination||""));
+      if(d !== 0) return d;
+      const c = cmpModel(a.it, b.it);
+      if(c !== 0) return c;
+      return String(a.it.serialNumber||"").localeCompare(String(b.it.serialNumber||""));
+    });
+
+    if(rows.length === 0){
+      listEl.innerHTML = '<div class="list-empty">해당하는 단말기가 없습니다.</div>';
+      return;
+    }
+    let h = '<div style="overflow-x:auto;"><table class="data-table" style="min-width:1200px;"><thead><tr>'
+      + '<th>일련번호</th><th>전산모델명</th><th>색상</th><th>통신사</th><th>판매처</th>'
+      + '<th>출고일</th><th class="ta-right">판매가</th><th>상태</th><th>입금</th><th>입금일</th><th>세금계산서</th>'
+      + '</tr></thead><tbody>';
+    rows.forEach(r=>{
+      const it = r.it, p = r.p;
+      const label = p ? p.label : "판매요청 없음";
+      const color = p ? p.color : "var(--gray)";
+      h += '<tr>'
+        + '<td><b>'+comboEsc(it.serialNumber||"-")+'</b></td>'
+        + '<td>'+comboEsc(it.systemModel||"-")+'</td>'
+        + '<td>'+comboEsc(it.systemColor||it.manufacturerColor||"-")+'</td>'
+        + '<td>'+comboEsc(it.carrier||"-")+'</td>'
+        + '<td>'+comboEsc(it.destination||"-")+'</td>'
+        + '<td>'+comboEsc(it.outDate||"-")+'</td>'
+        + '<td class="ta-right">'+(Number(it.salePrice)||0).toLocaleString()+'</td>'
+        + '<td>'+comboEsc(it.status||"-")+'</td>'
+        + '<td><span style="color:'+color+';font-weight:700;">'+comboEsc(label)+'</span>'
+        + (p && p.state === "part" ? ' <span style="color:var(--gray);font-size:11px;">'+(p.received||0).toLocaleString()+'/'+(p.need||0).toLocaleString()+'</span>' : '')
+        + '</td>'
+        + '<td>'+((p && p.state === "done") ? comboEsc(p.reqDate||"-") : "-")+'</td>'
+        + '<td>'+(p ? (p.taxDone ? '<span style="color:#2e7d32;">발행완료</span>' : '<span style="color:var(--danger);">미발행</span>') : "-")+'</td>'
+        + '</tr>';
+    });
+    const totQty = rows.length;
+    const totAmt = rows.reduce((n,r)=> n + (Number(r.it.salePrice)||0), 0);
+    h += '<tr style="background:#fafafa;font-weight:700;border-top:2px solid var(--navy);">'
+      + '<td colspan="6">합계 '+totQty+'대</td>'
+      + '<td class="ta-right">'+totAmt.toLocaleString()+'</td><td colspan="4"></td></tr>';
+    h += '</tbody></table></div>';
+    listEl.innerHTML = h;
+    addDownloadBtn("dl-paycheck", "pc-list", "단말기입금대조");
+    addViewCfgBtn("dl-paycheck", "pc-list");
+  };
+
+  // 모델명 안의 숫자로 정렬합니다. (1순위 모델 숫자, 2순위 기가수)
+  //  예) SM-F776N256 → 모델 776, 기가 256
+  //      SM-F971N512 → 모델 971, 기가 512
+  //  결과: 776/256 → 776/512 → 971/256 → 971/512 → 976/256 → 976/512
+  function modelSortKey(systemModel, baseModel, capacity){
+    const sm = String(systemModel || "");
+    const bm = String(baseModel || "");
+    let num = 0, gb = 0;
+    // 전산모델명에서 「SM-F776N256」 형태를 읽습니다.
+    let m = sm.match(/^([A-Za-z\-]*?)(\d+)([A-Za-z]*)(\d*)$/);
+    if(m){
+      num = Number(m[2]) || 0;
+      gb  = Number(m[4]) || 0;
+    }
+    if(!num){
+      const m2 = (bm || sm).match(/(\d+)/);
+      if(m2) num = Number(m2[1]) || 0;
+    }
+    if(!gb){
+      const c = String(capacity || "").match(/(\d+)/);
+      if(c) gb = Number(c[1]) || 0;
+    }
+    // 앞머리 글자(SM-F / SM-S 등)도 함께 봅니다.
+    const prefix = (sm.match(/^[A-Za-z\-]+/) || [""])[0].toUpperCase();
+    return { prefix, num, gb, raw: sm || bm };
+  }
+
+  // 두 모델을 견주어 정렬합니다.
+  function cmpModel(a, b){
+    const A = modelSortKey(a.systemModel, a.baseModel, a.capacity);
+    const B = modelSortKey(b.systemModel, b.baseModel, b.capacity);
+    if(A.prefix !== B.prefix) return A.prefix.localeCompare(B.prefix);
+    if(A.num !== B.num) return A.num - B.num;        // 1순위 — 모델 숫자 작은 것부터
+    if(A.gb  !== B.gb ) return A.gb  - B.gb;         // 2순위 — 기가수 작은 것부터
+    return String(A.raw).localeCompare(String(B.raw));
+  }
+
+  // ================= 공용 보기 설정 =================
+  // 표가 있는 어느 화면이든 열 고르기·줄 간격·가로 폭을 조절합니다.
+  // 설정은 브라우저에 저장되어 사람마다 따로 유지됩니다.
+  const VIEW_DEFAULT = { hidden: [], dense: "normal", full: false };
+
+  function viewKey(id){ return "viewCfg_" + id; }
+  function getViewCfg(id){
+    try{
+      const raw = localStorage.getItem(viewKey(id));
+      if(raw) return { ...VIEW_DEFAULT, ...JSON.parse(raw) };
+    }catch(e){}
+    return { ...VIEW_DEFAULT };
+  }
+  function setViewCfg(id, cfg){
+    try{ localStorage.setItem(viewKey(id), JSON.stringify(cfg)); }catch(e){}
+  }
+
+  // 저장된 설정을 표에 실제로 적용합니다.
+  window.applyViewCfg = function(containerId){
+    const box = document.getElementById(containerId);
+    if(!box) return;
+    const cfg = getViewCfg(containerId);
+    // 줄 간격·가로 폭은 클래스로 한 번에 적용합니다.
+    box.classList.remove("vc-tight","vc-tiny","vc-full");
+    if(cfg.dense === "tight") box.classList.add("vc-tight");
+    if(cfg.dense === "tiny")  box.classList.add("vc-tiny");
+    if(cfg.full) box.classList.add("vc-full");
+    box.querySelectorAll("table").forEach(tb=>{
+      // 숨긴 열
+      const heads = Array.from(tb.rows[0] ? tb.rows[0].cells : []);
+      heads.forEach((th, i)=>{
+        const nm = (th.textContent || "").replace(/\s+/g," ").trim();
+        const hide = nm && cfg.hidden.includes(nm);
+        Array.from(tb.rows).forEach(tr=>{
+          if(tr.cells[i]) tr.cells[i].style.display = hide ? "none" : "";
+        });
+      });
+    });
+  };
+
+  // 설정 창을 열고 닫습니다.
+  window.toggleViewCfg = function(containerId, panelId){
+    const panel = document.getElementById(panelId);
+    if(!panel) return;
+    if(panel.style.display === "none" || !panel.style.display){
+      renderViewCfgPanel(containerId, panelId);
+      panel.style.display = "block";
+    }else{
+      panel.style.display = "none";
+    }
+  };
+
+  function renderViewCfgPanel(containerId, panelId){
+    const box = document.getElementById(containerId);
+    const panel = document.getElementById(panelId);
+    if(!box || !panel) return;
+    const cfg = getViewCfg(containerId);
+    // 표의 머리글에서 열 이름을 뽑습니다.
+    const names = [];
+    box.querySelectorAll("table").forEach(tb=>{
+      const r0 = tb.rows[0];
+      if(!r0) return;
+      Array.from(r0.cells).forEach(th=>{
+        const nm = (th.textContent || "").replace(/\s+/g," ").trim();
+        if(nm && !names.includes(nm)) names.push(nm);
+      });
+    });
+    const btn = (label, on, act)=>
+      '<button class="btn small' + (on ? '' : ' secondary') + '" style="width:auto;" data-vc="' + act + '">' + label + '</button>';
+
+    panel.innerHTML =
+      '<div style="font-size:12.5px;font-weight:700;margin-bottom:6px;">보고 싶은 열을 고르세요</div>'
+      + (names.length
+        ? '<div style="display:flex;flex-wrap:wrap;gap:8px 16px;font-size:12.5px;">'
+          + names.map(n=>'<label style="display:flex;align-items:center;gap:4px;white-space:nowrap;">'
+            + '<input type="checkbox" class="vc-col" value="'+comboEsc(n)+'"'
+            + (cfg.hidden.includes(n) ? '' : ' checked') + '>' + comboEsc(n) + '</label>').join("")
+          + '</div>'
+        : '<div style="font-size:12px;color:var(--gray);">표를 먼저 조회해주세요.</div>')
+      + '<div style="border-top:1px solid var(--line);margin-top:10px;padding-top:8px;display:flex;align-items:center;gap:0;flex-wrap:wrap;">'
+      + '<span style="font-size:12.5px;margin-right:8px;">줄 간격</span>'
+      + btn("보통", cfg.dense==="normal", "d:normal") + btn("좁게", cfg.dense==="tight", "d:tight") + btn("아주 좁게", cfg.dense==="tiny", "d:tiny")
+      + '<span style="font-size:12.5px;margin:0 8px 0 16px;">가로 폭</span>'
+      + btn("내용에 맞게", !cfg.full, "f:0") + btn("화면에 꽉 채우기", cfg.full, "f:1")
+      + '</div>'
+      + '<div style="margin-top:8px;">'
+      + '<button class="btn small" style="width:auto;" data-vc="apply">적용</button>'
+      + '<button class="btn small secondary" style="width:auto;" data-vc="reset">기본으로</button>'
+      + '<button class="btn small secondary" style="width:auto;" data-vc="close">닫기</button>'
+      + '</div>';
+
+    panel.querySelectorAll("[data-vc]").forEach(b=>{
+      b.onclick = ()=>{
+        const act = b.dataset.vc;
+        const cur = getViewCfg(containerId);
+        if(act.startsWith("d:")){ cur.dense = act.slice(2); setViewCfg(containerId, cur); renderViewCfgPanel(containerId, panelId); applyViewCfg(containerId); return; }
+        if(act.startsWith("f:")){ cur.full = act === "f:1"; setViewCfg(containerId, cur); renderViewCfgPanel(containerId, panelId); applyViewCfg(containerId); return; }
+        if(act === "apply"){
+          const hid = [];
+          panel.querySelectorAll(".vc-col").forEach(cb=>{ if(!cb.checked) hid.push(cb.value); });
+          cur.hidden = hid; setViewCfg(containerId, cur);
+          applyViewCfg(containerId);
+          panel.style.display = "none";
+          return;
+        }
+        if(act === "reset"){ setViewCfg(containerId, { ...VIEW_DEFAULT }); applyViewCfg(containerId); renderViewCfgPanel(containerId, panelId); return; }
+        if(act === "close"){ panel.style.display = "none"; return; }
+      };
+    });
+  }
+
+  // 버튼과 설정 칸을 만들어 넣습니다.
+  window.addViewCfgBtn = function(slotId, containerId){
+    const slot = document.getElementById(slotId);
+    if(!slot) return;
+    const panelId = slotId + "-panel";
+    if(!document.getElementById(panelId)){
+      const pn = document.createElement("div");
+      pn.id = panelId;
+      pn.style.cssText = "display:none;border:1px solid var(--navy);background:#fafafa;padding:10px 12px;margin:8px 0;";
+      const box = document.getElementById(containerId);
+      if(box && box.parentElement) box.parentElement.insertBefore(pn, box);
+    }
+    if(!slot.querySelector("[data-vcbtn]")){
+      const b = document.createElement("button");
+      b.className = "btn small secondary";
+      b.style.width = "auto";
+      b.dataset.vcbtn = "1";
+      b.textContent = "보기 설정";
+      b.title = "열 고르기 · 줄 간격 · 가로 폭";
+      b.onclick = ()=> toggleViewCfg(containerId, panelId);
+      slot.appendChild(b);
+    }
+    applyViewCfg(containerId);
+  };
+
   // ================= 화면 표를 그대로 엑셀로 =================
   // 어느 화면이든 표가 있으면 보이는 그대로 내려받습니다.
   // 숨긴 열은 파일에도 들어가지 않습니다.
@@ -16821,17 +17343,31 @@
         }
       });
       if(itemId && changes.length>0){ matchedCount++; changedFieldsTotal += changes.length; }
-      previewRows.push({ serial, itemId, changes });
+      // 넣은 값으로 나머지를 계산해 미리 보여줍니다.
+      const baseItem = lastRenderedItems.find(x=> x.id === itemId) || null;
+      const auto = (itemId && changes.length>0) ? fillDiscountsFromUpload(baseItem, changes) : {};
+      previewRows.push({ serial, itemId, changes, auto });
     });
 
-    let html = '<div style="background:#fafafa;border:1px solid var(--line);padding:10px;margin-bottom:12px;font-size:12.5px;">' +
-      '매칭된 재고: <b>'+matchedCount+'건</b> · 반영될 칸 수: <b>'+changedFieldsTotal+'개</b></div>';
+    const autoTotal = previewRows.reduce((n,r)=> n + Object.keys(r.auto||{}).length, 0);
+    const AUTO_LABEL = { purchaseDiscount:"선할인%", purchaseDiscountAmt:"선할인",
+      otherDiscountPct:"타할인%", otherDiscountAmt:"타할인", purchasePrice:"입고가",
+      saleDiscount:"판매할인%", saleDiscountAmt:"판매할인", salePrice:"판매가", profit:"수익" };
+    let html = '<div style="background:#fafafa;border:1px solid var(--line);padding:10px;margin-bottom:12px;font-size:12.5px;line-height:1.8;">' +
+      '매칭된 재고: <b>'+matchedCount+'건</b> · 반영될 칸 수: <b>'+changedFieldsTotal+'개</b>'
+      + (autoTotal ? '<br><span style="color:#1565c0;">자동으로 함께 계산되는 칸: <b>'+autoTotal+'개</b></span> '
+          + '<span style="color:var(--gray);font-size:11.5px;">— 금액만 넣으면 %를, %만 넣으면 금액을 출고가 기준으로 채웁니다.</span>' : '')
+      + '</div>';
     html += '<div style="overflow-x:auto;border:1px solid var(--line);max-height:280px;overflow-y:auto;"><table class="data-table"><thead><tr><th>일련번호</th><th>매칭</th><th>바뀌는 내용</th></tr></thead><tbody>';
     previewRows.forEach(r=>{
+      const autoTxt = Object.keys(r.auto||{}).map(k=>
+        (AUTO_LABEL[k]||k) + "=" + (typeof r.auto[k] === "number" ? r.auto[k].toLocaleString() : r.auto[k])).join(", ");
       html += '<tr'+(!r.itemId?' style="color:var(--danger);"':'')+'>' +
         '<td>'+r.serial+'</td>' +
         '<td>'+(r.itemId?'✓':'재고 없음')+'</td>' +
-        '<td>'+(r.changes.length ? r.changes.map(c=>c.label+'='+c.display).join(', ') : '-')+'</td>' +
+        '<td>'+(r.changes.length ? comboEsc(r.changes.map(c=>c.label+'='+c.display).join(', ')) : '-')
+        + (autoTxt ? '<br><span style="color:#1565c0;font-size:11px;">+ 자동: '+comboEsc(autoTxt)+'</span>' : '')
+        + '</td>' +
         '</tr>';
     });
     html += '</tbody></table></div>';
@@ -16840,16 +17376,90 @@
 
     analysisEl.innerHTML = html;
     analysisEl.dataset.rows = JSON.stringify(
-      previewRows.filter(r=>r.itemId && r.changes.length>0).map(r=>({ itemId:r.itemId, changes:r.changes }))
+      previewRows.filter(r=>r.itemId && r.changes.length>0)
+        .map(r=>({ itemId:r.itemId, changes:r.changes, auto:r.auto||{} }))
     );
   };
+
+  // 엑셀에 넣은 값으로 나머지 금액·할인율을 채워 계산합니다.
+  //  · 출고가가 있어야 계산됩니다. (없으면 넣은 값만 저장)
+  //  · 파일에 이미 값이 있는 칸은 건드리지 않습니다. (사람이 적은 값 우선)
+  function fillDiscountsFromUpload(item, changes){
+    const num = v => (v==null || v==="" || !isFinite(Number(v))) ? null : Number(v);
+    const given = {};
+    changes.forEach(c=>{ given[c.key] = c.value; });
+
+    // 출고가 — 파일에 있으면 그것, 없으면 기존 값
+    const L = num(given.listPrice != null ? given.listPrice : (item ? item.listPrice : null));
+    if(!L) return {};   // 출고가가 없으면 계산할 수 없습니다.
+
+    const pct = a => Number(((a / L) * 100).toFixed(2));
+    const amt = r => Math.round(L * r / 100);
+    const has = k => given[k] != null && given[k] !== "";
+    const cur = k => num(item ? item[k] : null);
+    const add = {};
+
+    // ── 매입 쪽 ──
+    let pre   = has("purchaseDiscountAmt") ? num(given.purchaseDiscountAmt)
+              : (has("purchaseDiscount")   ? amt(num(given.purchaseDiscount)) : null);
+    let other = has("otherDiscountAmt")    ? num(given.otherDiscountAmt)
+              : (has("otherDiscountPct")   ? amt(num(given.otherDiscountPct)) : null);
+    let buy   = has("purchasePrice")       ? num(given.purchasePrice) : null;
+
+    // 금액만 넣었으면 %를, %만 넣었으면 금액을 채웁니다.
+    if(has("purchaseDiscountAmt") && !has("purchaseDiscount")) add.purchaseDiscount = pct(pre);
+    if(has("purchaseDiscount") && !has("purchaseDiscountAmt")) add.purchaseDiscountAmt = pre;
+    if(has("otherDiscountAmt") && !has("otherDiscountPct"))    add.otherDiscountPct = pct(other);
+    if(has("otherDiscountPct") && !has("otherDiscountAmt"))    add.otherDiscountAmt = other;
+
+    // 입고가를 안 넣었고 할인을 넣었으면 입고가를 계산합니다.
+    if(buy == null && (pre != null || other != null)){
+      const p2 = (pre   != null) ? pre   : (cur("purchaseDiscountAmt") || 0);
+      const o2 = (other != null) ? other : (cur("otherDiscountAmt")    || 0);
+      buy = L - p2 - o2;
+      add.purchasePrice = buy;
+    }
+    // 입고가만 넣었으면 선할인을 역산합니다.
+    if(buy != null && !has("purchaseDiscountAmt") && !has("purchaseDiscount")){
+      const o2 = (other != null) ? other : (cur("otherDiscountAmt") || 0);
+      const p3 = L - buy - o2;
+      add.purchaseDiscountAmt = p3;
+      add.purchaseDiscount = pct(p3);
+    }
+
+    // ── 판매 쪽 ──
+    let saleA = has("saleDiscountAmt") ? num(given.saleDiscountAmt)
+              : (has("saleDiscount")   ? amt(num(given.saleDiscount)) : null);
+    let sale  = has("salePrice")       ? num(given.salePrice) : null;
+
+    if(has("saleDiscountAmt") && !has("saleDiscount")) add.saleDiscount = pct(saleA);
+    if(has("saleDiscount") && !has("saleDiscountAmt")) add.saleDiscountAmt = saleA;
+
+    if(sale == null && saleA != null){ sale = L - saleA; add.salePrice = sale; }
+    if(sale != null && saleA == null && !has("saleDiscountAmt") && !has("saleDiscount")){
+      const s2 = L - sale;
+      add.saleDiscountAmt = s2;
+      add.saleDiscount = pct(s2);
+    }
+
+    // ── 수익 ──
+    const finalBuy  = (buy  != null) ? buy  : cur("purchasePrice");
+    const finalSale = (sale != null) ? sale : cur("salePrice");
+    if(finalBuy && finalSale) add.profit = finalSale - finalBuy;
+
+    return add;
+  }
 
   window.submitBulkEditUpload = async function(){
     if(!hasPerm(currentUserPerms, "bulkEdit")){ alert("이 기능을 사용할 권한이 없습니다. 관리자에게 요청해주세요."); return; }
     const data = JSON.parse(document.getElementById("bulk-edit-analysis").dataset.rows || "[]");
     const resultEl = document.getElementById("bulk-edit-result");
     if(data.length===0){ resultEl.innerHTML = '반영할 내용이 없습니다.'; return; }
-    if(!confirm(data.length+"건의 재고에 채워주신 값을 반영하시겠습니까?")) return;
+    const autoCnt = data.reduce((n,r)=> n + Object.keys(r.auto||{}).length, 0);
+    if(!confirm(data.length + "건의 재고에 채워주신 값을 반영하시겠습니까?\n\n"
+      + (autoCnt ? "· 함께 계산되는 칸 " + autoCnt + "개 (선할인%·타할인%·입고가·판매가·수익 등)\n"
+                   + "· 파일에 적으신 값이 우선이고, 빈칸만 계산해서 채웁니다.\n" : "")
+      + "\n진행하시겠습니까?")) return;
 
     let updated = 0;
     for(let i=0;i<data.length;i+=450){
@@ -16857,6 +17467,8 @@
       const batch = writeBatch(db);
       chunk.forEach(r=>{
         const patch = {};
+        // 자동 계산값을 먼저 넣고, 파일에 적은 값으로 덮어씁니다. (사람이 적은 값 우선)
+        Object.keys(r.auto || {}).forEach(k=>{ patch[k] = r.auto[k]; });
         r.changes.forEach(c=>{ patch[c.key] = c.value; });
         batch.update(doc(db,"inventoryItems", r.itemId), patch);
       });
@@ -16864,7 +17476,9 @@
       updated += chunk.length;
       resultEl.textContent = "반영 중... ("+updated+"/"+data.length+")";
     }
-    logAction("재고 일괄수정 업로드", updated+"건");
+    logAction("재고 일괄수정 업로드", updated + "건"
+      + (autoCnt ? " / 자동계산 " + autoCnt + "칸" : ""));
+    clearDashCache(); clearCache("inventory");
     resultEl.innerHTML = '<b>'+updated+'건 반영 완료</b>';
     loadInventoryList();
   };
@@ -17838,6 +18452,8 @@
       });
       listEl.prepend(renderPaginationBar("logs", allDocs.length, loadLogs));
     }catch(err){ listEl.innerHTML = '<div class="list-empty">이력을 불러오지 못했습니다: '+err.message+'</div>'; }
+  
+    addDownloadBtn("dl-logs", "log-list", "이력"); addViewCfgBtn("dl-logs", "log-list");
   }
   window.toggleAllLogs = function(masterCb){
     document.querySelectorAll(".log-check").forEach(cb=> cb.checked = masterCb.checked);
@@ -17925,6 +18541,7 @@
     if(tabId==="tab-datacheck" && typeof runDataCheck === "function") runDataCheck();
     if(tabId==="tab-itemhistory" && typeof initItemHistoryTab === "function") initItemHistoryTab();
     if(tabId==="tab-lgrefund" && typeof loadLgRefund === "function") loadLgRefund();
+    if(tabId==="tab-paycheck" && typeof loadPayCheck === "function") loadPayCheck();
     if(tabId==="tab-b2b" && typeof loadLoanList === "function") loadLoanList();
     if(tabId==="tab-site" && typeof renderHiddenList === "function") renderHiddenList();
     if(tabId==="tab-site" && typeof renderCacheTargets === "function") renderCacheTargets();
@@ -18078,6 +18695,7 @@
       setMenu("tabbtn-datacheck", showDataCheck || showSettlement);
       setMenu("tabbtn-itemhistory", showItemHist || showAnyWorkMenu);
       setMenu("tabbtn-lgrefund", showLgRefund || showSettlement);
+      setMenu("tabbtn-paycheck", showSettlement || showSaleReq);
       setMenu("tabbtn-logs", showLogs);
       setMenu("tabbtn-dashboard", showDashboard);
       setMenu("tabbtn-inv-work", showInvWork);
