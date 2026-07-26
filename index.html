@@ -289,7 +289,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-07-25 v167</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-07-25 v168</span>
       <span id="topbar-username">-</span>
       <button onclick="openPersonalSettingsModal()">개인설정</button>
       <button onclick="handleLogout()">로그아웃</button>
@@ -518,6 +518,8 @@
       <div class="card" style="max-width:1500px;">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
           <h3 style="margin:0;">예약 목록 <span class="info-tip" title="등록한 예약을 한 줄씩 보여줍니다. 수정·삭제·배정을 여기서 하세요.">ⓘ</span></h3>
+          <button class="btn small secondary" style="width:auto;" onclick="createQuotationFromSelected()">견적서 발행</button>
+          <button class="btn small secondary" style="width:auto;" onclick="toggleQuotationList()">발행한 견적서</button>
           <span style="position:relative;">
             <button class="btn small" style="width:auto;" onclick="toggleResvAddMenu(event)">+ 예약 ▾</button>
             <div id="resv-add-menu" style="display:none;position:absolute;top:36px;right:0;background:#fff;border:1px solid var(--navy);box-shadow:0 2px 10px rgba(0,0,0,0.15);z-index:100;min-width:200px;">
@@ -529,11 +531,7 @@
         </div>
         <p class="desc" style="margin-top:0;">거래처별 예약을 등록하고, 실물이 들어오면 <b>배정</b>을 눌러 판매요청으로 넘깁니다. 판매가를 비워두면 <b>미입력</b>으로 표시되고 배정할 때 넣으면 됩니다.</p>
         <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px;">
-          <button class="btn small" style="width:auto;" onclick="createQuotationFromSelected()">체크한 예약으로 견적서 발행</button>
-          <span class="info-tip" title="같은 거래처·같은 구분(구매 또는 판매)의 예약을 체크하면 하나로 합쳐 계산합니다. 구매 예약은 출고가·할인율·할인금액·입고가가 모두 표시되는 매입 견적서로 나옵니다. 발행하면 그 예약은 수정이 잠깁니다.">ⓘ</span>
-          <button class="btn small secondary" style="width:auto;" onclick="toggleQuotationList()">발행한 견적서 보기</button>
-          <span style="color:var(--line);">|</span>
-          <span style="font-size:12px;color:var(--gray);">구분</span>
+          <span class="info-tip" title="체크한 예약으로 견적서를 발행합니다. 같은 거래처·같은 구분(구매 또는 판매)이어야 합니다. 구매 예약은 출고가·할인율·할인금액·입고가가 모두 표시되는 매입 견적서로 나옵니다.">ⓘ</span>
           <button class="btn small" id="resvf-all" style="width:auto;border:1px solid var(--navy);" onclick="setResvListFilter('all')">전체</button>
           <button class="btn small secondary" id="resvf-sale" style="width:auto;border:1px solid var(--navy);margin-left:-1px;" onclick="setResvListFilter('sale')">판매</button>
           <button class="btn small secondary" id="resvf-buy" style="width:auto;border:1px solid var(--navy);margin-left:-1px;" onclick="setResvListFilter('buy')">구매</button>
@@ -1513,6 +1511,7 @@
         <datalist id="arrival-color-datalist"></datalist>
         <div class="stack-form">
           <div class="stack-row"><label>입고일 (도착일)</label><input type="text" id="arrival-bulk-indate-input" placeholder="예: 20260724" maxlength="8" inputmode="numeric"></div>
+          <div class="stack-row"><label>위치 <span class="info-tip" title="단말기를 어디에 두는지 적어주세요. 나중에 위치를 옮기면 단말 이력에 남습니다.">ⓘ</span></label><select id="arrival-bulk-location"><option value="">선택</option></select></div>
         </div>
         <div id="arrival-autosell-box" style="display:none;border:1px solid var(--navy);background:#fafafa;padding:9px 11px;margin-top:10px;font-size:12.5px;">
           <label style="display:flex;align-items:center;gap:6px;font-weight:700;color:var(--navy);">
@@ -6862,6 +6861,10 @@
     currentPoBatch = { batchId, b };
     const poBtn2 = document.getElementById("order-po-btn");
     if(poBtn2) poBtn2.style.display = "";
+    const baBtn2 = document.getElementById("order-bulkarr-btn");
+    if(baBtn2) baBtn2.style.display = "";
+    const baBox2 = document.getElementById("bulk-arrival-box");
+    if(baBox2) baBox2.style.display = "none";
 
     let sumQty = 0, sumPurchase = 0, sumSale = 0;
     lines.forEach(o=>{
@@ -6955,6 +6958,15 @@
       descCell("남은 대수", remain) +
       descCell("판매처", o.destination || "미지정");
     document.getElementById("arrival-bulk-indate-input").value = todayStr();
+    const locSel = document.getElementById("arrival-bulk-location");
+    if(locSel){
+      const cur = locSel.value;
+      locSel.innerHTML = '<option value="">선택</option>';
+      (await fetchNamesList("locations")).forEach(n=>{
+        const op = document.createElement("option"); op.value = n; op.textContent = n; locSel.appendChild(op);
+      });
+      if(cur) locSel.value = cur;   // 연속 입력을 위해 앞서 고른 위치를 유지합니다
+    }
 
     // 주문에 판매처가 정해져 있으면 "도착 즉시 판매처리" 선택지를 보여줍니다.
     const autoBox = document.getElementById("arrival-autosell-box");
@@ -7279,6 +7291,8 @@
     if(rows.length===0){ alert("입력할 대수가 없습니다."); return; }
     const m = modelsCache.find(x=>x.id===currentArrivalOrderData.modelId);
     const inDate = document.getElementById("arrival-bulk-indate-input").value || todayStr();
+    const locEl = document.getElementById("arrival-bulk-location");
+    const arrLocation = locEl ? locEl.value : "";
     const resultEl = document.getElementById("arrival-bulk-result");
 
     const entries = [];
@@ -7337,7 +7351,7 @@
       batch.set(ref, {
         baseModel:freshModel.baseModel, capacity:freshModel.capacity, systemModel:freshModel.systemModel,
         petName:freshModel.petName||"", manufacturerColor:c.manufacturerColor||"", systemColor:c.systemColor||"", sku:c.sku||"",
-        carrier:o.carrier||"", source:o.source||"", manufacturer:"", location:"", destination:o.destination||"",
+        carrier:o.carrier||"", source:o.source||"", manufacturer:"", location: arrLocation, destination:o.destination||"",
         listPrice:o.listPrice||null, purchasePrice:o.purchasePrice||null, salePrice:o.salePrice||null,
         purchaseDiscountAmt:o.preDiscountAmt||null, purchaseDiscount:o.preDiscountPct||null,
         otherDiscountAmt:o.otherDiscountAmt||null, otherDiscountPct:o.otherDiscountPct||null,
@@ -12053,6 +12067,10 @@
     document.getElementById("order-detail-heading").textContent = "판매 요청서";
     const poBtn = document.getElementById("order-po-btn");
     if(poBtn) poBtn.style.display = "none";   // 발주서는 주문에서만
+    const baBtn = document.getElementById("order-bulkarr-btn");
+    if(baBtn) baBtn.style.display = "none";   // 도착 등록도 주문에서만
+    const baBox = document.getElementById("bulk-arrival-box");
+    if(baBox) baBox.style.display = "none";
     // 이 판매요청이 어디서 왔는지 표시 (주문에서 자동생성 / 예약 배정 / 직접 등록)
     setTimeout(()=> renderSaleReqOrigin(b, lines), 0);
     document.getElementById("order-detail-title").textContent = (b.destination||"-") + " · 요청일 " + (b.requestDate||"-");
