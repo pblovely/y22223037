@@ -279,7 +279,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-07-25 v112</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-07-25 v113</span>
       <span id="topbar-username">-</span>
       <button onclick="openPersonalSettingsModal()">개인설정</button>
       <button onclick="handleLogout()">로그아웃</button>
@@ -1063,7 +1063,9 @@
       <div class="card">
         <h3>삼성 B2B 여신 관리 <span class="info-tip" title="포피플에서 삼성에 직접입금하거나 B2B대출로 입금하면 여신이 쌓입니다. 그 여신에서 단말기를 할인된 가격으로 주문해서 차감됩니다. B2B대출 관련 수수료·이자는 여신과 별개의 비용입니다.">ⓘ</span></h3>
         <div id="b2b-stat-cards" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px;"></div>
+        <button class="btn small secondary" style="width:auto;" onclick="showB2BOrderUseDetail()">주문사용 내역 보기</button>
         <button class="btn small secondary" style="width:auto;" onclick="repairB2BOrderUse()">주문사용 금액 정리</button>
+        <div id="b2b-orderuse-detail" style="display:none;margin-top:10px;"></div>
         <p class="desc" style="margin-top:6px;">여신으로 결제한 주문의 실제 금액과 <b>주문사용</b> 기록이 다르면 맞춰줍니다. 수기로 넣은 기록은 건드리지 않습니다.</p>
       </div>
 
@@ -6816,6 +6818,50 @@
     }
   }
 
+  // 주문사용이 어떤 주문에서 나왔는지 하나하나 보여줍니다.
+  window.showB2BOrderUseDetail = async function(){
+    const el = document.getElementById("b2b-orderuse-detail");
+    if(el.style.display !== "none"){ el.style.display = "none"; return; }
+    el.style.display = "block";
+    el.innerHTML = '<div class="list-empty">불러오는 중...</div>';
+
+    const ledSnap = await getDocs(query(collection(db,"b2bLedger"), where("category","==","order_use")));
+    const recs = []; ledSnap.forEach(d=> recs.push({ id:d.id, ...d.data() }));
+    if(recs.length === 0){ el.innerHTML = '<div class="list-empty">주문사용 기록이 없습니다.</div>'; return; }
+
+    const obSnap = await getDocs(collection(db,"orderBatches"));
+    const orders = {};
+    obSnap.forEach(d=> orders[d.id] = d.data());
+
+    recs.sort((a,b)=> String(b.date||"").localeCompare(String(a.date||"")));
+    let total = 0;
+    let h = '<div style="overflow-x:auto;border:1px solid var(--line);"><table class="data-table" style="min-width:760px;"><thead><tr>' +
+      '<th>일자</th><th>매입처</th><th class="ta-right">기록 금액</th><th class="ta-right">주문 금액</th><th>상태</th><th>메모</th>' +
+      '</tr></thead><tbody>';
+    recs.forEach(r=>{
+      const amt = Number(r.amount)||0; total += amt;
+      const o = r.fromOrderBatchId ? orders[r.fromOrderBatchId] : null;
+      const oAmt = o ? (Number(o.depositRequired)||0) : null;
+      let state = "", color = "";
+      if(!r.fromOrderBatchId){ state = "수기 입력"; color = "var(--gray)"; }
+      else if(!o){ state = "주문 없음"; color = "var(--danger)"; }
+      else if(o.status === "취소"){ state = "주문 취소됨"; color = "var(--danger)"; }
+      else if(o.paymentMethod !== "b2b_credit"){ state = "여신 결제 아님"; color = "var(--danger)"; }
+      else if(oAmt !== amt){ state = "금액 다름"; color = "var(--danger)"; }
+      else { state = "정상"; color = "#2e7d32"; }
+      h += '<tr><td>'+comboEsc(r.date||"-")+'</td>' +
+        '<td>'+comboEsc(o ? (o.source||"-") : "-")+'</td>' +
+        '<td class="ta-right">'+amt.toLocaleString()+'</td>' +
+        '<td class="ta-right">'+(oAmt!=null ? oAmt.toLocaleString() : "-")+'</td>' +
+        '<td style="color:'+color+';font-weight:700;">'+state+'</td>' +
+        '<td style="font-size:11px;color:var(--gray);">'+comboEsc(r.memo||"-")+'</td></tr>';
+    });
+    h += '<tr style="background:#fafafa;font-weight:700;"><td colspan="2">합계</td>' +
+      '<td class="ta-right">'+total.toLocaleString()+'</td><td colspan="3"></td></tr>';
+    h += '</tbody></table></div>';
+    el.innerHTML = h;
+  };
+
   // 여신 주문사용 기록을 실제 주문금액과 맞춥니다.
   // 중복·금액 불일치·삭제된 주문의 기록을 한 번에 바로잡습니다.
   window.repairB2BOrderUse = async function(){
@@ -10652,10 +10698,14 @@
         '<div style="font-size:11.5px;color:var(--gray);margin-bottom:4px;">'+label+'</div>' +
         '<div style="font-size:19px;font-weight:800;color:'+(color||'var(--navy)')+';">'+value+'</div></div>';
     }
-    let html = statCard("실시간 잔여여신 (입금+클럽장려금-주문사용)", remainingCredit.toLocaleString(), "#1565c0");
+    // 계산 근거를 그대로 보여줘서 숫자가 왜 그런지 바로 알 수 있게 합니다.
+    let html = statCard("실시간 잔여여신", remainingCredit.toLocaleString(), remainingCredit < 0 ? "var(--danger)" : "#1565c0");
+    html += statCard("① 여신 입금 (충전)", depositTotal.toLocaleString(), "#2e7d32");
+    html += statCard("② 클럽장려금", clubIncentiveTotal.toLocaleString(), "#6a1b9a");
+    html += statCard("③ 주문사용 (차감)", orderUseTotal.toLocaleString(), "var(--danger)");
     html += statCard("B2B대출비용 합계 (수수료+이자)", loanCostTotal.toLocaleString(), "var(--danger)");
+    html += statCard("잔여여신 = ①+②−③", remainingCredit.toLocaleString(), remainingCredit < 0 ? "var(--danger)" : "#1565c0");
     html += statCard("이자지급 수령 합계", interestReceivedTotal.toLocaleString(), "#2e7d32");
-    html += statCard("클럽장려금 합계 (후정산, 참고용)", clubIncentiveTotal.toLocaleString(), "#6a1b9a");
     html += statCard("기존 매입-매출 차액 (수익)", baseProfitSum.toLocaleString());
     html += statCard("최종 실제수익 (수익-대출비용+이자수령)", finalProfit.toLocaleString(), "#2e7d32");
     statEl.innerHTML = html;
