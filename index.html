@@ -309,7 +309,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-07-27 v273</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-07-27 v275</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -1341,6 +1341,8 @@
           <div style="flex:1;min-width:430px;">
             <h3 style="font-size:13px;margin:0 0 6px;">출금요청 <span style="color:var(--gray);font-weight:400;">— 줘야 할 돈 (주문)</span></h3>
             <div id="reqboard-out"></div>
+            <h3 style="font-size:13px;margin:14px 0 6px;">여신결제 주문 <span style="color:var(--gray);font-weight:400;">— 여신에서 차감 (결제완료)</span></h3>
+            <div id="reqboard-credit-orders"></div>
             <h3 style="font-size:13px;margin:14px 0 6px;">삼성전자 선입금 <span style="color:var(--gray);font-weight:400;">— 여신에 미리 넣은 돈 (이미 보낸 돈)</span></h3>
             <div id="reqboard-credit"></div>
           </div>
@@ -9807,7 +9809,41 @@
           '<tr style="background:#fafafa;font-weight:700;border-top:2px solid var(--navy);">' +
           '<td colspan="2">합계</td><td class="ta-right" style="color:#1565c0;">' + creditIn.toLocaleString() + '</td><td></td></tr>' +
           '</tbody></table></div>' +
-          '<div style="color:var(--gray);font-size:11.5px;margin-top:4px;">이미 나간 돈이라 「줘야 할 돈」에는 넣지 않습니다. 갚는 것(상환)은 삼성 B2B 여신에서 관리합니다.</div>';
+          '<div style="color:var(--gray);font-size:11.5px;margin-top:4px;">여신을 채우려고 미리 넣은 돈입니다. 결제 자체는 위 <b>여신결제 주문</b>에서 잡히므로 <b>합계에는 넣지 않습니다.</b> 갚는 것(상환)은 삼성 B2B 여신에서 관리합니다.</div>';
+      }
+    }
+
+    // 여신결제 주문 — 출금요청 없이 여신에서 바로 차감된 건들입니다. 이미 결제완료 상태입니다.
+    let creditOrderAmt = 0;
+    const creditOrderRows = [];
+    try{
+      const obSnap = await getDocs(query(collection(db,"orderBatches"), orderBy("orderDate","desc")));
+      obSnap.forEach(x=>{
+        const o = x.data();
+        if(o.paymentMethod !== "b2b_credit") return;
+        if(o.status === "취소") return;
+        const amt = Number(o.depositRequired) || 0;
+        creditOrderAmt += amt;
+        creditOrderRows.push({ date:o.orderDate||"-", who:o.source||"-", amt, paid:!!o.depositPaid });
+      });
+    }catch(e){}
+
+    const coEl = document.getElementById("reqboard-credit-orders");
+    if(coEl){
+      if(creditOrderRows.length === 0){
+        coEl.innerHTML = '<div class="list-empty">여신결제 주문이 없습니다.</div>';
+      }else{
+        coEl.innerHTML = '<div style="overflow-x:auto;"><table class="data-table">' +
+          '<thead><tr><th>매입처</th><th>주문일</th><th class="ta-right">금액</th><th class="ta-right">상태</th></tr></thead><tbody>' +
+          creditOrderRows.map(r=>
+            '<tr><td><b>' + comboEsc(r.who) + '</b></td>' +
+            '<td>' + comboEsc(r.date) + '</td>' +
+            '<td class="ta-right" style="color:#6a1b9a;font-weight:700;">' + r.amt.toLocaleString() + '</td>' +
+            '<td class="ta-right" style="color:#6a1b9a;">여신결제 완료</td></tr>').join("") +
+          '<tr style="background:#fafafa;font-weight:700;border-top:2px solid var(--navy);">' +
+          '<td colspan="2">합계</td><td class="ta-right" style="color:#6a1b9a;">' + creditOrderAmt.toLocaleString() + '</td><td></td></tr>' +
+          '</tbody></table></div>' +
+          '<div style="color:var(--gray);font-size:11.5px;margin-top:4px;">여신에서 차감되어 <b>결제가 끝난 주문</b>입니다. 위 「이미 보낸 돈」에 포함됩니다.</div>';
       }
     }
 
@@ -9835,10 +9871,11 @@
              "보류 제외 <b>" + inNow.toLocaleString() + "</b>" + (inRes.holdCnt ? " · 보류 " + inRes.holdCnt + "건" : "")) +
         card("차액", gap.toLocaleString(), gap>=0 ? "#2e7d32" : "var(--danger)",
              "보류 제외 <b>" + gapNow.toLocaleString() + "</b>") +
-        card("이미 보낸 돈", (outRes.sumDone + creditIn).toLocaleString(), "#1565c0",
-             "출금 처리 " + outRes.sumDone.toLocaleString() + " + 삼성 선입금 " + creditIn.toLocaleString()) +
+        card("이미 보낸 돈", (outRes.sumDone + creditOrderAmt).toLocaleString(), "#1565c0",
+             "출금 처리 " + outRes.sumDone.toLocaleString() + " + 여신결제 " + creditOrderAmt.toLocaleString()) +
         card("여신 잔액", creditLeft.toLocaleString(), creditLeft < 0 ? "var(--danger)" : "#2e7d32",
-             "선입금+장려금 − 주문사용") +
+             "선입금 " + creditIn.toLocaleString() + " − 주문사용 " + creditUse.toLocaleString()
+             + (creditClub ? " + 장려금 " + creditClub.toLocaleString() : "")) +
         card("승인대기", (outRes.waitCnt + inRes.waitCnt) + "건", (outRes.waitCnt+inRes.waitCnt)>0 ? "#b8860b" : null, "승인 전에는 반영되지 않습니다");
     }
 
