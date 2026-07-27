@@ -309,7 +309,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-07-27 v275</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-07-27 v276</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -1325,32 +1325,30 @@
     <!-- ===== 관리자: 정산 설정 (준비중) ===== -->
     <div id="tab-reqboard" class="tab-panel">
       <div class="card">
-        <h3 style="margin:0;">입출금 요청 <span class="info-tip" title="주문에서 만든 출금요청과 판매에서 만든 입금요청을 한 화면에서 봅니다. 처리 버튼으로 이체·입금 기록을 넣으면 누적됩니다.">ⓘ</span></h3>
-        <p class="desc" style="margin-top:0;">주문에서 만든 <b>출금요청</b>과 판매에서 만든 <b>입금요청</b>을 나란히 봅니다.
-          <b>처리</b>를 누르면 이체·입금 기록이 들어가고 <b>누적</b>됩니다. 승인된 금액만 반영됩니다.</p>
+        <h3 style="margin:0;">입출금 요청 <span class="info-tip" title="출금요청·여신결제 주문·삼성 선입금·입금요청을 한 표에서 봅니다. 처리를 누르면 이체·입금 기록이 누적됩니다.">ⓘ</span></h3>
+        <p class="desc" style="margin-top:0;">출금요청 · 여신결제 주문 · 삼성전자 선입금 · 입금요청을 <b>한 표</b>에서 봅니다.
+          금액은 <b>줘야 할 돈 / 받아야 할 돈</b>으로 나눠 표시합니다. <b>선입금</b>은 결제가 아니라서 「미반영」으로만 나옵니다.</p>
         <div id="reqboard-cards" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px;"></div>
-        <span class="btn-row" style="margin-bottom:10px;display:inline-flex;">
-          <button class="btn small" id="rbd-f-all" style="width:auto;" onclick="setReqBoardFilter('all')">전체</button>
-          <button class="btn small secondary" id="rbd-f-ing" style="width:auto;" onclick="setReqBoardFilter('ing')">진행중</button>
-          <button class="btn small secondary" id="rbd-f-done" style="width:auto;" onclick="setReqBoardFilter('done')">처리완료</button>
-          <button class="btn small secondary" id="rbd-f-hold" style="width:auto;" onclick="setReqBoardFilter('hold')">보류</button>
-          <button class="btn small secondary" id="rbd-f-cancel" style="width:auto;" onclick="setReqBoardFilter('cancel')">취소</button>
-        </span>
-        <button class="btn small danger" id="rbd-reset-btn" style="width:auto;margin-left:10px;display:none;" onclick="resetAllPayProcessing()">전체 되돌리기</button>
-        <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:flex-start;">
-          <div style="flex:1;min-width:430px;">
-            <h3 style="font-size:13px;margin:0 0 6px;">출금요청 <span style="color:var(--gray);font-weight:400;">— 줘야 할 돈 (주문)</span></h3>
-            <div id="reqboard-out"></div>
-            <h3 style="font-size:13px;margin:14px 0 6px;">여신결제 주문 <span style="color:var(--gray);font-weight:400;">— 여신에서 차감 (결제완료)</span></h3>
-            <div id="reqboard-credit-orders"></div>
-            <h3 style="font-size:13px;margin:14px 0 6px;">삼성전자 선입금 <span style="color:var(--gray);font-weight:400;">— 여신에 미리 넣은 돈 (이미 보낸 돈)</span></h3>
-            <div id="reqboard-credit"></div>
-          </div>
-          <div style="flex:1;min-width:430px;">
-            <h3 style="font-size:13px;margin:0 0 6px;">입금요청 <span style="color:var(--gray);font-weight:400;">— 받아야 할 돈 (판매)</span></h3>
-            <div id="reqboard-in"></div>
-          </div>
+        <div style="margin-bottom:8px;">
+          <span class="btn-row" style="display:inline-flex;">
+            <button class="btn small" id="rbd-f-all" style="width:auto;" onclick="setReqBoardFilter('all')">전체</button>
+            <button class="btn small secondary" id="rbd-f-todo" style="width:auto;" onclick="setReqBoardFilter('todo')">해야 할 일</button>
+            <button class="btn small secondary" id="rbd-f-done" style="width:auto;" onclick="setReqBoardFilter('done')">완료</button>
+            <button class="btn small secondary" id="rbd-f-hold" style="width:auto;" onclick="setReqBoardFilter('hold')">보류</button>
+            <button class="btn small secondary" id="rbd-f-cancel" style="width:auto;" onclick="setReqBoardFilter('cancel')">취소</button>
+          </span>
+          <button class="btn small danger" id="rbd-reset-btn" style="width:auto;margin-left:10px;display:none;" onclick="resetAllPayProcessing()">전체 되돌리기</button>
         </div>
+        <div style="margin-bottom:10px;">
+          <span style="font-size:12px;color:var(--gray);margin-right:6px;">구분</span>
+          <span class="btn-row" style="display:inline-flex;">
+            <button class="btn small" id="rbd-k-all" style="width:auto;" onclick="setReqBoardKind('all')">전체</button>
+            <button class="btn small secondary" id="rbd-k-out" style="width:auto;" onclick="setReqBoardKind('out')">출금</button>
+            <button class="btn small secondary" id="rbd-k-in" style="width:auto;" onclick="setReqBoardKind('in')">입금</button>
+            <button class="btn small secondary" id="rbd-k-credit" style="width:auto;" onclick="setReqBoardKind('credit')">여신·선입금</button>
+          </span>
+        </div>
+        <div id="reqboard-list"></div>
       </div>
     </div>
 
@@ -9634,37 +9632,48 @@
     el.prepend(renderPaginationBar("paymentRequests", prDocs.length, loadPaymentRequestList));
   }
 
-  // ---------- 입출금 요청 한 화면 ----------
-  //  왼쪽: 주문에서 만든 출금요청(줘야 할 돈) / 오른쪽: 판매에서 만든 입금요청(받아야 할 돈)
-  //  금액은 정산 관리와 같은 값을 씁니다. 처리도 같은 기능을 그대로 부릅니다.
-  let reqBoardFilter = "all";   // 처리완료한 것도 함께 보입니다
+  // ---------- 입출금 요청 — 하나의 리스트 ----------
+  //  출금요청 · 여신결제 주문 · 삼성전자 선입금 · 입금요청을 한 표에 모아 봅니다.
+  //  금액은 「줘야 할 돈 / 받아야 할 돈」 두 열로 나눠 뜻이 섞이지 않게 합니다.
+  //  선입금은 결제 자체가 아니라서 「미반영」으로만 표기하고 합계에 넣지 않습니다.
+  let reqBoardFilter = "all";    // all · todo · done · hold · cancel
+  let reqBoardKind = "all";      // all · out · in · credit
   const reqBoardCache = { out:{}, in:{} };
 
   window.setReqBoardFilter = function(f){
     reqBoardFilter = f;
-    ["all","ing","done","hold","cancel"].forEach(k=>{
+    ["all","todo","done","hold","cancel"].forEach(k=>{
       const b = document.getElementById("rbd-f-" + k);
       if(b) b.className = "btn small" + (k === f ? "" : " secondary");
     });
     loadReqBoard();
   };
+  window.setReqBoardKind = function(k){
+    reqBoardKind = k;
+    ["all","out","in","credit"].forEach(x=>{
+      const b = document.getElementById("rbd-k-" + x);
+      if(b) b.className = "btn small" + (x === k ? "" : " secondary");
+    });
+    loadReqBoard();
+  };
 
   window.loadReqBoard = async function(){
-    if(!hasPerm(currentUserPerms, "settlementSettings")) return;
-    const outEl = document.getElementById("reqboard-out");
-    const inEl  = document.getElementById("reqboard-in");
-    if(!outEl || !inEl) return;
+    if(!hasPerm(currentUserPerms, "settlementSettings") && !hasPerm(currentUserPerms, "menuReqBoard")) return;
+    const listEl = document.getElementById("reqboard-list");
+    if(!listEl) return;
+    listEl.innerHTML = '<div class="list-empty">불러오는 중...</div>';
     const rstBtn = document.getElementById("rbd-reset-btn");
     if(rstBtn) rstBtn.style.display = hasPerm(currentUserPerms, "paymentProcess") ? "inline-block" : "none";
-    outEl.innerHTML = '<div class="list-empty">불러오는 중...</div>';
-    inEl.innerHTML  = '<div class="list-empty">불러오는 중...</div>';
 
-    const [prSnap, sdrSnap] = await Promise.all([
-      getDocs(query(collection(db,"paymentRequests"), orderBy("createdAt","desc"))),
-      getDocs(query(collection(db,"saleDepositRequests"), orderBy("createdAt","desc")))
+    const canDo = hasPerm(currentUserPerms, "paymentProcess");
+    const [prSnap, sdrSnap, obSnap, ledSnap] = await Promise.all([
+      getDocs(collection(db,"paymentRequests")),
+      getDocs(collection(db,"saleDepositRequests")),
+      getDocs(collection(db,"orderBatches")),
+      getDocs(collection(db,"b2bLedger"))
     ]);
 
-    // 입금요청에 업체명이 저장돼 있지 않은 옛 건은 연결된 판매요청에서 찾아옵니다.
+    // 입금요청에 업체명이 없던 옛 건은 연결된 판매요청에서 찾아옵니다.
     const needLookup = sdrSnap.docs.some(d=> !((d.data().destinations)||[]).length);
     const destById = {};
     if(needLookup){
@@ -9678,217 +9687,193 @@
       }catch(e){}
     }
 
-    // 조건에 맞는 것만 골라냅니다.
-    const pick = (p, done)=>{
-      if(reqBoardFilter === "all") return true;
-      if(reqBoardFilter === "cancel") return p.status === "취소";
-      if(p.status === "취소") return false;
-      if(reqBoardFilter === "hold") return !!p.onHold;     // 보류만
-      if(reqBoardFilter === "done") return !!done;
-      return !done;   // 진행중 — 보류도 여기 함께 보입니다
-    };
+    reqBoardCache.out = {}; reqBoardCache.in = {};
+    const rows = [];
 
-    // 한 쪽 표를 만듭니다. kind: "out" = 출금요청, "in" = 입금요청
-    function buildTable(docs, kind){
-      const isIn = (kind === "in");
-      reqBoardCache[kind] = {};
-      const rows = [];
-      let sumTotal = 0, sumDone = 0, sumLeft = 0, waitCnt = 0;
-      let holdLeft = 0, holdCnt = 0;   // 보류로 표시된 것들
-
-      docs.forEach(d=>{
-        const p = d.data();
-        const done = isIn ? !!p.depositCompleted : !!p.transferCompleted;
-        if(!pick(p, done)) return;
-        reqBoardCache[kind][d.id] = p;
-
-        const total = Number(p.totalAmount) || 0;
-        const paid  = Number(isIn ? p.receivedAmount : p.paidAmount) || 0;
-        const left  = Math.max(0, total - paid);
-        const recs  = (isIn ? p.receipts : p.payments) || [];
-        const waiting = recs.filter(x=> !x.approved && !x.rejected).length;
-        if(p.status !== "취소"){
-          sumTotal += total; sumDone += paid; sumLeft += left; waitCnt += waiting;
-          // 보류는 못 받은 돈·못 준 돈에 그대로 포함하되, 따로도 세어둡니다.
-          if(p.onHold){ holdLeft += left; holdCnt++; }
-        }
-
-        // 업체명
-        let who;
-        if(isIn){
-          const saved = (p.destinations||[]).filter(Boolean);
-          if(saved.length) who = comboEsc(saved.join(", "));
-          else{
-            const found = [...new Set((p.saleBatchRefs||[]).map(b=> destById[b.id]).filter(Boolean))];
-            who = found.length ? comboEsc(found.join(", "))
-                 : '<span style="color:var(--danger);">연결 끊김</span>';
-          }
-        }else{
-          const src = (p.sources||[]).filter(Boolean);
-          who = src.length ? comboEsc(src.join(", ")) : '<span style="color:var(--gray);">-</span>';
-        }
-
-        const stColor = p.status === "취소" ? "var(--gray)" : (done ? "#2e7d32" : "var(--danger)");
-        rows.push(
-          '<tr>' +
-          '<td><b>' + who + '</b><br><span style="color:var(--gray);font-size:11px;">' +
-            (isIn ? '판매요청 ' + ((p.saleBatchRefs||[]).length) + '건' : '주문 ' + ((p.orderBatchIds||[]).length) + '건') +
-            (p.otherAmount ? ' + 기타' : '') + '</span></td>' +
-          '<td class="ta-right">' + comboEsc(p.requestDate||"-") + '</td>' +
-          '<td class="ta-right">' + total.toLocaleString() + '</td>' +
-          '<td class="ta-right" style="color:#1565c0;">' + (paid ? paid.toLocaleString() : '-') + '</td>' +
-          '<td class="ta-right" style="color:var(--danger);font-weight:700;">' + (left ? left.toLocaleString() : '-') + '</td>' +
-          '<td class="ta-right" style="color:' + stColor + ';">' + comboEsc(p.status||"-") +
-            (p.onHold ? '<br><span style="background:#fff8e1;border:1px solid #e0c46c;color:#8a6d0b;font-size:11px;padding:0 5px;">보류</span>'
-                      + (p.holdReason ? '<br><span style="color:var(--gray);font-size:10.5px;">' + comboEsc(p.holdReason) + '</span>' : '') : '') +
-            (waiting ? '<br><span style="color:#b8860b;font-size:11px;">승인대기 ' + waiting + '</span>' : '') + '</td>' +
-          '<td class="ta-right" style="white-space:nowrap;">' +
-            (p.status !== "취소" && !done && hasPerm(currentUserPerms, "paymentProcess")
-              ? '<button class="btn small" style="width:auto;" data-rbd-do="' + kind + '|' + d.id + '">처리</button>'
-                + '<button class="btn small secondary" style="width:auto;margin-left:4px;" data-rbd-hold="' + kind + '|' + d.id + '|' + (p.onHold ? "0" : "1") + '">'
-                + (p.onHold ? '보류 해제' : '보류') + '</button>'
-              : '<span style="color:var(--gray);">-</span>') +
-          '</td></tr>'
-        );
-
-        if(recs.length){
-          rows.push('<tr><td colspan="7" style="background:#fafafa;font-size:11.5px;line-height:1.9;">' +
-            recs.map((x,i)=> recordLine(x, i, isIn ? "in" : "out", d.id)).join('<br>') +
-            '</td></tr>');
-        }
+    // ① 출금요청 (줘야 할 돈)
+    prSnap.forEach(d=>{
+      const p = d.data();
+      reqBoardCache.out[d.id] = p;
+      const total = Number(p.totalAmount)||0, paid = Number(p.paidAmount)||0;
+      rows.push({
+        kind:"out", label:"출금", color:"var(--danger)", id:d.id, p,
+        who:(p.sources||[]).filter(Boolean).join(", ") || "-",
+        sub:"주문 " + ((p.orderBatchIds||[]).length) + "건" + (p.otherAmount ? " + 기타" : ""),
+        date:p.requestDate||"-", owe:total, recv:0, done:paid,
+        left:Math.max(0,total-paid), status:p.status||"-",
+        finished:!!p.transferCompleted, onHold:!!p.onHold, holdReason:p.holdReason||"",
+        canceled:p.status==="취소", recs:(p.payments||[]), inSum:true, canProcess:true
       });
+    });
 
-      if(rows.length === 0){
-        return { html:'<div class="list-empty">해당하는 요청이 없습니다.</div>', waitCnt:0, sumLeft:0, sumTotal:0, sumDone:0, holdLeft:0, holdCnt:0 };
+    // ② 입금요청 (받아야 할 돈)
+    sdrSnap.forEach(d=>{
+      const p = d.data();
+      reqBoardCache.in[d.id] = p;
+      const total = Number(p.totalAmount)||0, got = Number(p.receivedAmount)||0;
+      const saved = (p.destinations||[]).filter(Boolean);
+      let who = saved.join(", ");
+      if(!who){
+        const f = [...new Set((p.saleBatchRefs||[]).map(b=> destById[b.id]).filter(Boolean))];
+        who = f.length ? f.join(", ") : "";
       }
-      const html = '<div style="overflow-x:auto;"><table class="data-table">' +
-        '<thead><tr><th>업체</th><th class="ta-right">요청일</th><th class="ta-right">요청금액</th>' +
+      rows.push({
+        kind:"in", label:"입금", color:"#1565c0", id:d.id, p,
+        who: who || '<span style="color:var(--danger);">연결 끊김</span>',
+        sub:"판매요청 " + ((p.saleBatchRefs||[]).length) + "건" + (p.otherAmount ? " + 기타" : ""),
+        date:p.requestDate||"-", owe:0, recv:total, done:got,
+        left:Math.max(0,total-got), status:p.status||"-",
+        finished:!!p.depositCompleted, onHold:!!p.onHold, holdReason:p.holdReason||"",
+        canceled:p.status==="취소", recs:(p.receipts||[]), inSum:true, canProcess:true
+      });
+    });
+
+    // ③ 여신결제 주문 — 여신에서 차감되어 결제가 끝난 주문
+    obSnap.forEach(d=>{
+      const o = d.data();
+      if(o.paymentMethod !== "b2b_credit") return;
+      const amt = Number(o.depositRequired)||0;
+      rows.push({
+        kind:"credit", label:"여신결제", color:"#6a1b9a", id:d.id, p:null,
+        who:o.source||"-", sub:"여신에서 차감",
+        date:o.orderDate||"-", owe:amt, recv:0, done:amt, left:0,
+        status:(o.status==="취소" ? "취소" : "완료"),
+        finished:true, onHold:false, holdReason:"",
+        canceled:o.status==="취소", recs:[], inSum:true, canProcess:false
+      });
+    });
+
+    // ④ 삼성전자 선입금 — 여신을 채운 돈. 결제가 아니라서 합계에 넣지 않습니다.
+    const PRE = { deposit:"선입금", loan_deposit:"대출금 충전", interest_received:"이자 수령" };
+    let creditIn = 0, creditUse = 0, creditClub = 0;
+    ledSnap.forEach(x=>{
+      const e = x.data();
+      const amt = Number(e.amount)||0;
+      if(PRE[e.category]){
+        creditIn += amt;
+        rows.push({
+          kind:"prepay", label:PRE[e.category], color:"var(--gray)", id:x.id, p:null,
+          who:"삼성전자", sub:e.memo||"", date:e.date||"-",
+          owe:amt, recv:0, done:0, left:0, status:"미반영",
+          finished:true, onHold:false, holdReason:"",
+          canceled:false, recs:[], inSum:false, canProcess:false
+        });
+      }else if(e.category === "order_use") creditUse += amt;
+      else if(e.category === "club_incentive") creditClub += amt;
+    });
+    const creditLeft = creditIn + creditClub - creditUse;
+
+    // 구분·상태 걸러내기
+    const kindOk = (r)=>{
+      if(reqBoardKind === "all") return true;
+      if(reqBoardKind === "credit") return r.kind === "credit" || r.kind === "prepay";
+      return r.kind === reqBoardKind;
+    };
+    const stateOk = (r)=>{
+      if(reqBoardFilter === "all") return true;
+      if(reqBoardFilter === "cancel") return r.canceled;
+      if(r.canceled) return false;
+      if(reqBoardFilter === "hold") return r.onHold;
+      if(reqBoardFilter === "done") return r.finished;
+      return !r.finished;   // 해야 할 일
+    };
+    const view = rows.filter(r=> kindOk(r) && stateOk(r))
+                     .sort((a,b)=> String(b.date).localeCompare(String(a.date)));
+
+    // 합계 — 취소와 선입금은 뺍니다.
+    let sOwe=0, sRecv=0, sDone=0, sLeftOut=0, sLeftIn=0, holdOut=0, holdIn=0;
+    rows.forEach(r=>{
+      if(r.canceled || !r.inSum) return;
+      sOwe += r.owe; sRecv += r.recv; sDone += r.done;
+      if(r.kind === "in"){ sLeftIn += r.left; if(r.onHold) holdIn += r.left; }
+      else { sLeftOut += r.left; if(r.onHold) holdOut += r.left; }
+    });
+
+    // 표 그리기
+    if(view.length === 0){
+      listEl.innerHTML = '<div class="list-empty">해당하는 항목이 없습니다.</div>';
+    }else{
+      let vOwe=0, vRecv=0, vDone=0, vLeft=0;
+      const body = view.map(r=>{
+        if(!r.canceled && r.inSum){ vOwe+=r.owe; vRecv+=r.recv; vDone+=r.done; vLeft+=r.left; }
+        const stColor = r.canceled ? "var(--gray)" : (r.finished ? "#2e7d32" : "var(--danger)");
+        let tr = '<tr>' +
+          '<td style="white-space:nowrap;"><b style="color:' + r.color + ';">' + r.label + '</b></td>' +
+          '<td><b>' + r.who + '</b>' + (r.sub ? '<br><span style="color:var(--gray);font-size:11px;">' + comboEsc(r.sub) + '</span>' : '') + '</td>' +
+          '<td style="white-space:nowrap;">' + comboEsc(r.date) + '</td>' +
+          '<td class="ta-right"' + (r.inSum ? '' : ' style="color:var(--gray);"') + '>' + (r.owe ? r.owe.toLocaleString() : '-') + '</td>' +
+          '<td class="ta-right" style="color:#1565c0;">' + (r.recv ? r.recv.toLocaleString() : '-') + '</td>' +
+          '<td class="ta-right">' + (r.done ? r.done.toLocaleString() : '-') + '</td>' +
+          '<td class="ta-right" style="color:var(--danger);font-weight:700;">' + (r.left ? r.left.toLocaleString() : '-') + '</td>' +
+          '<td class="ta-right" style="color:' + stColor + ';white-space:nowrap;">' + comboEsc(r.status) +
+            (r.onHold ? '<br><span style="background:#fff8e1;border:1px solid #e0c46c;color:#8a6d0b;font-size:11px;padding:0 5px;">보류</span>'
+                      + (r.holdReason ? '<br><span style="color:var(--gray);font-size:10.5px;">' + comboEsc(r.holdReason) + '</span>' : '') : '') +
+          '</td>' +
+          '<td class="ta-right" style="white-space:nowrap;">' +
+            ((r.canProcess && !r.canceled && !r.finished && canDo)
+              ? '<button class="btn small" style="width:auto;" data-rbd-do="' + r.kind + '|' + r.id + '">처리</button>'
+                + '<button class="btn small secondary" style="width:auto;margin-left:4px;" data-rbd-hold="' + r.kind + '|' + r.id + '|' + (r.onHold ? "0" : "1") + '">'
+                + (r.onHold ? '보류 해제' : '보류') + '</button>'
+              : '<span style="color:var(--gray);">-</span>') +
+          '</td></tr>';
+        if(r.recs.length){
+          tr += '<tr><td colspan="9" style="background:#fafafa;font-size:11.5px;line-height:1.9;">' +
+            r.recs.map((x,i)=> recordLine(x, i, r.kind, r.id)).join('<br>') + '</td></tr>';
+        }
+        return tr;
+      }).join("");
+
+      listEl.innerHTML = '<div style="overflow-x:auto;"><table class="data-table">' +
+        '<thead><tr><th>구분</th><th>업체</th><th>날짜</th>' +
+        '<th class="ta-right">줘야 할 돈</th><th class="ta-right">받아야 할 돈</th>' +
         '<th class="ta-right">처리액</th><th class="ta-right">남은금액</th><th class="ta-right">상태</th><th></th></tr></thead>' +
-        '<tbody>' + rows.join("") +
+        '<tbody>' + body +
         '<tr style="background:#fafafa;font-weight:700;border-top:2px solid var(--navy);">' +
-        '<td>합계</td><td></td>' +
-        '<td class="ta-right">' + sumTotal.toLocaleString() + '</td>' +
-        '<td class="ta-right" style="color:#1565c0;">' + sumDone.toLocaleString() + '</td>' +
-        '<td class="ta-right" style="color:var(--danger);">' + sumLeft.toLocaleString() + '</td>' +
+        '<td colspan="3">합계 (보이는 것)</td>' +
+        '<td class="ta-right">' + vOwe.toLocaleString() + '</td>' +
+        '<td class="ta-right" style="color:#1565c0;">' + vRecv.toLocaleString() + '</td>' +
+        '<td class="ta-right">' + vDone.toLocaleString() + '</td>' +
+        '<td class="ta-right" style="color:var(--danger);">' + vLeft.toLocaleString() + '</td>' +
         '<td colspan="2"></td></tr>' +
         '</tbody></table></div>' +
-        '<div style="color:var(--gray);font-size:11.5px;margin-top:4px;">합계는 취소된 요청을 뺀 금액입니다.</div>';
-      return { html, waitCnt, sumLeft, sumTotal, sumDone, holdLeft, holdCnt };
+        '<div style="color:var(--gray);font-size:11.5px;margin-top:4px;">합계는 <b>취소</b>와 <b>선입금(미반영)</b>을 뺀 금액입니다. 선입금은 여신을 채운 돈이라 결제 합계에 넣지 않습니다.</div>';
     }
 
-    // 삼성전자 선입금(여신 충전) — 이미 나간 돈입니다. 상환은 여기서 다루지 않습니다.
-    let creditIn = 0, creditUse = 0, creditClub = 0;
-    const creditRows = [];
-    try{
-      const ledSnap = await getDocs(query(collection(db,"b2bLedger"), orderBy("date","desc")));
-      const LABEL = { deposit:"선입금", loan_deposit:"대출금 충전", interest_received:"이자 수령" };
-      ledSnap.forEach(x=>{
-        const e = x.data();
-        const amt = Number(e.amount) || 0;
-        if(e.category === "deposit" || e.category === "loan_deposit" || e.category === "interest_received"){
-          creditIn += amt;
-          creditRows.push({ date:e.date||"-", label: LABEL[e.category] || e.category, amount: amt, memo: e.memo||"" });
-        }else if(e.category === "order_use") creditUse += amt;
-        else if(e.category === "club_incentive") creditClub += amt;
-      });
-    }catch(e){}
-    const creditLeft = creditIn + creditClub - creditUse;   // 실시간 잔여여신
-
-    const creditEl = document.getElementById("reqboard-credit");
-    if(creditEl){
-      if(creditRows.length === 0){
-        creditEl.innerHTML = '<div class="list-empty">선입금 내역이 없습니다.</div>';
-      }else{
-        creditEl.innerHTML = '<div style="overflow-x:auto;"><table class="data-table">' +
-          '<thead><tr><th>날짜</th><th>구분</th><th class="ta-right">금액</th><th>메모</th></tr></thead><tbody>' +
-          creditRows.map(r=>
-            '<tr><td>' + comboEsc(r.date) + '</td>' +
-            '<td>' + comboEsc(r.label) + '</td>' +
-            '<td class="ta-right" style="color:#1565c0;font-weight:700;">' + r.amount.toLocaleString() + '</td>' +
-            '<td style="color:var(--gray);font-size:11.5px;">' + comboEsc(r.memo) + '</td></tr>').join("") +
-          '<tr style="background:#fafafa;font-weight:700;border-top:2px solid var(--navy);">' +
-          '<td colspan="2">합계</td><td class="ta-right" style="color:#1565c0;">' + creditIn.toLocaleString() + '</td><td></td></tr>' +
-          '</tbody></table></div>' +
-          '<div style="color:var(--gray);font-size:11.5px;margin-top:4px;">여신을 채우려고 미리 넣은 돈입니다. 결제 자체는 위 <b>여신결제 주문</b>에서 잡히므로 <b>합계에는 넣지 않습니다.</b> 갚는 것(상환)은 삼성 B2B 여신에서 관리합니다.</div>';
-      }
-    }
-
-    // 여신결제 주문 — 출금요청 없이 여신에서 바로 차감된 건들입니다. 이미 결제완료 상태입니다.
-    let creditOrderAmt = 0;
-    const creditOrderRows = [];
-    try{
-      const obSnap = await getDocs(query(collection(db,"orderBatches"), orderBy("orderDate","desc")));
-      obSnap.forEach(x=>{
-        const o = x.data();
-        if(o.paymentMethod !== "b2b_credit") return;
-        if(o.status === "취소") return;
-        const amt = Number(o.depositRequired) || 0;
-        creditOrderAmt += amt;
-        creditOrderRows.push({ date:o.orderDate||"-", who:o.source||"-", amt, paid:!!o.depositPaid });
-      });
-    }catch(e){}
-
-    const coEl = document.getElementById("reqboard-credit-orders");
-    if(coEl){
-      if(creditOrderRows.length === 0){
-        coEl.innerHTML = '<div class="list-empty">여신결제 주문이 없습니다.</div>';
-      }else{
-        coEl.innerHTML = '<div style="overflow-x:auto;"><table class="data-table">' +
-          '<thead><tr><th>매입처</th><th>주문일</th><th class="ta-right">금액</th><th class="ta-right">상태</th></tr></thead><tbody>' +
-          creditOrderRows.map(r=>
-            '<tr><td><b>' + comboEsc(r.who) + '</b></td>' +
-            '<td>' + comboEsc(r.date) + '</td>' +
-            '<td class="ta-right" style="color:#6a1b9a;font-weight:700;">' + r.amt.toLocaleString() + '</td>' +
-            '<td class="ta-right" style="color:#6a1b9a;">여신결제 완료</td></tr>').join("") +
-          '<tr style="background:#fafafa;font-weight:700;border-top:2px solid var(--navy);">' +
-          '<td colspan="2">합계</td><td class="ta-right" style="color:#6a1b9a;">' + creditOrderAmt.toLocaleString() + '</td><td></td></tr>' +
-          '</tbody></table></div>' +
-          '<div style="color:var(--gray);font-size:11.5px;margin-top:4px;">여신에서 차감되어 <b>결제가 끝난 주문</b>입니다. 위 「이미 보낸 돈」에 포함됩니다.</div>';
-      }
-    }
-
-    const outRes = buildTable(prSnap.docs, "out");
-    const inRes  = buildTable(sdrSnap.docs, "in");
-    outEl.innerHTML = outRes.html;
-    inEl.innerHTML  = inRes.html;
-
-    // 위쪽 합계 카드
+    // 카드
     const cardEl = document.getElementById("reqboard-cards");
     if(cardEl){
-      const gap = inRes.sumLeft - outRes.sumLeft;
+      const gap = sLeftIn - sLeftOut;
+      const gapNow = (sLeftIn - holdIn) - (sLeftOut - holdOut);
       const card = (label, value, color, note)=>
         '<div style="border:1px solid var(--line);padding:9px 12px;min-width:170px;background:#fff;">' +
         '<div style="font-size:11px;color:var(--gray);">' + label + '</div>' +
         '<div style="font-size:16px;font-weight:700;' + (color?('color:'+color+';'):'') + '">' + value + '</div>' +
         (note ? '<div style="font-size:10.5px;color:var(--gray);">' + note + '</div>' : '') + '</div>';
-      const outNow = outRes.sumLeft - outRes.holdLeft;   // 보류 뺀 금액
-      const inNow  = inRes.sumLeft - inRes.holdLeft;
-      const gapNow = inNow - outNow;
       cardEl.innerHTML =
-        card("줘야 할 돈 (출금 남음)", outRes.sumLeft.toLocaleString(), "var(--danger)",
-             "보류 제외 <b>" + outNow.toLocaleString() + "</b>" + (outRes.holdCnt ? " · 보류 " + outRes.holdCnt + "건" : "")) +
-        card("받아야 할 돈 (입금 남음)", inRes.sumLeft.toLocaleString(), "#1565c0",
-             "보류 제외 <b>" + inNow.toLocaleString() + "</b>" + (inRes.holdCnt ? " · 보류 " + inRes.holdCnt + "건" : "")) +
+        card("줘야 할 돈 (남음)", sLeftOut.toLocaleString(), "var(--danger)",
+             "보류 제외 <b>" + (sLeftOut - holdOut).toLocaleString() + "</b>") +
+        card("받아야 할 돈 (남음)", sLeftIn.toLocaleString(), "#1565c0",
+             "보류 제외 <b>" + (sLeftIn - holdIn).toLocaleString() + "</b>") +
         card("차액", gap.toLocaleString(), gap>=0 ? "#2e7d32" : "var(--danger)",
              "보류 제외 <b>" + gapNow.toLocaleString() + "</b>") +
-        card("이미 보낸 돈", (outRes.sumDone + creditOrderAmt).toLocaleString(), "#1565c0",
-             "출금 처리 " + outRes.sumDone.toLocaleString() + " + 여신결제 " + creditOrderAmt.toLocaleString()) +
+        card("이미 보낸 돈", sDone.toLocaleString(), "#1565c0", "출금 처리 + 여신결제") +
         card("여신 잔액", creditLeft.toLocaleString(), creditLeft < 0 ? "var(--danger)" : "#2e7d32",
              "선입금 " + creditIn.toLocaleString() + " − 주문사용 " + creditUse.toLocaleString()
-             + (creditClub ? " + 장려금 " + creditClub.toLocaleString() : "")) +
-        card("승인대기", (outRes.waitCnt + inRes.waitCnt) + "건", (outRes.waitCnt+inRes.waitCnt)>0 ? "#b8860b" : null, "승인 전에는 반영되지 않습니다");
+             + (creditClub ? " + 장려금 " + creditClub.toLocaleString() : ""));
     }
 
-    // 처리 버튼 — 정산 관리와 같은 기능을 그대로 부릅니다.
-    document.querySelectorAll("[data-rbd-do]").forEach(b=>{
+    // 버튼 연결
+    document.querySelectorAll("#tab-reqboard [data-rbd-do]").forEach(b=>{
       const [kind, id] = b.dataset.rbdDo.split("|");
       b.onclick = ()=>{
         const p = reqBoardCache[kind][id];
-        if(!p) return;
-        openPayProcess(kind, id, p);
+        if(p) openPayProcess(kind, id, p);
       };
     });
-    // 승인·반려 버튼
+    document.querySelectorAll("#tab-reqboard [data-rbd-hold]").forEach(b=>{
+      const [kind, id, on] = b.dataset.rbdHold.split("|");
+      b.onclick = ()=> toggleReqHold(kind, id, on === "1");
+    });
     document.querySelectorAll("#tab-reqboard [data-appr]").forEach(b=>{
       const [k, id, i] = b.dataset.appr.split("|");
       b.onclick = async ()=>{ await approveRecord(k, id, Number(i), false); loadReqBoard(); };
@@ -9896,10 +9881,6 @@
     document.querySelectorAll("#tab-reqboard [data-rej]").forEach(b=>{
       const [k, id, i] = b.dataset.rej.split("|");
       b.onclick = async ()=>{ await approveRecord(k, id, Number(i), true); loadReqBoard(); };
-    });
-    document.querySelectorAll("[data-rbd-hold]").forEach(b=>{
-      const [kind, id, on] = b.dataset.rbdHold.split("|");
-      b.onclick = ()=> toggleReqHold(kind, id, on === "1");
     });
     document.querySelectorAll("#tab-reqboard [data-delrec]").forEach(b=>{
       const [k, id, i] = b.dataset.delrec.split("|");
