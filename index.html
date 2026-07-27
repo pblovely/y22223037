@@ -309,7 +309,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-07-27 v271</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-07-27 v272</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -1336,6 +1336,7 @@
           <button class="btn small secondary" id="rbd-f-hold" style="width:auto;" onclick="setReqBoardFilter('hold')">보류</button>
           <button class="btn small secondary" id="rbd-f-cancel" style="width:auto;" onclick="setReqBoardFilter('cancel')">취소</button>
         </span>
+        <button class="btn small danger" id="rbd-reset-btn" style="width:auto;margin-left:10px;display:none;" onclick="resetAllPayProcessing()">전체 되돌리기</button>
         <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:flex-start;">
           <div style="flex:1;min-width:430px;">
             <h3 style="font-size:13px;margin:0 0 6px;">출금요청 <span style="color:var(--gray);font-weight:400;">— 줘야 할 돈 (주문)</span></h3>
@@ -9651,6 +9652,8 @@
     const outEl = document.getElementById("reqboard-out");
     const inEl  = document.getElementById("reqboard-in");
     if(!outEl || !inEl) return;
+    const rstBtn = document.getElementById("rbd-reset-btn");
+    if(rstBtn) rstBtn.style.display = hasPerm(currentUserPerms, "paymentProcess") ? "inline-block" : "none";
     outEl.innerHTML = '<div class="list-empty">불러오는 중...</div>';
     inEl.innerHTML  = '<div class="list-empty">불러오는 중...</div>';
 
@@ -9865,6 +9868,128 @@
       const [k, id, i] = b.dataset.delrec.split("|");
       b.onclick = ()=> deletePayRecord(k, id, Number(i));
     });
+  };
+
+  // ---------- 입출금 처리 전체 되돌리기 ----------
+  //  · 입금요청·출금요청은 그대로 두고 "완료 여부"만 처음 상태로 되돌립니다.
+  //  · 취소된 요청은 목록에서 지웁니다. (무엇을 지웠는지는 이력에 남습니다)
+  //  · 삼성여신(선입금·주문사용·장려금·대출)은 건드리지 않습니다.
+  //  · 여신결제로 산 주문은 출금요청과 무관하므로 결제완료를 유지합니다.
+  window.resetAllPayProcessing = async function(){
+    if(!hasPerm(currentUserPerms, "paymentProcess")){ alert("권한이 없습니다."); return; }
+
+    const [sdrSnap, prSnap, obSnap] = await Promise.all([
+      getDocs(collection(db,"saleDepositRequests")),
+      getDocs(collection(db,"paymentRequests")),
+      getDocs(collection(db,"orderBatches"))
+    ]);
+
+    // 여신결제 주문은 결제완료를 유지해야 하므로 미리 표시해둡니다.
+    const creditBatch = new Set();
+    obSnap.forEach(d=>{ if(d.data().paymentMethod === "b2b_credit") creditBatch.add(d.id); });
+
+    const inKeep = [], inDel = [], outKeep = [], outDel = [];
+    sdrSnap.forEach(d=>{ (d.data().status === "취소" ? inDel : inKeep).push({ id:d.id, ...d.data() }); });
+    prSnap.forEach(d=>{ (d.data().status === "취소" ? outDel : outKeep).push({ id:d.id, ...d.data() }); });
+
+    const inRecCnt  = inKeep.reduce((n,p)=> n + ((p.receipts||[]).length), 0);
+    const outRecCnt = outKeep.reduce((n,p)=> n + ((p.payments||[]).length), 0);
+    const inBatchCnt  = inKeep.reduce((n,p)=> n + ((p.saleBatchRefs||[]).length), 0);
+    const outBatchCnt = outKeep.reduce((n,p)=> n + ((p.orderBatchIds||[]).filter(x=> !creditBatch.has(x)).length), 0);
+
+    const delSummary = (arr, isIn)=> arr.slice(0,5).map(p=>{
+      const who = isIn ? ((p.destinations||[]).join(",") || "-") : ((p.sources||[]).join(",") || "-");
+      return "  · " + who + " " + (Number(p.totalAmount)||0).toLocaleString();
+    }).join("\n") + (arr.length > 5 ? "\n  · ... 외 " + (arr.length-5) + "건" : "");
+
+    const msg =
+      "입출금 처리를 처음 상태로 되돌립니다.\n" +
+      "─────────────────────────────\n" +
+      "[되돌립니다]\n" +
+      "· 입금요청 " + inKeep.length + "건 → 요청중 (입금기록 " + inRecCnt + "개 삭제)\n" +
+      "· 판매요청(단말기) " + inBatchCnt + "건 → 대기중\n" +
+      "· 출금요청 " + outKeep.length + "건 → 요청중 (이체기록 " + outRecCnt + "개 삭제)\n" +
+      "· 주문 " + outBatchCnt + "건 → 미결제\n" +
+      "· 세금계산서 발행 체크·보류 표시도 함께 지웁니다\n\n" +
+      "[삭제합니다] 취소된 요청 " + (inDel.length + outDel.length) + "건\n" +
+      (inDel.length ? delSummary(inDel, true) + "\n" : "") +
+      (outDel.length ? delSummary(outDel, false) + "\n" : "") +
+      "\n[건드리지 않습니다]\n" +
+      "· 삼성여신 전부 (선입금·주문사용·장려금·대출)\n" +
+      "· 여신결제 주문 " + creditBatch.size + "건은 결제완료 유지\n" +
+      "· 입금요청·출금요청 자체는 지우지 않습니다\n" +
+      "─────────────────────────────\n" +
+      "되돌릴 수 없습니다. 진행할까요?";
+    if(!confirm(msg)) return;
+
+    const typed = prompt('확인을 위해 "초기화" 를 그대로 입력해주세요.', "");
+    if(String(typed||"").trim() !== "초기화"){ alert("입력이 달라 중단했습니다."); return; }
+
+    // 400개씩 나눠 처리합니다. (한 번에 보낼 수 있는 양이 정해져 있습니다)
+    const ops = [];
+    const CLEAR_IN = {
+      receipts: [], receivedAmount: 0, depositCompleted: false, depositCompleteDate: "",
+      status: "요청중", taxInvoiceIssued: false, taxInvoiceDate: "",
+      onHold: false, holdReason: "", holdBy: "", holdAt: ""
+    };
+    const CLEAR_OUT = {
+      payments: [], paidAmount: 0, transferCompleted: false, transferCompleteDate: "",
+      status: "요청중", taxInvoiceIssued: false, taxInvoiceDate: "",
+      onHold: false, holdReason: "", holdBy: "", holdAt: ""
+    };
+    inKeep.forEach(p=>{
+      ops.push({ t:"u", ref: doc(db,"saleDepositRequests", p.id), data: CLEAR_IN });
+      (p.saleBatchRefs||[]).forEach(b=>{
+        const col = b.isLegacy ? "saleRequests" : "saleRequestBatches";
+        ops.push({ t:"u", ref: doc(db, col, b.id), data:{ depositReceived:false, depositReceivedDate:"", status:"대기중" } });
+      });
+    });
+    outKeep.forEach(p=>{
+      ops.push({ t:"u", ref: doc(db,"paymentRequests", p.id), data: CLEAR_OUT });
+      (p.orderBatchIds||[]).forEach(bid=>{
+        if(creditBatch.has(bid)) return;   // 여신결제 주문은 그대로 둡니다
+        ops.push({ t:"u", ref: doc(db,"orderBatches", bid), data:{ depositPaid:false, depositPaidDate:"" } });
+      });
+    });
+    // 취소된 요청은 삭제하고, 묶여 있던 쪽의 연결도 풀어줍니다.
+    inDel.forEach(p=>{
+      (p.saleBatchRefs||[]).forEach(b=>{
+        const col = b.isLegacy ? "saleRequests" : "saleRequestBatches";
+        ops.push({ t:"u", ref: doc(db, col, b.id), data:{ depositRequestId: "" } });
+      });
+      ops.push({ t:"d", ref: doc(db,"saleDepositRequests", p.id) });
+    });
+    outDel.forEach(p=>{
+      (p.orderBatchIds||[]).forEach(bid=>{
+        ops.push({ t:"u", ref: doc(db,"orderBatches", bid), data:{ paymentRequestId: "" } });
+      });
+      ops.push({ t:"d", ref: doc(db,"paymentRequests", p.id) });
+    });
+
+    try{
+      for(let i = 0; i < ops.length; i += 400){
+        const bt = writeBatch(db);
+        ops.slice(i, i+400).forEach(o=>{
+          if(o.t === "d") bt.delete(o.ref); else bt.update(o.ref, o.data);
+        });
+        await bt.commit();
+      }
+    }catch(e){
+      alert("되돌리는 중 문제가 생겼습니다.\n\n" + ((e && e.message) ? e.message : String(e)));
+      return;
+    }
+
+    logAction("입출금 처리 전체 되돌리기",
+      "입금요청 " + inKeep.length + "건(기록 " + inRecCnt + ") / 판매요청 " + inBatchCnt + "건 / "
+      + "출금요청 " + outKeep.length + "건(기록 " + outRecCnt + ") / 주문 " + outBatchCnt + "건 / "
+      + "취소 삭제 " + (inDel.length + outDel.length) + "건"
+      + (inDel.length ? " [입금:" + inDel.map(p=> ((p.destinations||[]).join(",")||"-") + " " + (Number(p.totalAmount)||0).toLocaleString()).join(" / ") + "]" : "")
+      + (outDel.length ? " [출금:" + outDel.map(p=> ((p.sources||[]).join(",")||"-") + " " + (Number(p.totalAmount)||0).toLocaleString()).join(" / ") + "]" : "")
+      + " / 여신·여신결제 주문 " + creditBatch.size + "건 유지");
+
+    alert("되돌렸습니다.\n\n· 되돌린 요청 " + (inKeep.length + outKeep.length) + "건\n"
+      + "· 삭제한 취소 요청 " + (inDel.length + outDel.length) + "건\n\n이제 처음부터 다시 등록하시면 됩니다.");
+    loadReqBoard();
   };
 
   // ---------- 입출금 처리 입력창 ----------
