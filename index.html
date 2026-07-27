@@ -309,7 +309,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-07-26 v262</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-07-27 v264</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -348,6 +348,7 @@
           <button class="tab-btn" data-tab="tab-team" data-label-key="tab-team" id="tabbtn-team" onclick="switchTab('tab-team')" style="display:none;"><span class="tab-label-text">팀 관리</span></button>
           <button class="tab-btn" data-label-key="inv-admin" id="tabbtn-inv-admin" onclick="openInvAdminSection()" style="display:none;"><span class="tab-label-text">재고 기초설정</span></button>
           <button class="tab-btn" data-tab="tab-users" data-label-key="tab-users" id="tabbtn-users" onclick="switchTab('tab-users')" style="display:none;"><span class="tab-label-text">사용자 관리</span> <span id="user-admin-badge" style="display:none;background:var(--danger);color:#fff;font-size:10px;padding:1px 6px;margin-left:4px;">0</span></button>
+          <button class="tab-btn" data-tab="tab-reqboard" data-label-key="tab-reqboard" id="tabbtn-reqboard" onclick="switchTab('tab-reqboard')" style="display:none;"><span class="tab-label-text">입출금 요청</span></button>
           <button class="tab-btn" data-tab="tab-settlement" data-label-key="tab-settlement" id="tabbtn-settlement" onclick="switchTab('tab-settlement')" style="display:none;"><span class="tab-label-text">정산 관리</span></button>
           <button class="tab-btn" data-tab="tab-paycheck" data-label-key="tab-paycheck" id="tabbtn-paycheck" onclick="switchTab('tab-paycheck')" style="display:none;"><span class="tab-label-text">단말기 입금 대조</span></button>
           <button class="tab-btn" data-tab="tab-lgrefund" data-label-key="tab-lgrefund" id="tabbtn-lgrefund" onclick="switchTab('tab-lgrefund')" style="display:none;"><span class="tab-label-text">LG 환불·수수료</span></button>
@@ -1322,6 +1323,31 @@
     </div>
 
     <!-- ===== 관리자: 정산 설정 (준비중) ===== -->
+    <div id="tab-reqboard" class="tab-panel">
+      <div class="card">
+        <h3 style="margin:0;">입출금 요청 <span class="info-tip" title="주문에서 만든 출금요청과 판매에서 만든 입금요청을 한 화면에서 봅니다. 처리 버튼으로 이체·입금 기록을 넣으면 누적됩니다.">ⓘ</span></h3>
+        <p class="desc" style="margin-top:0;">주문에서 만든 <b>출금요청</b>과 판매에서 만든 <b>입금요청</b>을 나란히 봅니다.
+          <b>처리</b>를 누르면 이체·입금 기록이 들어가고 <b>누적</b>됩니다. 승인된 금액만 반영됩니다.</p>
+        <div id="reqboard-cards" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px;"></div>
+        <span class="btn-row" style="margin-bottom:10px;display:inline-flex;">
+          <button class="btn small" id="rbd-f-ing" style="width:auto;" onclick="setReqBoardFilter('ing')">진행중</button>
+          <button class="btn small secondary" id="rbd-f-done" style="width:auto;" onclick="setReqBoardFilter('done')">완료</button>
+          <button class="btn small secondary" id="rbd-f-cancel" style="width:auto;" onclick="setReqBoardFilter('cancel')">취소</button>
+          <button class="btn small secondary" id="rbd-f-all" style="width:auto;" onclick="setReqBoardFilter('all')">전체</button>
+        </span>
+        <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:flex-start;">
+          <div style="flex:1;min-width:430px;">
+            <h3 style="font-size:13px;margin:0 0 6px;">출금요청 <span style="color:var(--gray);font-weight:400;">— 줘야 할 돈 (주문)</span></h3>
+            <div id="reqboard-out"></div>
+          </div>
+          <div style="flex:1;min-width:430px;">
+            <h3 style="font-size:13px;margin:0 0 6px;">입금요청 <span style="color:var(--gray);font-weight:400;">— 받아야 할 돈 (판매)</span></h3>
+            <div id="reqboard-in"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <div id="tab-settlement" class="tab-panel">
       <div class="card">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
@@ -9536,6 +9562,179 @@
     el.prepend(renderPaginationBar("paymentRequests", prDocs.length, loadPaymentRequestList));
   }
 
+  // ---------- 입출금 요청 한 화면 ----------
+  //  왼쪽: 주문에서 만든 출금요청(줘야 할 돈) / 오른쪽: 판매에서 만든 입금요청(받아야 할 돈)
+  //  금액은 정산 관리와 같은 값을 씁니다. 처리도 같은 기능을 그대로 부릅니다.
+  let reqBoardFilter = "ing";
+  const reqBoardCache = { out:{}, in:{} };
+
+  window.setReqBoardFilter = function(f){
+    reqBoardFilter = f;
+    ["ing","done","cancel","all"].forEach(k=>{
+      const b = document.getElementById("rbd-f-" + k);
+      if(b) b.className = "btn small" + (k === f ? "" : " secondary");
+    });
+    loadReqBoard();
+  };
+
+  window.loadReqBoard = async function(){
+    if(!hasPerm(currentUserPerms, "settlementSettings")) return;
+    const outEl = document.getElementById("reqboard-out");
+    const inEl  = document.getElementById("reqboard-in");
+    if(!outEl || !inEl) return;
+    outEl.innerHTML = '<div class="list-empty">불러오는 중...</div>';
+    inEl.innerHTML  = '<div class="list-empty">불러오는 중...</div>';
+
+    const [prSnap, sdrSnap] = await Promise.all([
+      getDocs(query(collection(db,"paymentRequests"), orderBy("createdAt","desc"))),
+      getDocs(query(collection(db,"saleDepositRequests"), orderBy("createdAt","desc")))
+    ]);
+
+    // 입금요청에 업체명이 저장돼 있지 않은 옛 건은 연결된 판매요청에서 찾아옵니다.
+    const needLookup = sdrSnap.docs.some(d=> !((d.data().destinations)||[]).length);
+    const destById = {};
+    if(needLookup){
+      try{
+        const [bs, ls] = await Promise.all([
+          getDocs(collection(db,"saleRequestBatches")),
+          getDocs(collection(db,"saleRequests"))
+        ]);
+        bs.forEach(x=>{ const v=x.data(); if(v.destination) destById[x.id]=v.destination; });
+        ls.forEach(x=>{ const v=x.data(); if(v.destination) destById[x.id]=v.destination; });
+      }catch(e){}
+    }
+
+    // 조건에 맞는 것만 골라냅니다.
+    const pick = (p, done)=>{
+      if(reqBoardFilter === "all") return true;
+      if(reqBoardFilter === "cancel") return p.status === "취소";
+      if(p.status === "취소") return false;
+      if(reqBoardFilter === "done") return !!done;
+      return !done;   // 진행중
+    };
+
+    // 한 쪽 표를 만듭니다. kind: "out" = 출금요청, "in" = 입금요청
+    function buildTable(docs, kind){
+      const isIn = (kind === "in");
+      reqBoardCache[kind] = {};
+      const rows = [];
+      let sumTotal = 0, sumDone = 0, sumLeft = 0, waitCnt = 0;
+
+      docs.forEach(d=>{
+        const p = d.data();
+        const done = isIn ? !!p.depositCompleted : !!p.transferCompleted;
+        if(!pick(p, done)) return;
+        reqBoardCache[kind][d.id] = p;
+
+        const total = Number(p.totalAmount) || 0;
+        const paid  = Number(isIn ? p.receivedAmount : p.paidAmount) || 0;
+        const left  = Math.max(0, total - paid);
+        const recs  = (isIn ? p.receipts : p.payments) || [];
+        const waiting = recs.filter(x=> !x.approved && !x.rejected).length;
+        if(p.status !== "취소"){ sumTotal += total; sumDone += paid; sumLeft += left; waitCnt += waiting; }
+
+        // 업체명
+        let who;
+        if(isIn){
+          const saved = (p.destinations||[]).filter(Boolean);
+          if(saved.length) who = comboEsc(saved.join(", "));
+          else{
+            const found = [...new Set((p.saleBatchRefs||[]).map(b=> destById[b.id]).filter(Boolean))];
+            who = found.length ? comboEsc(found.join(", "))
+                 : '<span style="color:var(--danger);">연결 끊김</span>';
+          }
+        }else{
+          const src = (p.sources||[]).filter(Boolean);
+          who = src.length ? comboEsc(src.join(", ")) : '<span style="color:var(--gray);">-</span>';
+        }
+
+        const stColor = p.status === "취소" ? "var(--gray)" : (done ? "#2e7d32" : "var(--danger)");
+        rows.push(
+          '<tr>' +
+          '<td><b>' + who + '</b><br><span style="color:var(--gray);font-size:11px;">' +
+            (isIn ? '판매요청 ' + ((p.saleBatchRefs||[]).length) + '건' : '주문 ' + ((p.orderBatchIds||[]).length) + '건') +
+            (p.otherAmount ? ' + 기타' : '') + '</span></td>' +
+          '<td class="ta-right">' + comboEsc(p.requestDate||"-") + '</td>' +
+          '<td class="ta-right">' + total.toLocaleString() + '</td>' +
+          '<td class="ta-right" style="color:#1565c0;">' + (paid ? paid.toLocaleString() : '-') + '</td>' +
+          '<td class="ta-right" style="color:var(--danger);font-weight:700;">' + (left ? left.toLocaleString() : '-') + '</td>' +
+          '<td class="ta-right" style="color:' + stColor + ';">' + comboEsc(p.status||"-") +
+            (waiting ? '<br><span style="color:#b8860b;font-size:11px;">승인대기 ' + waiting + '</span>' : '') + '</td>' +
+          '<td class="ta-right">' +
+            (p.status !== "취소" && !done
+              ? '<button class="btn small secondary" style="width:auto;" data-rbd-do="' + kind + '|' + d.id + '">처리</button>'
+              : '<span style="color:var(--gray);">-</span>') +
+          '</td></tr>'
+        );
+
+        if(recs.length){
+          rows.push('<tr><td colspan="7" style="background:#fafafa;font-size:11.5px;line-height:1.9;">' +
+            recs.map((x,i)=> recordLine(x, i, isIn ? "in" : "out", d.id)).join('<br>') +
+            '</td></tr>');
+        }
+      });
+
+      if(rows.length === 0){
+        return { html:'<div class="list-empty">해당하는 요청이 없습니다.</div>', waitCnt:0, sumLeft:0, sumTotal:0, sumDone:0 };
+      }
+      const html = '<div style="overflow-x:auto;"><table class="data-table">' +
+        '<thead><tr><th>업체</th><th class="ta-right">요청일</th><th class="ta-right">요청금액</th>' +
+        '<th class="ta-right">처리액</th><th class="ta-right">남은금액</th><th class="ta-right">상태</th><th></th></tr></thead>' +
+        '<tbody>' + rows.join("") +
+        '<tr style="background:#fafafa;font-weight:700;border-top:2px solid var(--navy);">' +
+        '<td>합계</td><td></td>' +
+        '<td class="ta-right">' + sumTotal.toLocaleString() + '</td>' +
+        '<td class="ta-right" style="color:#1565c0;">' + sumDone.toLocaleString() + '</td>' +
+        '<td class="ta-right" style="color:var(--danger);">' + sumLeft.toLocaleString() + '</td>' +
+        '<td colspan="2"></td></tr>' +
+        '</tbody></table></div>' +
+        '<div style="color:var(--gray);font-size:11.5px;margin-top:4px;">합계는 취소된 요청을 뺀 금액입니다.</div>';
+      return { html, waitCnt, sumLeft, sumTotal, sumDone };
+    }
+
+    const outRes = buildTable(prSnap.docs, "out");
+    const inRes  = buildTable(sdrSnap.docs, "in");
+    outEl.innerHTML = outRes.html;
+    inEl.innerHTML  = inRes.html;
+
+    // 위쪽 합계 카드
+    const cardEl = document.getElementById("reqboard-cards");
+    if(cardEl){
+      const gap = inRes.sumLeft - outRes.sumLeft;
+      const card = (label, value, color, note)=>
+        '<div style="border:1px solid var(--line);padding:9px 12px;min-width:170px;background:#fff;">' +
+        '<div style="font-size:11px;color:var(--gray);">' + label + '</div>' +
+        '<div style="font-size:16px;font-weight:700;' + (color?('color:'+color+';'):'') + '">' + value + '</div>' +
+        (note ? '<div style="font-size:10.5px;color:var(--gray);">' + note + '</div>' : '') + '</div>';
+      cardEl.innerHTML =
+        card("줘야 할 돈 (출금 남음)", outRes.sumLeft.toLocaleString(), "var(--danger)", "출금요청 남은금액 합계") +
+        card("받아야 할 돈 (입금 남음)", inRes.sumLeft.toLocaleString(), "#1565c0", "입금요청 남은금액 합계") +
+        card("차액", gap.toLocaleString(), gap>=0 ? "#2e7d32" : "var(--danger)", "받아야 할 돈 − 줘야 할 돈") +
+        card("승인대기", (outRes.waitCnt + inRes.waitCnt) + "건", (outRes.waitCnt+inRes.waitCnt)>0 ? "#b8860b" : null, "승인 전에는 반영되지 않습니다");
+    }
+
+    // 처리 버튼 — 정산 관리와 같은 기능을 그대로 부릅니다.
+    document.querySelectorAll("[data-rbd-do]").forEach(b=>{
+      const [kind, id] = b.dataset.rbdDo.split("|");
+      b.onclick = async ()=>{
+        const p = reqBoardCache[kind][id];
+        if(!p) return;
+        if(kind === "in") await addReceiptRecord(id, p);
+        else await addTransferRecord(id, p);
+        loadReqBoard();
+      };
+    });
+    // 승인·반려 버튼
+    document.querySelectorAll("#tab-reqboard [data-appr]").forEach(b=>{
+      const [k, id, i] = b.dataset.appr.split("|");
+      b.onclick = async ()=>{ await approveRecord(k, id, Number(i), false); loadReqBoard(); };
+    });
+    document.querySelectorAll("#tab-reqboard [data-rej]").forEach(b=>{
+      const [k, id, i] = b.dataset.rej.split("|");
+      b.onclick = async ()=>{ await approveRecord(k, id, Number(i), true); loadReqBoard(); };
+    });
+  };
+
   // ---------- 판매요청 묶어서 입금요청 ----------
   window.createSaleDepositRequestFromSelected = async function(){
     const checked = Array.from(document.querySelectorAll(".sale-pay-cb:checked"));
@@ -17562,13 +17761,19 @@
     //  · 머리글 이름은 업로드가 알아보는 이름을 씁니다. (화면 이름과 다를 수 있어 맞춰둡니다)
     const bulkByKey = {};
     BULK_EDIT_DOWNLOAD_FIELDS.forEach(f=> bulkByKey[f.key] = f);
-    const viewCols = INV_COLUMNS.filter(c=> currentViewSettings.includes(c.key) && c.key !== "serialNumber");
+    // 일련번호도 화면 순서 그대로 둡니다. 앞으로 끌어오지 않습니다.
+    // (업로드는 머리글 이름으로 찾으므로 어느 자리에 있어도 정확히 반영됩니다)
+    const viewCols = INV_COLUMNS.filter(c=> currentViewSettings.includes(c.key));
     if(viewCols.length === 0){ alert("보기 설정에서 열을 하나 이상 켜주세요."); return; }
-    const headers = ["확인", "일련번호"].concat(viewCols.map(c=> bulkByKey[c.key] ? bulkByKey[c.key].header : c.label));
+    if(!currentViewSettings.includes("serialNumber")){
+      alert("보기 설정에서 「일련번호」를 켜주세요.\n\n일련번호가 없으면 올릴 때 어느 단말기인지 찾을 수 없습니다.");
+      return;
+    }
+    const headers = ["확인"].concat(viewCols.map(c=> bulkByKey[c.key] ? bulkByKey[c.key].header : c.label));
     const numericColIndices = new Set();
     viewCols.forEach((c, idx)=>{
       const f = bulkByKey[c.key];
-      if(f && f.type === "number") numericColIndices.add(idx + 2);   // +2: 확인·일련번호가 앞에
+      if(f && f.type === "number") numericColIndices.add(idx + 1);   // +1: 확인만 앞에
     });
     // 화면에 없어서 이번 파일에 안 들어간 "고칠 수 있는 칸"을 미리 알려드립니다.
     const missingEditable = BULK_EDIT_DOWNLOAD_FIELDS
@@ -17587,7 +17792,7 @@
       if(!sn) marks.push("일련번호 없음");
       else if(snCount[sn] > 1) marks.push("중복");
       if(!it.listPrice) marks.push("출고가 없음");
-      const row = [marks.join(" · "), it.serialNumber || ""];
+      const row = [marks.join(" · ")];
       viewCols.forEach(c=>{
         const f = bulkByKey[c.key];
         if(f){
@@ -17614,8 +17819,8 @@
       "· 지금 화면   : " + pageInfo + "\n" +
       "· 정렬 기준   : " + lastRenderedSortLabel + "\n" +
       "· 조회 조건   : " + condInfo + "\n\n" +
-      "· 열 구성   : 화면 보기 설정과 같음 (" + (viewCols.length + 2) + "칸)\n" +
-      "             A 확인 · B 일련번호 · C부터 화면 순서\n\n" +
+      "· 열 구성   : 화면 보기 설정과 같음 (" + (viewCols.length + 1) + "칸)\n" +
+      "             A 확인 · B부터 화면 순서 그대로\n\n" +
       (missingEditable.length
         ? "화면에 없어서 이번 파일에 안 들어간 칸:\n" + missingEditable.join(", ")
           + "\n\n이 칸을 고치시려면 보기 설정에서 먼저 켜주세요.\n\n"
@@ -17636,7 +17841,7 @@
       ["정렬 기준", lastRenderedSortLabel],
       ["조회 조건", condInfo],
       ["화면 표시", pageInfo],
-      ["열 구성", "화면 보기 설정과 같음 — A 확인 · B 일련번호 · C부터 화면 순서"],
+      ["열 구성", "화면 보기 설정과 같음 — A 확인 · B부터 화면 순서 그대로"],
       ["안 들어간 칸", missingEditable.length ? missingEditable.join(", ") : "없음"],
       ["주의", "반영은 일련번호로 찾아서 합니다. 행 순서를 바꿔도 결과는 같습니다"],
       ["주의", "순번·확인·전산모델명·모델명·기가수·펫네임은 고쳐도 반영되지 않습니다"]
@@ -18806,7 +19011,7 @@
     document.getElementById("signup-form").style.display="none";
     document.getElementById("login-form").style.display="block";
   };
-  const ADMIN_TAB_IDS = ["tab-site","tab-team","tab-users","tab-settlement","tab-b2b","tab-logs"];
+  const ADMIN_TAB_IDS = ["tab-site","tab-team","tab-users","tab-reqboard","tab-settlement","tab-b2b","tab-logs"];
   const INV_ADMIN_TAB_IDS = ["tab-inv-model","tab-inv-color","tab-inv-manufacturer","tab-inv-location","tab-inv-status","tab-inv-carrier"];
 
   window.toggleAdminMenu = function(){
@@ -18856,6 +19061,7 @@
     if(tabId==="tab-orders") loadOrderList();
     if(tabId==="tab-salereq") loadSaleRequestList();
     if(tabId==="tab-reservation") loadReservationTable();
+    if(tabId==="tab-reqboard") loadReqBoard();
     if(tabId==="tab-settlement") loadSettlementTab();
     if(tabId==="tab-b2b") loadB2BTab();
     if(tabId==="tab-team") loadTeamList();
@@ -19016,6 +19222,7 @@
       setMenu("tabbtn-team", showTeam);
       setMenu("tabbtn-inv-admin", showInvAdmin);
       setMenu("tabbtn-users", showUsers);
+      setMenu("tabbtn-reqboard", showSettlement);
       setMenu("tabbtn-settlement", showSettlement);
       setMenu("tabbtn-b2b", showSettlement);
       setMenu("tabbtn-ledger", showLedger || showSettlement);
