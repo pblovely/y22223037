@@ -309,7 +309,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-07-27 v272</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-07-27 v273</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -9878,10 +9878,12 @@
   window.resetAllPayProcessing = async function(){
     if(!hasPerm(currentUserPerms, "paymentProcess")){ alert("권한이 없습니다."); return; }
 
-    const [sdrSnap, prSnap, obSnap] = await Promise.all([
+    const [sdrSnap, prSnap, obSnap, srbSnap, srSnap] = await Promise.all([
       getDocs(collection(db,"saleDepositRequests")),
       getDocs(collection(db,"paymentRequests")),
-      getDocs(collection(db,"orderBatches"))
+      getDocs(collection(db,"orderBatches")),
+      getDocs(collection(db,"saleRequestBatches")),
+      getDocs(collection(db,"saleRequests"))
     ]);
 
     // 여신결제 주문은 결제완료를 유지해야 하므로 미리 표시해둡니다.
@@ -9894,8 +9896,24 @@
 
     const inRecCnt  = inKeep.reduce((n,p)=> n + ((p.receipts||[]).length), 0);
     const outRecCnt = outKeep.reduce((n,p)=> n + ((p.payments||[]).length), 0);
-    const inBatchCnt  = inKeep.reduce((n,p)=> n + ((p.saleBatchRefs||[]).length), 0);
-    const outBatchCnt = outKeep.reduce((n,p)=> n + ((p.orderBatchIds||[]).filter(x=> !creditBatch.has(x)).length), 0);
+
+    // 입금요청에 묶이지 않은 채 완료 처리된 건까지 전부 찾습니다. (예: 에이스 건)
+    const doneSale = [];
+    srbSnap.forEach(d=>{ const v=d.data();
+      if(v.status !== "취소" && v.depositReceived) doneSale.push({ col:"saleRequestBatches", id:d.id, who:v.destination||"-", amt:Number(v.depositRequired)||0 }); });
+    srSnap.forEach(d=>{ const v=d.data();
+      if(v.status !== "취소" && v.depositReceived) doneSale.push({ col:"saleRequests", id:d.id, who:v.destination||"-", amt:Number(v.depositRequired)||0 }); });
+
+    // 결제완료된 주문도 전부 찾습니다. 단 여신결제 주문은 뺍니다.
+    const doneOrder = [];
+    obSnap.forEach(d=>{ const v=d.data();
+      if(v.status !== "취소" && v.depositPaid && v.paymentMethod !== "b2b_credit")
+        doneOrder.push({ id:d.id, who:v.source||"-", amt:Number(v.depositRequired)||0 }); });
+
+    const inBatchCnt = doneSale.length;
+    const outBatchCnt = doneOrder.length;
+    const doneSaleAmt = doneSale.reduce((n,x)=> n + x.amt, 0);
+    const doneOrderAmt = doneOrder.reduce((n,x)=> n + x.amt, 0);
 
     const delSummary = (arr, isIn)=> arr.slice(0,5).map(p=>{
       const who = isIn ? ((p.destinations||[]).join(",") || "-") : ((p.sources||[]).join(",") || "-");
@@ -9907,9 +9925,10 @@
       "─────────────────────────────\n" +
       "[되돌립니다]\n" +
       "· 입금요청 " + inKeep.length + "건 → 요청중 (입금기록 " + inRecCnt + "개 삭제)\n" +
-      "· 판매요청(단말기) " + inBatchCnt + "건 → 대기중\n" +
+      "· 입금완료된 판매요청 " + inBatchCnt + "건 → 대기중  (" + doneSaleAmt.toLocaleString() + ")\n" +
+      "    ※ 입금요청에 묶이지 않고 완료된 것도 전부 포함합니다\n" +
       "· 출금요청 " + outKeep.length + "건 → 요청중 (이체기록 " + outRecCnt + "개 삭제)\n" +
-      "· 주문 " + outBatchCnt + "건 → 미결제\n" +
+      "· 결제완료된 주문 " + outBatchCnt + "건 → 미결제  (" + doneOrderAmt.toLocaleString() + ")\n" +
       "· 세금계산서 발행 체크·보류 표시도 함께 지웁니다\n\n" +
       "[삭제합니다] 취소된 요청 " + (inDel.length + outDel.length) + "건\n" +
       (inDel.length ? delSummary(inDel, true) + "\n" : "") +
@@ -9937,20 +9956,13 @@
       status: "요청중", taxInvoiceIssued: false, taxInvoiceDate: "",
       onHold: false, holdReason: "", holdBy: "", holdAt: ""
     };
-    inKeep.forEach(p=>{
-      ops.push({ t:"u", ref: doc(db,"saleDepositRequests", p.id), data: CLEAR_IN });
-      (p.saleBatchRefs||[]).forEach(b=>{
-        const col = b.isLegacy ? "saleRequests" : "saleRequestBatches";
-        ops.push({ t:"u", ref: doc(db, col, b.id), data:{ depositReceived:false, depositReceivedDate:"", status:"대기중" } });
-      });
-    });
-    outKeep.forEach(p=>{
-      ops.push({ t:"u", ref: doc(db,"paymentRequests", p.id), data: CLEAR_OUT });
-      (p.orderBatchIds||[]).forEach(bid=>{
-        if(creditBatch.has(bid)) return;   // 여신결제 주문은 그대로 둡니다
-        ops.push({ t:"u", ref: doc(db,"orderBatches", bid), data:{ depositPaid:false, depositPaidDate:"" } });
-      });
-    });
+    inKeep.forEach(p=> ops.push({ t:"u", ref: doc(db,"saleDepositRequests", p.id), data: CLEAR_IN }));
+    outKeep.forEach(p=> ops.push({ t:"u", ref: doc(db,"paymentRequests", p.id), data: CLEAR_OUT }));
+    // 완료 처리된 판매요청·주문을 전부 되돌립니다. (요청에 묶였는지와 무관)
+    doneSale.forEach(x=>
+      ops.push({ t:"u", ref: doc(db, x.col, x.id), data:{ depositReceived:false, depositReceivedDate:"", status:"대기중" } }));
+    doneOrder.forEach(x=>
+      ops.push({ t:"u", ref: doc(db,"orderBatches", x.id), data:{ depositPaid:false, depositPaidDate:"" } }));
     // 취소된 요청은 삭제하고, 묶여 있던 쪽의 연결도 풀어줍니다.
     inDel.forEach(p=>{
       (p.saleBatchRefs||[]).forEach(b=>{
@@ -9980,8 +9992,8 @@
     }
 
     logAction("입출금 처리 전체 되돌리기",
-      "입금요청 " + inKeep.length + "건(기록 " + inRecCnt + ") / 판매요청 " + inBatchCnt + "건 / "
-      + "출금요청 " + outKeep.length + "건(기록 " + outRecCnt + ") / 주문 " + outBatchCnt + "건 / "
+      "입금요청 " + inKeep.length + "건(기록 " + inRecCnt + ") / 판매요청 " + inBatchCnt + "건 " + doneSaleAmt.toLocaleString() + " / "
+      + "출금요청 " + outKeep.length + "건(기록 " + outRecCnt + ") / 주문 " + outBatchCnt + "건 " + doneOrderAmt.toLocaleString() + " / "
       + "취소 삭제 " + (inDel.length + outDel.length) + "건"
       + (inDel.length ? " [입금:" + inDel.map(p=> ((p.destinations||[]).join(",")||"-") + " " + (Number(p.totalAmount)||0).toLocaleString()).join(" / ") + "]" : "")
       + (outDel.length ? " [출금:" + outDel.map(p=> ((p.sources||[]).join(",")||"-") + " " + (Number(p.totalAmount)||0).toLocaleString()).join(" / ") + "]" : "")
