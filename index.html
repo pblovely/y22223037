@@ -309,7 +309,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-07-27 v264</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-07-27 v266</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -1330,10 +1330,10 @@
           <b>처리</b>를 누르면 이체·입금 기록이 들어가고 <b>누적</b>됩니다. 승인된 금액만 반영됩니다.</p>
         <div id="reqboard-cards" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px;"></div>
         <span class="btn-row" style="margin-bottom:10px;display:inline-flex;">
-          <button class="btn small" id="rbd-f-ing" style="width:auto;" onclick="setReqBoardFilter('ing')">진행중</button>
-          <button class="btn small secondary" id="rbd-f-done" style="width:auto;" onclick="setReqBoardFilter('done')">완료</button>
+          <button class="btn small" id="rbd-f-all" style="width:auto;" onclick="setReqBoardFilter('all')">전체</button>
+          <button class="btn small secondary" id="rbd-f-ing" style="width:auto;" onclick="setReqBoardFilter('ing')">진행중</button>
+          <button class="btn small secondary" id="rbd-f-done" style="width:auto;" onclick="setReqBoardFilter('done')">처리완료</button>
           <button class="btn small secondary" id="rbd-f-cancel" style="width:auto;" onclick="setReqBoardFilter('cancel')">취소</button>
-          <button class="btn small secondary" id="rbd-f-all" style="width:auto;" onclick="setReqBoardFilter('all')">전체</button>
         </span>
         <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:flex-start;">
           <div style="flex:1;min-width:430px;">
@@ -1345,6 +1345,33 @@
             <div id="reqboard-in"></div>
           </div>
         </div>
+      </div>
+    </div>
+
+    <!-- 입출금 처리 입력창 -->
+    <div class="modal-overlay" id="payproc-overlay" style="display:none;">
+      <div class="modal-box" style="max-width:430px;">
+        <h3 id="pp-title" style="margin-top:0;margin-bottom:8px;">입금 처리</h3>
+        <div style="border:1px solid var(--line);background:#fafafa;padding:9px 11px;font-size:12.5px;line-height:1.9;margin-bottom:10px;">
+          <div>업체 <b id="pp-company">-</b></div>
+          <div>계좌 <span id="pp-account">-</span></div>
+          <div>요청금액 <b id="pp-total">0</b> · 남은금액 <b id="pp-left" style="color:var(--danger);">0</b></div>
+        </div>
+        <div class="stack-row"><label>금액</label><input type="text" id="pp-amount" placeholder="숫자만"></div>
+        <div class="stack-row"><label>날짜</label><input type="text" id="pp-date" placeholder="20260727"></div>
+        <div class="stack-row"><label id="pp-payer-label">입금자명</label><input type="text" id="pp-payer"></div>
+        <div class="stack-row"><label>세금계산서</label>
+          <span style="display:inline-flex;align-items:center;gap:8px;">
+            <label style="font-size:12.5px;"><input type="checkbox" id="pp-tax"> 발행완료</label>
+            <input type="text" id="pp-taxdate" placeholder="발행일 20260727" style="width:140px;">
+          </span>
+        </div>
+        <div class="stack-row"><label>메모</label><input type="text" id="pp-memo" placeholder="선택"></div>
+        <div id="pp-msg" style="font-size:12.5px;margin:6px 0;"></div>
+        <span class="btn-row" style="margin-top:8px;">
+          <button class="btn small" style="width:auto;" onclick="submitPayProcess()">저장</button>
+          <button class="btn small secondary" style="width:auto;" onclick="closePayProcess()">닫기</button>
+        </span>
       </div>
     </div>
 
@@ -2337,6 +2364,8 @@
     cancelDelete:"⚠ 취소된 주문·판매요청 삭제 (되돌릴 수 없음)",
     accountView:"업체 계좌·사업자번호 보기 (없으면 가려짐)",
     depositApprove:"입금·이체 승인 (정산팀 — 실제 입금을 확인하고 확정)",
+    menuReqBoard:"메뉴: 입출금 요청 (보기)",
+    paymentProcess:"입출금 처리 입력 (없으면 보기만 — 입금·이체 기록 못 넣음)",
     uiCustomize:"화면 문구·버튼 이름 수정 (마우스 오른쪽 클릭)",
     userApproval:"사용자 승인·추방", permissionManage:"권한 설정 관리(전체 관리자)",
     teamManage:"팀 관리", inventorySettings:"재고 기초설정 관리",
@@ -2344,8 +2373,8 @@
   };
   // 권한을 성격별로 묶어서 보여줍니다 (화면에서 찾기 쉽게)
   const PERMISSION_GROUPS = [
-    { title:"화면 메뉴", keys:["dashboard","menuInvWork","menuInvUpload","menuOrders","menuSaleReq","menuReservation","menuCompany","menuDataUpload","menuItemHistory","menuLgRefund","menuLedger","menuDataCheck"] },
-    { title:"기능", keys:["excelExport","bulkEdit","bulkModelApply","companyEdit","listPriceOverride","cancelDelete","accountView","depositApprove","uiCustomize"] },
+    { title:"화면 메뉴", keys:["dashboard","menuInvWork","menuInvUpload","menuOrders","menuSaleReq","menuReservation","menuCompany","menuDataUpload","menuItemHistory","menuLgRefund","menuLedger","menuDataCheck","menuReqBoard"] },
+    { title:"기능", keys:["excelExport","bulkEdit","bulkModelApply","companyEdit","listPriceOverride","cancelDelete","accountView","depositApprove","paymentProcess","uiCustomize"] },
     { title:"관리자", keys:["userApproval","permissionManage","teamManage","inventorySettings","settlementSettings","siteSettings","dataReset"] }
   ];
   const PERMISSION_SUB_KEYS = ["menuInvUpload"];   // 상위 항목 아래에 들여쓰기할 항목
@@ -9565,7 +9594,7 @@
   // ---------- 입출금 요청 한 화면 ----------
   //  왼쪽: 주문에서 만든 출금요청(줘야 할 돈) / 오른쪽: 판매에서 만든 입금요청(받아야 할 돈)
   //  금액은 정산 관리와 같은 값을 씁니다. 처리도 같은 기능을 그대로 부릅니다.
-  let reqBoardFilter = "ing";
+  let reqBoardFilter = "all";   // 처리완료한 것도 함께 보입니다
   const reqBoardCache = { out:{}, in:{} };
 
   window.setReqBoardFilter = function(f){
@@ -9661,8 +9690,8 @@
           '<td class="ta-right" style="color:' + stColor + ';">' + comboEsc(p.status||"-") +
             (waiting ? '<br><span style="color:#b8860b;font-size:11px;">승인대기 ' + waiting + '</span>' : '') + '</td>' +
           '<td class="ta-right">' +
-            (p.status !== "취소" && !done
-              ? '<button class="btn small secondary" style="width:auto;" data-rbd-do="' + kind + '|' + d.id + '">처리</button>'
+            (p.status !== "취소" && !done && hasPerm(currentUserPerms, "paymentProcess")
+              ? '<button class="btn small" style="width:auto;" data-rbd-do="' + kind + '|' + d.id + '">처리</button>'
               : '<span style="color:var(--gray);">-</span>') +
           '</td></tr>'
         );
@@ -9716,12 +9745,10 @@
     // 처리 버튼 — 정산 관리와 같은 기능을 그대로 부릅니다.
     document.querySelectorAll("[data-rbd-do]").forEach(b=>{
       const [kind, id] = b.dataset.rbdDo.split("|");
-      b.onclick = async ()=>{
+      b.onclick = ()=>{
         const p = reqBoardCache[kind][id];
         if(!p) return;
-        if(kind === "in") await addReceiptRecord(id, p);
-        else await addTransferRecord(id, p);
-        loadReqBoard();
+        openPayProcess(kind, id, p);
       };
     });
     // 승인·반려 버튼
@@ -9733,6 +9760,195 @@
       const [k, id, i] = b.dataset.rej.split("|");
       b.onclick = async ()=>{ await approveRecord(k, id, Number(i), true); loadReqBoard(); };
     });
+    document.querySelectorAll("#tab-reqboard [data-delrec]").forEach(b=>{
+      const [k, id, i] = b.dataset.delrec.split("|");
+      b.onclick = ()=> deletePayRecord(k, id, Number(i));
+    });
+  };
+
+  // ---------- 입출금 처리 입력창 ----------
+  //  요청 줄의 [처리]를 누르면 열립니다. 승인 단계 없이 저장하면 바로 반영됩니다.
+  //  대신 누가·언제·얼마를 넣었는지 이력에 남기고, 잘못 넣으면 지울 수 있습니다.
+  let payProcTarget = null;   // { kind:"in"|"out", id, p }
+
+  window.openPayProcess = async function(kind, id, p){
+    if(!hasPerm(currentUserPerms, "paymentProcess")){
+      alert("입출금을 입력할 권한이 없습니다. 관리자에게 요청해주세요."); return;
+    }
+    payProcTarget = { kind, id, p };
+    const isIn = (kind === "in");
+    const total = Number(p.totalAmount) || 0;
+    const paid  = Number(isIn ? p.receivedAmount : p.paidAmount) || 0;
+    const left  = Math.max(0, total - paid);
+
+    // 업체명 — 입금은 판매처, 출금은 송금처
+    let who = "";
+    if(isIn){
+      const saved = (p.destinations||[]).filter(Boolean);
+      who = saved.length ? saved.join(", ") : "";
+    }else{
+      who = (p.sources||[]).filter(Boolean).join(", ");
+    }
+
+    // 계좌는 업체정보에서 끌어옵니다.
+    if(!companiesCache.length){ try{ await fetchCompanies(); }catch(e){} }
+    let acct = "";
+    const first = who.split(",")[0].trim();
+    const co = companiesCache.find(c=> String(c.name||"").trim() === first);
+    if(co){
+      const parts = [co.bankName, co.accountNumber, co.accountHolder].filter(Boolean);
+      acct = parts.length ? parts.join(" ") : "";
+    }
+    if(!acct && !isIn && Array.isArray(p.accounts) && p.accounts.length){
+      const a = p.accounts[0];
+      acct = [a.bankName, a.accountNumber, a.accountHolder].filter(Boolean).join(" ");
+    }
+
+    document.getElementById("pp-title").textContent = isIn ? "입금 처리" : "출금 처리";
+    document.getElementById("pp-company").textContent = who || "-";
+    document.getElementById("pp-account").innerHTML = acct
+      ? comboEsc(acct)
+      : '<span style="color:var(--danger);">계좌 미등록 — 업체정보에서 등록해주세요</span>';
+    document.getElementById("pp-total").textContent = total.toLocaleString();
+    document.getElementById("pp-left").textContent  = left.toLocaleString();
+    document.getElementById("pp-amount").value = left || "";
+    document.getElementById("pp-date").value   = todayStr();
+    document.getElementById("pp-payer").value  = who.split(",")[0].trim();
+    document.getElementById("pp-payer-label").textContent = isIn ? "입금자명" : "받는 곳";
+    document.getElementById("pp-tax").checked = !!p.taxInvoiceIssued;
+    document.getElementById("pp-taxdate").value = p.taxInvoiceDate || "";
+    document.getElementById("pp-memo").value = "";
+    document.getElementById("pp-msg").innerHTML = "";
+    document.getElementById("payproc-overlay").style.display = "flex";
+  };
+
+  window.closePayProcess = function(){
+    document.getElementById("payproc-overlay").style.display = "none";
+    payProcTarget = null;
+  };
+
+  window.submitPayProcess = async function(){
+    if(!payProcTarget) return;
+    const { kind, id, p } = payProcTarget;
+    const isIn = (kind === "in");
+    const msgEl = document.getElementById("pp-msg");
+    const show = (t)=>{ msgEl.innerHTML = '<span style="color:var(--danger);">' + t + '</span>'; };
+
+    const amount = Number(String(document.getElementById("pp-amount").value).replace(/[^0-9.\-]/g, ""));
+    const date   = String(document.getElementById("pp-date").value).replace(/\D/g, "");
+    const payer  = document.getElementById("pp-payer").value.trim();
+    const memo   = document.getElementById("pp-memo").value.trim();
+    const taxOn  = document.getElementById("pp-tax").checked;
+    const taxDate= String(document.getElementById("pp-taxdate").value).replace(/\D/g, "");
+
+    if(!(amount > 0)){ show("금액을 숫자로 넣어주세요."); return; }
+    if(date.length !== 8){ show("날짜를 20260727 형태로 넣어주세요."); return; }
+
+    const total = Number(p.totalAmount) || 0;
+    const before = Number(isIn ? p.receivedAmount : p.paidAmount) || 0;
+    if(before + amount > total){
+      if(!confirm("요청금액보다 " + (before + amount - total).toLocaleString() + "원 많습니다.\n\n그래도 저장할까요?")) return;
+    }
+
+    // 승인 단계 없이 바로 반영되도록 승인된 기록으로 저장합니다.
+    const rec = { amount, date, payer, memo, by: currentUser.name,
+                  approved:true, approvedBy: currentUser.name, approvedAt: date };
+    const list = [...((isIn ? p.receipts : p.payments) || []), rec];
+    const sum  = list.filter(x=> x.approved).reduce((n,x)=> n + (Number(x.amount)||0), 0);
+    const full = total > 0 && sum >= total;
+    const lastDate = list.filter(x=> x.approved).map(x=> x.date).sort().slice(-1)[0] || date;
+
+    try{
+      if(isIn){
+        await updateDoc(doc(db,"saleDepositRequests", id), {
+          receipts: list, receivedAmount: sum,
+          depositCompleted: full, depositCompleteDate: full ? lastDate : "",
+          status: full ? "입금완료" : "부분입금",
+          taxInvoiceIssued: taxOn, taxInvoiceDate: taxOn ? (taxDate || date) : ""
+        });
+        // 묶인 판매요청은 전액이 다 들어왔을 때만 완료로 바꿉니다.
+        if(full){
+          for(const b of (p.saleBatchRefs||[])){
+            const col = b.isLegacy ? "saleRequests" : "saleRequestBatches";
+            await updateDoc(doc(db, col, b.id), { depositReceived:true, depositReceivedDate: lastDate, status:"입금완료" });
+          }
+        }
+      }else{
+        await updateDoc(doc(db,"paymentRequests", id), {
+          payments: list, paidAmount: sum,
+          transferCompleted: full, transferCompleteDate: full ? lastDate : "",
+          status: full ? "이체완료" : "부분이체",
+          taxInvoiceIssued: taxOn, taxInvoiceDate: taxOn ? (taxDate || date) : ""
+        });
+        if(full){
+          for(const bId of (p.orderBatchIds||[])){
+            await updateDoc(doc(db,"orderBatches", bId), { depositPaid:true, depositPaidDate: lastDate });
+          }
+        }
+      }
+      logAction(isIn ? "입금 처리" : "출금 처리",
+        (payer||"-") + " / " + amount.toLocaleString() + " / " + date
+        + " / 누적 " + sum.toLocaleString() + "·요청 " + total.toLocaleString()
+        + (full ? " / 완료" : " / 부분")
+        + (taxOn ? " / 세금계산서 발행" : "")
+        + (memo ? " / " + memo : ""));
+    }catch(e){
+      show("저장에 실패했습니다. " + comboEsc((e && e.message) ? e.message : String(e))); return;
+    }
+    closePayProcess();
+    loadReqBoard();
+  };
+
+  // 잘못 넣은 기록을 지웁니다. (되돌리기)
+  window.deletePayRecord = async function(kind, id, idx){
+    if(!hasPerm(currentUserPerms, "paymentProcess")){ alert("권한이 없습니다."); return; }
+    const isIn = (kind === "in");
+    const col = isIn ? "saleDepositRequests" : "paymentRequests";
+    const snap = await getDoc(doc(db, col, id));
+    if(!snap.exists()) return;
+    const p = snap.data();
+    const list = [...((isIn ? p.receipts : p.payments) || [])];
+    const target = list[idx];
+    if(!target) return;
+    if(!confirm((isIn ? "입금" : "출금") + " 기록을 지웁니다.\n\n"
+      + (target.date||"-") + " · " + (Number(target.amount)||0).toLocaleString()
+      + (target.payer ? " · " + target.payer : "") + "\n\n지울까요?")) return;
+    list.splice(idx, 1);
+    const total = Number(p.totalAmount) || 0;
+    const sum = list.filter(x=> x.approved).reduce((n,x)=> n + (Number(x.amount)||0), 0);
+    const full = total > 0 && sum >= total;
+    const lastDate = list.filter(x=> x.approved).map(x=> x.date).sort().slice(-1)[0] || "";
+    try{
+      if(isIn){
+        await updateDoc(doc(db, col, id), {
+          receipts: list, receivedAmount: sum,
+          depositCompleted: full, depositCompleteDate: full ? lastDate : "",
+          status: full ? "입금완료" : (sum > 0 ? "부분입금" : "요청중")
+        });
+        // 완료가 풀리면 묶인 판매요청도 미입금으로 되돌립니다.
+        if(!full){
+          for(const b of (p.saleBatchRefs||[])){
+            const c2 = b.isLegacy ? "saleRequests" : "saleRequestBatches";
+            await updateDoc(doc(db, c2, b.id), { depositReceived:false, depositReceivedDate:"", status:"대기중" });
+          }
+        }
+      }else{
+        await updateDoc(doc(db, col, id), {
+          payments: list, paidAmount: sum,
+          transferCompleted: full, transferCompleteDate: full ? lastDate : "",
+          status: full ? "이체완료" : (sum > 0 ? "부분이체" : "요청중")
+        });
+        if(!full){
+          for(const bId of (p.orderBatchIds||[])){
+            await updateDoc(doc(db,"orderBatches", bId), { depositPaid:false, depositPaidDate:"" });
+          }
+        }
+      }
+      logAction(isIn ? "입금 기록 지움" : "출금 기록 지움",
+        (target.payer||"-") + " / " + (Number(target.amount)||0).toLocaleString() + " / " + (target.date||"-")
+        + " / 남은 누적 " + sum.toLocaleString());
+    }catch(e){ alert("지우지 못했습니다."); return; }
+    loadReqBoard();
   };
 
   // ---------- 판매요청 묶어서 입금요청 ----------
@@ -9939,6 +10155,8 @@
       + (x.approvedBy ? ' <span style="color:var(--gray);font-size:10.5px;">' + comboEsc(x.approvedBy) + '</span>' : '')
       + (x.rejectReason ? '<br><span style="color:var(--danger);font-size:11px;">반려 사유: ' + comboEsc(x.rejectReason) + '</span>' : '')
       + '</span>'
+      + (hasPerm(currentUserPerms, "paymentProcess")
+          ? ' <button class="btn small secondary" style="width:auto;padding:1px 7px;font-size:10.5px;" data-delrec="'+kind+'|'+reqId+'|'+i+'">지우기</button>' : '')
       + ((!x.approved && !x.rejected && canApprove)
         ? ' <button class="btn small secondary" style="width:auto;" data-appr="'+kind+'|'+reqId+'|'+i+'">승인</button>'
           + '<button class="btn small danger" style="width:auto;" data-rej="'+kind+'|'+reqId+'|'+i+'">반려</button>'
@@ -14832,6 +15050,17 @@
     statEl.innerHTML = '<div class="list-empty">불러오는 중...</div>';
 
     const batchSnap = await getDocs(collection(db,"orderBatches"));
+    // 부분이체·부분입금한 금액을 미지급·미수에서 뺍니다.
+    // (아직 완료되지 않은 요청에 이미 넣은 돈은 실제로 주고받은 돈이므로)
+    let prePaid = 0, preRecv = 0;
+    try{
+      const [prS, sdrS] = await Promise.all([
+        getDocs(collection(db,"paymentRequests")),
+        getDocs(collection(db,"saleDepositRequests"))
+      ]);
+      prS.forEach(x=>{ const v=x.data(); if(v.status!=="취소" && !v.transferCompleted) prePaid += Number(v.paidAmount)||0; });
+      sdrS.forEach(x=>{ const v=x.data(); if(v.status!=="취소" && !v.depositCompleted) preRecv += Number(v.receivedAmount)||0; });
+    }catch(e){}
     let unpaidTotal = 0, unpaidCount = 0;
     purchasePendingEl.innerHTML = "";
     let purchaseHtml = "";
@@ -14907,15 +15136,18 @@
     if(sTitle) sTitle.innerHTML = sLabel + ' <span style="font-weight:400;color:var(--gray);font-size:12px;">'
       + (settleFilter === "done" ? doneCnt : receivableCount) + '건</span>';
 
-    function statCard(label, value, color){
+    function statCard(label, value, color, note){
       const k = cardKeyOf("settle", label);
       return '<div class="stat-card" data-label-key="'+k+'-card" style="flex:1;min-width:150px;border:1px solid var(--line);background:#fff;padding:10px 14px;">' +
         '<div data-label-key="'+k+'" style="font-size:11.5px;color:var(--gray);margin-bottom:4px;"><span class="tab-label-text">'+label+'</span></div>' +
-        '<div data-label-key="'+k+'-value" style="font-size:20px;font-weight:800;color:'+(color||'var(--navy)')+';">'+value+'</div></div>';
+        '<div data-label-key="'+k+'-value" style="font-size:20px;font-weight:800;color:'+(color||'var(--navy)')+';">'+value+'</div>' +
+        (note ? '<div style="font-size:10.5px;color:var(--gray);margin-top:2px;">'+note+'</div>' : '') + '</div>';
     }
     statEl.innerHTML =
-      statCard("미지급액 (줘야 할 돈)", unpaidTotal.toLocaleString(), "var(--danger)") +
-      statCard("미수금액 (받아야 할 돈)", receivableTotal.toLocaleString(), "#1565c0");
+      statCard("미지급액 (줘야 할 돈)", Math.max(0, unpaidTotal - prePaid).toLocaleString(), "var(--danger)",
+               prePaid ? ("이미 보낸 " + prePaid.toLocaleString() + " 뺀 금액") : null) +
+      statCard("미수금액 (받아야 할 돈)", Math.max(0, receivableTotal - preRecv).toLocaleString(), "#1565c0",
+               preRecv ? ("이미 받은 " + preRecv.toLocaleString() + " 뺀 금액") : null);
 
     // 출금요청 목록 (없으면 영역 자동 생성)
     let prSection = document.getElementById("settlement-payment-requests");
@@ -19222,7 +19454,7 @@
       setMenu("tabbtn-team", showTeam);
       setMenu("tabbtn-inv-admin", showInvAdmin);
       setMenu("tabbtn-users", showUsers);
-      setMenu("tabbtn-reqboard", showSettlement);
+      setMenu("tabbtn-reqboard", hasPerm(p, "menuReqBoard") || showSettlement);
       setMenu("tabbtn-settlement", showSettlement);
       setMenu("tabbtn-b2b", showSettlement);
       setMenu("tabbtn-ledger", showLedger || showSettlement);
