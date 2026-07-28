@@ -309,7 +309,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-07-27 v276</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-07-27 v278</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -348,7 +348,8 @@
           <button class="tab-btn" data-tab="tab-team" data-label-key="tab-team" id="tabbtn-team" onclick="switchTab('tab-team')" style="display:none;"><span class="tab-label-text">팀 관리</span></button>
           <button class="tab-btn" data-label-key="inv-admin" id="tabbtn-inv-admin" onclick="openInvAdminSection()" style="display:none;"><span class="tab-label-text">재고 기초설정</span></button>
           <button class="tab-btn" data-tab="tab-users" data-label-key="tab-users" id="tabbtn-users" onclick="switchTab('tab-users')" style="display:none;"><span class="tab-label-text">사용자 관리</span> <span id="user-admin-badge" style="display:none;background:var(--danger);color:#fff;font-size:10px;padding:1px 6px;margin-left:4px;">0</span></button>
-          <button class="tab-btn" data-tab="tab-reqboard" data-label-key="tab-reqboard" id="tabbtn-reqboard" onclick="switchTab('tab-reqboard')" style="display:none;"><span class="tab-label-text">입출금 요청</span></button>
+          <button class="tab-btn" data-tab="tab-reqboard" data-label-key="tab-reqboard" id="tabbtn-reqboard" onclick="switchTab('tab-reqboard')" style="display:none;"><span class="tab-label-text">입출금리스트</span></button>
+          <button class="tab-btn" data-tab="tab-cashbook" data-label-key="tab-cashbook" id="tabbtn-cashbook" onclick="switchTab('tab-cashbook')" style="display:none;"><span class="tab-label-text">입출금 내역</span></button>
           <button class="tab-btn" data-tab="tab-settlement" data-label-key="tab-settlement" id="tabbtn-settlement" onclick="switchTab('tab-settlement')" style="display:none;"><span class="tab-label-text">정산 관리</span></button>
           <button class="tab-btn" data-tab="tab-paycheck" data-label-key="tab-paycheck" id="tabbtn-paycheck" onclick="switchTab('tab-paycheck')" style="display:none;"><span class="tab-label-text">단말기 입금 대조</span></button>
           <button class="tab-btn" data-tab="tab-lgrefund" data-label-key="tab-lgrefund" id="tabbtn-lgrefund" onclick="switchTab('tab-lgrefund')" style="display:none;"><span class="tab-label-text">LG 환불·수수료</span></button>
@@ -1325,10 +1326,30 @@
     <!-- ===== 관리자: 정산 설정 (준비중) ===== -->
     <div id="tab-reqboard" class="tab-panel">
       <div class="card">
-        <h3 style="margin:0;">입출금 요청 <span class="info-tip" title="출금요청·여신결제 주문·삼성 선입금·입금요청을 한 표에서 봅니다. 처리를 누르면 이체·입금 기록이 누적됩니다.">ⓘ</span></h3>
+        <h3 style="margin:0;">입출금리스트 <span class="info-tip" title="출금요청·여신결제 주문·삼성 선입금·입금요청을 한 표에서 봅니다. 열은 보기 설정에서 사람마다 고를 수 있습니다.">ⓘ</span></h3>
         <p class="desc" style="margin-top:0;">출금요청 · 여신결제 주문 · 삼성전자 선입금 · 입금요청을 <b>한 표</b>에서 봅니다.
-          금액은 <b>줘야 할 돈 / 받아야 할 돈</b>으로 나눠 표시합니다. <b>선입금</b>은 결제가 아니라서 「미반영」으로만 나옵니다.</p>
+          금액은 <b>줘야 할 돈 / 받아야 할 돈</b>으로 나눠 표시하고, <b>선입금</b>은 「미반영」으로만 나옵니다.</p>
         <div id="reqboard-cards" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px;"></div>
+
+        <div class="tbar-row" style="display:flex;gap:0;flex-wrap:wrap;align-items:center;margin-bottom:8px;">
+          <select id="rbd-company" onchange="loadReqBoard()" style="height:28px;border:1px solid var(--line);padding:0 6px;font-size:12.5px;box-sizing:border-box;"></select>
+          <input type="text" id="rbd-from" placeholder="시작일 20260701" onchange="loadReqBoard()" style="width:130px;height:28px;border:1px solid var(--line);padding:0 8px;font-size:12.5px;margin-left:-1px;box-sizing:border-box;">
+          <input type="text" id="rbd-to" placeholder="종료일 20260731" onchange="loadReqBoard()" style="width:130px;height:28px;border:1px solid var(--line);padding:0 8px;font-size:12.5px;margin-left:-1px;box-sizing:border-box;">
+          <button class="btn small secondary" style="width:auto;margin-left:-1px;" onclick="clearReqBoardCond()">비우기</button>
+          <button class="btn small secondary" style="width:auto;margin-left:6px;" onclick="toggleReqViewPanel()">보기 설정</button>
+          <button class="btn small danger" id="rbd-reset-btn" style="width:auto;margin-left:6px;display:none;" onclick="resetAllPayProcessing()">전체 되돌리기</button>
+        </div>
+
+        <div id="rbd-view-panel" style="display:none;border:1px solid var(--line);background:#fafafa;padding:10px 12px;margin-bottom:8px;">
+          <div style="font-size:12.5px;font-weight:700;margin-bottom:6px;">보고 싶은 칸을 골라주세요 <span style="color:var(--gray);font-weight:400;">— 고른 내용은 내 계정에만 저장됩니다</span></div>
+          <div id="rbd-view-checks" style="margin-bottom:8px;"></div>
+          <span class="btn-row">
+            <button class="btn small" style="width:auto;" onclick="saveReqViewSettings()">저장</button>
+            <button class="btn small secondary" style="width:auto;" onclick="resetReqViewSettings()">기본값</button>
+            <button class="btn small secondary" style="width:auto;" onclick="toggleReqViewPanel()">닫기</button>
+          </span>
+        </div>
+
         <div style="margin-bottom:8px;">
           <span class="btn-row" style="display:inline-flex;">
             <button class="btn small" id="rbd-f-all" style="width:auto;" onclick="setReqBoardFilter('all')">전체</button>
@@ -1337,10 +1358,7 @@
             <button class="btn small secondary" id="rbd-f-hold" style="width:auto;" onclick="setReqBoardFilter('hold')">보류</button>
             <button class="btn small secondary" id="rbd-f-cancel" style="width:auto;" onclick="setReqBoardFilter('cancel')">취소</button>
           </span>
-          <button class="btn small danger" id="rbd-reset-btn" style="width:auto;margin-left:10px;display:none;" onclick="resetAllPayProcessing()">전체 되돌리기</button>
-        </div>
-        <div style="margin-bottom:10px;">
-          <span style="font-size:12px;color:var(--gray);margin-right:6px;">구분</span>
+          <span style="font-size:12px;color:var(--gray);margin:0 6px 0 12px;">구분</span>
           <span class="btn-row" style="display:inline-flex;">
             <button class="btn small" id="rbd-k-all" style="width:auto;" onclick="setReqBoardKind('all')">전체</button>
             <button class="btn small secondary" id="rbd-k-out" style="width:auto;" onclick="setReqBoardKind('out')">출금</button>
@@ -1349,6 +1367,62 @@
           </span>
         </div>
         <div id="reqboard-list"></div>
+      </div>
+    </div>
+
+    <!-- 요청 정보 수정 -->
+    <div class="modal-overlay" id="reqedit-overlay" style="display:none;">
+      <div class="modal-box" style="max-width:400px;">
+        <h3 id="re-title" style="margin-top:0;margin-bottom:8px;">요청 수정</h3>
+        <div class="stack-row"><label>요청일</label><input type="text" id="re-reqdate" placeholder="20260727"></div>
+        <div class="stack-row"><label>세금계산서</label>
+          <span style="display:inline-flex;align-items:center;gap:8px;">
+            <label style="font-size:12.5px;"><input type="checkbox" id="re-tax"> 발행완료</label>
+            <input type="text" id="re-taxdate" placeholder="발행일" style="width:120px;">
+          </span>
+        </div>
+        <div class="stack-row"><label>세금계산서 금액</label><input type="text" id="re-taxamount" placeholder="숫자만"></div>
+        <div class="stack-row"><label>비고</label><input type="text" id="re-note" placeholder="선택"></div>
+        <div id="re-msg" style="font-size:12.5px;margin:6px 0;"></div>
+        <span class="btn-row" style="margin-top:8px;">
+          <button class="btn small" style="width:auto;" onclick="submitReqEdit()">저장</button>
+          <button class="btn small secondary" style="width:auto;" onclick="closeReqEdit()">닫기</button>
+        </span>
+      </div>
+    </div>
+
+    <div id="tab-cashbook" class="tab-panel">
+      <div class="card">
+        <h3 style="margin:0;">입출금 내역 <span class="info-tip" title="실제로 오간 돈을 그대로 적는 곳입니다. 요청이 없어도 먼저 적어둘 수 있고, 업체를 모르면 비워두고 나중에 연결합니다.">ⓘ</span></h3>
+        <p class="desc" style="margin-top:0;">통장에 찍힌 대로 적어둡니다. <b>거래처가 미리 보낸 돈(선수금)</b>도 여기 적습니다.<br>
+          <b>업체를 모르면 비워두세요.</b> 나중에 「업체 찾기」로 연결하시면 됩니다. 앞의 「입출금 요청」은 <b>요청</b> 기준, 이 화면은 <b>실제로 오간 돈</b> 기준입니다.</p>
+        <div id="cashbook-cards" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px;"></div>
+
+        <div style="border:1px solid var(--line);background:#fafafa;padding:10px 12px;margin-bottom:12px;">
+          <div style="font-size:12.5px;font-weight:700;margin-bottom:6px;">새 내역 등록</div>
+          <div class="stack-row"><label>구분</label>
+            <select id="cb-kind"><option value="in">입금 (받은 돈)</option><option value="out">출금 (보낸 돈)</option></select>
+          </div>
+          <div class="stack-row"><label>날짜</label><input type="text" id="cb-date" placeholder="20260727"></div>
+          <div class="stack-row"><label>금액</label><input type="text" id="cb-amount" placeholder="숫자만"></div>
+          <div class="stack-row"><label>입금자명</label><input type="text" id="cb-payer" placeholder="통장에 찍힌 이름 (필수)"></div>
+          <div class="stack-row"><label>업체명</label>
+            <input type="text" id="cb-company" list="cb-company-datalist" placeholder="모르면 비워두세요 (타이핑하면 목록)">
+            <datalist id="cb-company-datalist"></datalist>
+          </div>
+          <div class="stack-row"><label>메모</label><input type="text" id="cb-memo" placeholder="선택"></div>
+          <div id="cb-msg" style="font-size:12.5px;margin:6px 0;"></div>
+          <button class="btn small" style="width:auto;" onclick="submitCashbook()">등록</button>
+        </div>
+
+        <span class="btn-row" style="display:inline-flex;margin-bottom:10px;">
+          <button class="btn small" id="cb-f-all" style="width:auto;" onclick="setCashbookFilter('all')">전체</button>
+          <button class="btn small secondary" id="cb-f-in" style="width:auto;" onclick="setCashbookFilter('in')">입금</button>
+          <button class="btn small secondary" id="cb-f-out" style="width:auto;" onclick="setCashbookFilter('out')">출금</button>
+          <button class="btn small secondary" id="cb-f-open" style="width:auto;" onclick="setCashbookFilter('open')">안 쓴 입금</button>
+          <button class="btn small secondary" id="cb-f-nocompany" style="width:auto;" onclick="setCashbookFilter('nocompany')">업체 미연결</button>
+        </span>
+        <div id="cashbook-list"></div>
       </div>
     </div>
 
@@ -1370,6 +1444,7 @@
             <input type="text" id="pp-taxdate" placeholder="발행일 20260727" style="width:140px;">
           </span>
         </div>
+        <div class="stack-row"><label>세금계산서 금액</label><input type="text" id="pp-taxamount" placeholder="숫자만 (비우면 요청금액)"></div>
         <div class="stack-row"><label>메모</label><input type="text" id="pp-memo" placeholder="선택"></div>
         <div id="pp-msg" style="font-size:12.5px;margin:6px 0;"></div>
         <span class="btn-row" style="margin-top:8px;">
@@ -9632,13 +9707,71 @@
     el.prepend(renderPaginationBar("paymentRequests", prDocs.length, loadPaymentRequestList));
   }
 
-  // ---------- 입출금 요청 — 하나의 리스트 ----------
+  // ---------- 입출금리스트 ----------
   //  출금요청 · 여신결제 주문 · 삼성전자 선입금 · 입금요청을 한 표에 모아 봅니다.
-  //  금액은 「줘야 할 돈 / 받아야 할 돈」 두 열로 나눠 뜻이 섞이지 않게 합니다.
-  //  선입금은 결제 자체가 아니라서 「미반영」으로만 표기하고 합계에 넣지 않습니다.
+  //  열은 「보기 설정」에서 사람마다 골라 저장합니다. (사용자 문서에 저장 — 재고 목록과 같은 방식)
   let reqBoardFilter = "all";    // all · todo · done · hold · cancel
   let reqBoardKind = "all";      // all · out · in · credit
   const reqBoardCache = { out:{}, in:{} };
+
+  // 표에 넣을 수 있는 열 목록
+  const RB_COLUMNS = [
+    { key:"kind",      label:"구분" },
+    { key:"company",   label:"업체" },
+    { key:"bizName",   label:"사업자명" },
+    { key:"bizNumber", label:"사업자번호" },
+    { key:"reqDate",   label:"요청일" },
+    { key:"owe",       label:"줘야 할 돈", num:true },
+    { key:"recv",      label:"받아야 할 돈", num:true },
+    { key:"done",      label:"처리액", num:true },
+    { key:"left",      label:"남은금액", num:true },
+    { key:"payDate",   label:"입금일·출금일" },
+    { key:"payMemo",   label:"처리 메모" },
+    { key:"taxDate",   label:"세금계산서일" },
+    { key:"taxAmount", label:"세금계산서 금액", num:true },
+    { key:"status",    label:"상태" }
+  ];
+  const RB_DEFAULT_VIEW = RB_COLUMNS.map(c=>c.key);
+  let reqViewSettings = RB_DEFAULT_VIEW.slice();
+
+  window.toggleReqViewPanel = function(){
+    const p = document.getElementById("rbd-view-panel");
+    if(!p) return;
+    if(p.style.display === "none" || !p.style.display){
+      const box = document.getElementById("rbd-view-checks");
+      box.innerHTML = "";
+      RB_COLUMNS.forEach(col=>{
+        const l = document.createElement("label");
+        l.style.cssText = "display:inline-block;margin:2px 10px 2px 0;font-size:12.5px;";
+        const cb = document.createElement("input");
+        cb.type = "checkbox"; cb.className = "rbd-view-opt"; cb.value = col.key;
+        cb.checked = reqViewSettings.includes(col.key);
+        l.appendChild(cb); l.appendChild(document.createTextNode(" " + col.label));
+        box.appendChild(l);
+      });
+      p.style.display = "block";
+    }else p.style.display = "none";
+  };
+  window.saveReqViewSettings = async function(){
+    const checked = Array.from(document.querySelectorAll(".rbd-view-opt:checked")).map(cb=>cb.value);
+    if(checked.length === 0){ alert("최소 1개는 골라주세요."); return; }
+    reqViewSettings = checked;
+    try{
+      const u = auth.currentUser;
+      if(u) await setDoc(doc(db,"users",u.uid), { reqViewSettings: checked }, { merge:true });
+    }catch(e){}
+    document.getElementById("rbd-view-panel").style.display = "none";
+    loadReqBoard();
+  };
+  window.resetReqViewSettings = async function(){
+    reqViewSettings = RB_DEFAULT_VIEW.slice();
+    try{
+      const u = auth.currentUser;
+      if(u) await setDoc(doc(db,"users",u.uid), { reqViewSettings: reqViewSettings }, { merge:true });
+    }catch(e){}
+    document.getElementById("rbd-view-panel").style.display = "none";
+    loadReqBoard();
+  };
 
   window.setReqBoardFilter = function(f){
     reqBoardFilter = f;
@@ -9656,6 +9789,10 @@
     });
     loadReqBoard();
   };
+  window.clearReqBoardCond = function(){
+    ["rbd-company","rbd-from","rbd-to"].forEach(id=>{ const e=document.getElementById(id); if(e) e.value=""; });
+    loadReqBoard();
+  };
 
   window.loadReqBoard = async function(){
     if(!hasPerm(currentUserPerms, "settlementSettings") && !hasPerm(currentUserPerms, "menuReqBoard")) return;
@@ -9666,6 +9803,10 @@
     if(rstBtn) rstBtn.style.display = hasPerm(currentUserPerms, "paymentProcess") ? "inline-block" : "none";
 
     const canDo = hasPerm(currentUserPerms, "paymentProcess");
+    if(!companiesCache.length){ try{ await fetchCompanies(); }catch(e){} }
+    const coByName = {};
+    companiesCache.forEach(c=>{ if(c.name) coByName[String(c.name).trim()] = c; });
+
     const [prSnap, sdrSnap, obSnap, ledSnap] = await Promise.all([
       getDocs(collection(db,"paymentRequests")),
       getDocs(collection(db,"saleDepositRequests")),
@@ -9673,7 +9814,6 @@
       getDocs(collection(db,"b2bLedger"))
     ]);
 
-    // 입금요청에 업체명이 없던 옛 건은 연결된 판매요청에서 찾아옵니다.
     const needLookup = sdrSnap.docs.some(d=> !((d.data().destinations)||[]).length);
     const destById = {};
     if(needLookup){
@@ -9687,83 +9827,91 @@
       }catch(e){}
     }
 
+    // 처리 기록에서 마지막 날짜·메모를 뽑습니다.
+    const lastOf = (recs)=>{
+      const ok = (recs||[]).filter(x=> x.approved);
+      if(!ok.length) return { date:"", memo:"" };
+      const sorted = ok.slice().sort((a,b)=> String(a.date||"").localeCompare(String(b.date||"")));
+      const last = sorted[sorted.length-1];
+      return { date:last.date||"", memo:last.memo||"" };
+    };
+
     reqBoardCache.out = {}; reqBoardCache.in = {};
     const rows = [];
 
-    // ① 출금요청 (줘야 할 돈)
     prSnap.forEach(d=>{
-      const p = d.data();
-      reqBoardCache.out[d.id] = p;
+      const p = d.data(); reqBoardCache.out[d.id] = p;
       const total = Number(p.totalAmount)||0, paid = Number(p.paidAmount)||0;
-      rows.push({
-        kind:"out", label:"출금", color:"var(--danger)", id:d.id, p,
-        who:(p.sources||[]).filter(Boolean).join(", ") || "-",
-        sub:"주문 " + ((p.orderBatchIds||[]).length) + "건" + (p.otherAmount ? " + 기타" : ""),
-        date:p.requestDate||"-", owe:total, recv:0, done:paid,
-        left:Math.max(0,total-paid), status:p.status||"-",
-        finished:!!p.transferCompleted, onHold:!!p.onHold, holdReason:p.holdReason||"",
-        canceled:p.status==="취소", recs:(p.payments||[]), inSum:true, canProcess:true
-      });
+      const who = (p.sources||[]).filter(Boolean).join(", ") || "-";
+      const L = lastOf(p.payments);
+      rows.push({ kind:"out", label:"출금", color:"var(--danger)", id:d.id, p,
+        who, sub:"주문 " + ((p.orderBatchIds||[]).length) + "건" + (p.otherAmount ? " + 기타" : ""),
+        date:p.requestDate||"", owe:total, recv:0, done:paid, left:Math.max(0,total-paid),
+        payDate:L.date, payMemo:L.memo,
+        taxDate:p.taxInvoiceDate||"", taxAmount:Number(p.taxInvoiceAmount)||0,
+        status:p.status||"-", finished:!!p.transferCompleted, onHold:!!p.onHold, holdReason:p.holdReason||"",
+        canceled:p.status==="취소", recs:(p.payments||[]), inSum:true, canProcess:true, canEdit:true });
     });
 
-    // ② 입금요청 (받아야 할 돈)
     sdrSnap.forEach(d=>{
-      const p = d.data();
-      reqBoardCache.in[d.id] = p;
+      const p = d.data(); reqBoardCache.in[d.id] = p;
       const total = Number(p.totalAmount)||0, got = Number(p.receivedAmount)||0;
-      const saved = (p.destinations||[]).filter(Boolean);
-      let who = saved.join(", ");
+      let who = (p.destinations||[]).filter(Boolean).join(", ");
       if(!who){
         const f = [...new Set((p.saleBatchRefs||[]).map(b=> destById[b.id]).filter(Boolean))];
         who = f.length ? f.join(", ") : "";
       }
-      rows.push({
-        kind:"in", label:"입금", color:"#1565c0", id:d.id, p,
-        who: who || '<span style="color:var(--danger);">연결 끊김</span>',
+      const L = lastOf(p.receipts);
+      rows.push({ kind:"in", label:"입금", color:"#1565c0", id:d.id, p,
+        who: who || "", noCompany: !who,
         sub:"판매요청 " + ((p.saleBatchRefs||[]).length) + "건" + (p.otherAmount ? " + 기타" : ""),
-        date:p.requestDate||"-", owe:0, recv:total, done:got,
-        left:Math.max(0,total-got), status:p.status||"-",
-        finished:!!p.depositCompleted, onHold:!!p.onHold, holdReason:p.holdReason||"",
-        canceled:p.status==="취소", recs:(p.receipts||[]), inSum:true, canProcess:true
-      });
+        date:p.requestDate||"", owe:0, recv:total, done:got, left:Math.max(0,total-got),
+        payDate:L.date, payMemo:L.memo,
+        taxDate:p.taxInvoiceDate||"", taxAmount:Number(p.taxInvoiceAmount)||0,
+        status:p.status||"-", finished:!!p.depositCompleted, onHold:!!p.onHold, holdReason:p.holdReason||"",
+        canceled:p.status==="취소", recs:(p.receipts||[]), inSum:true, canProcess:true, canEdit:true });
     });
 
-    // ③ 여신결제 주문 — 여신에서 차감되어 결제가 끝난 주문
     obSnap.forEach(d=>{
       const o = d.data();
       if(o.paymentMethod !== "b2b_credit") return;
       const amt = Number(o.depositRequired)||0;
-      rows.push({
-        kind:"credit", label:"여신결제", color:"#6a1b9a", id:d.id, p:null,
-        who:o.source||"-", sub:"여신에서 차감",
-        date:o.orderDate||"-", owe:amt, recv:0, done:amt, left:0,
-        status:(o.status==="취소" ? "취소" : "완료"),
-        finished:true, onHold:false, holdReason:"",
-        canceled:o.status==="취소", recs:[], inSum:true, canProcess:false
-      });
+      rows.push({ kind:"credit", label:"여신결제", color:"#6a1b9a", id:d.id, p:null,
+        who:o.source||"-", sub:"여신에서 차감", date:o.orderDate||"",
+        owe:amt, recv:0, done:amt, left:0, payDate:o.depositPaidDate||o.orderDate||"", payMemo:"",
+        taxDate:"", taxAmount:0,
+        status:(o.status==="취소" ? "취소" : "완료"), finished:true, onHold:false, holdReason:"",
+        canceled:o.status==="취소", recs:[], inSum:true, canProcess:false, canEdit:false });
     });
 
-    // ④ 삼성전자 선입금 — 여신을 채운 돈. 결제가 아니라서 합계에 넣지 않습니다.
     const PRE = { deposit:"선입금", loan_deposit:"대출금 충전", interest_received:"이자 수령" };
     let creditIn = 0, creditUse = 0, creditClub = 0;
     ledSnap.forEach(x=>{
-      const e = x.data();
-      const amt = Number(e.amount)||0;
+      const e = x.data(); const amt = Number(e.amount)||0;
       if(PRE[e.category]){
         creditIn += amt;
-        rows.push({
-          kind:"prepay", label:PRE[e.category], color:"var(--gray)", id:x.id, p:null,
-          who:"삼성전자", sub:e.memo||"", date:e.date||"-",
-          owe:amt, recv:0, done:0, left:0, status:"미반영",
-          finished:true, onHold:false, holdReason:"",
-          canceled:false, recs:[], inSum:false, canProcess:false
-        });
+        rows.push({ kind:"prepay", label:PRE[e.category], color:"var(--gray)", id:x.id, p:null,
+          who:"삼성전자", sub:e.memo||"", date:e.date||"",
+          owe:amt, recv:0, done:0, left:0, payDate:e.date||"", payMemo:e.memo||"",
+          taxDate:"", taxAmount:0, status:"미반영", finished:true, onHold:false, holdReason:"",
+          canceled:false, recs:[], inSum:false, canProcess:false, canEdit:false });
       }else if(e.category === "order_use") creditUse += amt;
       else if(e.category === "club_incentive") creditClub += amt;
     });
     const creditLeft = creditIn + creditClub - creditUse;
 
-    // 구분·상태 걸러내기
+    // 업체 목록 채우기 (조회칸)
+    const coSel = document.getElementById("rbd-company");
+    if(coSel){
+      const cur = coSel.value;
+      const names = [...new Set(rows.map(r=> String(r.who||"").trim()).filter(Boolean))].sort();
+      coSel.innerHTML = '<option value="">업체 전체</option>' +
+        names.map(n=>'<option value="'+comboEsc(n)+'"'+(cur===n?' selected':'')+'>'+comboEsc(n)+'</option>').join("");
+    }
+    const coPick = coSel ? coSel.value : "";
+    const from = String((document.getElementById("rbd-from")||{}).value || "").replace(/\D/g,"");
+    const to   = String((document.getElementById("rbd-to")||{}).value || "").replace(/\D/g,"");
+
     const kindOk = (r)=>{
       if(reqBoardKind === "all") return true;
       if(reqBoardKind === "credit") return r.kind === "credit" || r.kind === "prepay";
@@ -9775,71 +9923,99 @@
       if(r.canceled) return false;
       if(reqBoardFilter === "hold") return r.onHold;
       if(reqBoardFilter === "done") return r.finished;
-      return !r.finished;   // 해야 할 일
+      return !r.finished;
     };
-    const view = rows.filter(r=> kindOk(r) && stateOk(r))
+    const condOk = (r)=>{
+      if(coPick && String(r.who||"").trim() !== coPick) return false;
+      const d = String(r.date||"").replace(/\D/g,"");
+      if(from && d && d < from) return false;
+      if(to && d && d > to) return false;
+      return true;
+    };
+    const view = rows.filter(r=> kindOk(r) && stateOk(r) && condOk(r))
                      .sort((a,b)=> String(b.date).localeCompare(String(a.date)));
 
-    // 합계 — 취소와 선입금은 뺍니다.
-    let sOwe=0, sRecv=0, sDone=0, sLeftOut=0, sLeftIn=0, holdOut=0, holdIn=0;
+    let sDone=0, sLeftOut=0, sLeftIn=0, holdOut=0, holdIn=0;
     rows.forEach(r=>{
       if(r.canceled || !r.inSum) return;
-      sOwe += r.owe; sRecv += r.recv; sDone += r.done;
+      sDone += r.done;
       if(r.kind === "in"){ sLeftIn += r.left; if(r.onHold) holdIn += r.left; }
       else { sLeftOut += r.left; if(r.onHold) holdOut += r.left; }
     });
 
-    // 표 그리기
+    // 한 칸 만들기
+    const cellOf = (r, key)=>{
+      const co = coByName[String(r.who||"").trim()];
+      const money = (v)=> v ? Number(v).toLocaleString() : "-";
+      switch(key){
+        case "kind":      return '<b style="color:' + r.color + ';">' + r.label + '</b>';
+        case "company":   return (r.who ? '<b>' + comboEsc(r.who) + '</b>' : '<span style="color:var(--danger);">연결 끊김</span>')
+                                 + (r.sub ? '<br><span style="color:var(--gray);font-size:11px;">' + comboEsc(r.sub) + '</span>' : '');
+        case "bizName":   return co && co.bizName ? comboEsc(co.bizName) : '<span style="color:var(--gray);">-</span>';
+        case "bizNumber": return co && co.bizNumber ? comboEsc(co.bizNumber) : '<span style="color:var(--gray);">-</span>';
+        case "reqDate":   return comboEsc(r.date || "-");
+        case "owe":       return r.inSum ? money(r.owe) : '<span style="color:var(--gray);">' + money(r.owe) + '</span>';
+        case "recv":      return '<span style="color:#1565c0;">' + money(r.recv) + '</span>';
+        case "done":      return money(r.done);
+        case "left":       return '<span style="color:var(--danger);font-weight:700;">' + money(r.left) + '</span>';
+        case "payDate":   return comboEsc(r.payDate || "-");
+        case "payMemo":   return r.payMemo ? '<span style="color:var(--gray);font-size:11.5px;">' + comboEsc(r.payMemo) + '</span>' : '-';
+        case "taxDate":   return r.taxDate ? comboEsc(r.taxDate) : '<span style="color:var(--gray);">-</span>';
+        case "taxAmount": return money(r.taxAmount);
+        case "status": {
+          const c = r.canceled ? "var(--gray)" : (r.finished ? "#2e7d32" : "var(--danger)");
+          return '<span style="color:' + c + ';">' + comboEsc(r.status) + '</span>'
+            + (r.onHold ? '<br><span style="background:#fff8e1;border:1px solid #e0c46c;color:#8a6d0b;font-size:11px;padding:0 5px;">보류</span>'
+                        + (r.holdReason ? '<br><span style="color:var(--gray);font-size:10.5px;">' + comboEsc(r.holdReason) + '</span>' : '') : '');
+        }
+      }
+      return "-";
+    };
+
+    const cols = RB_COLUMNS.filter(c=> reqViewSettings.includes(c.key));
     if(view.length === 0){
       listEl.innerHTML = '<div class="list-empty">해당하는 항목이 없습니다.</div>';
     }else{
-      let vOwe=0, vRecv=0, vDone=0, vLeft=0;
+      let vOwe=0, vRecv=0, vDone=0, vLeft=0, vTax=0;
       const body = view.map(r=>{
-        if(!r.canceled && r.inSum){ vOwe+=r.owe; vRecv+=r.recv; vDone+=r.done; vLeft+=r.left; }
-        const stColor = r.canceled ? "var(--gray)" : (r.finished ? "#2e7d32" : "var(--danger)");
-        let tr = '<tr>' +
-          '<td style="white-space:nowrap;"><b style="color:' + r.color + ';">' + r.label + '</b></td>' +
-          '<td><b>' + r.who + '</b>' + (r.sub ? '<br><span style="color:var(--gray);font-size:11px;">' + comboEsc(r.sub) + '</span>' : '') + '</td>' +
-          '<td style="white-space:nowrap;">' + comboEsc(r.date) + '</td>' +
-          '<td class="ta-right"' + (r.inSum ? '' : ' style="color:var(--gray);"') + '>' + (r.owe ? r.owe.toLocaleString() : '-') + '</td>' +
-          '<td class="ta-right" style="color:#1565c0;">' + (r.recv ? r.recv.toLocaleString() : '-') + '</td>' +
-          '<td class="ta-right">' + (r.done ? r.done.toLocaleString() : '-') + '</td>' +
-          '<td class="ta-right" style="color:var(--danger);font-weight:700;">' + (r.left ? r.left.toLocaleString() : '-') + '</td>' +
-          '<td class="ta-right" style="color:' + stColor + ';white-space:nowrap;">' + comboEsc(r.status) +
-            (r.onHold ? '<br><span style="background:#fff8e1;border:1px solid #e0c46c;color:#8a6d0b;font-size:11px;padding:0 5px;">보류</span>'
-                      + (r.holdReason ? '<br><span style="color:var(--gray);font-size:10.5px;">' + comboEsc(r.holdReason) + '</span>' : '') : '') +
-          '</td>' +
+        if(!r.canceled && r.inSum){ vOwe+=r.owe; vRecv+=r.recv; vDone+=r.done; vLeft+=r.left; vTax+=r.taxAmount; }
+        let tr = '<tr>' + cols.map(c=>
+          '<td' + (c.num ? ' class="ta-right"' : '') + ' style="white-space:' + (c.key==="company"||c.key==="payMemo" ? "normal" : "nowrap") + ';">'
+          + cellOf(r, c.key) + '</td>').join("") +
           '<td class="ta-right" style="white-space:nowrap;">' +
             ((r.canProcess && !r.canceled && !r.finished && canDo)
               ? '<button class="btn small" style="width:auto;" data-rbd-do="' + r.kind + '|' + r.id + '">처리</button>'
                 + '<button class="btn small secondary" style="width:auto;margin-left:4px;" data-rbd-hold="' + r.kind + '|' + r.id + '|' + (r.onHold ? "0" : "1") + '">'
-                + (r.onHold ? '보류 해제' : '보류') + '</button>'
-              : '<span style="color:var(--gray);">-</span>') +
+                + (r.onHold ? '보류 해제' : '보류') + '</button>' : '') +
+            ((r.canEdit && canDo)
+              ? '<button class="btn small secondary" style="width:auto;margin-left:4px;" data-rbd-edit="' + r.kind + '|' + r.id + '">수정</button>' : '') +
+            ((!r.canProcess && !r.canEdit) ? '<span style="color:var(--gray);">-</span>' : '') +
           '</td></tr>';
         if(r.recs.length){
-          tr += '<tr><td colspan="9" style="background:#fafafa;font-size:11.5px;line-height:1.9;">' +
+          tr += '<tr><td colspan="' + (cols.length+1) + '" style="background:#fafafa;font-size:11.5px;line-height:1.9;">' +
             r.recs.map((x,i)=> recordLine(x, i, r.kind, r.id)).join('<br>') + '</td></tr>';
         }
         return tr;
       }).join("");
 
+      const sumCell = (c)=>{
+        if(c.key === "owe") return '<td class="ta-right">' + vOwe.toLocaleString() + '</td>';
+        if(c.key === "recv") return '<td class="ta-right" style="color:#1565c0;">' + vRecv.toLocaleString() + '</td>';
+        if(c.key === "done") return '<td class="ta-right">' + vDone.toLocaleString() + '</td>';
+        if(c.key === "left") return '<td class="ta-right" style="color:var(--danger);">' + vLeft.toLocaleString() + '</td>';
+        if(c.key === "taxAmount") return '<td class="ta-right">' + vTax.toLocaleString() + '</td>';
+        if(c.key === "kind") return '<td>합계</td>';
+        return '<td></td>';
+      };
       listEl.innerHTML = '<div style="overflow-x:auto;"><table class="data-table">' +
-        '<thead><tr><th>구분</th><th>업체</th><th>날짜</th>' +
-        '<th class="ta-right">줘야 할 돈</th><th class="ta-right">받아야 할 돈</th>' +
-        '<th class="ta-right">처리액</th><th class="ta-right">남은금액</th><th class="ta-right">상태</th><th></th></tr></thead>' +
+        '<thead><tr>' + cols.map(c=>'<th' + (c.num ? ' class="ta-right"' : '') + '>' + c.label + '</th>').join("") + '<th></th></tr></thead>' +
         '<tbody>' + body +
         '<tr style="background:#fafafa;font-weight:700;border-top:2px solid var(--navy);">' +
-        '<td colspan="3">합계 (보이는 것)</td>' +
-        '<td class="ta-right">' + vOwe.toLocaleString() + '</td>' +
-        '<td class="ta-right" style="color:#1565c0;">' + vRecv.toLocaleString() + '</td>' +
-        '<td class="ta-right">' + vDone.toLocaleString() + '</td>' +
-        '<td class="ta-right" style="color:var(--danger);">' + vLeft.toLocaleString() + '</td>' +
-        '<td colspan="2"></td></tr>' +
+        cols.map(sumCell).join("") + '<td></td></tr>' +
         '</tbody></table></div>' +
-        '<div style="color:var(--gray);font-size:11.5px;margin-top:4px;">합계는 <b>취소</b>와 <b>선입금(미반영)</b>을 뺀 금액입니다. 선입금은 여신을 채운 돈이라 결제 합계에 넣지 않습니다.</div>';
+        '<div style="color:var(--gray);font-size:11.5px;margin-top:4px;">합계는 <b>보이는 것</b> 기준이며 <b>취소</b>와 <b>선입금(미반영)</b>은 뺐습니다.</div>';
     }
 
-    // 카드
     const cardEl = document.getElementById("reqboard-cards");
     if(cardEl){
       const gap = sLeftIn - sLeftOut;
@@ -9850,29 +10026,26 @@
         '<div style="font-size:16px;font-weight:700;' + (color?('color:'+color+';'):'') + '">' + value + '</div>' +
         (note ? '<div style="font-size:10.5px;color:var(--gray);">' + note + '</div>' : '') + '</div>';
       cardEl.innerHTML =
-        card("줘야 할 돈 (남음)", sLeftOut.toLocaleString(), "var(--danger)",
-             "보류 제외 <b>" + (sLeftOut - holdOut).toLocaleString() + "</b>") +
-        card("받아야 할 돈 (남음)", sLeftIn.toLocaleString(), "#1565c0",
-             "보류 제외 <b>" + (sLeftIn - holdIn).toLocaleString() + "</b>") +
-        card("차액", gap.toLocaleString(), gap>=0 ? "#2e7d32" : "var(--danger)",
-             "보류 제외 <b>" + gapNow.toLocaleString() + "</b>") +
+        card("줘야 할 돈 (남음)", sLeftOut.toLocaleString(), "var(--danger)", "보류 제외 <b>" + (sLeftOut - holdOut).toLocaleString() + "</b>") +
+        card("받아야 할 돈 (남음)", sLeftIn.toLocaleString(), "#1565c0", "보류 제외 <b>" + (sLeftIn - holdIn).toLocaleString() + "</b>") +
+        card("차액", gap.toLocaleString(), gap>=0 ? "#2e7d32" : "var(--danger)", "보류 제외 <b>" + gapNow.toLocaleString() + "</b>") +
         card("이미 보낸 돈", sDone.toLocaleString(), "#1565c0", "출금 처리 + 여신결제") +
         card("여신 잔액", creditLeft.toLocaleString(), creditLeft < 0 ? "var(--danger)" : "#2e7d32",
              "선입금 " + creditIn.toLocaleString() + " − 주문사용 " + creditUse.toLocaleString()
              + (creditClub ? " + 장려금 " + creditClub.toLocaleString() : ""));
     }
 
-    // 버튼 연결
     document.querySelectorAll("#tab-reqboard [data-rbd-do]").forEach(b=>{
       const [kind, id] = b.dataset.rbdDo.split("|");
-      b.onclick = ()=>{
-        const p = reqBoardCache[kind][id];
-        if(p) openPayProcess(kind, id, p);
-      };
+      b.onclick = ()=>{ const p = reqBoardCache[kind][id]; if(p) openPayProcess(kind, id, p); };
     });
     document.querySelectorAll("#tab-reqboard [data-rbd-hold]").forEach(b=>{
       const [kind, id, on] = b.dataset.rbdHold.split("|");
       b.onclick = ()=> toggleReqHold(kind, id, on === "1");
+    });
+    document.querySelectorAll("#tab-reqboard [data-rbd-edit]").forEach(b=>{
+      const [kind, id] = b.dataset.rbdEdit.split("|");
+      b.onclick = ()=>{ const p = reqBoardCache[kind][id]; if(p) openReqEdit(kind, id, p); };
     });
     document.querySelectorAll("#tab-reqboard [data-appr]").forEach(b=>{
       const [k, id, i] = b.dataset.appr.split("|");
@@ -9886,6 +10059,250 @@
       const [k, id, i] = b.dataset.delrec.split("|");
       b.onclick = ()=> deletePayRecord(k, id, Number(i));
     });
+  };
+
+  // 요청 정보 수정 (요청일 · 세금계산서 · 비고)
+  let reqEditTarget = null;
+  window.openReqEdit = function(kind, id, p){
+    if(!hasPerm(currentUserPerms, "paymentProcess")){ alert("권한이 없습니다."); return; }
+    reqEditTarget = { kind, id, p };
+    document.getElementById("re-title").textContent = (kind === "in") ? "입금요청 수정" : "출금요청 수정";
+    document.getElementById("re-reqdate").value = p.requestDate || "";
+    document.getElementById("re-tax").checked = !!p.taxInvoiceIssued;
+    document.getElementById("re-taxdate").value = p.taxInvoiceDate || "";
+    document.getElementById("re-taxamount").value = p.taxInvoiceAmount || "";
+    document.getElementById("re-note").value = p.note || "";
+    document.getElementById("re-msg").innerHTML = "";
+    document.getElementById("reqedit-overlay").style.display = "flex";
+  };
+  window.closeReqEdit = function(){
+    document.getElementById("reqedit-overlay").style.display = "none";
+    reqEditTarget = null;
+  };
+  window.submitReqEdit = async function(){
+    if(!reqEditTarget) return;
+    const { kind, id, p } = reqEditTarget;
+    const col = (kind === "in") ? "saleDepositRequests" : "paymentRequests";
+    const reqDate = String(document.getElementById("re-reqdate").value).replace(/\D/g,"");
+    const taxOn = document.getElementById("re-tax").checked;
+    const taxDate = String(document.getElementById("re-taxdate").value).replace(/\D/g,"");
+    const taxAmt = Number(String(document.getElementById("re-taxamount").value).replace(/[^0-9.\-]/g,"")) || 0;
+    const note = document.getElementById("re-note").value.trim();
+    if(reqDate && reqDate.length !== 8){
+      document.getElementById("re-msg").innerHTML = '<span style="color:var(--danger);">요청일을 20260727 형태로 넣어주세요.</span>'; return;
+    }
+    try{
+      await updateDoc(doc(db, col, id), {
+        requestDate: reqDate || (p.requestDate || ""),
+        taxInvoiceIssued: taxOn,
+        taxInvoiceDate: taxOn ? (taxDate || "") : "",
+        taxInvoiceAmount: taxAmt,
+        note: note
+      });
+      logAction((kind === "in" ? "입금요청 수정" : "출금요청 수정"),
+        "요청일 " + (reqDate || "-") + " / 세금계산서 " + (taxOn ? ("발행 " + (taxDate||"-") + " " + taxAmt.toLocaleString()) : "미발행")
+        + (note ? " / " + note : ""));
+    }catch(e){
+      document.getElementById("re-msg").innerHTML = '<span style="color:var(--danger);">저장에 실패했습니다.</span>'; return;
+    }
+    closeReqEdit();
+    loadReqBoard();
+  };
+
+  // ---------- 입출금 내역 ----------
+  //  실제로 오간 돈을 그대로 적어두는 곳입니다. 요청이 없어도 먼저 적을 수 있습니다.
+  //  · 거래처가 미리 보낸 돈(선수금)도 여기 적습니다.
+  //  · 업체를 모르면 비워두고, 나중에 「업체 찾기」로 연결합니다.
+  //  · 기존 「통장 입금 등록」과 같은 자료(bankDeposits)를 씁니다. 예약 배정의 "등록된 입금에서 고르기"도 그대로 동작합니다.
+  let cashbookFilter = "all";   // all · in · out · open(남은 것) · matched(업체 연결됨)
+
+  window.setCashbookFilter = function(f){
+    cashbookFilter = f;
+    ["all","in","out","open","nocompany"].forEach(k=>{
+      const b = document.getElementById("cb-f-" + k);
+      if(b) b.className = "btn small" + (k === f ? "" : " secondary");
+    });
+    loadCashbook();
+  };
+
+  window.loadCashbook = async function(){
+    const el = document.getElementById("cashbook-list");
+    if(!el) return;
+    el.innerHTML = '<div class="list-empty">불러오는 중...</div>';
+    const canDo = hasPerm(currentUserPerms, "paymentProcess");
+
+    // 업체명 자동완성 목록
+    if(!companiesCache.length){ try{ await fetchCompanies(); }catch(e){} }
+    const dl = document.getElementById("cb-company-datalist");
+    if(dl) dl.innerHTML = companiesCache.map(c=>'<option value="'+comboEsc(c.name||"")+'"></option>').join("");
+
+    let snap;
+    try{ snap = await getDocs(query(collection(db,"bankDeposits"), orderBy("date","desc"))); }
+    catch(e){ el.innerHTML = '<div class="list-empty">불러오지 못했습니다.</div>'; return; }
+
+    const rows = [];
+    snap.forEach(d=>{
+      const x = d.data();
+      const amt = Number(x.amount)||0;
+      const used = Number(x.usedAmount)||0;
+      rows.push({
+        id: d.id,
+        kind: (x.kind === "out") ? "out" : "in",
+        date: x.date || "-", amount: amt, used, left: Math.max(0, amt - used),
+        payer: x.payer || "", company: (x.company||"").trim(), memo: x.memo || "",
+        uses: Array.isArray(x.uses) ? x.uses : []
+      });
+    });
+
+    const pick = (r)=>{
+      if(cashbookFilter === "all") return true;
+      if(cashbookFilter === "in") return r.kind === "in";
+      if(cashbookFilter === "out") return r.kind === "out";
+      if(cashbookFilter === "open") return r.left > 0;
+      if(cashbookFilter === "nocompany") return !r.company;
+      return true;
+    };
+    const view = rows.filter(pick);
+
+    let sIn = 0, sOut = 0, sLeft = 0, noCo = 0;
+    rows.forEach(r=>{
+      if(r.kind === "in"){ sIn += r.amount; sLeft += r.left; } else sOut += r.amount;
+      if(!r.company) noCo++;
+    });
+
+    const cardEl = document.getElementById("cashbook-cards");
+    if(cardEl){
+      const card = (label, value, color, note)=>
+        '<div style="border:1px solid var(--line);padding:9px 12px;min-width:160px;background:#fff;">' +
+        '<div style="font-size:11px;color:var(--gray);">' + label + '</div>' +
+        '<div style="font-size:16px;font-weight:700;' + (color?('color:'+color+';'):'') + '">' + value + '</div>' +
+        (note ? '<div style="font-size:10.5px;color:var(--gray);">' + note + '</div>' : '') + '</div>';
+      cardEl.innerHTML =
+        card("들어온 돈", sIn.toLocaleString(), "#1565c0", "입금 합계") +
+        card("나간 돈", sOut.toLocaleString(), "var(--danger)", "출금 합계") +
+        card("아직 안 쓴 입금", sLeft.toLocaleString(), "#2e7d32", "요청에 배분하지 않은 금액") +
+        card("업체 미연결", noCo + "건", noCo > 0 ? "#b8860b" : null, "업체명이 비어 있는 줄");
+    }
+
+    if(view.length === 0){
+      el.innerHTML = '<div class="list-empty">해당하는 내역이 없습니다.</div>';
+    }else{
+      el.innerHTML = '<div style="overflow-x:auto;"><table class="data-table">' +
+        '<thead><tr><th>구분</th><th>날짜</th><th class="ta-right">금액</th><th>입금자명</th><th>업체</th>' +
+        '<th class="ta-right">배분</th><th class="ta-right">남음</th><th>메모</th><th></th></tr></thead><tbody>' +
+        view.map(r=>{
+          const isIn = r.kind === "in";
+          let tr = '<tr>' +
+            '<td><b style="color:' + (isIn ? "#1565c0" : "var(--danger)") + ';">' + (isIn ? "입금" : "출금") + '</b></td>' +
+            '<td style="white-space:nowrap;">' + comboEsc(r.date) + '</td>' +
+            '<td class="ta-right" style="font-weight:700;">' + r.amount.toLocaleString() + '</td>' +
+            '<td>' + (r.payer ? comboEsc(r.payer) : '<span style="color:var(--gray);">-</span>') + '</td>' +
+            '<td>' + (r.company ? '<b>' + comboEsc(r.company) + '</b>'
+                                : '<span style="color:#b8860b;">미연결</span>') + '</td>' +
+            '<td class="ta-right">' + (r.used ? r.used.toLocaleString() : '-') + '</td>' +
+            '<td class="ta-right" style="color:' + (r.left > 0 ? "#2e7d32" : "var(--gray)") + ';font-weight:700;">' +
+              (isIn ? (r.left ? r.left.toLocaleString() : '0') : '-') + '</td>' +
+            '<td style="color:var(--gray);font-size:11.5px;">' + comboEsc(r.memo) + '</td>' +
+            '<td class="ta-right" style="white-space:nowrap;">' +
+              (canDo
+                ? '<button class="btn small secondary" style="width:auto;" data-cb-co="' + r.id + '">업체 찾기</button>'
+                  + '<button class="btn small secondary" style="width:auto;margin-left:4px;" data-cb-del="' + r.id + '">지우기</button>'
+                : '<span style="color:var(--gray);">-</span>') +
+            '</td></tr>';
+          if(r.uses.length){
+            tr += '<tr><td colspan="9" style="background:#fafafa;font-size:11.5px;line-height:1.9;">' +
+              r.uses.map(u=> '· 배분 ' + (Number(u.amount)||0).toLocaleString()
+                + (u.destination ? ' → ' + comboEsc(u.destination) : '')
+                + (u.date ? ' (' + comboEsc(u.date) + ')' : '')).join('<br>') +
+              '</td></tr>';
+          }
+          return tr;
+        }).join("") +
+        '</tbody></table></div>';
+    }
+
+    document.querySelectorAll("#tab-cashbook [data-cb-co]").forEach(b=>{
+      b.onclick = ()=> setCashbookCompany(b.dataset.cbCo);
+    });
+    document.querySelectorAll("#tab-cashbook [data-cb-del]").forEach(b=>{
+      b.onclick = ()=> deleteCashbookRow(b.dataset.cbDel);
+    });
+  };
+
+  // 새 내역 등록
+  window.submitCashbook = async function(){
+    if(!hasPerm(currentUserPerms, "paymentProcess")){ alert("입력 권한이 없습니다."); return; }
+    const msgEl = document.getElementById("cb-msg");
+    const show = (t)=>{ msgEl.innerHTML = '<span style="color:var(--danger);">' + t + '</span>'; };
+    const kind   = document.getElementById("cb-kind").value;
+    const date   = String(document.getElementById("cb-date").value).replace(/\D/g,"");
+    const amount = Number(String(document.getElementById("cb-amount").value).replace(/[^0-9.\-]/g,""));
+    const payer  = document.getElementById("cb-payer").value.trim();
+    const company= document.getElementById("cb-company").value.trim();
+    const memo   = document.getElementById("cb-memo").value.trim();
+
+    if(date.length !== 8){ show("날짜를 20260727 형태로 넣어주세요."); return; }
+    if(!(amount > 0)){ show("금액을 숫자로 넣어주세요."); return; }
+    if(!payer){ show("통장에 찍힌 <b>입금자명</b>을 넣어주세요. 업체명은 비워두셔도 됩니다."); return; }
+
+    try{
+      await addDoc(collection(db,"bankDeposits"), {
+        kind, date, amount, payer, company, memo,
+        usedAmount: 0, uses: [],
+        createdBy: currentUser.name, createdByUsername: currentUser.username, createdAt: serverTimestamp()
+      });
+      logAction(kind === "out" ? "입출금 내역 등록 (출금)" : "입출금 내역 등록 (입금)",
+        amount.toLocaleString() + " / " + date + " / " + payer + (company ? " / " + company : " / 업체 미연결")
+        + (memo ? " / " + memo : ""));
+    }catch(e){ show("저장에 실패했습니다."); return; }
+
+    ["cb-amount","cb-payer","cb-company","cb-memo"].forEach(id=>{ document.getElementById(id).value = ""; });
+    msgEl.innerHTML = '<span style="color:#2e7d32;">등록했습니다.</span>';
+    loadCashbook();
+  };
+
+  // 업체명 연결·수정
+  window.setCashbookCompany = async function(id){
+    if(!hasPerm(currentUserPerms, "paymentProcess")){ alert("권한이 없습니다."); return; }
+    const snap = await getDoc(doc(db,"bankDeposits", id));
+    if(!snap.exists()) return;
+    const x = snap.data();
+    const cur = (x.company||"").trim();
+    const name = prompt("업체명을 넣어주세요. (비우면 연결을 풉니다)\n\n입금자명: " + (x.payer||"-")
+      + "\n금액: " + (Number(x.amount)||0).toLocaleString(), cur);
+    if(name === null) return;
+    const val = String(name).trim();
+    if(val && !companiesCache.some(c=> String(c.name||"").trim() === val)){
+      if(!confirm('"' + val + '" 은 업체정보에 없는 이름입니다.\n\n그대로 넣을까요?')) return;
+    }
+    try{
+      await updateDoc(doc(db,"bankDeposits", id), { company: val });
+      logAction("입출금 내역 업체 연결",
+        (Number(x.amount)||0).toLocaleString() + " / " + (x.payer||"-") + " / "
+        + (cur || "미연결") + " → " + (val || "미연결"));
+    }catch(e){ alert("바꾸지 못했습니다."); return; }
+    loadCashbook();
+  };
+
+  // 잘못 넣은 내역 지우기
+  window.deleteCashbookRow = async function(id){
+    if(!hasPerm(currentUserPerms, "paymentProcess")){ alert("권한이 없습니다."); return; }
+    const snap = await getDoc(doc(db,"bankDeposits", id));
+    if(!snap.exists()) return;
+    const x = snap.data();
+    const used = Number(x.usedAmount)||0;
+    if(used > 0){
+      alert("이미 " + used.toLocaleString() + "원이 배분된 내역이라 지울 수 없습니다.\n\n먼저 배분을 되돌려주세요.");
+      return;
+    }
+    if(!confirm("이 내역을 지웁니다.\n\n" + (x.date||"-") + " · " + (Number(x.amount)||0).toLocaleString()
+      + " · " + (x.payer||"-") + "\n\n지울까요?")) return;
+    try{
+      await deleteDoc(doc(db,"bankDeposits", id));
+      logAction("입출금 내역 지움",
+        (Number(x.amount)||0).toLocaleString() + " / " + (x.date||"-") + " / " + (x.payer||"-"));
+    }catch(e){ alert("지우지 못했습니다."); return; }
+    loadCashbook();
   };
 
   // ---------- 입출금 처리 전체 되돌리기 ----------
@@ -10073,6 +10490,7 @@
     document.getElementById("pp-payer-label").textContent = isIn ? "입금자명" : "받는 곳";
     document.getElementById("pp-tax").checked = !!p.taxInvoiceIssued;
     document.getElementById("pp-taxdate").value = p.taxInvoiceDate || "";
+    document.getElementById("pp-taxamount").value = p.taxInvoiceAmount || "";
     document.getElementById("pp-memo").value = "";
     document.getElementById("pp-msg").innerHTML = "";
     document.getElementById("payproc-overlay").style.display = "flex";
@@ -10096,6 +10514,7 @@
     const memo   = document.getElementById("pp-memo").value.trim();
     const taxOn  = document.getElementById("pp-tax").checked;
     const taxDate= String(document.getElementById("pp-taxdate").value).replace(/\D/g, "");
+    const taxAmt = Number(String(document.getElementById("pp-taxamount").value).replace(/[^0-9.\-]/g, "")) || 0;
 
     if(!(amount > 0)){ show("금액을 숫자로 넣어주세요."); return; }
     if(date.length !== 8){ show("날짜를 20260727 형태로 넣어주세요."); return; }
@@ -10120,7 +10539,8 @@
           receipts: list, receivedAmount: sum,
           depositCompleted: full, depositCompleteDate: full ? lastDate : "",
           status: full ? "입금완료" : "부분입금",
-          taxInvoiceIssued: taxOn, taxInvoiceDate: taxOn ? (taxDate || date) : ""
+          taxInvoiceIssued: taxOn, taxInvoiceDate: taxOn ? (taxDate || date) : "",
+          taxInvoiceAmount: taxOn ? (taxAmt || total) : 0
         });
         // 묶인 판매요청은 전액이 다 들어왔을 때만 완료로 바꿉니다.
         if(full){
@@ -10134,7 +10554,8 @@
           payments: list, paidAmount: sum,
           transferCompleted: full, transferCompleteDate: full ? lastDate : "",
           status: full ? "이체완료" : "부분이체",
-          taxInvoiceIssued: taxOn, taxInvoiceDate: taxOn ? (taxDate || date) : ""
+          taxInvoiceIssued: taxOn, taxInvoiceDate: taxOn ? (taxDate || date) : "",
+          taxInvoiceAmount: taxOn ? (taxAmt || total) : 0
         });
         if(full){
           for(const bId of (p.orderBatchIds||[])){
@@ -10402,6 +10823,7 @@
     const rows = [];
     snap.forEach(d=>{
       const x = { id:d.id, ...d.data() };
+      if(x.kind === "out") return;   // 출금 내역은 선입금으로 쓸 수 없습니다
       const left = (Number(x.amount)||0) - (Number(x.usedAmount)||0);
       if(left <= 0) return;
       if(company && x.company && String(x.company).trim() !== company) return;
@@ -19542,7 +19964,7 @@
     document.getElementById("signup-form").style.display="none";
     document.getElementById("login-form").style.display="block";
   };
-  const ADMIN_TAB_IDS = ["tab-site","tab-team","tab-users","tab-reqboard","tab-settlement","tab-b2b","tab-logs"];
+  const ADMIN_TAB_IDS = ["tab-site","tab-team","tab-users","tab-reqboard","tab-cashbook","tab-settlement","tab-b2b","tab-logs"];
   const INV_ADMIN_TAB_IDS = ["tab-inv-model","tab-inv-color","tab-inv-manufacturer","tab-inv-location","tab-inv-status","tab-inv-carrier"];
 
   window.toggleAdminMenu = function(){
@@ -19593,6 +20015,7 @@
     if(tabId==="tab-salereq") loadSaleRequestList();
     if(tabId==="tab-reservation") loadReservationTable();
     if(tabId==="tab-reqboard") loadReqBoard();
+    if(tabId==="tab-cashbook"){ document.getElementById("cb-date").value = todayStr(); loadCashbook(); }
     if(tabId==="tab-settlement") loadSettlementTab();
     if(tabId==="tab-b2b") loadB2BTab();
     if(tabId==="tab-team") loadTeamList();
@@ -19702,6 +20125,7 @@
       document.getElementById("welcome-name").textContent = data.name;
       currentUser = { name:data.name, username:data.username, uid:user.uid };
       currentViewSettings = data.viewSettings && data.viewSettings.length ? data.viewSettings : DEFAULT_VIEW_SETTINGS.slice();
+      reqViewSettings = data.reqViewSettings && data.reqViewSettings.length ? data.reqViewSettings : RB_DEFAULT_VIEW.slice();
       checkLoginNotices();
       checkUnreadNotices();
 
@@ -19754,6 +20178,7 @@
       setMenu("tabbtn-inv-admin", showInvAdmin);
       setMenu("tabbtn-users", showUsers);
       setMenu("tabbtn-reqboard", hasPerm(p, "menuReqBoard") || showSettlement);
+      setMenu("tabbtn-cashbook", hasPerm(p, "menuReqBoard") || showSettlement);
       setMenu("tabbtn-settlement", showSettlement);
       setMenu("tabbtn-b2b", showSettlement);
       setMenu("tabbtn-ledger", showLedger || showSettlement);
