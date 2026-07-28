@@ -313,7 +313,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-07-28 v289</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-07-28 v290</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -1721,7 +1721,7 @@
         <div style="border:1px solid var(--line);background:#fafafa;padding:9px 11px;margin-bottom:10px;font-size:12px;line-height:1.9;color:var(--gray);">
           <b>값을 지우고 싶으면</b> 빈칸이 아니라 <b>0</b>을 넣으세요.<br>
           <b>할인은 자동 계산됩니다.</b> %만 넣으면 금액을, 금액만 넣으면 %를 출고가 기준으로 채웁니다.<br>
-          <b>참고용 칸</b>(확인·전산모델명·모델명·기가수·펫네임)은 고쳐도 반영되지 않습니다. 대신 <b>같은 일련번호를 가려내는 데</b> 씁니다.<br>
+          <b>참고용 칸</b>(확인·전산모델명·모델명·기가수·펫네임)은 고쳐도 반영되지 않습니다. 「확인」은 맨 뒤에 있습니다. 대신 <b>같은 일련번호를 가려내는 데</b> 씁니다.<br>
           <b>반영은 일련번호로 찾아서</b> 합니다. 엑셀에서 정렬을 바꾸거나 행을 지워도 결과는 달라지지 않습니다.<br>
           <b>열 순서를 바꾸거나 안 쓰는 열을 지워도</b> 됩니다. 머리글 이름으로 찾습니다.
         </div>
@@ -19026,12 +19026,27 @@
   // ================= 화면 표를 그대로 엑셀로 =================
   // 어느 화면이든 표가 있으면 보이는 그대로 내려받습니다.
   // 숨긴 열은 파일에도 들어가지 않습니다.
+  // 어느 목록이 어떤 페이지 설정을 쓰는지 짝지어 둡니다. (현재 페이지만 내려가는 것을 알리려고)
+  const DL_PAGE_KEY = {
+    "company-list-wrap":"companies", "order-list":"orders", "sale-request-list":"saleRequests",
+    "reservation-table-area":"reservations", "log-list":"logs", "b2b-ledger-list":"b2bLedger"
+  };
   window.downloadVisibleTable = function(containerId, fileLabel){
     if(!hasPerm(currentUserPerms, "excelExport")){ alert("엑셀 다운로드 권한이 없습니다."); return; }
     const box = document.getElementById(containerId);
     if(!box){ alert("표를 찾을 수 없습니다."); return; }
     const tables = Array.from(box.querySelectorAll("table"));
     if(tables.length === 0){ alert("내려받을 표가 없습니다."); return; }
+    // 이 방식은 화면에 그려진 표를 그대로 가져옵니다.
+    // 페이지로 잘려 있으면 그 페이지만 내려가므로 먼저 알려드립니다.
+    const pk = DL_PAGE_KEY[containerId];
+    if(pk){
+      const st = getPageState(pk);
+      if(st.size !== "all"){
+        if(!confirm("지금 화면에 보이는 " + st.size + "건(" + st.page + "페이지)만 내려받습니다.\n\n"
+          + "전체를 받으시려면 목록 위 페이지 칸을 「전체」로 바꾼 뒤 다시 눌러주세요.\n\n이대로 받을까요?")) return;
+      }
+    }
 
     const wb = XLSX.utils.book_new();
     let total = 0;
@@ -19185,11 +19200,15 @@
       alert("보기 설정에서 「일련번호」를 켜주세요.\n\n일련번호가 없으면 올릴 때 어느 단말기인지 찾을 수 없습니다.");
       return;
     }
-    const headers = ["확인"].concat(viewCols.map(c=> bulkByKey[c.key] ? bulkByKey[c.key].header : c.label));
+    // 화면 재고 목록과 칸을 똑같이 맞춥니다.
+    //  A부터 화면에 보이는 열 순서 그대로 → 그다음 현재상태 → 맨 뒤에 확인
+    //  (화면의 #·체크박스·관리 버튼은 자료가 아니라 넣지 않습니다)
+    const headers = viewCols.map(c=> bulkByKey[c.key] ? bulkByKey[c.key].header : c.label)
+      .concat(["현재상태", "확인"]);
     const numericColIndices = new Set();
     viewCols.forEach((c, idx)=>{
       const f = bulkByKey[c.key];
-      if(f && f.type === "number") numericColIndices.add(idx + 1);   // +1: 확인만 앞에
+      if(f && f.type === "number") numericColIndices.add(idx);   // 앞에 붙는 칸이 없습니다
     });
     // 화면에 없어서 이번 파일에 안 들어간 "고칠 수 있는 칸"을 미리 알려드립니다.
     const missingEditable = BULK_EDIT_DOWNLOAD_FIELDS
@@ -19208,7 +19227,7 @@
       if(!sn) marks.push("일련번호 없음");
       else if(snCount[sn] > 1) marks.push("중복");
       if(!it.listPrice) marks.push("출고가 없음");
-      const row = [marks.join(" · ")];
+      const row = [];
       viewCols.forEach(c=>{
         const f = bulkByKey[c.key];
         if(f){
@@ -19219,6 +19238,8 @@
           row.push(c.getRaw ? c.getRaw(it) : c.get(it));
         }
       });
+      row.push(it.status || "");      // 현재상태 — 화면과 같은 자리
+      row.push(marks.join(" · "));    // 확인 — 참고용이라 맨 뒤
       return row;
     });
     // 내려받기 전에, 화면과 파일의 차이를 미리 알려드립니다.
@@ -19235,8 +19256,8 @@
       "· 지금 화면   : " + pageInfo + "\n" +
       "· 정렬 기준   : " + lastRenderedSortLabel + "\n" +
       "· 조회 조건   : " + condInfo + "\n\n" +
-      "· 열 구성   : 화면 보기 설정과 같음 (" + (viewCols.length + 1) + "칸)\n" +
-      "             A 확인 · B부터 화면 순서 그대로\n\n" +
+      "· 열 구성   : 화면 재고 목록과 같음 (" + (viewCols.length + 2) + "칸)\n" +
+      "             A부터 화면 순서 그대로 · 뒤에 현재상태 · 확인\n\n" +
       (missingEditable.length
         ? "화면에 없어서 이번 파일에 안 들어간 칸:\n" + missingEditable.join(", ")
           + "\n\n이 칸을 고치시려면 보기 설정에서 먼저 켜주세요.\n\n"
@@ -19257,7 +19278,7 @@
       ["정렬 기준", lastRenderedSortLabel],
       ["조회 조건", condInfo],
       ["화면 표시", pageInfo],
-      ["열 구성", "화면 보기 설정과 같음 — A 확인 · B부터 화면 순서 그대로"],
+      ["열 구성", "화면 재고 목록과 같음 — A부터 화면 순서, 뒤에 현재상태·확인"],
       ["안 들어간 칸", missingEditable.length ? missingEditable.join(", ") : "없음"],
       ["주의", "반영은 일련번호로 찾아서 합니다. 행 순서를 바꿔도 결과는 같습니다"],
       ["주의", "순번·확인·전산모델명·모델명·기가수·펫네임은 고쳐도 반영되지 않습니다"]
