@@ -313,7 +313,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-07-28 v281</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-07-28 v282</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -397,11 +397,14 @@
         <div id="dash-cache-stamp" style="font-size:12px;margin-bottom:4px;text-align:right;"></div>
         <div id="dash-scope-note" style="font-size:12px;color:var(--gray);margin-bottom:8px;"></div>
         <div id="dash-stat-cards" style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-start;margin-bottom:16px;"></div>
-        <div>
-          <h3 style="font-size:13px;">통신사별</h3>
-          <div id="dash-carrier-list"></div>
+        <div style="margin-bottom:10px;font-size:12px;">
+          <span style="color:var(--gray);margin-right:6px;">전체 합계 칸 배경색</span>
+          <select onchange="setDashSumBg(this.value)" id="dash-sumbg-select" style="height:26px;font-size:12px;border:1px solid var(--line);">
+            <option value="none">없음</option><option value="gray">연회색</option><option value="blue">연파랑</option>
+            <option value="yellow">연노랑</option><option value="green">연초록</option><option value="pink">연분홍</option>
+          </select>
         </div>
-        <div style="margin-top:18px;">
+        <div>
           <h3 style="font-size:13px;">펫네임/모델명별</h3>
           <div id="dash-model-list"></div>
         </div>
@@ -1550,6 +1553,9 @@
               <option value="other">기타 (비용)</option>
             </select>
           </div>
+          <div class="stack-row"><label>매입처</label>
+            <select id="b2b-source-select"><option value="">(미지정)</option></select>
+          </div>
           <div class="stack-row"><label>금액</label><input type="number" id="b2b-amount-input"></div>
           <div class="stack-row"><label>메모 (선택)</label><input type="text" id="b2b-memo-input"></div>
         </div>
@@ -2681,14 +2687,23 @@
   let dashFontSize = "medium";
   // 대시보드 지표 표 — 정렬 기준과 판매처 통신사 펼침 상태 (사람마다 저장)
   const dashSort = { carrier:{key:"total",asc:false}, model:{key:"total",asc:false}, dest:{key:"total",asc:false} };
-  let dashDestOpen = false;
-  let dashDestHide = [];
-  async function saveDashDestPref(){
+  const dashCrossOpen = { model:false, dest:false };
+  const dashCrossHide = { model:[], dest:[] };
+  // 전체 합계 칸 배경색 — 고른 값은 내 계정에만 저장됩니다.
+  const DASH_SUM_BG = { none:"", gray:"#f4f4f4", blue:"#eef4fb", yellow:"#fff8e1", green:"#eef7ee", pink:"#fdeef3" };
+  let dashSumBg = "none";
+  async function saveDashPref(){
     try{
       const u = auth.currentUser;
-      if(u) await setDoc(doc(db,"users",u.uid), { dashDestOpen, dashDestHide }, { merge:true });
+      if(u) await setDoc(doc(db,"users",u.uid),
+        { dashCrossOpen, dashCrossHide, dashSumBg }, { merge:true });
     }catch(e){}
   }
+  window.setDashSumBg = function(v){
+    dashSumBg = v;
+    saveDashPref();
+    if(typeof loadDashboard === "function") loadDashboard();
+  };
   const DASH_FONT_SCALES = { small:0.8, medium:1, large:1.3 };
   function applyDashFontSize(){
     const el = document.getElementById("dash-stat-cards");
@@ -9908,7 +9923,7 @@
       if(PRE[e.category]){
         creditIn += amt;
         rows.push({ kind:"prepay", label:PRE[e.category], color:"var(--gray)", id:x.id, p:null,
-          who:"삼성전자", sub:e.memo||"", date:e.date||"",
+          who: (e.source || "").trim() || "(매입처 미지정)", sub:e.memo||"", date:e.date||"",
           owe:amt, recv:0, done:0, left:0, payDate:e.date||"", payMemo:e.memo||"",
           taxDate:"", taxAmount:0, status:"미반영", finished:true, onHold:false, holdReason:"",
           canceled:false, recs:[], inSum:false, canProcess:false, canEdit:false });
@@ -15970,13 +15985,32 @@
     const memo = document.getElementById("b2b-memo-input").value.trim();
     if(!amount){ alert("금액을 입력해주세요."); return; }
 
+    const ledSource = (document.getElementById("b2b-source-select")||{}).value || "";
     await addDoc(collection(db,"b2bLedger"), {
-      date: dateVal, category, amount, memo,
+      date: dateVal, category, amount, memo, source: ledSource,
       createdBy: currentUser.name, createdByUsername: currentUser.username, createdAt: serverTimestamp()
     });
-    logAction("B2B 여신 거래 추가", B2B_CATEGORY_LABELS[category]+" "+amount.toLocaleString());
+    logAction("B2B 여신 거래 추가", B2B_CATEGORY_LABELS[category]+" "+amount.toLocaleString()
+      + (ledSource ? " / " + ledSource : " / 매입처 미지정"));
     document.getElementById("b2b-amount-input").value = "";
     document.getElementById("b2b-memo-input").value = "";
+    loadB2BTab();
+  };
+
+  // 여신 장부의 매입처를 나중에 채우거나 고칩니다.
+  window.setLedgerSource = async function(id){
+    const names = await fetchNamesList("inboundSources");
+    const snap = await getDoc(doc(db,"b2bLedger", id));
+    if(!snap.exists()) return;
+    const cur = snap.data().source || "";
+    const val = prompt("매입처를 넣어주세요. (비우면 미지정)\n\n등록된 매입처: " + (names.join(", ") || "없음"), cur);
+    if(val === null) return;
+    const v = String(val).trim();
+    if(v && !names.includes(v)){
+      if(!confirm('"' + v + '" 은 등록된 매입처가 아닙니다.\n\n그대로 넣을까요?')) return;
+    }
+    await updateDoc(doc(db,"b2bLedger", id), { source: v });
+    logAction("여신 거래 매입처 변경", (cur || "미지정") + " → " + (v || "미지정"));
     loadB2BTab();
   };
 
@@ -16079,17 +16113,29 @@
       listEl.innerHTML = '<div class="list-empty">등록된 거래가 없습니다.</div>';
     }else{
       const { pageItems: b2bPage } = paginateSlice(entries, "b2bLedger");
-      let tbl = '<div style="overflow-x:auto;"><table class="data-table"><thead><tr><th>거래일자</th><th>구분</th><th class="ta-right">금액</th><th>메모</th><th class="ta-right">관리</th></tr></thead><tbody>';
+      let tbl = '<div style="overflow-x:auto;"><table class="data-table"><thead><tr><th>거래일자</th><th>구분</th><th>매입처</th><th class="ta-right">금액</th><th>메모</th><th class="ta-right">관리</th></tr></thead><tbody>';
       b2bPage.forEach(e=>{
         tbl += '<tr><td>'+e.date+'</td><td>'+(B2B_CATEGORY_LABELS[e.category]||e.category)+'</td>' +
+          '<td>'+(e.source ? comboEsc(e.source) : '<span style="color:#b8860b;">미지정</span>')+'</td>' +
           '<td class="ta-right">'+Number(e.amount).toLocaleString()+'</td><td>'+(e.memo||'-')+'</td>' +
-          '<td class="ta-right"><button class="btn small danger" style="width:auto;" onclick="deleteB2BLedgerEntry(\''+e.id+'\')">삭제</button></td></tr>';
+          '<td class="ta-right"><button class="btn small secondary" style="width:auto;" onclick="setLedgerSource(\''+e.id+'\')">매입처</button>' +
+          '<button class="btn small danger" style="width:auto;margin-left:4px;" onclick="deleteB2BLedgerEntry(\''+e.id+'\')">삭제</button></td></tr>';
       });
       tbl += '</tbody></table></div>';
       listEl.innerHTML = tbl;
       listEl.prepend(renderPaginationBar("b2bLedger", entries.length, loadB2BTab));
     }
   
+    // 매입처 고르는 칸 채우기
+    try{
+      const srcNames = await fetchNamesList("inboundSources");
+      const sel = document.getElementById("b2b-source-select");
+      if(sel){
+        const cur = sel.value;
+        sel.innerHTML = '<option value="">(미지정)</option>' +
+          srcNames.map(n=>'<option value="'+comboEsc(n)+'"'+(cur===n?' selected':'')+'>'+comboEsc(n)+'</option>').join("");
+      }
+    }catch(e){}
     addDownloadBtn("dl-b2b", "b2b-ledger-list", "여신내역");
     addViewCfgBtn("dl-b2b", "b2b-ledger-list");
   }
@@ -17605,7 +17651,6 @@
 
   async function loadDashboard(){
     const statEl = document.getElementById("dash-stat-cards");
-    const carrierEl = document.getElementById("dash-carrier-list");
     const modelEl = document.getElementById("dash-model-list");
     const destEl = document.getElementById("dash-dest-list");
     const regionEl = document.getElementById("dash-master-region-list");
@@ -17692,6 +17737,7 @@
     const modelAgg = {};
     const destAgg = {};
     const destCarrierAgg = {};
+    const modelCarrierAgg = {};
 
     allItems.forEach(it=>{
       const qty = it.entryType==="imei" ? 1 : (Number(it.quantity)||0);
@@ -17739,6 +17785,15 @@
         // 전산모델명 기준으로 묶습니다. 펫네임이 바뀌어도 집계가 갈라지지 않습니다.
         const m = docModelLabel(it);
         if(!modelAgg[m]) modelAgg[m] = {purchaseCount:0, saleCount:0, purchaseAmount:0, saleAmount:0};
+        // 모델도 통신사로 한 번 더 나눠 담습니다. (모델별 표에서 펼쳐 보기용)
+        {
+          const mc = it.carrier || "미지정";
+          if(!modelCarrierAgg[m]) modelCarrierAgg[m] = {};
+          if(!modelCarrierAgg[m][mc]) modelCarrierAgg[m][mc] = {purchaseCount:0, saleCount:0, purchaseAmount:0, saleAmount:0};
+          const M = modelCarrierAgg[m][mc];
+          if(inScopeIn){ M.purchaseCount += qty; if(it.purchasePrice) M.purchaseAmount += Number(it.purchasePrice)*qty; }
+          if(inScopeOut){ M.saleCount += qty; if(it.salePrice) M.saleAmount += Number(it.salePrice)*qty; }
+        }
         if(inScopeIn){ modelAgg[m].purchaseCount += qty; if(it.purchasePrice) modelAgg[m].purchaseAmount += Number(it.purchasePrice)*qty; }
         if(inScopeOut){ modelAgg[m].saleCount += qty; if(it.salePrice) modelAgg[m].saleAmount += Number(it.salePrice)*qty; }
 
@@ -17841,6 +17896,7 @@
     statEl.innerHTML = statHtml;
     applyCustomTabLabels();
     applyDashFontSize();
+    { const sb = document.getElementById("dash-sumbg-select"); if(sb) sb.value = dashSumBg; }
 
     function dashEmptyWhy(){
       let why = '<div class="list-empty">' + scopeLabel + ' 기준으로 집계할 재고가 없습니다.';
@@ -17849,7 +17905,6 @@
       else if(noDateCount > 0){ why += '<br>재고 ' + noDateCount + '건에 입고일·출고일이 비어 있어 집계에서 제외됐습니다.'; }
       return why + '</div>';
     }
-    // 열 제목을 눌러 정렬합니다. 표마다 따로 기억합니다.
     const DASH_SORTABLE = [
       { key:"purchaseCount",  label:"매입대수" },
       { key:"purchaseAmount", label:"매입액" },
@@ -17859,73 +17914,43 @@
     function sortEntries(entries, which){
       const s = dashSort[which] || { key:"total", asc:false };
       const val = (v)=> s.key === "total" ? (v.purchaseCount + v.saleCount) : (Number(v[s.key]) || 0);
-      return entries.sort((a,b)=>{
-        const d = val(a[1]) - val(b[1]);
-        return s.asc ? d : -d;
-      });
+      return entries.sort((a,b)=>{ const d = val(a[1]) - val(b[1]); return s.asc ? d : -d; });
     }
-    function headCells(which, nameLabel, nameWidth){
-      const s = dashSort[which] || { key:"total", asc:false };
-      const arrow = (k)=> s.key === k ? (s.asc ? ' ▲' : ' ▼') : '';
-      return '<th style="width:' + nameWidth + ';">' + nameLabel + '</th>' +
-        DASH_SORTABLE.map(c=>
-          '<th class="ta-right" style="cursor:pointer;white-space:nowrap;" data-dsort="' + which + '|' + c.key + '"'
-          + ' title="눌러서 정렬">' + c.label + arrow(c.key) + '</th>').join("");
-    }
+    // 전체 합계 칸 배경색 — 사람마다 고를 수 있습니다.
+    const sumBg = (DASH_SUM_BG[dashSumBg] || "");
+    const bgStyle = sumBg ? ("background:" + sumBg + ";") : "";
 
-    // 통신사별 · 모델별 — 정렬만 있는 기본 표
-    function renderAggTable(el, agg, nameLabel, which){
+    // 이름별 표 + 통신사별 펼치기 (판매처별·모델별 공통)
+    function renderCrossTable(el, agg, crossAgg, nameLabel, which, nameWidth){
       const entries = Object.entries(agg);
       if(entries.length === 0){ el.innerHTML = dashEmptyWhy(); return; }
       sortEntries(entries, which);
-      let html = '<div style="overflow-x:auto;"><table class="data-table dash-agg" data-label-key="dash-agg-table" style="width:auto;">'
-        + '<thead><tr>' + headCells(which, nameLabel, "200px") + '</tr></thead><tbody>';
-      let tP=0,tPA=0,tS=0,tSA=0;
-      entries.forEach(([k,v])=>{
-        tP+=v.purchaseCount; tPA+=v.purchaseAmount; tS+=v.saleCount; tSA+=v.saleAmount;
-        html += '<tr><td>'+comboEsc(k)+'</td>'
-          + '<td class="ta-right">'+v.purchaseCount+'</td>'
-          + '<td class="ta-right">'+v.purchaseAmount.toLocaleString()+'</td>'
-          + '<td class="ta-right">'+v.saleCount+'</td>'
-          + '<td class="ta-right">'+v.saleAmount.toLocaleString()+'</td></tr>';
-      });
-      html += '<tr style="background:#fafafa;font-weight:700;border-top:2px solid var(--navy);">'
-        + '<td>합계</td><td class="ta-right">'+tP+'</td><td class="ta-right">'+tPA.toLocaleString()+'</td>'
-        + '<td class="ta-right">'+tS+'</td><td class="ta-right">'+tSA.toLocaleString()+'</td></tr>';
-      html += '</tbody></table></div>';
-      el.innerHTML = html;
-      applyCustomTabLabels();
-    }
-
-    // 판매처별 — 전체 합계 + 통신사별 펼치기
-    function renderDestTable(){
-      const entries = Object.entries(destAgg);
-      if(entries.length === 0){ destEl.innerHTML = dashEmptyWhy(); return; }
-      sortEntries(entries, "dest");
-      const allCarriers = [...new Set(Object.values(destCarrierAgg).flatMap(o=> Object.keys(o)))].sort();
-      const showCarriers = dashDestOpen ? allCarriers.filter(c=> !dashDestHide.includes(c)) : [];
+      const allCarriers = [...new Set(Object.values(crossAgg).flatMap(o=> Object.keys(o)))].sort();
+      const isOpen = !!dashCrossOpen[which];
+      const hide = dashCrossHide[which] || [];
+      const showCarriers = isOpen ? allCarriers.filter(c=> !hide.includes(c)) : [];
       const sub = ["매입대수","매입액","매출대수","매출액"];
+      const s = dashSort[which] || { key:"total", asc:false };
 
       let bar = '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px;">'
-        + '<button class="btn small secondary" style="width:auto;" onclick="toggleDashDest()">'
-        + (dashDestOpen ? "통신사별 접기" : "통신사별 펼치기") + '</button>';
-      if(dashDestOpen && allCarriers.length){
+        + '<button class="btn small secondary" style="width:auto;" data-dcross="' + which + '">'
+        + (isOpen ? "통신사별 접기" : "통신사별 펼치기") + '</button>';
+      if(isOpen && allCarriers.length){
         bar += '<span style="font-size:11px;color:var(--gray);">보이게 할 통신사</span>'
-          + allCarriers.map(c=>'<label style="font-size:11px;margin-right:6px;"><input type="checkbox" class="dash-carrier-ck" value="'
-            + comboEsc(c) + '"' + (dashDestHide.includes(c) ? '' : ' checked') + '> ' + comboEsc(c) + '</label>').join("");
+          + allCarriers.map(c=>'<label style="font-size:11px;margin-right:6px;"><input type="checkbox" class="dash-ck-'
+            + which + '" value="' + comboEsc(c) + '"' + (hide.includes(c) ? '' : ' checked') + '> ' + comboEsc(c) + '</label>').join("");
       }
       bar += '</div>';
 
       let html = bar + '<div style="overflow-x:auto;"><table class="data-table dash-agg" data-label-key="dash-agg-table" style="width:auto;">'
-        + '<thead><tr><th rowspan="2" style="width:150px;">판매처</th>'
-        + '<th colspan="4" class="ta-center" style="background:#f1f1f1;">전체 합계</th>'
+        + '<thead><tr><th rowspan="2" style="width:' + nameWidth + ';">' + nameLabel + '</th>'
+        + '<th colspan="4" class="ta-center" style="' + bgStyle + '">전체 합계</th>'
         + showCarriers.map(c=>'<th colspan="4" class="ta-center" style="border-left:2px solid var(--navy);">'+comboEsc(c)+'</th>').join("")
         + '</tr><tr>'
-        + DASH_SORTABLE.map(c=>'<th class="ta-right" style="background:#f1f1f1;cursor:pointer;white-space:nowrap;" data-dsort="dest|'
-            + c.key + '" title="눌러서 정렬">' + c.label
-            + ((dashSort.dest && dashSort.dest.key === c.key) ? (dashSort.dest.asc ? ' ▲' : ' ▼') : '') + '</th>').join("")
-        + showCarriers.map(()=> sub.map((s,i)=>'<th class="ta-right" style="white-space:nowrap;'
-            + (i===0 ? 'border-left:2px solid var(--navy);' : '') + '">' + s + '</th>').join("")).join("")
+        + DASH_SORTABLE.map(c=>'<th class="ta-right" style="' + bgStyle + 'cursor:pointer;" data-dsort="' + which + '|'
+            + c.key + '" title="눌러서 정렬">' + c.label + (s.key === c.key ? (s.asc ? ' ▲' : ' ▼') : '') + '</th>').join("")
+        + showCarriers.map(()=> sub.map((x,i)=>'<th class="ta-right" style="'
+            + (i===0 ? 'border-left:2px solid var(--navy);' : '') + '">' + x + '</th>').join("")).join("")
         + '</tr></thead><tbody>';
 
       let tP=0,tPA=0,tS=0,tSA=0;
@@ -17934,12 +17959,12 @@
       entries.forEach(([k,v])=>{
         tP+=v.purchaseCount; tPA+=v.purchaseAmount; tS+=v.saleCount; tSA+=v.saleAmount;
         html += '<tr><td>'+comboEsc(k)+'</td>'
-          + '<td class="ta-right" style="background:#f7f7f7;font-weight:700;">'+v.purchaseCount+'</td>'
-          + '<td class="ta-right" style="background:#f7f7f7;font-weight:700;">'+v.purchaseAmount.toLocaleString()+'</td>'
-          + '<td class="ta-right" style="background:#f7f7f7;font-weight:700;">'+v.saleCount+'</td>'
-          + '<td class="ta-right" style="background:#f7f7f7;font-weight:700;">'+v.saleAmount.toLocaleString()+'</td>';
+          + '<td class="ta-right" style="'+bgStyle+'font-weight:700;">'+v.purchaseCount+'</td>'
+          + '<td class="ta-right" style="'+bgStyle+'font-weight:700;">'+v.purchaseAmount.toLocaleString()+'</td>'
+          + '<td class="ta-right" style="'+bgStyle+'font-weight:700;">'+v.saleCount+'</td>'
+          + '<td class="ta-right" style="'+bgStyle+'font-weight:700;">'+v.saleAmount.toLocaleString()+'</td>';
         showCarriers.forEach(c=>{
-          const x = (destCarrierAgg[k] && destCarrierAgg[k][c]) || {purchaseCount:0,purchaseAmount:0,saleCount:0,saleAmount:0};
+          const x = (crossAgg[k] && crossAgg[k][c]) || {purchaseCount:0,purchaseAmount:0,saleCount:0,saleAmount:0};
           cTot[c].purchaseCount += x.purchaseCount; cTot[c].purchaseAmount += x.purchaseAmount;
           cTot[c].saleCount += x.saleCount; cTot[c].saleAmount += x.saleAmount;
           html += '<td class="ta-right" style="border-left:2px solid var(--navy);">'+(x.purchaseCount||'-')+'</td>'
@@ -17949,47 +17974,44 @@
         });
         html += '</tr>';
       });
-      html += '<tr style="background:#fafafa;font-weight:700;border-top:2px solid var(--navy);"><td>합계</td>'
-        + '<td class="ta-right">'+tP+'</td><td class="ta-right">'+tPA.toLocaleString()+'</td>'
-        + '<td class="ta-right">'+tS+'</td><td class="ta-right">'+tSA.toLocaleString()+'</td>'
+      html += '<tr style="font-weight:700;border-top:2px solid var(--navy);"><td>합계</td>'
+        + '<td class="ta-right" style="'+bgStyle+'">'+tP+'</td><td class="ta-right" style="'+bgStyle+'">'+tPA.toLocaleString()+'</td>'
+        + '<td class="ta-right" style="'+bgStyle+'">'+tS+'</td><td class="ta-right" style="'+bgStyle+'">'+tSA.toLocaleString()+'</td>'
         + showCarriers.map(c=> '<td class="ta-right" style="border-left:2px solid var(--navy);">'+cTot[c].purchaseCount+'</td>'
             + '<td class="ta-right">'+cTot[c].purchaseAmount.toLocaleString()+'</td>'
             + '<td class="ta-right">'+cTot[c].saleCount+'</td>'
             + '<td class="ta-right">'+cTot[c].saleAmount.toLocaleString()+'</td>').join("")
         + '</tr></tbody></table></div>';
-      destEl.innerHTML = html;
-      document.querySelectorAll(".dash-carrier-ck").forEach(cb=>{
+      el.innerHTML = html;
+      document.querySelectorAll(".dash-ck-" + which).forEach(cb=>{
         cb.onchange = ()=>{
-          dashDestHide = Array.from(document.querySelectorAll(".dash-carrier-ck")).filter(x=>!x.checked).map(x=>x.value);
-          saveDashDestPref(); renderDestTable(); bindDashSort();
+          dashCrossHide[which] = Array.from(document.querySelectorAll(".dash-ck-" + which)).filter(x=>!x.checked).map(x=>x.value);
+          saveDashPref(); drawDashTables();
         };
       });
       applyCustomTabLabels();
     }
 
-    function bindDashSort(){
+    function drawDashTables(){
+      renderCrossTable(modelEl, modelAgg, modelCarrierAgg, "펫네임/모델명", "model", "220px");
+      renderCrossTable(destEl, destAgg, destCarrierAgg, "판매처", "dest", "150px");
       document.querySelectorAll("[data-dsort]").forEach(th=>{
         th.onclick = ()=>{
           const [which, key] = th.dataset.dsort.split("|");
           const cur = dashSort[which] || { key:"total", asc:false };
           dashSort[which] = { key, asc: (cur.key === key ? !cur.asc : false) };
-          if(which === "carrier") renderAggTable(carrierEl, carrierAgg, "통신사", "carrier");
-          else if(which === "model") renderAggTable(modelEl, modelAgg, "펫네임/모델명", "model");
-          else renderDestTable();
-          bindDashSort();
+          drawDashTables();
+        };
+      });
+      document.querySelectorAll("[data-dcross]").forEach(b=>{
+        b.onclick = ()=>{
+          const which = b.dataset.dcross;
+          dashCrossOpen[which] = !dashCrossOpen[which];
+          saveDashPref(); drawDashTables();
         };
       });
     }
-    window.toggleDashDest = function(){
-      dashDestOpen = !dashDestOpen;
-      saveDashDestPref();
-      renderDestTable(); bindDashSort();
-    };
-    renderAggTable(carrierEl, carrierAgg, "통신사", "carrier");
-    renderAggTable(modelEl, modelAgg, "펫네임/모델명", "model");
-    renderDestTable();
-    bindDashSort();
-
+    drawDashTables();
 
     const discountItems = allItems.filter(it => (it.purchaseDiscountAmt!=null || it.otherDiscountAmt!=null) && (dashboardScope==="all" || inScope(it.inDate)));
     let preDiscountSum = 0, otherDiscountSum = 0, discountCount = 0;
@@ -20320,8 +20342,12 @@
       currentUser = { name:data.name, username:data.username, uid:user.uid };
       currentViewSettings = data.viewSettings && data.viewSettings.length ? data.viewSettings : DEFAULT_VIEW_SETTINGS.slice();
       reqViewSettings = data.reqViewSettings && data.reqViewSettings.length ? data.reqViewSettings : RB_DEFAULT_VIEW.slice();
-      dashDestOpen = data.dashDestOpen === true;
-      dashDestHide = Array.isArray(data.dashDestHide) ? data.dashDestHide : [];
+      if(data.dashCrossOpen){ dashCrossOpen.model = data.dashCrossOpen.model === true; dashCrossOpen.dest = data.dashCrossOpen.dest === true; }
+      if(data.dashCrossHide){
+        dashCrossHide.model = Array.isArray(data.dashCrossHide.model) ? data.dashCrossHide.model : [];
+        dashCrossHide.dest  = Array.isArray(data.dashCrossHide.dest)  ? data.dashCrossHide.dest  : [];
+      }
+      dashSumBg = data.dashSumBg || "none";
       checkLoginNotices();
       checkUnreadNotices();
 
