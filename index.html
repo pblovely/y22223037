@@ -313,7 +313,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-07-28 v286</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-07-28 v288</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -377,6 +377,22 @@
 
     <!-- ===== 작업: 대시보드 ===== -->
     <div id="tab-dashboard" class="tab-panel">
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+          <h3 style="margin:0;">경영 지표 <span class="info-tip" title="수익·출고가·자금을 한눈에 봅니다. 보고할 때 필요한 칸만 보기 설정에서 고르세요. 고른 내용은 내 계정에만 저장됩니다.">ⓘ</span></h3>
+          <button class="btn small secondary" style="width:auto;" onclick="toggleProfitPanel()">보기 설정</button>
+        </div>
+        <div id="profit-view-panel" style="display:none;border:1px solid var(--line);background:#fafafa;padding:10px 12px;margin-bottom:10px;">
+          <div id="profit-view-checks" style="margin-bottom:8px;"></div>
+          <span class="btn-row">
+            <button class="btn small" style="width:auto;" onclick="saveProfitCards()">저장</button>
+            <button class="btn small secondary" style="width:auto;" onclick="selectAllProfitCards()">전부 고르기</button>
+            <button class="btn small secondary" style="width:auto;" onclick="resetProfitCards()">기본값</button>
+            <button class="btn small secondary" style="width:auto;" onclick="toggleProfitPanel()">닫기</button>
+          </span>
+        </div>
+        <div id="profit-cards"></div>
+      </div>
       <div class="card">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
           <h3 style="margin:0;">대시보드</h3>
@@ -2638,7 +2654,8 @@
   let dashFontSize = "medium";
   // 대시보드 지표 표 — 정렬 기준과 판매처 통신사 펼침 상태 (사람마다 저장)
   const dashSort = { carrier:{key:"total",asc:false}, model:{key:"total",asc:false}, dest:{key:"total",asc:false} };
-  const dashCrossOpen = { model:false, dest:false };
+  // 기본은 펼친 상태입니다. 접으면 그 상태가 내 계정에 기억됩니다.
+  const dashCrossOpen = { model:true, dest:true };
   const dashCrossHide = { model:[], dest:[] };
   // 전체 합계 칸 배경색 — 고른 값은 내 계정에만 저장됩니다.
   const DASH_SUM_BG = { none:"", gray:"#f4f4f4", blue:"#eef4fb", yellow:"#fff8e1", green:"#eef7ee", pink:"#fdeef3" };
@@ -17623,6 +17640,114 @@
     loadDashboard();
   };
 
+  // ---------- 경영 지표 (수익·출고가·자금) ----------
+  //  대시보드 맨 위에 나옵니다. 보고할 때마다 필요한 칸이 달라서 「보기 설정」으로 고릅니다.
+  //  고른 내용은 내 계정에만 저장됩니다.
+  const PROFIT_CARDS = [
+    { key:"saleAmt",     group:"수익",   label:"매출액",              note:"판매가 × 수량" },
+    { key:"costAmt",     group:"수익",   label:"매출원가",            note:"입고가 × 수량" },
+    { key:"grossProfit", group:"수익",   label:"매출총이익",          note:"매출 − 원가", signed:true },
+    { key:"rebateDue",   group:"수익",   label:"받을 클럽장려금",     note:"타할인 − 이미 받은 금액", plus:true },
+    { key:"loanCost",    group:"수익",   label:"대출비용",            note:"B2B 수수료 + 이자", minus:true },
+    { key:"clawback",    group:"수익",   label:"환수액",              note:"공시지원금 환수", minus:true },
+    { key:"realProfit",  group:"수익",   label:"예상 실제수익",       note:"총이익 + 장려금 − 비용 − 환수", signed:true, strong:true },
+    { key:"perUnit",     group:"수익",   label:"대당 평균수익",       note:"실제수익 ÷ 판매대수", signed:true },
+
+    { key:"listAmt",     group:"출고가", label:"출고가 합계",         note:"출고가 × 수량" },
+    { key:"preDisc",     group:"출고가", label:"선할인 합계",         note:"이체 기준" },
+    { key:"otherDisc",   group:"출고가", label:"타할인 합계",         note:"여신 등 반영" },
+    { key:"inDisc",      group:"출고가", label:"입고할인 합계",       note:"선할인 + 타할인" },
+    { key:"preRate",     group:"출고가", label:"선할인율",            note:"목표 0.20%", pct:true },
+    { key:"otherRate",   group:"출고가", label:"타할인율",            note:"목표 2.14%", pct:true },
+    { key:"totalRate",   group:"출고가", label:"실효 할인율",         note:"목표 2.34%", pct:true, strong:true },
+
+    { key:"receivable",  group:"자금",   label:"받아야 할 돈",        note:"입금요청 남은금액" },
+    { key:"payable",     group:"자금",   label:"줘야 할 돈",          note:"출금요청 남은금액" },
+    { key:"creditLeft",  group:"자금",   label:"여신 잔액",           note:"선입금 − 주문사용", signed:true },
+    { key:"stockAmt",    group:"자금",   label:"미판매 재고 금액",    note:"원가 기준" },
+    { key:"stockCnt",    group:"자금",   label:"미판매 재고 대수",    note:"출고일 없는 재고", unit:true }
+  ];
+  const PROFIT_DEFAULT = ["saleAmt","costAmt","grossProfit","rebateDue","realProfit","listAmt","inDisc","totalRate"];
+  let profitCardKeys = PROFIT_DEFAULT.slice();
+
+  window.toggleProfitPanel = function(){
+    const p = document.getElementById("profit-view-panel");
+    if(!p) return;
+    if(p.style.display === "none" || !p.style.display){
+      const box = document.getElementById("profit-view-checks");
+      box.innerHTML = "";
+      ["수익","출고가","자금"].forEach(g=>{
+        const t = document.createElement("div");
+        t.style.cssText = "font-size:11.5px;font-weight:700;color:var(--navy);margin:6px 0 2px;";
+        t.textContent = g;
+        box.appendChild(t);
+        PROFIT_CARDS.filter(c=>c.group===g).forEach(c=>{
+          const l = document.createElement("label");
+          l.style.cssText = "display:inline-block;margin:2px 10px 2px 0;font-size:12.5px;";
+          const cb = document.createElement("input");
+          cb.type = "checkbox"; cb.className = "profit-opt"; cb.value = c.key;
+          cb.checked = profitCardKeys.includes(c.key);
+          l.appendChild(cb); l.appendChild(document.createTextNode(" " + c.label));
+          box.appendChild(l);
+        });
+      });
+      p.style.display = "block";
+    }else p.style.display = "none";
+  };
+  window.saveProfitCards = async function(){
+    const checked = Array.from(document.querySelectorAll(".profit-opt:checked")).map(cb=>cb.value);
+    if(checked.length === 0){ alert("최소 1개는 골라주세요."); return; }
+    profitCardKeys = checked;
+    try{ const u = auth.currentUser; if(u) await setDoc(doc(db,"users",u.uid), { profitCardKeys: checked }, { merge:true }); }catch(e){}
+    document.getElementById("profit-view-panel").style.display = "none";
+    if(typeof loadDashboard === "function") loadDashboard();
+  };
+  window.resetProfitCards = async function(){
+    profitCardKeys = PROFIT_DEFAULT.slice();
+    try{ const u = auth.currentUser; if(u) await setDoc(doc(db,"users",u.uid), { profitCardKeys }, { merge:true }); }catch(e){}
+    document.getElementById("profit-view-panel").style.display = "none";
+    if(typeof loadDashboard === "function") loadDashboard();
+  };
+  window.selectAllProfitCards = function(){
+    document.querySelectorAll(".profit-opt").forEach(cb=> cb.checked = true);
+  };
+
+  // 값들을 받아 카드로 그립니다.
+  function renderProfitCards(V){
+    const el = document.getElementById("profit-cards");
+    if(!el) return;
+    const money = (v)=> Math.round(Number(v)||0).toLocaleString();
+    const show = PROFIT_CARDS.filter(c=> profitCardKeys.includes(c.key));
+    let html = "";
+    ["수익","출고가","자금"].forEach(g=>{
+      const list = show.filter(c=>c.group===g);
+      if(!list.length) return;
+      html += '<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-start;margin-bottom:8px;">'
+        + '<div style="display:flex;align-items:center;font-size:12px;font-weight:700;color:var(--navy);min-width:46px;">' + g + '</div>'
+        + list.map(c=>{
+            const raw = Number(V[c.key]) || 0;
+            let val, color = "";
+            if(c.pct){ val = raw.toFixed(3) + "%"; }
+            else if(c.unit){ val = raw.toLocaleString() + "대"; }
+            else val = money(raw);
+            if(c.signed || c.plus || c.minus){
+              if(c.minus){ color = raw ? "var(--danger)" : ""; val = raw ? "−" + money(Math.abs(raw)) : "0"; }
+              else if(c.plus){ color = raw ? "#2e7d32" : ""; val = raw ? "+" + money(raw) : "0"; }
+              else color = raw >= 0 ? "#2e7d32" : "var(--danger)";
+            }
+            return '<div style="border:1px solid ' + (c.strong ? "var(--navy)" : "var(--line)")
+              + ';padding:9px 12px;min-width:150px;background:' + (c.strong ? "#f4f7fb" : "#fff") + ';">'
+              + '<div style="font-size:11px;color:var(--gray);">' + c.label + '</div>'
+              + '<div style="font-size:' + (c.strong ? "18px" : "16px") + ';font-weight:700;'
+              + (color ? "color:" + color + ";" : "") + '">' + val + '</div>'
+              + (c.note ? '<div style="font-size:10.5px;color:var(--gray);">' + c.note + '</div>' : '')
+              + '</div>';
+          }).join("")
+        + '</div>';
+    });
+    el.innerHTML = html || '<div class="list-empty">보기 설정에서 볼 칸을 골라주세요.</div>';
+  }
+
   async function loadDashboard(){
     const statEl = document.getElementById("dash-stat-cards");
     const modelEl = document.getElementById("dash-model-list");
@@ -17994,6 +18119,61 @@
       otherDiscountSum += Number(it.otherDiscountAmt)||0;
       discountCount++;
     });
+    // ===== 경영 지표 값 계산 =====
+    {
+      let saleAmt=0, costAmt=0, listAmt=0, clawback=0, saleCnt=0, stockAmt=0, stockCnt=0;
+      allItems.forEach(it=>{
+        const qty = it.entryType === "imei" ? 1 : (Number(it.quantity)||0);
+        const inS = dashboardScope==="all" || inScope(it.inDate);
+        const outS = dashboardScope==="all" || inScope(it.outDate);
+        if(outS && it.outDate){
+          saleCnt += qty;
+          if(it.salePrice) saleAmt += Number(it.salePrice)*qty;
+          if(it.purchasePrice) costAmt += Number(it.purchasePrice)*qty;
+          if(it.clawbackAmount) clawback += Number(it.clawbackAmount)*qty;
+        }
+        if(inS && it.listPrice) listAmt += Number(it.listPrice)*qty;
+        if(!it.outDate){ stockCnt += qty; if(it.purchasePrice) stockAmt += Number(it.purchasePrice)*qty; }
+      });
+      // 여신 장부에서 장려금·대출비용을 가져옵니다.
+      let clubGot=0, loanCost=0, depIn=0, orderUse=0;
+      try{
+        const ls = await getDocs(collection(db,"b2bLedger"));
+        ls.forEach(x=>{
+          const e=x.data(), a=Number(e.amount)||0;
+          if(e.category==="club_incentive") clubGot += a;
+          else if(e.category==="b2b_fee_payment"||e.category==="b2b_fee_mp"||e.category==="b2b_interest") loanCost += a;
+          else if(e.category==="deposit"||e.category==="loan_deposit"||e.category==="interest_received") depIn += a;
+          else if(e.category==="order_use") orderUse += a;
+        });
+      }catch(e){}
+      // 요청 남은금액 (받아야 할 돈·줘야 할 돈)
+      let receivable=0, payable=0;
+      try{
+        const [sdr, pr] = await Promise.all([
+          getDocs(collection(db,"saleDepositRequests")),
+          getDocs(collection(db,"paymentRequests"))
+        ]);
+        sdr.forEach(x=>{ const v=x.data(); if(v.status!=="취소") receivable += Math.max(0,(Number(v.totalAmount)||0)-(Number(v.receivedAmount)||0)); });
+        pr.forEach(x=>{ const v=x.data(); if(v.status!=="취소") payable += Math.max(0,(Number(v.totalAmount)||0)-(Number(v.paidAmount)||0)); });
+      }catch(e){}
+
+      const grossProfit = saleAmt - costAmt;
+      const rebateDue = Math.max(0, otherDiscountSum - clubGot);
+      const realProfit = grossProfit + rebateDue - loanCost - clawback;
+      renderProfitCards({
+        saleAmt, costAmt, grossProfit, rebateDue, loanCost, clawback, realProfit,
+        perUnit: saleCnt ? realProfit/saleCnt : 0,
+        listAmt, preDisc: preDiscountSum, otherDisc: otherDiscountSum,
+        inDisc: preDiscountSum + otherDiscountSum,
+        preRate:   listAmt ? preDiscountSum/listAmt*100 : 0,
+        otherRate: listAmt ? otherDiscountSum/listAmt*100 : 0,
+        totalRate: listAmt ? (preDiscountSum+otherDiscountSum)/listAmt*100 : 0,
+        receivable, payable, creditLeft: depIn - orderUse,
+        stockAmt, stockCnt
+      });
+    }
+
     discountEl.innerHTML =
       statCard("선할인 합계 (이체 기준)", preDiscountSum.toLocaleString(), "#1565c0") +
       statCard("타할인 합계 (여신 등 반영)", otherDiscountSum.toLocaleString(), "#8a6d00") +
@@ -20315,7 +20495,11 @@
       currentUser = { name:data.name, username:data.username, uid:user.uid };
       currentViewSettings = data.viewSettings && data.viewSettings.length ? data.viewSettings : DEFAULT_VIEW_SETTINGS.slice();
       reqViewSettings = data.reqViewSettings && data.reqViewSettings.length ? data.reqViewSettings : RB_DEFAULT_VIEW.slice();
-      if(data.dashCrossOpen){ dashCrossOpen.model = data.dashCrossOpen.model === true; dashCrossOpen.dest = data.dashCrossOpen.dest === true; }
+      if(data.dashCrossOpen){
+        dashCrossOpen.model = data.dashCrossOpen.model !== false;   // 저장된 값이 없으면 펼침
+        dashCrossOpen.dest  = data.dashCrossOpen.dest  !== false;
+      }
+      if(Array.isArray(data.profitCardKeys) && data.profitCardKeys.length) profitCardKeys = data.profitCardKeys;
       if(data.dashCrossHide){
         dashCrossHide.model = Array.isArray(data.dashCrossHide.model) ? data.dashCrossHide.model : [];
         dashCrossHide.dest  = Array.isArray(data.dashCrossHide.dest)  ? data.dashCrossHide.dest  : [];
