@@ -253,6 +253,10 @@
   .data-table .ta-right{ text-align:right; }
   .data-table .ta-left{ text-align:left; }
   .data-table{ width:100%; border-collapse:collapse; font-size:12.5px; }
+  /* 대시보드 지표 표 — 한 화면에 들어가도록 글씨와 여백을 줄입니다. */
+  .data-table.dash-agg{ font-size:11px; }
+  .data-table.dash-agg th, .data-table.dash-agg td{ padding:3px 7px; white-space:nowrap; }
+  .ta-center{ text-align:center; }
   /* 업체별 지표 표 — 좌우로 늘리지 않고 내용 너비만 차지하며 왼쪽에 붙입니다. */
   .data-table.resv-dest-fit{ width:auto !important; min-width:0 !important; margin:0 !important; table-layout:auto; }
   .data-table.resv-dest-fit th, .data-table.resv-dest-fit td{ white-space:nowrap; padding-left:10px; padding-right:10px; }
@@ -309,7 +313,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-07-28 v280</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-07-28 v281</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -2675,6 +2679,16 @@
 
   // ---------- 대시보드 카드 글씨 크기 ----------
   let dashFontSize = "medium";
+  // 대시보드 지표 표 — 정렬 기준과 판매처 통신사 펼침 상태 (사람마다 저장)
+  const dashSort = { carrier:{key:"total",asc:false}, model:{key:"total",asc:false}, dest:{key:"total",asc:false} };
+  let dashDestOpen = false;
+  let dashDestHide = [];
+  async function saveDashDestPref(){
+    try{
+      const u = auth.currentUser;
+      if(u) await setDoc(doc(db,"users",u.uid), { dashDestOpen, dashDestHide }, { merge:true });
+    }catch(e){}
+  }
   const DASH_FONT_SCALES = { small:0.8, medium:1, large:1.3 };
   function applyDashFontSize(){
     const el = document.getElementById("dash-stat-cards");
@@ -17677,6 +17691,7 @@
     const carrierAgg = {}; // { name: {count, amount} }
     const modelAgg = {};
     const destAgg = {};
+    const destCarrierAgg = {};
 
     allItems.forEach(it=>{
       const qty = it.entryType==="imei" ? 1 : (Number(it.quantity)||0);
@@ -17731,6 +17746,13 @@
           if(!destAgg[it.destination]) destAgg[it.destination] = {purchaseCount:0, saleCount:0, purchaseAmount:0, saleAmount:0};
           if(inScopeIn){ destAgg[it.destination].purchaseCount += qty; if(it.purchasePrice) destAgg[it.destination].purchaseAmount += Number(it.purchasePrice)*qty; }
           if(inScopeOut){ destAgg[it.destination].saleCount += qty; if(it.salePrice) destAgg[it.destination].saleAmount += Number(it.salePrice)*qty; }
+          // 판매처를 통신사로 한 번 더 나눠 담습니다. (판매처별 표에서 펼쳐 보기용)
+          const dc = it.carrier || "미지정";
+          if(!destCarrierAgg[it.destination]) destCarrierAgg[it.destination] = {};
+          if(!destCarrierAgg[it.destination][dc]) destCarrierAgg[it.destination][dc] = {purchaseCount:0, saleCount:0, purchaseAmount:0, saleAmount:0};
+          const T = destCarrierAgg[it.destination][dc];
+          if(inScopeIn){ T.purchaseCount += qty; if(it.purchasePrice) T.purchaseAmount += Number(it.purchasePrice)*qty; }
+          if(inScopeOut){ T.saleCount += qty; if(it.salePrice) T.saleAmount += Number(it.salePrice)*qty; }
         }
       }
     });
@@ -17820,34 +17842,154 @@
     applyCustomTabLabels();
     applyDashFontSize();
 
-    function renderFullList(el, agg, nameLabel){
-      const entries = Object.entries(agg).sort((a,b)=>(b[1].purchaseCount+b[1].saleCount)-(a[1].purchaseCount+a[1].saleCount));
-      if(entries.length===0){
-        let why = '<div class="list-empty">' + scopeLabel + ' 기준으로 집계할 재고가 없습니다.';
-        if(allItems.length === 0){
-          why += '<br>등록된 재고 자체가 없습니다.';
-        }else if(dashboardScope !== "all"){
-          why += '<br>전체 재고 ' + allItems.length + '건 중 이 기간에 입고·출고된 건이 없습니다. 위의 <b>전체</b> 버튼 또는 <b>월 선택</b>으로 기간을 바꿔보세요.';
-        }else if(noDateCount > 0){
-          why += '<br>재고 ' + noDateCount + '건에 입고일·출고일이 비어 있어 집계에서 제외됐습니다. 재고 목록에서 날짜를 채워주세요.';
-        }
-        why += '</div>';
-        el.innerHTML = why;
-        return;
-      }
-      let html = '<div style="overflow-x:auto;"><table class="data-table" data-label-key="dash-agg-table" style="width:auto;max-width:760px;table-layout:fixed;"><thead><tr>' +
-        '<th style="width:220px;">'+nameLabel+'</th><th class="ta-right" style="width:80px;">매입대수</th><th class="ta-right" style="width:150px;">매입액</th><th class="ta-right" style="width:80px;">매출대수</th><th class="ta-right" style="width:150px;">매출액</th>' +
-        '</tr></thead><tbody>';
-      entries.forEach(([k,v])=>{
-        html += '<tr><td>'+k+'</td><td class="ta-right">'+v.purchaseCount+'</td><td class="ta-right">'+v.purchaseAmount.toLocaleString()+'</td><td class="ta-right">'+v.saleCount+'</td><td class="ta-right">'+v.saleAmount.toLocaleString()+'</td></tr>';
+    function dashEmptyWhy(){
+      let why = '<div class="list-empty">' + scopeLabel + ' 기준으로 집계할 재고가 없습니다.';
+      if(allItems.length === 0){ why += '<br>등록된 재고 자체가 없습니다.'; }
+      else if(dashboardScope !== "all"){ why += '<br>전체 재고 ' + allItems.length + '건 중 이 기간에 입고·출고된 건이 없습니다. 위의 <b>전체</b> 버튼 또는 <b>월 선택</b>으로 기간을 바꿔보세요.'; }
+      else if(noDateCount > 0){ why += '<br>재고 ' + noDateCount + '건에 입고일·출고일이 비어 있어 집계에서 제외됐습니다.'; }
+      return why + '</div>';
+    }
+    // 열 제목을 눌러 정렬합니다. 표마다 따로 기억합니다.
+    const DASH_SORTABLE = [
+      { key:"purchaseCount",  label:"매입대수" },
+      { key:"purchaseAmount", label:"매입액" },
+      { key:"saleCount",      label:"매출대수" },
+      { key:"saleAmount",     label:"매출액" }
+    ];
+    function sortEntries(entries, which){
+      const s = dashSort[which] || { key:"total", asc:false };
+      const val = (v)=> s.key === "total" ? (v.purchaseCount + v.saleCount) : (Number(v[s.key]) || 0);
+      return entries.sort((a,b)=>{
+        const d = val(a[1]) - val(b[1]);
+        return s.asc ? d : -d;
       });
+    }
+    function headCells(which, nameLabel, nameWidth){
+      const s = dashSort[which] || { key:"total", asc:false };
+      const arrow = (k)=> s.key === k ? (s.asc ? ' ▲' : ' ▼') : '';
+      return '<th style="width:' + nameWidth + ';">' + nameLabel + '</th>' +
+        DASH_SORTABLE.map(c=>
+          '<th class="ta-right" style="cursor:pointer;white-space:nowrap;" data-dsort="' + which + '|' + c.key + '"'
+          + ' title="눌러서 정렬">' + c.label + arrow(c.key) + '</th>').join("");
+    }
+
+    // 통신사별 · 모델별 — 정렬만 있는 기본 표
+    function renderAggTable(el, agg, nameLabel, which){
+      const entries = Object.entries(agg);
+      if(entries.length === 0){ el.innerHTML = dashEmptyWhy(); return; }
+      sortEntries(entries, which);
+      let html = '<div style="overflow-x:auto;"><table class="data-table dash-agg" data-label-key="dash-agg-table" style="width:auto;">'
+        + '<thead><tr>' + headCells(which, nameLabel, "200px") + '</tr></thead><tbody>';
+      let tP=0,tPA=0,tS=0,tSA=0;
+      entries.forEach(([k,v])=>{
+        tP+=v.purchaseCount; tPA+=v.purchaseAmount; tS+=v.saleCount; tSA+=v.saleAmount;
+        html += '<tr><td>'+comboEsc(k)+'</td>'
+          + '<td class="ta-right">'+v.purchaseCount+'</td>'
+          + '<td class="ta-right">'+v.purchaseAmount.toLocaleString()+'</td>'
+          + '<td class="ta-right">'+v.saleCount+'</td>'
+          + '<td class="ta-right">'+v.saleAmount.toLocaleString()+'</td></tr>';
+      });
+      html += '<tr style="background:#fafafa;font-weight:700;border-top:2px solid var(--navy);">'
+        + '<td>합계</td><td class="ta-right">'+tP+'</td><td class="ta-right">'+tPA.toLocaleString()+'</td>'
+        + '<td class="ta-right">'+tS+'</td><td class="ta-right">'+tSA.toLocaleString()+'</td></tr>';
       html += '</tbody></table></div>';
       el.innerHTML = html;
       applyCustomTabLabels();
     }
-    renderFullList(carrierEl, carrierAgg, "통신사");
-    renderFullList(modelEl, modelAgg, "펫네임/모델명");
-    renderFullList(destEl, destAgg, "판매처");
+
+    // 판매처별 — 전체 합계 + 통신사별 펼치기
+    function renderDestTable(){
+      const entries = Object.entries(destAgg);
+      if(entries.length === 0){ destEl.innerHTML = dashEmptyWhy(); return; }
+      sortEntries(entries, "dest");
+      const allCarriers = [...new Set(Object.values(destCarrierAgg).flatMap(o=> Object.keys(o)))].sort();
+      const showCarriers = dashDestOpen ? allCarriers.filter(c=> !dashDestHide.includes(c)) : [];
+      const sub = ["매입대수","매입액","매출대수","매출액"];
+
+      let bar = '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px;">'
+        + '<button class="btn small secondary" style="width:auto;" onclick="toggleDashDest()">'
+        + (dashDestOpen ? "통신사별 접기" : "통신사별 펼치기") + '</button>';
+      if(dashDestOpen && allCarriers.length){
+        bar += '<span style="font-size:11px;color:var(--gray);">보이게 할 통신사</span>'
+          + allCarriers.map(c=>'<label style="font-size:11px;margin-right:6px;"><input type="checkbox" class="dash-carrier-ck" value="'
+            + comboEsc(c) + '"' + (dashDestHide.includes(c) ? '' : ' checked') + '> ' + comboEsc(c) + '</label>').join("");
+      }
+      bar += '</div>';
+
+      let html = bar + '<div style="overflow-x:auto;"><table class="data-table dash-agg" data-label-key="dash-agg-table" style="width:auto;">'
+        + '<thead><tr><th rowspan="2" style="width:150px;">판매처</th>'
+        + '<th colspan="4" class="ta-center" style="background:#f1f1f1;">전체 합계</th>'
+        + showCarriers.map(c=>'<th colspan="4" class="ta-center" style="border-left:2px solid var(--navy);">'+comboEsc(c)+'</th>').join("")
+        + '</tr><tr>'
+        + DASH_SORTABLE.map(c=>'<th class="ta-right" style="background:#f1f1f1;cursor:pointer;white-space:nowrap;" data-dsort="dest|'
+            + c.key + '" title="눌러서 정렬">' + c.label
+            + ((dashSort.dest && dashSort.dest.key === c.key) ? (dashSort.dest.asc ? ' ▲' : ' ▼') : '') + '</th>').join("")
+        + showCarriers.map(()=> sub.map((s,i)=>'<th class="ta-right" style="white-space:nowrap;'
+            + (i===0 ? 'border-left:2px solid var(--navy);' : '') + '">' + s + '</th>').join("")).join("")
+        + '</tr></thead><tbody>';
+
+      let tP=0,tPA=0,tS=0,tSA=0;
+      const cTot = {};
+      showCarriers.forEach(c=> cTot[c] = {purchaseCount:0,purchaseAmount:0,saleCount:0,saleAmount:0});
+      entries.forEach(([k,v])=>{
+        tP+=v.purchaseCount; tPA+=v.purchaseAmount; tS+=v.saleCount; tSA+=v.saleAmount;
+        html += '<tr><td>'+comboEsc(k)+'</td>'
+          + '<td class="ta-right" style="background:#f7f7f7;font-weight:700;">'+v.purchaseCount+'</td>'
+          + '<td class="ta-right" style="background:#f7f7f7;font-weight:700;">'+v.purchaseAmount.toLocaleString()+'</td>'
+          + '<td class="ta-right" style="background:#f7f7f7;font-weight:700;">'+v.saleCount+'</td>'
+          + '<td class="ta-right" style="background:#f7f7f7;font-weight:700;">'+v.saleAmount.toLocaleString()+'</td>';
+        showCarriers.forEach(c=>{
+          const x = (destCarrierAgg[k] && destCarrierAgg[k][c]) || {purchaseCount:0,purchaseAmount:0,saleCount:0,saleAmount:0};
+          cTot[c].purchaseCount += x.purchaseCount; cTot[c].purchaseAmount += x.purchaseAmount;
+          cTot[c].saleCount += x.saleCount; cTot[c].saleAmount += x.saleAmount;
+          html += '<td class="ta-right" style="border-left:2px solid var(--navy);">'+(x.purchaseCount||'-')+'</td>'
+            + '<td class="ta-right">'+(x.purchaseAmount ? x.purchaseAmount.toLocaleString() : '-')+'</td>'
+            + '<td class="ta-right">'+(x.saleCount||'-')+'</td>'
+            + '<td class="ta-right">'+(x.saleAmount ? x.saleAmount.toLocaleString() : '-')+'</td>';
+        });
+        html += '</tr>';
+      });
+      html += '<tr style="background:#fafafa;font-weight:700;border-top:2px solid var(--navy);"><td>합계</td>'
+        + '<td class="ta-right">'+tP+'</td><td class="ta-right">'+tPA.toLocaleString()+'</td>'
+        + '<td class="ta-right">'+tS+'</td><td class="ta-right">'+tSA.toLocaleString()+'</td>'
+        + showCarriers.map(c=> '<td class="ta-right" style="border-left:2px solid var(--navy);">'+cTot[c].purchaseCount+'</td>'
+            + '<td class="ta-right">'+cTot[c].purchaseAmount.toLocaleString()+'</td>'
+            + '<td class="ta-right">'+cTot[c].saleCount+'</td>'
+            + '<td class="ta-right">'+cTot[c].saleAmount.toLocaleString()+'</td>').join("")
+        + '</tr></tbody></table></div>';
+      destEl.innerHTML = html;
+      document.querySelectorAll(".dash-carrier-ck").forEach(cb=>{
+        cb.onchange = ()=>{
+          dashDestHide = Array.from(document.querySelectorAll(".dash-carrier-ck")).filter(x=>!x.checked).map(x=>x.value);
+          saveDashDestPref(); renderDestTable(); bindDashSort();
+        };
+      });
+      applyCustomTabLabels();
+    }
+
+    function bindDashSort(){
+      document.querySelectorAll("[data-dsort]").forEach(th=>{
+        th.onclick = ()=>{
+          const [which, key] = th.dataset.dsort.split("|");
+          const cur = dashSort[which] || { key:"total", asc:false };
+          dashSort[which] = { key, asc: (cur.key === key ? !cur.asc : false) };
+          if(which === "carrier") renderAggTable(carrierEl, carrierAgg, "통신사", "carrier");
+          else if(which === "model") renderAggTable(modelEl, modelAgg, "펫네임/모델명", "model");
+          else renderDestTable();
+          bindDashSort();
+        };
+      });
+    }
+    window.toggleDashDest = function(){
+      dashDestOpen = !dashDestOpen;
+      saveDashDestPref();
+      renderDestTable(); bindDashSort();
+    };
+    renderAggTable(carrierEl, carrierAgg, "통신사", "carrier");
+    renderAggTable(modelEl, modelAgg, "펫네임/모델명", "model");
+    renderDestTable();
+    bindDashSort();
+
 
     const discountItems = allItems.filter(it => (it.purchaseDiscountAmt!=null || it.otherDiscountAmt!=null) && (dashboardScope==="all" || inScope(it.inDate)));
     let preDiscountSum = 0, otherDiscountSum = 0, discountCount = 0;
@@ -20178,6 +20320,8 @@
       currentUser = { name:data.name, username:data.username, uid:user.uid };
       currentViewSettings = data.viewSettings && data.viewSettings.length ? data.viewSettings : DEFAULT_VIEW_SETTINGS.slice();
       reqViewSettings = data.reqViewSettings && data.reqViewSettings.length ? data.reqViewSettings : RB_DEFAULT_VIEW.slice();
+      dashDestOpen = data.dashDestOpen === true;
+      dashDestHide = Array.isArray(data.dashDestHide) ? data.dashDestHide : [];
       checkLoginNotices();
       checkUnreadNotices();
 
