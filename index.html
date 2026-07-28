@@ -313,7 +313,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-07-28 v282</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-07-28 v283</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -878,6 +878,8 @@
           <div class="stack-row"><label>또는 주소로</label><input type="text" id="site-favicon-input" placeholder="https://.../icon.png (파일을 올리면 비워두세요)"></div>
         </div>
         <div style="display:flex;align-items:center;gap:10px;margin-top:8px;">
+          <div class="stack-row"><label>통신사 순서 <span class="info-tip" title="대시보드 지표에서 통신사가 보이는 순서입니다. 쉼표로 구분해 적어주세요. 여기 없는 통신사는 뒤에 붙습니다. 모두에게 같이 적용됩니다.">ⓘ</span></label>
+            <input type="text" id="carrier-order-input" placeholder="LG, SK, KT"></div>
           <button class="btn small" style="width:auto;" onclick="saveSiteName()">저장</button>
           <span style="font-size:12px;color:var(--gray);">미리보기</span>
           <img id="site-favicon-preview" style="width:24px;height:24px;border:1px solid var(--line);object-fit:contain;background:#fff;">
@@ -2672,6 +2674,10 @@
         hiddenLabels = currentSettings.hiddenLabels || {};
         tipLabels = currentSettings.tipLabels || {};
         dashFontSize = currentSettings.dashFontSize || "medium";
+        dashSumBg = currentSettings.dashSumBg || "none";
+        carrierOrder = Array.isArray(currentSettings.carrierOrder) && currentSettings.carrierOrder.length
+          ? currentSettings.carrierOrder : DEFAULT_CARRIER_ORDER.slice();
+        { const co = document.getElementById("carrier-order-input"); if(co) co.value = carrierOrder.join(", "); }
         applyCustomTabLabels();
         applyCustomTips();
         applyDashFontSize();
@@ -2691,17 +2697,33 @@
   const dashCrossHide = { model:[], dest:[] };
   // 전체 합계 칸 배경색 — 고른 값은 내 계정에만 저장됩니다.
   const DASH_SUM_BG = { none:"", gray:"#f4f4f4", blue:"#eef4fb", yellow:"#fff8e1", green:"#eef7ee", pink:"#fdeef3" };
+  // 통신사 보이는 순서 — 사이트 설정에서 바꿉니다. 목록에 없는 통신사는 뒤에 붙습니다.
+  const DEFAULT_CARRIER_ORDER = ["LG","SK","KT"];
+  let carrierOrder = DEFAULT_CARRIER_ORDER.slice();
+  function sortCarriers(list){
+    const rank = (c)=>{
+      const i = carrierOrder.indexOf(c);
+      return i === -1 ? (900 + String(c).charCodeAt(0)) : i;
+    };
+    return list.slice().sort((a,b)=> rank(a) - rank(b) || String(a).localeCompare(String(b)));
+  }
   let dashSumBg = "none";
+  // 접기/펼치기와 고른 통신사는 사람마다 다르게 쓰는 것이라 내 계정에 저장합니다.
   async function saveDashPref(){
     try{
       const u = auth.currentUser;
       if(u) await setDoc(doc(db,"users",u.uid),
-        { dashCrossOpen, dashCrossHide, dashSumBg }, { merge:true });
+        { dashCrossOpen, dashCrossHide }, { merge:true });
     }catch(e){}
   }
-  window.setDashSumBg = function(v){
+  // 배경색은 모두가 같이 보는 값이라 사이트 설정에 저장합니다.
+  window.setDashSumBg = async function(v){
     dashSumBg = v;
-    saveDashPref();
+    try{
+      await setDoc(doc(db,"settings","general"), { dashSumBg: v }, { merge:true });
+      currentSettings.dashSumBg = v;
+      logAction("대시보드 합계칸 배경색 변경", v);
+    }catch(e){}
     if(typeof loadDashboard === "function") loadDashboard();
   };
   const DASH_FONT_SCALES = { small:0.8, medium:1, large:1.3 };
@@ -3075,14 +3097,21 @@
     const val = document.getElementById("site-name-input").value.trim();
     if(!val) return;
     const fav = document.getElementById("site-favicon-input").value.trim();
-    await setDoc(doc(db, "settings", "general"), { siteName: val, faviconUrl: fav }, { merge:true });
+    // 통신사 순서 — 쉼표로 나눠 저장합니다. 비우면 기본값(LG, SK, KT)을 씁니다.
+    const rawOrder = (document.getElementById("carrier-order-input")||{}).value || "";
+    const ord = String(rawOrder).split(",").map(s=>s.trim()).filter(Boolean);
+    const useOrder = ord.length ? ord : DEFAULT_CARRIER_ORDER.slice();
+    await setDoc(doc(db, "settings", "general"), { siteName: val, faviconUrl: fav, carrierOrder: useOrder }, { merge:true });
+    carrierOrder = useOrder;
+    currentSettings.carrierOrder = useOrder;
     currentSettings.siteName = val;
     currentSettings.faviconUrl = fav;
     applySiteName(val);
     applyFavicon(fav, val);
     updateFaviconPreview();
     flashMsg("site-name-msg");
-    logAction("사이트 이름·아이콘 변경", "→ " + val + (fav ? " / 아이콘 지정" : " / 기본 아이콘"));
+    logAction("사이트 이름·아이콘 변경", "→ " + val + (fav ? " / 아이콘 지정" : " / 기본 아이콘")
+      + " / 통신사 순서 " + useOrder.join(", "));
   };
 
   // 고른 이미지를 작게 줄여 그림 데이터로 바꿉니다. (따로 올릴 곳이 필요 없습니다)
@@ -17925,7 +17954,7 @@
       const entries = Object.entries(agg);
       if(entries.length === 0){ el.innerHTML = dashEmptyWhy(); return; }
       sortEntries(entries, which);
-      const allCarriers = [...new Set(Object.values(crossAgg).flatMap(o=> Object.keys(o)))].sort();
+      const allCarriers = sortCarriers([...new Set(Object.values(crossAgg).flatMap(o=> Object.keys(o)))]);
       const isOpen = !!dashCrossOpen[which];
       const hide = dashCrossHide[which] || [];
       const showCarriers = isOpen ? allCarriers.filter(c=> !hide.includes(c)) : [];
@@ -20347,7 +20376,7 @@
         dashCrossHide.model = Array.isArray(data.dashCrossHide.model) ? data.dashCrossHide.model : [];
         dashCrossHide.dest  = Array.isArray(data.dashCrossHide.dest)  ? data.dashCrossHide.dest  : [];
       }
-      dashSumBg = data.dashSumBg || "none";
+
       checkLoginNotices();
       checkUnreadNotices();
 
