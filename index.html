@@ -313,7 +313,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-07-28 v285</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-07-28 v286</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -9722,6 +9722,7 @@
 
   // 표에 넣을 수 있는 열 목록
   const RB_COLUMNS = [
+    { key:"status",    label:"상태" },
     { key:"kind",      label:"구분" },
     { key:"company",   label:"업체" },
     { key:"bizName",   label:"사업자명" },
@@ -9734,8 +9735,7 @@
     { key:"payDate",   label:"입금일·출금일" },
     { key:"payMemo",   label:"처리 메모" },
     { key:"taxDate",   label:"세금계산서일" },
-    { key:"taxAmount", label:"세금계산서 금액", num:true },
-    { key:"status",    label:"상태" }
+    { key:"taxAmount", label:"세금계산서 금액", num:true }
   ];
   const RB_DEFAULT_VIEW = RB_COLUMNS.map(c=>c.key);
   let reqViewSettings = RB_DEFAULT_VIEW.slice();
@@ -10020,13 +10020,13 @@
         return tr;
       }).join("");
 
-      const sumCell = (c)=>{
+      const sumCell = (c, idx)=>{
+        if(idx === 0) return '<td>합계</td>';
         if(c.key === "owe") return '<td class="ta-right">' + vOwe.toLocaleString() + '</td>';
         if(c.key === "recv") return '<td class="ta-right" style="color:#1565c0;">' + vRecv.toLocaleString() + '</td>';
         if(c.key === "done") return '<td class="ta-right">' + vDone.toLocaleString() + '</td>';
         if(c.key === "left") return '<td class="ta-right" style="color:var(--danger);">' + vLeft.toLocaleString() + '</td>';
         if(c.key === "taxAmount") return '<td class="ta-right">' + vTax.toLocaleString() + '</td>';
-        if(c.key === "kind") return '<td>합계</td>';
         return '<td></td>';
       };
       listEl.innerHTML = '<div style="overflow-x:auto;"><table class="data-table resv-dest-fit" style="width:auto;">' +
@@ -10034,7 +10034,7 @@
           + ' style="white-space:nowrap;padding-left:6px;padding-right:6px;">' + c.label + '</th>').join("") + '<th></th></tr></thead>' +
         '<tbody>' + body +
         '<tr style="background:#fafafa;font-weight:700;border-top:2px solid var(--navy);">' +
-        cols.map(sumCell).join("") + '<td></td></tr>' +
+        cols.map((c,i)=> sumCell(c,i)).join("") + '<td></td></tr>' +
         '</tbody></table></div>' +
         '<div style="color:var(--gray);font-size:11.5px;margin-top:4px;">합계는 <b>조건에 걸린 전체</b> 기준입니다. (페이지와 무관) <b>취소</b>와 <b>선입금(미반영)</b>은 뺐습니다.</div>';
     }
