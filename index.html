@@ -309,7 +309,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-07-27 v278</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-07-27 v279</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -1366,6 +1366,7 @@
             <button class="btn small secondary" id="rbd-k-credit" style="width:auto;" onclick="setReqBoardKind('credit')">여신·선입금</button>
           </span>
         </div>
+        <div id="reqboard-pagination"></div>
         <div id="reqboard-list"></div>
       </div>
     </div>
@@ -1422,6 +1423,7 @@
           <button class="btn small secondary" id="cb-f-open" style="width:auto;" onclick="setCashbookFilter('open')">안 쓴 입금</button>
           <button class="btn small secondary" id="cb-f-nocompany" style="width:auto;" onclick="setCashbookFilter('nocompany')">업체 미연결</button>
         </span>
+        <div id="cashbook-pagination"></div>
         <div id="cashbook-list"></div>
       </div>
     </div>
@@ -9950,7 +9952,7 @@
       switch(key){
         case "kind":      return '<b style="color:' + r.color + ';">' + r.label + '</b>';
         case "company":   return (r.who ? '<b>' + comboEsc(r.who) + '</b>' : '<span style="color:var(--danger);">연결 끊김</span>')
-                                 + (r.sub ? '<br><span style="color:var(--gray);font-size:11px;">' + comboEsc(r.sub) + '</span>' : '');
+                                 + (r.sub ? ' <span style="color:var(--gray);font-size:11px;">' + comboEsc(r.sub) + '</span>' : '');
         case "bizName":   return co && co.bizName ? comboEsc(co.bizName) : '<span style="color:var(--gray);">-</span>';
         case "bizNumber": return co && co.bizNumber ? comboEsc(co.bizNumber) : '<span style="color:var(--gray);">-</span>';
         case "reqDate":   return comboEsc(r.date || "-");
@@ -9965,22 +9967,30 @@
         case "status": {
           const c = r.canceled ? "var(--gray)" : (r.finished ? "#2e7d32" : "var(--danger)");
           return '<span style="color:' + c + ';">' + comboEsc(r.status) + '</span>'
-            + (r.onHold ? '<br><span style="background:#fff8e1;border:1px solid #e0c46c;color:#8a6d0b;font-size:11px;padding:0 5px;">보류</span>'
-                        + (r.holdReason ? '<br><span style="color:var(--gray);font-size:10.5px;">' + comboEsc(r.holdReason) + '</span>' : '') : '');
+            + (r.onHold ? ' <span style="background:#fff8e1;border:1px solid #e0c46c;color:#8a6d0b;font-size:11px;padding:0 5px;" title="'
+                        + comboEsc(r.holdReason || "보류") + '">보류</span>' : '');
         }
       }
       return "-";
     };
+
+    // 페이지 설정 — 다른 목록과 같은 방식입니다.
+    const pgEl = document.getElementById("reqboard-pagination");
+    if(pgEl){
+      pgEl.innerHTML = "";
+      pgEl.appendChild(renderPaginationBar("reqboard", view.length, loadReqBoard));
+    }
+    const { pageItems: pageView } = paginateSlice(view, "reqboard");
 
     const cols = RB_COLUMNS.filter(c=> reqViewSettings.includes(c.key));
     if(view.length === 0){
       listEl.innerHTML = '<div class="list-empty">해당하는 항목이 없습니다.</div>';
     }else{
       let vOwe=0, vRecv=0, vDone=0, vLeft=0, vTax=0;
-      const body = view.map(r=>{
-        if(!r.canceled && r.inSum){ vOwe+=r.owe; vRecv+=r.recv; vDone+=r.done; vLeft+=r.left; vTax+=r.taxAmount; }
+      view.forEach(r=>{ if(!r.canceled && r.inSum){ vOwe+=r.owe; vRecv+=r.recv; vDone+=r.done; vLeft+=r.left; vTax+=r.taxAmount; } });
+      const body = pageView.map(r=>{
         let tr = '<tr>' + cols.map(c=>
-          '<td' + (c.num ? ' class="ta-right"' : '') + ' style="white-space:' + (c.key==="company"||c.key==="payMemo" ? "normal" : "nowrap") + ';">'
+          '<td' + (c.num ? ' class="ta-right"' : '') + ' style="white-space:nowrap;padding-left:6px;padding-right:6px;">'
           + cellOf(r, c.key) + '</td>').join("") +
           '<td class="ta-right" style="white-space:nowrap;">' +
             ((r.canProcess && !r.canceled && !r.finished && canDo)
@@ -10007,13 +10017,14 @@
         if(c.key === "kind") return '<td>합계</td>';
         return '<td></td>';
       };
-      listEl.innerHTML = '<div style="overflow-x:auto;"><table class="data-table">' +
-        '<thead><tr>' + cols.map(c=>'<th' + (c.num ? ' class="ta-right"' : '') + '>' + c.label + '</th>').join("") + '<th></th></tr></thead>' +
+      listEl.innerHTML = '<div style="overflow-x:auto;"><table class="data-table resv-dest-fit" style="width:auto;">' +
+        '<thead><tr>' + cols.map(c=>'<th' + (c.num ? ' class="ta-right"' : '')
+          + ' style="white-space:nowrap;padding-left:6px;padding-right:6px;">' + c.label + '</th>').join("") + '<th></th></tr></thead>' +
         '<tbody>' + body +
         '<tr style="background:#fafafa;font-weight:700;border-top:2px solid var(--navy);">' +
         cols.map(sumCell).join("") + '<td></td></tr>' +
         '</tbody></table></div>' +
-        '<div style="color:var(--gray);font-size:11.5px;margin-top:4px;">합계는 <b>보이는 것</b> 기준이며 <b>취소</b>와 <b>선입금(미반영)</b>은 뺐습니다.</div>';
+        '<div style="color:var(--gray);font-size:11.5px;margin-top:4px;">합계는 <b>조건에 걸린 전체</b> 기준입니다. (페이지와 무관) <b>취소</b>와 <b>선입금(미반영)</b>은 뺐습니다.</div>';
     }
 
     const cardEl = document.getElementById("reqboard-cards");
@@ -10163,6 +10174,12 @@
       return true;
     };
     const view = rows.filter(pick);
+    const cbPg = document.getElementById("cashbook-pagination");
+    if(cbPg){
+      cbPg.innerHTML = "";
+      cbPg.appendChild(renderPaginationBar("cashbook", view.length, loadCashbook));
+    }
+    const { pageItems: cbPage } = paginateSlice(view, "cashbook");
 
     let sIn = 0, sOut = 0, sLeft = 0, noCo = 0;
     rows.forEach(r=>{
@@ -10190,7 +10207,7 @@
       el.innerHTML = '<div style="overflow-x:auto;"><table class="data-table">' +
         '<thead><tr><th>구분</th><th>날짜</th><th class="ta-right">금액</th><th>입금자명</th><th>업체</th>' +
         '<th class="ta-right">배분</th><th class="ta-right">남음</th><th>메모</th><th></th></tr></thead><tbody>' +
-        view.map(r=>{
+        cbPage.map(r=>{
           const isIn = r.kind === "in";
           let tr = '<tr>' +
             '<td><b style="color:' + (isIn ? "#1565c0" : "var(--danger)") + ';">' + (isIn ? "입금" : "출금") + '</b></td>' +
