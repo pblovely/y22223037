@@ -313,7 +313,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-07-28 v288</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-07-28 v289</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -379,8 +379,14 @@
     <div id="tab-dashboard" class="tab-panel">
       <div class="card">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
-          <h3 style="margin:0;">경영 지표 <span class="info-tip" title="수익·출고가·자금을 한눈에 봅니다. 보고할 때 필요한 칸만 보기 설정에서 고르세요. 고른 내용은 내 계정에만 저장됩니다.">ⓘ</span></h3>
-          <button class="btn small secondary" style="width:auto;" onclick="toggleProfitPanel()">보기 설정</button>
+          <h3 style="margin:0;">경영 지표 <span class="info-tip" title="수익·출고가·자금을 한눈에 봅니다. 보고할 때 필요한 칸만 보기 설정에서 고르세요.">ⓘ</span></h3>
+          <span class="btn-row" id="profit-head-btns">
+            <span id="profit-mode-btns" style="display:none;">
+              <button class="btn small" id="profit-mode-lock" style="width:auto;" onclick="setProfitViewMode('lock')">고정 화면</button>
+              <button class="btn small secondary" id="profit-mode-mine" style="width:auto;" onclick="setProfitViewMode('mine')">내 설정</button>
+            </span>
+            <button class="btn small secondary" id="profit-view-btn" style="width:auto;" onclick="toggleProfitPanel()">보기 설정</button>
+          </span>
         </div>
         <div id="profit-view-panel" style="display:none;border:1px solid var(--line);background:#fafafa;padding:10px 12px;margin-bottom:10px;">
           <div id="profit-view-checks" style="margin-bottom:8px;"></div>
@@ -391,6 +397,7 @@
             <button class="btn small secondary" style="width:auto;" onclick="toggleProfitPanel()">닫기</button>
           </span>
         </div>
+        <div id="profit-lock-note" style="display:none;font-size:11.5px;color:#8a6d0b;background:#fff8e1;border:1px solid #e0c46c;padding:6px 10px;margin-bottom:8px;">관리자가 고정한 화면입니다. 보이는 칸은 사이트 설정에서 바꿉니다.</div>
         <div id="profit-cards"></div>
       </div>
       <div class="card">
@@ -906,6 +913,21 @@
           <b>바꿨는데 옛 아이콘이 보이면</b> 브라우저가 기억하고 있는 것입니다. <b>Ctrl+Shift+R</b>로 새로고침하거나 탭을 닫았다 다시 열어주세요.
         </div>
         <div id="site-name-msg" style="font-size:12px;color:var(--navy);display:none;margin-top:8px;">저장되었습니다.</div>
+      </div>
+      <div class="card">
+        <h3>경영 지표 고정 <span class="info-tip" title="고정을 켜면 여기서 고른 칸만 모두에게 보입니다. 고정을 끄면 각자 본인 보기 설정대로 봅니다. 개인이 고른 값은 지워지지 않습니다.">ⓘ</span></h3>
+        <p class="desc" style="margin-top:0;">고정을 켜면 아래에서 고른 칸만 <b>모두에게</b> 보입니다. 개인 보기 설정 버튼은 숨겨집니다.<br>
+          고정을 끄면 각자 <b>본인이 고른 대로</b> 봅니다. 사이트 설정 권한자는 화면에서 <b>고정 화면 / 내 설정</b>을 골라볼 수 있습니다.</p>
+        <label style="font-size:13px;font-weight:700;display:block;margin-bottom:8px;">
+          <input type="checkbox" id="profit-lock-on"> 고정으로 적용 (모두에게 같은 칸만 보이기)
+        </label>
+        <div id="profit-lock-checks" style="margin-bottom:8px;"></div>
+        <span class="btn-row">
+          <button class="btn small" style="width:auto;" onclick="saveProfitLock()">저장</button>
+          <button class="btn small secondary" style="width:auto;" onclick="profitLockAll(true)">전부 고르기</button>
+          <button class="btn small secondary" style="width:auto;" onclick="profitLockAll(false)">전부 끄기</button>
+        </span>
+        <div id="profit-lock-msg" style="font-size:12px;color:var(--navy);display:none;margin-top:8px;">저장되었습니다.</div>
       </div>
       <div class="card">
         <h3>승인 대기 화면 문구</h3>
@@ -2636,6 +2658,11 @@
         tipLabels = currentSettings.tipLabels || {};
         dashFontSize = currentSettings.dashFontSize || "medium";
         dashSumBg = currentSettings.dashSumBg || "none";
+        if(currentSettings.profitLock && Array.isArray(currentSettings.profitLock.keys)){
+          profitLock = { on: currentSettings.profitLock.on === true,
+                         keys: currentSettings.profitLock.keys.length ? currentSettings.profitLock.keys : PROFIT_DEFAULT.slice() };
+        }
+        if(typeof renderProfitLockChecks === "function") renderProfitLockChecks();
         carrierOrder = Array.isArray(currentSettings.carrierOrder) && currentSettings.carrierOrder.length
           ? currentSettings.carrierOrder : DEFAULT_CARRIER_ORDER.slice();
         { const co = document.getElementById("carrier-order-input"); if(co) co.value = carrierOrder.join(", "); }
@@ -17668,7 +17695,64 @@
     { key:"stockCnt",    group:"자금",   label:"미판매 재고 대수",    note:"출고일 없는 재고", unit:true }
   ];
   const PROFIT_DEFAULT = ["saleAmt","costAmt","grossProfit","rebateDue","realProfit","listAmt","inDisc","totalRate"];
-  let profitCardKeys = PROFIT_DEFAULT.slice();
+  let profitCardKeys = PROFIT_DEFAULT.slice();          // 내가 고른 칸 (내 계정에 저장)
+  let profitLock = { on:false, keys:PROFIT_DEFAULT.slice() };   // 관리자가 고정한 칸 (모두 공통)
+  let profitViewMode = "lock";                          // 사이트 설정 권한자만 바꿉니다
+
+  window.setProfitViewMode = function(m){
+    profitViewMode = m;
+    ["lock","mine"].forEach(k=>{
+      const b = document.getElementById("profit-mode-" + k);
+      if(b) b.className = "btn small" + (k === m ? "" : " secondary");
+    });
+    if(typeof loadDashboard === "function") loadDashboard();
+  };
+
+  // 지금 화면에 쓸 칸 목록을 정합니다.
+  function activeProfitKeys(){
+    const canManage = hasPerm(currentUserPerms, "siteSettings");
+    if(profitLock.on && !(canManage && profitViewMode === "mine")) return profitLock.keys;
+    return profitCardKeys;
+  }
+
+  window.renderProfitLockChecks = function(){
+    const box = document.getElementById("profit-lock-checks");
+    if(!box) return;
+    const on = document.getElementById("profit-lock-on");
+    if(on) on.checked = !!profitLock.on;
+    box.innerHTML = "";
+    ["수익","출고가","자금"].forEach(g=>{
+      const t = document.createElement("div");
+      t.style.cssText = "font-size:11.5px;font-weight:700;color:var(--navy);margin:6px 0 2px;";
+      t.textContent = g;
+      box.appendChild(t);
+      PROFIT_CARDS.filter(c=>c.group===g).forEach(c=>{
+        const l = document.createElement("label");
+        l.style.cssText = "display:inline-block;margin:2px 10px 2px 0;font-size:12.5px;";
+        const cb = document.createElement("input");
+        cb.type = "checkbox"; cb.className = "profit-lock-opt"; cb.value = c.key;
+        cb.checked = profitLock.keys.includes(c.key);
+        l.appendChild(cb); l.appendChild(document.createTextNode(" " + c.label));
+        box.appendChild(l);
+      });
+    });
+  };
+  window.profitLockAll = function(on){
+    document.querySelectorAll(".profit-lock-opt").forEach(cb=> cb.checked = !!on);
+  };
+  window.saveProfitLock = async function(){
+    const keys = Array.from(document.querySelectorAll(".profit-lock-opt:checked")).map(cb=>cb.value);
+    const on = document.getElementById("profit-lock-on").checked;
+    if(on && keys.length === 0){ alert("고정으로 쓸 칸을 하나 이상 골라주세요."); return; }
+    profitLock = { on, keys };
+    try{
+      await setDoc(doc(db,"settings","general"), { profitLock }, { merge:true });
+      currentSettings.profitLock = profitLock;
+      logAction("경영 지표 고정 설정", (on ? "고정 켬" : "고정 끔") + " / " + keys.length + "칸");
+      flashMsg("profit-lock-msg");
+    }catch(e){ alert("저장에 실패했습니다."); return; }
+    if(typeof loadDashboard === "function") loadDashboard();
+  };
 
   window.toggleProfitPanel = function(){
     const p = document.getElementById("profit-view-panel");
@@ -17717,7 +17801,16 @@
     const el = document.getElementById("profit-cards");
     if(!el) return;
     const money = (v)=> Math.round(Number(v)||0).toLocaleString();
-    const show = PROFIT_CARDS.filter(c=> profitCardKeys.includes(c.key));
+    const keys = activeProfitKeys();
+    const show = PROFIT_CARDS.filter(c=> keys.includes(c.key));
+    // 고정 여부에 따라 버튼·안내를 보여줍니다.
+    const canManage = hasPerm(currentUserPerms, "siteSettings");
+    const modeBox = document.getElementById("profit-mode-btns");
+    const viewBtn = document.getElementById("profit-view-btn");
+    const note = document.getElementById("profit-lock-note");
+    if(modeBox) modeBox.style.display = (profitLock.on && canManage) ? "inline-flex" : "none";
+    if(viewBtn) viewBtn.style.display = (profitLock.on && !(canManage && profitViewMode === "mine")) ? "none" : "inline-block";
+    if(note) note.style.display = (profitLock.on && !(canManage && profitViewMode === "mine")) ? "block" : "none";
     let html = "";
     ["수익","출고가","자금"].forEach(g=>{
       const list = show.filter(c=>c.group===g);
