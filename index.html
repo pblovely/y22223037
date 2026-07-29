@@ -315,7 +315,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-07-29 v295</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-07-29 v296</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -12788,12 +12788,22 @@
       destNames.map(n=>'<option value="'+comboEsc(n)+'"'+(String(cur||"")===n?' selected':'')+'>'+comboEsc(n)+'</option>').join("") +
       ((cur && !destNames.includes(String(cur))) ? '<option value="'+comboEsc(cur)+'" selected>'+comboEsc(cur)+'  (업체정보에 없음)</option>' : '');
 
+    const beEditCarrierNames = await fetchNamesList("carriers");
     let h = "";
     if(kind === "order"){
       h += '<div class="stack-row"><label>매입처</label><select id="be-party">'+opts(b.source)+'</select></div>';
       h += '<div class="stack-row"><label>주문일</label><input type="text" id="be-date1" maxlength="8" inputmode="numeric" value="'+comboEsc(b.orderDate||"")+'"></div>';
       h += '<div class="stack-row"><label>도착예정일</label><input type="text" id="be-date2" maxlength="8" inputmode="numeric" value="'+comboEsc(b.expectedArrivalDate||"")+'"></div>';
       h += '<div class="stack-row"><label>입금예정일</label><input type="text" id="be-date3" maxlength="8" inputmode="numeric" value="'+comboEsc(b.payDueDate||"")+'"></div>';
+      // 통신사 — 주문 목록에 보이는 값입니다. 바꾸면 품목 줄에도 함께 반영할지 물어봅니다.
+      {
+        const curCar = b.carrier || [...new Set((lines||[]).map(l=>l.carrier).filter(Boolean))].join(",") || "";
+        h += '<div class="stack-row"><label>통신사 <span class="info-tip" title="주문 목록에 보이는 통신사입니다. 바꾸면 이 주문의 품목 통신사도 함께 바꿀지 물어봅니다.">ⓘ</span></label>'
+          + '<select id="be-carrier"><option value="">-</option>'
+          + (beEditCarrierNames||[]).map(n=>'<option value="'+comboEsc(n)+'"'+(curCar===n?' selected':'')+'>'+comboEsc(n)+'</option>').join("")
+          + ((curCar && !(beEditCarrierNames||[]).includes(curCar)) ? '<option value="'+comboEsc(curCar)+'" selected>'+comboEsc(curCar)+'</option>' : '')
+          + '</select></div>';
+      }
       h += '<div class="stack-row"><label>결제방식 <span class="info-tip" title="여신으로 바꾸면 잔여 여신에서 바로 차감되고 출금요청 대상에서 빠집니다. 일반으로 되돌리면 차감 기록도 함께 지워집니다.">ⓘ</span></label>'
         + '<select id="be-paymethod">'
         + '<option value="normal"'+(b.paymentMethod!=="b2b_credit"?' selected':'')+'>일반 (계좌이체 — 출금요청 필요)</option>'
@@ -12978,6 +12988,20 @@
       batchPatch.source = party; batchPatch.orderDate = d1; batchPatch.expectedArrivalDate = d2;
       const d3El = document.getElementById("be-date3");
       if(d3El) batchPatch.payDueDate = (d3El.value||"").replace(/\D/g,"");
+      // 통신사 — 바뀌었으면 품목 줄에도 함께 바꿀지 물어봅니다.
+      const carEl = document.getElementById("be-carrier");
+      if(carEl){
+        const newCar = carEl.value;
+        const oldCar = b.carrier || [...new Set((lines||[]).map(l=>l.carrier).filter(Boolean))].join(",") || "";
+        if(newCar !== oldCar){
+          batchPatch.carrier = newCar;
+          if(confirm("통신사를 " + (oldCar||"-") + " → " + (newCar||"-") + " 로 바꿉니다.\n\n"
+            + "이 주문의 품목 통신사도 함께 바꿀까요?\n"
+            + "(이미 도착·매칭된 줄은 그대로 둡니다)")){
+            linePatch.carrier = newCar;
+          }
+        }
+      }
 
     }else{
       batchPatch.destination = party; batchPatch.requestDate = d1;
