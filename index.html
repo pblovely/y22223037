@@ -315,7 +315,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-07-29 v293</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-07-29 v295</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -524,6 +524,7 @@
         </div>
         <div id="order-col-picker" style="display:none;border:1px solid var(--navy);background:#fafafa;padding:10px 12px;margin-bottom:8px;"></div>
         <div id="order-price-notice" style="display:none;font-size:12.5px;padding:9px 11px;margin-bottom:8px;border:1px solid var(--danger);background:#fdecea;line-height:1.7;"></div>
+        <div id="pending-arrival-box" style="margin-bottom:10px;"></div>
         <div id="order-list"></div>
       </div>
     </div>
@@ -6879,6 +6880,77 @@
     }catch(e){ el.style.display = "none"; }
   }
 
+  // ---------- 미입고 현황 ----------
+  //  아직 안 들어온 수량만 모델(행) × 통신사(열)로 보여줍니다.
+  //  다른 화면에 붙이려면 그 화면에 빈 칸을 만들고 renderPendingArrival("칸id", 주문품목목록) 을 부르면 됩니다.
+  function renderPendingArrival(elId, allLines){
+    const el = document.getElementById(elId);
+    if(!el) return;
+    // 취소된 품목은 빼고, 아직 안 들어온 수량만 셉니다.
+    const grid = {};           // grid[모델][통신사] = 수량
+    const amtByModel = {};     // 모델별 미입고 금액 (원가 기준)
+    const carrierSet = new Set();
+    let total = 0, totalAmt = 0;
+    (allLines||[]).forEach(o=>{
+      if(o.status === "취소") return;
+      const left = (Number(o.quantity)||0) - (Number(o.fulfilledCount)||0);
+      if(left <= 0) return;
+      const model = docModelLabel(o) || "-";
+      const car = (o.carrier || "미지정").trim();
+      carrierSet.add(car);
+      if(!grid[model]) grid[model] = {};
+      grid[model][car] = (grid[model][car] || 0) + left;
+      total += left;
+      // 금액은 원가(입고가) 기준입니다. 입고가가 비어 있으면 출고가에서 할인을 뺀 값으로 계산합니다.
+      const unit = Number(o.purchasePrice) || Math.max(0,
+        (Number(o.listPrice)||0) - (Number(o.preDiscountAmt)||0) - (Number(o.otherDiscountAmt)||0));
+      const amt = unit * left;
+      amtByModel[model] = (amtByModel[model] || 0) + amt;
+      totalAmt += amt;
+    });
+    if(total === 0){
+      el.innerHTML = '<div style="border:1px solid var(--line);background:#f4faf4;color:#2e7d32;padding:8px 11px;font-size:12.5px;">'
+        + '미입고 없음 — 주문한 물량이 모두 도착했습니다.</div>';
+      return;
+    }
+    // 통신사 순서는 사이트 설정의 순서를 따릅니다.
+    const carriers = (typeof sortCarriers === "function")
+      ? sortCarriers([...carrierSet]) : [...carrierSet].sort();
+    // 모델은 미입고가 많은 순
+    const models = Object.keys(grid).sort((a,b)=>{
+      const sa = carriers.reduce((n,c)=> n + (grid[a][c]||0), 0);
+      const sb = carriers.reduce((n,c)=> n + (grid[b][c]||0), 0);
+      return sb - sa || a.localeCompare(b);
+    });
+    const colTot = {}; carriers.forEach(c=> colTot[c] = 0);
+    let html = '<div style="font-size:12.5px;font-weight:700;margin-bottom:5px;">미입고 현황 '
+      + '<span style="color:var(--gray);font-weight:400;font-size:11.5px;">— 아직 안 들어온 수량만</span></div>'
+      + '<div style="overflow-x:auto;"><table class="data-table" style="width:auto;">'
+      + '<thead><tr><th style="text-align:left;">모델</th>'
+      + carriers.map(c=>'<th class="ta-right">'+comboEsc(c)+'</th>').join("")
+      + '<th class="ta-right" style="border-left:2px solid var(--navy);">합계</th>'
+      + '<th class="ta-right">미입고 금액</th></tr></thead><tbody>';
+    models.forEach(m=>{
+      let rowSum = 0;
+      html += '<tr><td style="text-align:left;">'+comboEsc(m)+'</td>'
+        + carriers.map(c=>{
+            const v = grid[m][c] || 0;
+            colTot[c] += v; rowSum += v;
+            return '<td class="ta-right"'+(v ? '' : ' style="color:var(--gray);"')+'>'+(v || '-')+'</td>';
+          }).join("")
+        + '<td class="ta-right" style="border-left:2px solid var(--navy);font-weight:700;">'+rowSum+'</td>'
+        + '<td class="ta-right">'+Math.round(amtByModel[m]||0).toLocaleString()+'</td></tr>';
+    });
+    html += '<tr style="background:#fafafa;font-weight:700;border-top:2px solid var(--navy);">'
+      + '<td style="text-align:left;">합계</td>'
+      + carriers.map(c=>'<td class="ta-right">'+colTot[c]+'</td>').join("")
+      + '<td class="ta-right" style="border-left:2px solid var(--navy);">'+total+'</td>'
+      + '<td class="ta-right">'+Math.round(totalAmt).toLocaleString()+'</td></tr>'
+      + '</tbody></table></div>'
+      + '<div style="color:var(--gray);font-size:11.5px;margin-top:4px;">금액은 <b>원가(입고가)</b> 기준입니다. 입고가가 비어 있는 품목은 출고가에서 할인을 뺀 값으로 계산합니다.</div>';
+    el.innerHTML = html;
+  }
+
   async function loadOrderList(){
     renderOrderPriceNotice();
     const listEl = document.getElementById("order-list");
@@ -6903,6 +6975,18 @@
     };
     Object.keys(ordersByBatch).forEach(k=> ordersByBatch[k].sort(byLineNo));
     orderBatchLinesCache = ordersByBatch;
+
+    // 미입고 현황 — 취소된 주문 묶음의 품목은 뺍니다.
+    {
+      const aliveBatch = new Set();
+      batchSnap.forEach(bd=>{ if(bd.data().status !== "취소") aliveBatch.add(bd.id); });
+      const allLines = [];
+      Object.keys(ordersByBatch).forEach(bid=>{
+        if(!aliveBatch.has(bid)) return;
+        ordersByBatch[bid].forEach(o=> allLines.push(o));
+      });
+      renderPendingArrival("pending-arrival-box", allLines);
+    }
 
     // 여신 차감 기록을 자동으로 맞춥니다. (설정에서 끌 수 있습니다)
     try{
