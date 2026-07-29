@@ -24,7 +24,6 @@
   .auth-box{ width:380px; background:#fff; border:2px solid var(--navy); padding:32px; }
   .auth-box h1{ font-size:19px; margin:0 0 4px 0; color:var(--navy); }
   .auth-box .sub{ font-size:13px; color:var(--gray); margin-bottom:22px; }
-  .field{ margin-bottom:13px; }
   .field label{ display:block; font-size:12px; font-weight:600; color:var(--navy); margin-bottom:4px; }
   .field input, .field select{ width:100%; padding:10px 12px; border:1px solid #c7c7c7; font-size:14px; background:#fff; font-family:inherit; }
   .field input:focus, .field select:focus{ outline:none; border-color:var(--accent); }
@@ -256,7 +255,6 @@
   /* 대시보드 지표 표 — 한 화면에 들어가도록 글씨와 여백을 줄입니다. */
   .data-table.dash-agg{ font-size:11px; }
   .data-table.dash-agg th, .data-table.dash-agg td{ padding:3px 7px; white-space:nowrap; }
-  .ta-center{ text-align:center; }
   /* 업체별 지표 표 — 좌우로 늘리지 않고 내용 너비만 차지하며 왼쪽에 붙입니다. */
   .data-table.resv-dest-fit{ width:auto !important; min-width:0 !important; margin:0 !important; table-layout:auto; }
   .data-table.resv-dest-fit th, .data-table.resv-dest-fit td{ white-space:nowrap; padding-left:10px; padding-right:10px; }
@@ -317,7 +315,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-07-28 v291</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-07-29 v293</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -8583,7 +8581,21 @@
     const remain = {};
     lines.forEach(o=> remain[o.id] = (Number(o.quantity)||0) - (Number(o.fulfilledCount)||0));
 
-    const ok = [], bad = [];
+    // 붙여넣은 일련번호 중 이미 재고에 있는 것을 먼저 찾아둡니다. (중복 입고를 막습니다)
+    const allSerials = [...new Set(rows.map(l=>{
+      const c = l.split(/\t|\s{2,}|\s/).map(x=>x.trim()).filter(Boolean);
+      return c.find(x=> /^[0-9]{4,}$/.test(x));
+    }).filter(Boolean))];
+    const already = new Set();
+    try{
+      for(let i=0; i<allSerials.length; i+=10){
+        const chunk = allSerials.slice(i, i+10);
+        const s = await getDocs(query(collection(db,"inventoryItems"), where("serialNumber","in",chunk)));
+        s.forEach(d=>{ const v=d.data(); if(v.deleted !== true) already.add(String(v.serialNumber||"").trim()); });
+      }
+    }catch(e){}
+
+    const ok = [], bad = [], skip = [];
     const seen = new Set();
     rows.forEach((line, i)=>{
       const label = (i+1) + "번째 줄";
@@ -8591,8 +8603,9 @@
       // 일련번호 = 숫자 4자리 이상
       const serial = c.find(x=> /^[0-9]{4,}$/.test(x));
       if(!serial){ bad.push({ label, reason:"일련번호를 찾지 못했습니다", raw:line }); return; }
-      if(seen.has(serial)){ bad.push({ label, reason:"같은 일련번호가 여러 번 있습니다", raw:line }); return; }
+      if(seen.has(serial)){ skip.push({ label, reason:"붙여넣기 안에 같은 일련번호가 또 있습니다", raw:line }); return; }
       seen.add(serial);
+      if(already.has(serial)){ skip.push({ label, reason:"이미 재고에 등록된 일련번호입니다", raw:line }); return; }
 
       const rest = c.filter(x=> x !== serial);
       // 품목 찾기 — 적어준 모델·색상으로 좁히고, 없으면 남은 품목 중 하나
@@ -8618,7 +8631,14 @@
     });
 
     bulkArrRows = ok;
-    let h = '<div style="font-weight:700;margin-bottom:8px;">분석 결과 — 정상 '+ok.length+'대 / 오류 '+bad.length+'줄</div>';
+    let h = '<div style="font-weight:700;margin-bottom:8px;">분석 결과 — 정상 '+ok.length+'대'
+      + (skip.length ? ' / <span style="color:#8a6d0b;">건너뜀 '+skip.length+'줄</span>' : '')
+      + ' / 오류 '+bad.length+'줄</div>';
+    if(skip.length){
+      h += '<div style="border:1px solid #e0c46c;background:#fff8e1;padding:8px 10px;margin-bottom:10px;max-height:160px;overflow-y:auto;">'
+        + '<b style="color:#8a6d0b;">이미 들어와 있어 빼둔 줄 '+skip.length+'개</b> <span style="color:var(--gray);">— 등록하지 않습니다. 남은 수량도 깎지 않습니다.</span><br>'
+        + skip.map(b=>'· '+comboEsc(b.label)+' — '+comboEsc(b.reason)+'<br><span style="color:var(--gray);font-size:11px;">'+comboEsc(b.raw)+'</span>').join('<br>') + '</div>';
+    }
     if(bad.length){
       h += '<div style="border:1px solid var(--danger);background:#fdecea;padding:8px 10px;margin-bottom:10px;max-height:180px;overflow-y:auto;">'
         + bad.map(b=>'· '+comboEsc(b.label)+' — '+comboEsc(b.reason)+'<br><span style="color:var(--gray);font-size:11px;">'+comboEsc(b.raw)+'</span>').join('<br>') + '</div>';
