@@ -315,7 +315,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-07-29 v298</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-07-30 v301</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -1834,7 +1834,7 @@
         <span class="btn-row"><button class="btn small secondary" style="width:auto;" onclick="addArrivalRow()">+ 한 대 더</button><button class="btn small secondary" style="width:auto;" onclick="toggleArrivalPaste()">일련번호 붙여넣기</button></span>
         <div id="arrival-paste-box" style="display:none;border:1px solid var(--navy);background:#f4f7fb;padding:10px 12px;margin-top:8px;margin-bottom:8px;">
           <div style="font-size:12.5px;font-weight:700;margin-bottom:6px;">일련번호를 그대로 붙여넣으세요</div>
-          <textarea id="arrival-paste-text" rows="6" style="width:100%;border:1px solid var(--line);padding:8px;font-size:12.5px;font-family:monospace;box-sizing:border-box;" placeholder="1038307&#10;1038472&#10;1038215&#10;&#10;또는  1038307  그레이&#10;(색상을 함께 적으면 색상도 채워집니다)"></textarea>
+          <textarea id="arrival-paste-text" rows="6" style="width:100%;border:1px solid var(--line);padding:8px;font-size:12.5px;font-family:monospace;box-sizing:border-box;" placeholder="1038307&#10;1038472&#10;&#10;또는 한 줄에 여러 개&#10;1038307 1038472 1038215&#10;&#10;또는 모델·색상을 위에 적고&#10;SM-F971N512&#10;그라파이트&#10;1038307&#10;1038472"></textarea>
           <div style="margin-top:8px;">
             <span class="btn-row"><button class="btn small" style="width:auto;" onclick="applyArrivalPaste()">넣기</button><button class="btn small secondary" style="width:auto;" onclick="applyArrivalPaste(true)">기존 줄 지우고 넣기</button></span>
           </div>
@@ -2250,7 +2250,7 @@
           <div style="color:var(--gray);margin-top:4px;padding-left:22px;">체크하지 않으면 판매요청만 만들어집니다. 실물이 도착한 뒤 판매 관리에서 재고 매칭하시면 됩니다.</div>
           <div id="resv-alloc-serial-wrap" style="display:none;margin-top:8px;">
             <div style="color:var(--gray);margin-bottom:4px;">보유중인 재고의 일련번호를 한 줄에 하나씩 적어주세요.</div>
-            <textarea id="resv-alloc-serials" rows="4" style="width:100%;border:1px solid #c7c7c7;padding:6px 8px;font-size:12.5px;font-family:inherit;box-sizing:border-box;" placeholder="1038307&#10;1038308"></textarea>
+            <textarea id="resv-alloc-serials" rows="4" style="width:100%;border:1px solid #c7c7c7;padding:6px 8px;font-size:12.5px;font-family:monospace;box-sizing:border-box;" placeholder="1038307&#10;1038308&#10;&#10;또는 한 줄에 여러 개&#10;1038307 1038308 1038309"></textarea>
             <div class="stack-form" style="margin-top:8px;">
               <div class="stack-row"><label>출고일 (판매일)</label><input type="text" id="resv-alloc-outdate-input" placeholder="비우면 오늘" maxlength="8" inputmode="numeric"></div>
             </div>
@@ -4085,6 +4085,79 @@
       }
     });
   };
+
+  // ---------- 붙여넣기 해석 (공통) ----------
+  //  모델·색상이 따로 줄로 있어도, 한 줄에 일련번호가 여러 개 있어도 읽습니다.
+  //   · 빈 줄을 기준으로 묶음을 나눕니다.
+  //   · 한 묶음에 모델 1개·색상 1개면 순서와 상관없이 묶음 전체에 적용합니다.
+  //   · 모델·색상이 여러 개면 위에서 만난 것이 아래 일련번호에 붙습니다. (모델이 바뀌면 색상 초기화)
+  //   · 줄 전체가 모델명·색상이면 통째로 봅니다. ("바이올렛 쉐도우"처럼 띄어쓰기가 있어도)
+  //   · 예전처럼 "모델 일련번호 색상"을 한 줄에 적어도 그대로 됩니다.
+  //  돌려주는 것: [{ sn, hints, line, no }]
+  function parseSerialPaste(raw){
+    const norm = v => String(v||"").trim().toLowerCase();
+    const modelSet = new Set(), colorSet = new Set();
+    (modelsCache||[]).forEach(m=>{
+      [m.systemModel, m.baseModel, m.petName].forEach(v=>{ if(v) modelSet.add(norm(v)); });
+      (m.colors||[]).forEach(c=>{
+        [c.manufacturerColor, c.systemColor].forEach(v=>{ if(v) colorSet.add(norm(v)); });
+      });
+    });
+    const isSn = x => /^[0-9]{4,}$/.test(x);
+
+    const rawLines = String(raw||"").split(/\r?\n/).map(x=> x.trim());
+    const blocks = [];
+    let cur = [];
+    rawLines.forEach((l, idx)=>{
+      if(!l){ if(cur.length) blocks.push(cur); cur = []; return; }
+      cur.push({ line:l, no:idx+1 });
+    });
+    if(cur.length) blocks.push(cur);
+
+    const out = [];
+    blocks.forEach(block=>{
+      const parsed = block.map(b=>{
+        const whole = b.line.trim();
+        if(modelSet.has(norm(whole)) || colorSet.has(norm(whole))){
+          return { no:b.no, line:b.line, cells:[whole], sns:[], others:[whole] };
+        }
+        const cells = b.line.split(/\t|\s{2,}|\s/).map(x=>x.trim()).filter(Boolean);
+        const sns = cells.filter(isSn);                    // 한 줄에 여러 개도 받습니다
+        return { no:b.no, line:b.line, cells, sns, others: cells.filter(x=> !isSn(x)) };
+      });
+      const mTok = [], cTok = [];
+      parsed.forEach(pp=>{
+        if(pp.sns.length) return;
+        pp.cells.forEach(c=>{
+          if(modelSet.has(norm(c))) mTok.push(c);
+          else if(colorSet.has(norm(c))) cTok.push(c);
+        });
+      });
+      const oneModel = [...new Set(mTok.map(norm))].length === 1;
+      const oneColor = [...new Set(cTok.map(norm))].length <= 1;
+
+      if(oneModel && oneColor){
+        const base = [...new Set([...mTok, ...cTok])];
+        parsed.forEach(pp=>{
+          pp.sns.forEach(sn=>{
+            out.push({ sn, hints:[...new Set([...base, ...pp.others])], line:pp.line, no:pp.no });
+          });
+        });
+      }else{
+        let cm = "", cc = "";
+        parsed.forEach(pp=>{
+          pp.others.forEach(c=>{
+            if(modelSet.has(norm(c))){ cm = c; cc = ""; }
+            else if(colorSet.has(norm(c))) cc = c;
+          });
+          pp.sns.forEach(sn=>{
+            out.push({ sn, hints:[...new Set([cm, cc, ...pp.others].filter(Boolean))], line:pp.line, no:pp.no });
+          });
+        });
+      }
+    });
+    return out;
+  }
 
   async function fetchModelsCache(){
     const snap = await getDocs(collection(db, "inventoryModels"));
@@ -8120,75 +8193,8 @@
     const ok = [], bad = [];
     const usedItem = new Set();
 
-    // ===== 붙여넣기 해석 =====
-    //  모델·색상이 따로 줄로 있어도 읽습니다.
-    //   · 빈 줄을 기준으로 묶음을 나눕니다.
-    //   · 한 묶음에 모델 1개·색상 1개면 순서와 상관없이 그 묶음 전체에 적용합니다.
-    //   · 색상이나 모델이 여러 개면 위에서 만난 것이 아래 일련번호에 붙습니다. (모델이 바뀌면 색상은 초기화)
-    //   · 예전처럼 "모델 일련번호 색상"을 한 줄에 적어도 그대로 됩니다.
-    const modelSet = new Set(), colorSet = new Set();
-    modelsCache.forEach(m=>{
-      [m.systemModel, m.baseModel, m.petName].forEach(v=>{ if(v) modelSet.add(norm(v)); });
-      (m.colors||[]).forEach(c=>{
-        [c.manufacturerColor, c.systemColor].forEach(v=>{ if(v) colorSet.add(norm(v)); });
-      });
-    });
-
-    const blocks = [];
-    let cur = [];
-    rawLines.forEach((l, idx)=>{
-      if(!l){ if(cur.length) blocks.push(cur); cur = []; return; }
-      cur.push({ line:l, no:idx+1 });
-    });
-    if(cur.length) blocks.push(cur);
-
-    const entries = [];
-    blocks.forEach(block=>{
-      const parsed = block.map(b=>{
-        // 줄 전체가 모델명이나 색상이면 통째로 봅니다. ("바이올렛 쉐도우"처럼 띄어쓰기가 있는 색상 때문)
-        const whole = b.line.trim();
-        if(modelSet.has(norm(whole)) || colorSet.has(norm(whole))){
-          return { no:b.no, line:b.line, cells:[whole], sn:undefined, others:[] };
-        }
-        const cells = b.line.split(/\t|\s{2,}|\s/).map(x=>x.trim()).filter(Boolean);
-        const sn = cells.find(x=> /^[0-9]{4,}$/.test(x));
-        return { no:b.no, line:b.line, cells, sn, others: cells.filter(x=> x !== sn) };
-      });
-      // 이 묶음에 나온 모델·색상을 모읍니다. (일련번호가 없는 줄에서만)
-      const mTok = [], cTok = [];
-      parsed.forEach(pp=>{
-        if(pp.sn) return;
-        pp.cells.forEach(c=>{
-          if(modelSet.has(norm(c))) mTok.push(c);
-          else if(colorSet.has(norm(c))) cTok.push(c);
-        });
-      });
-      const oneModel = [...new Set(mTok.map(norm))].length === 1;
-      const oneColor = [...new Set(cTok.map(norm))].length <= 1;
-
-      if(oneModel && oneColor){
-        // 순서와 상관없이 묶음 전체에 적용합니다.
-        const base = [...new Set([...mTok, ...cTok])];
-        parsed.forEach(pp=>{
-          if(!pp.sn) return;
-          entries.push({ sn:pp.sn, hints:[...new Set([...base, ...pp.others])], line:pp.line, no:pp.no });
-        });
-      }else{
-        // 위에서 만난 모델·색상이 아래 일련번호에 붙습니다.
-        let cm = "", cc = "";
-        parsed.forEach(pp=>{
-          pp.cells.forEach(c=>{
-            if(pp.sn && c === pp.sn) return;
-            if(modelSet.has(norm(c))){ cm = c; cc = ""; }        // 모델이 바뀌면 색상 초기화
-            else if(colorSet.has(norm(c))) cc = c;
-          });
-          if(pp.sn){
-            entries.push({ sn:pp.sn, hints:[...new Set([cm, cc, ...pp.others].filter(Boolean))], line:pp.line, no:pp.no });
-          }
-        });
-      }
-    });
-    // 일련번호가 하나도 없으면 알려줍니다.
+    // 붙여넣기 해석은 공통 함수를 씁니다. (모델·색상 줄, 한 줄에 여러 일련번호 모두 지원)
+    const entries = parseSerialPaste(raw);
     if(entries.length === 0){
       el.innerHTML = '<span style="color:var(--danger);">일련번호를 찾지 못했습니다. 숫자 4자리 이상이어야 합니다.</span>'; return;
     }
@@ -8729,19 +8735,20 @@
     const lines = (orderBatchLinesCache[batchId] || []).filter(o=> o.status !== "취소");
     if(lines.length === 0){ el.innerHTML = '<span style="color:var(--danger);">이 주문에 품목이 없습니다.</span>'; return; }
 
-    const rows = raw.split(/\r?\n/).map(x=>x.trim()).filter(Boolean);
-    if(rows.length === 0){ el.innerHTML = '<span style="color:var(--danger);">붙여넣은 내용이 없습니다.</span>'; return; }
+    if(!String(raw||"").trim()){ el.innerHTML = '<span style="color:var(--danger);">붙여넣은 내용이 없습니다.</span>'; return; }
     await fetchModelsCache();
 
     // 남은 수량을 품목별로 추적합니다.
     const remain = {};
     lines.forEach(o=> remain[o.id] = (Number(o.quantity)||0) - (Number(o.fulfilledCount)||0));
 
-    // 붙여넣은 일련번호 중 이미 재고에 있는 것을 먼저 찾아둡니다. (중복 입고를 막습니다)
-    const allSerials = [...new Set(rows.map(l=>{
-      const c = l.split(/\t|\s{2,}|\s/).map(x=>x.trim()).filter(Boolean);
-      return c.find(x=> /^[0-9]{4,}$/.test(x));
-    }).filter(Boolean))];
+    // 붙여넣기 해석 — 모델·색상 줄, 한 줄에 여러 일련번호 모두 지원 (공통 함수)
+    const entries = parseSerialPaste(raw);
+    if(entries.length === 0){
+      el.innerHTML = '<span style="color:var(--danger);">일련번호를 찾지 못했습니다. 숫자 4자리 이상이어야 합니다.</span>'; return;
+    }
+    // 이미 재고에 있는 일련번호를 먼저 찾아둡니다. (중복 입고를 막습니다)
+    const allSerials = [...new Set(entries.map(e=> e.sn))];
     const already = new Set();
     try{
       for(let i=0; i<allSerials.length; i+=10){
@@ -8753,17 +8760,15 @@
 
     const ok = [], bad = [], skip = [];
     const seen = new Set();
-    rows.forEach((line, i)=>{
-      const label = (i+1) + "번째 줄";
-      const c = line.split(/\t|\s{2,}|\s/).map(x=>x.trim()).filter(Boolean);
-      // 일련번호 = 숫자 4자리 이상
-      const serial = c.find(x=> /^[0-9]{4,}$/.test(x));
-      if(!serial){ bad.push({ label, reason:"일련번호를 찾지 못했습니다", raw:line }); return; }
+    entries.forEach(ent=>{
+      const label = ent.no + "번째 줄";
+      const line = ent.line;
+      const serial = ent.sn;
+      const rest = ent.hints;
       if(seen.has(serial)){ skip.push({ label, reason:"붙여넣기 안에 같은 일련번호가 또 있습니다", raw:line }); return; }
       seen.add(serial);
       if(already.has(serial)){ skip.push({ label, reason:"이미 재고에 등록된 일련번호입니다", raw:line }); return; }
 
-      const rest = c.filter(x=> x !== serial);
       // 품목 찾기 — 적어준 모델·색상으로 좁히고, 없으면 남은 품목 중 하나
       let cands = lines.filter(o=> remain[o.id] > 0);
       if(cands.length === 0){ bad.push({ label, reason:"이 주문에 남은 수량이 없습니다", raw:line }); return; }
@@ -8952,17 +8957,19 @@
   window.applyArrivalPaste = function(replaceAll){
     const raw = document.getElementById("arrival-paste-text").value;
     const msg = document.getElementById("arrival-paste-msg");
-    const lines = raw.split(/\r?\n/).map(x=>x.trim()).filter(Boolean);
-    if(lines.length === 0){ msg.innerHTML = '<span style="color:var(--danger);">붙여넣은 내용이 없습니다.</span>'; return; }
+    if(!String(raw||"").trim()){ msg.innerHTML = '<span style="color:var(--danger);">붙여넣은 내용이 없습니다.</span>'; return; }
 
     const preColor = currentArrivalOrderData
       ? (currentArrivalOrderData.systemColor || currentArrivalOrderData.manufacturerColor || "") : "";
-    const parsed = lines.map(line=>{
-      const c = line.split(/\t|\s{2,}|\s/).map(x=>x.trim()).filter(Boolean);
-      // 숫자가 많은 칸을 일련번호로 봅니다.
-      let serial = c.find(x=> /^[0-9]{4,}$/.test(x)) || c[0] || "";
-      const color = c.find(x=> x !== serial && !/^[0-9]+$/.test(x)) || "";
-      return { serial, color: color || preColor };
+    // 붙여넣기 해석은 공통 함수를 씁니다. (모델·색상 줄, 한 줄에 여러 일련번호 모두 지원)
+    // 색상만 골라내면 되므로, 알아낸 힌트 중 모델이 아닌 것을 색상으로 씁니다.
+    const colorNames = new Set();
+    (modelsCache||[]).forEach(m=> (m.colors||[]).forEach(c=>{
+      [c.manufacturerColor, c.systemColor].forEach(v=>{ if(v) colorNames.add(String(v).trim().toLowerCase()); });
+    }));
+    const parsed = parseSerialPaste(raw).map(e=>{
+      const col = (e.hints||[]).find(t=> colorNames.has(String(t).trim().toLowerCase())) || "";
+      return { serial: e.sn, color: col || preColor };
     }).filter(x=>x.serial);
 
     if(parsed.length === 0){ msg.innerHTML = '<span style="color:var(--danger);">일련번호를 찾지 못했습니다.</span>'; return; }
@@ -12192,7 +12199,8 @@
     let serials = [];
     let matchedDocs = [];
     if(wantMatch){
-      serials = document.getElementById("resv-alloc-serials").value.split(/[\n,\s]+/).map(x=>x.trim()).filter(Boolean);
+      // 붙여넣기 해석은 공통 함수를 씁니다. (모델·색상 줄이 섞여 있어도 일련번호만 골라냅니다)
+      serials = parseSerialPaste(document.getElementById("resv-alloc-serials").value).map(e=> e.sn);
       if(serials.length === 0){ msg("일련번호를 한 개 이상 적어주세요. (또는 체크를 해제하세요)", true); return; }
       if(serials.length > qty){ msg("일련번호가 배정 수량("+qty+")보다 많습니다. 수량을 늘리거나 일련번호를 줄여주세요.", true); return; }
       const dup = serials.filter((v,i)=>serials.indexOf(v)!==i);
