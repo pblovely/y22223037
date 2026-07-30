@@ -315,7 +315,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-07-29 v296</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-07-29 v298</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -8085,7 +8085,8 @@
     const el = document.getElementById("rb-result");
     const dest = document.getElementById("rb-dest").value;
     const raw  = document.getElementById("rb-serials").value;
-    const lines = raw.split(/\r?\n/).map(x=>x.trim()).filter(Boolean);
+    const rawLines = raw.split(/\r?\n/).map(x=> x.trim());
+    const lines = rawLines.filter(Boolean);
     if(lines.length === 0){ el.innerHTML = '<span style="color:var(--danger);">붙여넣은 내용이 없습니다.</span>'; return; }
     el.innerHTML = '<div style="color:var(--gray);">찾는 중...</div>';
     await fetchModelsCache();
@@ -8119,13 +8120,84 @@
     const ok = [], bad = [];
     const usedItem = new Set();
 
-    lines.forEach((line, i)=>{
-      const label = (i+1) + "번째 줄";
-      const cells = line.split(/\t|\s{2,}|\s/).map(x=>x.trim()).filter(Boolean);
-      // 일련번호 = 숫자만 4자리 이상인 칸
-      const sn = cells.find(x=> /^[0-9]{4,}$/.test(x));
-      if(!sn){ bad.push({ label, raw:line, reason:"일련번호를 찾지 못했습니다" }); return; }
-      const hints = cells.filter(x=> x !== sn);
+    // ===== 붙여넣기 해석 =====
+    //  모델·색상이 따로 줄로 있어도 읽습니다.
+    //   · 빈 줄을 기준으로 묶음을 나눕니다.
+    //   · 한 묶음에 모델 1개·색상 1개면 순서와 상관없이 그 묶음 전체에 적용합니다.
+    //   · 색상이나 모델이 여러 개면 위에서 만난 것이 아래 일련번호에 붙습니다. (모델이 바뀌면 색상은 초기화)
+    //   · 예전처럼 "모델 일련번호 색상"을 한 줄에 적어도 그대로 됩니다.
+    const modelSet = new Set(), colorSet = new Set();
+    modelsCache.forEach(m=>{
+      [m.systemModel, m.baseModel, m.petName].forEach(v=>{ if(v) modelSet.add(norm(v)); });
+      (m.colors||[]).forEach(c=>{
+        [c.manufacturerColor, c.systemColor].forEach(v=>{ if(v) colorSet.add(norm(v)); });
+      });
+    });
+
+    const blocks = [];
+    let cur = [];
+    rawLines.forEach((l, idx)=>{
+      if(!l){ if(cur.length) blocks.push(cur); cur = []; return; }
+      cur.push({ line:l, no:idx+1 });
+    });
+    if(cur.length) blocks.push(cur);
+
+    const entries = [];
+    blocks.forEach(block=>{
+      const parsed = block.map(b=>{
+        // 줄 전체가 모델명이나 색상이면 통째로 봅니다. ("바이올렛 쉐도우"처럼 띄어쓰기가 있는 색상 때문)
+        const whole = b.line.trim();
+        if(modelSet.has(norm(whole)) || colorSet.has(norm(whole))){
+          return { no:b.no, line:b.line, cells:[whole], sn:undefined, others:[] };
+        }
+        const cells = b.line.split(/\t|\s{2,}|\s/).map(x=>x.trim()).filter(Boolean);
+        const sn = cells.find(x=> /^[0-9]{4,}$/.test(x));
+        return { no:b.no, line:b.line, cells, sn, others: cells.filter(x=> x !== sn) };
+      });
+      // 이 묶음에 나온 모델·색상을 모읍니다. (일련번호가 없는 줄에서만)
+      const mTok = [], cTok = [];
+      parsed.forEach(pp=>{
+        if(pp.sn) return;
+        pp.cells.forEach(c=>{
+          if(modelSet.has(norm(c))) mTok.push(c);
+          else if(colorSet.has(norm(c))) cTok.push(c);
+        });
+      });
+      const oneModel = [...new Set(mTok.map(norm))].length === 1;
+      const oneColor = [...new Set(cTok.map(norm))].length <= 1;
+
+      if(oneModel && oneColor){
+        // 순서와 상관없이 묶음 전체에 적용합니다.
+        const base = [...new Set([...mTok, ...cTok])];
+        parsed.forEach(pp=>{
+          if(!pp.sn) return;
+          entries.push({ sn:pp.sn, hints:[...new Set([...base, ...pp.others])], line:pp.line, no:pp.no });
+        });
+      }else{
+        // 위에서 만난 모델·색상이 아래 일련번호에 붙습니다.
+        let cm = "", cc = "";
+        parsed.forEach(pp=>{
+          pp.cells.forEach(c=>{
+            if(pp.sn && c === pp.sn) return;
+            if(modelSet.has(norm(c))){ cm = c; cc = ""; }        // 모델이 바뀌면 색상 초기화
+            else if(colorSet.has(norm(c))) cc = c;
+          });
+          if(pp.sn){
+            entries.push({ sn:pp.sn, hints:[...new Set([cm, cc, ...pp.others].filter(Boolean))], line:pp.line, no:pp.no });
+          }
+        });
+      }
+    });
+    // 일련번호가 하나도 없으면 알려줍니다.
+    if(entries.length === 0){
+      el.innerHTML = '<span style="color:var(--danger);">일련번호를 찾지 못했습니다. 숫자 4자리 이상이어야 합니다.</span>'; return;
+    }
+
+    entries.forEach(ent=>{
+      const label = ent.no + "번째 줄";
+      const line = ent.line;
+      const sn = ent.sn;
+      const hints = ent.hints;
 
       let cands = (bySerial[sn] || []).filter(it=> !usedItem.has(it.id));
       if(cands.length === 0){ bad.push({ label, raw:line, reason:"재고에 없는 일련번호입니다 (" + sn + ")" }); return; }
