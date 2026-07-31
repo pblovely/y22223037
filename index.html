@@ -315,7 +315,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-07-31 v307</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-07-31 v309</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -798,6 +798,22 @@
 
         <button class="btn small" style="width:auto;margin-top:12px;" onclick="submitBatchEdit()">수정 저장</button>
         <div id="be-msg" style="display:none;font-size:12.5px;margin-top:10px;padding:8px 10px;border-left:3px solid var(--navy);background:#f2f2f2;line-height:1.6;"></div>
+      </div>
+    </div>
+
+    <!-- 목록으로 찾기 -->
+    <div id="ipk-overlay" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.55);z-index:1100;align-items:center;justify-content:center;">
+      <div style="background:#fff;border:2px solid var(--navy);max-width:560px;width:96%;max-height:92vh;overflow-y:auto;padding:22px;position:relative;">
+        <button onclick="closeInvPick()" style="position:absolute;top:12px;right:12px;background:none;border:1px solid var(--navy);width:26px;height:26px;cursor:pointer;font-size:13px;">✕</button>
+        <h3 style="margin-top:0;margin-bottom:4px;">목록으로 찾기</h3>
+        <p class="desc" style="margin-top:0;"><b>모델과 일련번호</b>를 붙여넣으면 그 재고들만 목록에 남습니다.<br>
+          모델이 맞지 않으면 뺍니다. 찾은 뒤 <b>전체 체크 → 일괄 변경</b>으로 비고 등을 한 번에 바꾸시면 됩니다.</p>
+        <textarea id="ipk-text" rows="9" style="width:100%;border:1px solid var(--line);padding:8px;font-size:12.5px;font-family:monospace;box-sizing:border-box;" placeholder="SM-F776N512&#10;그라파이트&#10;79387&#10;79599&#10;79044&#10;&#10;SM-F776N256&#10;블랙&#10;79778&#10;&#10;또는 한 줄에&#10;SM-F776N512 79387 그라파이트"></textarea>
+        <div id="ipk-msg" style="font-size:12.5px;margin:8px 0;"></div>
+        <span class="btn-row">
+          <button class="btn small" style="width:auto;" onclick="runInvPick()">찾기</button>
+          <button class="btn small secondary" style="width:auto;" onclick="closeInvPick()">닫기</button>
+        </span>
       </div>
     </div>
 
@@ -1657,6 +1673,7 @@
             </select>
             <input type="text" id="primary-cond-value" placeholder="검색어" style="width:115px;">
             <button class="btn small secondary" onclick="openAddConditionModal()">+ 조건 추가</button>
+            <button class="btn small secondary" onclick="openInvPick()">목록으로 찾기</button>
             <button class="btn small push" style="" onclick="loadInventoryList()">조회</button>
           </div>
           <!-- 2행: 목록 도구 -->
@@ -1679,6 +1696,7 @@
         </div>
 
         <div style="overflow-x:auto;">
+        <div id="inv-pick-bar" style="display:none;border:1px solid var(--navy);background:#f4f7fb;padding:8px 11px;margin-bottom:8px;font-size:12.5px;"></div>
         <div id="inventory-list"></div>
         </div>
       </div>
@@ -12290,6 +12308,113 @@
   }
 
   // 배정 취소: 판매요청을 취소하고, 매칭된 재고는 보유중으로 되돌리고, 예약의 배정 수량을 줄입니다.
+  // ---------- 목록으로 찾기 ----------
+  //  모델 + 일련번호를 붙여넣으면 그 재고들만 목록에 남깁니다.
+  //  모델이 다르면 빼고, 못 찾은 줄을 따로 알려줍니다.
+  let invPickIds = null;      // null 이면 안 걸림
+  let invPickInfo = null;     // { found, missing:[{line, reason}] }
+
+  window.openInvPick = function(){
+    document.getElementById("ipk-text").value = "";
+    document.getElementById("ipk-msg").innerHTML = "";
+    document.getElementById("ipk-overlay").style.display = "flex";
+  };
+  window.closeInvPick = function(){
+    document.getElementById("ipk-overlay").style.display = "none";
+  };
+  window.clearInvPick = function(){
+    invPickIds = null; invPickInfo = null;
+    loadInventoryList();
+  };
+
+  window.runInvPick = async function(){
+    const msg = document.getElementById("ipk-msg");
+    const raw = document.getElementById("ipk-text").value;
+    if(!String(raw||"").trim()){
+      msg.innerHTML = '<span style="color:var(--danger);">붙여넣은 내용이 없습니다.</span>'; return;
+    }
+    await fetchModelsCache();
+    const entries = parseSerialPaste(raw);
+    if(entries.length === 0){
+      msg.innerHTML = '<span style="color:var(--danger);">일련번호를 찾지 못했습니다. 숫자 4자리 이상이어야 합니다.</span>'; return;
+    }
+    msg.innerHTML = '<span style="color:var(--gray);">찾는 중입니다...</span>';
+
+    // 일련번호로 후보를 모은 뒤, 적어준 모델·색상과 맞는 것만 남깁니다.
+    const bySerial = {};
+    const sns = [...new Set(entries.map(e=> e.sn))];
+    try{
+      for(let i=0; i<sns.length; i+=10){
+        const chunk = sns.slice(i, i+10);
+        const s = await getDocs(query(collection(db,"inventoryItems"), where("serialNumber","in",chunk)));
+        s.forEach(d=>{
+          const v = d.data();
+          if(v.deleted === true) return;
+          const sn = String(v.serialNumber||"").trim();
+          if(!bySerial[sn]) bySerial[sn] = [];
+          bySerial[sn].push({ id:d.id, ...v });
+        });
+      }
+    }catch(e){
+      msg.innerHTML = '<span style="color:var(--danger);">찾는 중 문제가 생겼습니다.</span>'; return;
+    }
+
+    const norm = v => String(v||"").trim().toLowerCase();
+    const ids = new Set(), missing = [];
+    entries.forEach(ent=>{
+      let cands = bySerial[ent.sn] || [];
+      if(cands.length === 0){
+        missing.push({ line: ent.line, reason: "재고에 없는 일련번호입니다 (" + ent.sn + ")" }); return;
+      }
+      // 적어준 모델·색상으로 좁힙니다. 모델이 안 맞으면 뺍니다.
+      let modelGiven = false;
+      (ent.hints||[]).forEach(t=>{
+        const tl = norm(t);
+        const byModel = cands.filter(it=>
+          norm(it.systemModel) === tl || norm(it.baseModel) === tl ||
+          norm(it.petName) === tl || norm(it.sku) === tl);
+        if(byModel.length > 0){ cands = byModel; modelGiven = true; return; }
+        const byColor = cands.filter(it=>
+          norm(it.systemColor) === tl || norm(it.manufacturerColor) === tl);
+        if(byColor.length > 0) cands = byColor;
+      });
+      if(!modelGiven && (bySerial[ent.sn]||[]).length > 1){
+        missing.push({ line: ent.line, reason: "같은 일련번호가 여러 모델에 있습니다 — 모델을 함께 적어주세요" }); return;
+      }
+      if(cands.length === 0){
+        missing.push({ line: ent.line, reason: "적어주신 모델·색상과 맞는 재고가 없습니다" }); return;
+      }
+      cands.forEach(it=> ids.add(it.id));
+    });
+
+    if(ids.size === 0){
+      msg.innerHTML = '<span style="color:var(--danger);">맞는 재고를 하나도 찾지 못했습니다.</span>'
+        + (missing.length ? '<div style="margin-top:6px;font-size:11.5px;color:var(--gray);line-height:1.7;">'
+            + missing.slice(0,8).map(x=>'· '+comboEsc(x.reason)+'<br><span style="color:#999;">'+comboEsc(x.line)+'</span>').join('<br>')
+            + (missing.length>8 ? '<br>... 외 '+(missing.length-8)+'줄' : '') + '</div>' : '');
+      return;
+    }
+    invPickIds = ids;
+    invPickInfo = { found: ids.size, missing };
+    closeInvPick();
+    loadInventoryList();
+  };
+
+  // 목록 위에 안내를 보여줍니다.
+  function renderInvPickBar(){
+    const el = document.getElementById("inv-pick-bar");
+    if(!el) return;
+    if(!invPickIds){ el.style.display = "none"; el.innerHTML = ""; return; }
+    const miss = (invPickInfo && invPickInfo.missing) || [];
+    el.style.display = "block";
+    el.innerHTML = '<b>목록으로 찾기</b> — ' + invPickIds.size + '건만 보이는 중'
+      + (miss.length ? ' · <span style="color:var(--danger);">못 찾은 줄 ' + miss.length + '개</span>' : '')
+      + ' <button class="btn small secondary" style="width:auto;margin-left:8px;" onclick="clearInvPick()">해제</button>'
+      + (miss.length ? '<div style="margin-top:6px;font-size:11.5px;color:var(--gray);line-height:1.7;">'
+          + miss.slice(0,10).map(x=>'· '+comboEsc(x.reason)+' <span style="color:#999;">'+comboEsc(x.line)+'</span>').join('<br>')
+          + (miss.length>10 ? '<br>... 외 '+(miss.length-10)+'줄' : '') + '</div>' : '');
+  }
+
   // ---------- 배정 취소 — 일련번호 고르기 ----------
   //  매칭된 재고가 있으면 어떤 단말기를 되돌릴지 골라서 취소합니다.
   //  일부만 고르면 그 대수만 빠지고 배정은 남습니다. 전부 고르면 배정 자체가 취소됩니다.
@@ -16718,6 +16843,25 @@
     addViewCfgBtn("dl-b2b", "b2b-ledger-list");
   }
 
+  // 재고 목록 조건을 처음 상태로 되돌립니다. (목록은 부르지 않습니다)
+  //  · 되돌림: 조건 검색·추가 조건·날짜 범위·목록으로 찾기
+  //  · 그대로 둠: 정렬·보기 설정(열)·페이지 크기 — 개인 설정이라 유지합니다
+  function resetInvConditions(){
+    const setVal = (id, v)=>{ const e = document.getElementById(id); if(e) e.value = v; };
+    const setChk = (id, v)=>{ const e = document.getElementById(id); if(e) e.checked = v; };
+    setVal("filter-date-from-native", ""); setVal("filter-date-to-native", "");
+    setChk("filter-date-all", false);
+    const f1 = document.getElementById("filter-date-from-native"); if(f1) f1.disabled = false;
+    const f2 = document.getElementById("filter-date-to-native");   if(f2) f2.disabled = false;
+    setVal("primary-cond-value", "");
+    setVal("primary-cond-match", "포함");
+    if(typeof onCondMatchChange === "function") onCondMatchChange();
+    activeConditions = [];
+    if(typeof renderConditionChips === "function") renderConditionChips();
+    invPickIds = null; invPickInfo = null;      // 목록으로 찾기도 해제
+    showDeletedInventory = false;               // 삭제함 보기도 꺼둡니다
+  }
+
   window.clearDateFilter = function(){
     document.getElementById("filter-date-from-native").value = "";
     document.getElementById("filter-date-to-native").value = "";
@@ -18927,6 +19071,9 @@
     const normDate = (v)=> String(v||"").replace(/\D/g,"");
 
     let items = allRows.slice();
+    // 「목록으로 찾기」로 고른 재고가 있으면 그것만 남깁니다.
+    if(invPickIds) items = items.filter(it=> invPickIds.has(it.id));
+    renderInvPickBar();
 
     // "삭제함" 표시된 재고는 기본으로 숨깁니다. 보기 버튼으로 켜서 볼 수 있습니다.
     const deletedCount = items.filter(it=> it.deleted === true).length;
@@ -21085,6 +21232,8 @@
     if(tabId==="tab-inv-work"){
       loadModelsIntoItemSelect(); loadSourcesIntoSelect(); loadDestIntoSelect(); loadCarriersIntoSelect();
       loadManufacturersIntoSelect(); loadLocationsIntoSelect(); loadStatusesIntoSelect();
+      // 메뉴로 들어올 때마다 조건을 처음 상태로 되돌립니다. (예전 조건이 남아 헷갈리지 않게)
+      resetInvConditions();
       syncViewCheckboxes(); loadInventoryList();
       if(!document.getElementById("item-indate-input").value){
         document.getElementById("item-indate-input").value = todayStr();
