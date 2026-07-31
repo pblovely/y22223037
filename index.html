@@ -315,7 +315,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-07-30 v304</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-07-30 v305</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -798,6 +798,23 @@
 
         <button class="btn small" style="width:auto;margin-top:12px;" onclick="submitBatchEdit()">수정 저장</button>
         <div id="be-msg" style="display:none;font-size:12.5px;margin-top:10px;padding:8px 10px;border-left:3px solid var(--navy);background:#f2f2f2;line-height:1.6;"></div>
+      </div>
+    </div>
+
+    <!-- 배정 취소 — 일련번호 고르기 -->
+    <div class="modal-overlay" id="acp-overlay" style="display:none;">
+      <div class="modal-box" style="max-width:560px;">
+        <h3 style="margin-top:0;margin-bottom:4px;">배정 취소 — 되돌릴 단말기 고르기</h3>
+        <p class="desc" style="margin-top:0;">체크한 단말기만 <b>보유중</b>으로 되돌립니다.<br>
+          <b>일부만 고르면</b> 그 대수만 빠지고 배정은 남습니다. <b>전부 고르면</b> 배정 자체가 취소됩니다.</p>
+        <div id="acp-info" style="border:1px solid var(--line);background:#fafafa;padding:8px 11px;font-size:12.5px;margin-bottom:8px;"></div>
+        <div id="acp-list" style="max-height:260px;overflow-y:auto;border:1px solid var(--line);margin-bottom:8px;"></div>
+        <div class="stack-row"><label>취소 사유</label><input type="text" id="acp-reason" placeholder="필수"></div>
+        <div id="acp-msg" style="font-size:12.5px;margin:6px 0;"></div>
+        <span class="btn-row" style="margin-top:6px;">
+          <button class="btn small danger" style="width:auto;" onclick="submitAllocCancelPick()">되돌리기</button>
+          <button class="btn small secondary" style="width:auto;" onclick="closeAllocCancelPick()">닫기</button>
+        </span>
       </div>
     </div>
 
@@ -12255,11 +12272,138 @@
     el.innerHTML = html;
 
     el.querySelectorAll('[data-cancel-alloc]').forEach(btn=>{
-      btn.onclick = ()=> cancelResvAllocation(btn.dataset.cancelAlloc);
+      btn.onclick = ()=> openAllocCancelPick(btn.dataset.cancelAlloc);
     });
   }
 
   // 배정 취소: 판매요청을 취소하고, 매칭된 재고는 보유중으로 되돌리고, 예약의 배정 수량을 줄입니다.
+  // ---------- 배정 취소 — 일련번호 고르기 ----------
+  //  매칭된 재고가 있으면 어떤 단말기를 되돌릴지 골라서 취소합니다.
+  //  일부만 고르면 그 대수만 빠지고 배정은 남습니다. 전부 고르면 배정 자체가 취소됩니다.
+  let allocCancelTarget = null;   // { saleRequestId, sr, items:[{id, serial, color}] }
+
+  window.openAllocCancelPick = async function(saleRequestId){
+    const srSnap = await getDoc(doc(db,"saleRequests", saleRequestId));
+    if(!srSnap.exists()){ alert("이미 삭제된 판매요청입니다."); return; }
+    const sr = srSnap.data();
+    if(sr.status === "취소"){ alert("이미 취소된 배정입니다."); return; }
+
+    const ids = sr.matchedItemIds || [];
+    // 아직 재고가 안 붙었으면 고를 게 없으니 예전 방식으로 통째 취소합니다.
+    if(ids.length === 0){ cancelResvAllocation(saleRequestId); return; }
+
+    const items = [];
+    for(const id of ids){
+      try{
+        const s = await getDoc(doc(db,"inventoryItems", id));
+        if(s.exists()){
+          const v = s.data();
+          items.push({ id, serial: v.serialNumber || "-", color: v.systemColor || v.manufacturerColor || "-",
+                       model: docModelLabel(v) });
+        }else{
+          items.push({ id, serial:"(재고 없음)", color:"-", model:"-" });
+        }
+      }catch(e){}
+    }
+    allocCancelTarget = { saleRequestId, sr, items };
+
+    const box = document.getElementById("acp-list");
+    box.innerHTML = '<table class="data-table" style="width:auto;"><thead><tr>'
+      + '<th style="width:34px;"><input type="checkbox" id="acp-all" checked></th>'
+      + '<th style="text-align:left;">일련번호</th><th style="text-align:left;">모델</th><th>색상</th>'
+      + '</tr></thead><tbody>'
+      + items.map((x,i)=>'<tr><td><input type="checkbox" class="acp-ck" value="'+i+'" checked></td>'
+          + '<td style="text-align:left;">'+comboEsc(x.serial)+'</td>'
+          + '<td style="text-align:left;">'+comboEsc(x.model)+'</td>'
+          + '<td>'+comboEsc(x.color)+'</td></tr>').join("")
+      + '</tbody></table>';
+    document.getElementById("acp-info").innerHTML =
+      '<b>' + comboEsc(sr.destination||"-") + '</b> · 배정 ' + (Number(sr.quantity)||0) + '개 · 판매가 '
+      + (Number(sr.salePrice)||0).toLocaleString();
+    document.getElementById("acp-reason").value = "";
+    document.getElementById("acp-msg").innerHTML = "";
+    document.getElementById("acp-overlay").style.display = "flex";
+    const all = document.getElementById("acp-all");
+    if(all) all.onchange = ()=> document.querySelectorAll(".acp-ck").forEach(c=> c.checked = all.checked);
+  };
+  window.closeAllocCancelPick = function(){
+    document.getElementById("acp-overlay").style.display = "none";
+    allocCancelTarget = null;
+  };
+
+  window.submitAllocCancelPick = async function(){
+    if(!allocCancelTarget) return;
+    const { saleRequestId, sr, items } = allocCancelTarget;
+    const msg = document.getElementById("acp-msg");
+    const picked = Array.from(document.querySelectorAll(".acp-ck:checked")).map(c=> items[Number(c.value)]);
+    if(picked.length === 0){ msg.innerHTML = '<span style="color:var(--danger);">되돌릴 일련번호를 골라주세요.</span>'; return; }
+    const reason = document.getElementById("acp-reason").value.trim();
+    if(!reason){ msg.innerHTML = '<span style="color:var(--danger);">취소 사유를 넣어주세요.</span>'; return; }
+
+    const isAll = picked.length === items.length;
+    const qty = Number(sr.quantity) || 0;
+    const nextQty = Math.max(0, qty - picked.length);
+    if(!confirm(
+      (isAll ? "이 배정을 전부 취소합니다." : "고른 " + picked.length + "대만 되돌립니다.") + "\n\n"
+      + "· 재고 " + picked.length + "대를 <보유중>으로 되돌립니다\n"
+      + "  (판매처·판매가·출고일을 비웁니다)\n"
+      + (isAll ? "· 판매요청이 취소 상태가 됩니다\n" : "· 배정 수량이 " + qty + "개 → " + nextQty + "개로 줄어듭니다\n")
+      + "· 예약의 배정 수량도 " + picked.length + "개 줄어듭니다\n\n"
+      + "되돌릴 수 없습니다. 진행할까요?")) return;
+
+    try{
+      // 1) 고른 재고를 보유중으로
+      for(let i=0; i<picked.length; i+=300){
+        const batch = writeBatch(db);
+        picked.slice(i, i+300).forEach(x=>{
+          batch.update(doc(db,"inventoryItems", x.id), {
+            status:"보유중", outDate:"", destination:"",
+            salePrice:null, saleDiscountAmt:null, saleDiscount:null,
+            profit:null, saleRequestId:null
+          });
+        });
+        await batch.commit();
+      }
+      for(const x of picked){
+        await logItem(x.id, x.serial, "status", "배정 취소로 <보유중> 되돌림 · 사유: " + reason, {});
+      }
+      // 2) 판매요청 — 전부면 취소, 일부면 수량·매칭만 줄입니다
+      const restIds = items.filter(x=> !picked.includes(x)).map(x=> x.id);
+      if(isAll){
+        await updateDoc(doc(db,"saleRequests", saleRequestId), { status:"취소",
+          cancelReason: reason, cancelledAt: serverTimestamp(), cancelledBy: currentUser.name });
+        if(sr.batchId){ try{ await updateDoc(doc(db,"saleRequestBatches", sr.batchId), { status:"취소" }); }catch(e){} }
+      }else{
+        await updateDoc(doc(db,"saleRequests", saleRequestId), {
+          quantity: nextQty, fulfilledCount: restIds.length, matchedItemIds: restIds
+        });
+      }
+      // 3) 예약의 배정 수량 감소
+      if(sr.fromReservationId){
+        const rSnap = await getDoc(doc(db,"reservations", sr.fromReservationId));
+        if(rSnap.exists()){
+          const cur = Number(rSnap.data().allocatedQty)||0;
+          await updateDoc(doc(db,"reservations", sr.fromReservationId),
+            { allocatedQty: Math.max(0, cur - picked.length) });
+        }
+      }
+    }catch(e){
+      msg.innerHTML = '<span style="color:var(--danger);">되돌리지 못했습니다. ' + comboEsc((e&&e.message)?e.message:String(e)) + '</span>';
+      return;
+    }
+
+    logAction(isAll ? "예약 배정 취소" : "예약 배정 일부 취소",
+      (sr.destination||"-") + " / " + picked.length + "대 / "
+      + picked.map(x=>x.serial).slice(0,8).join(", ") + (picked.length>8 ? " 외" : "")
+      + " / 사유: " + reason);
+    closeAllocCancelPick();
+    alert(picked.length + "대를 되돌렸습니다.");
+    if(currentResvAlloc) await renderResvAllocHistory(currentResvAlloc.id);
+    loadReservationTable();
+    if(typeof loadSaleRequestList === "function") loadSaleRequestList();
+    loadInventoryList();
+  };
+
   window.cancelResvAllocation = async function(saleRequestId){
     const srSnap = await getDoc(doc(db,"saleRequests", saleRequestId));
     if(!srSnap.exists()){ alert("이미 삭제된 판매요청입니다."); return; }
