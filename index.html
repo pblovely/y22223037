@@ -315,7 +315,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-07-31 v306</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-07-31 v307</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -8930,12 +8930,19 @@
     }
     // 이미 재고에 있는 일련번호를 먼저 찾아둡니다. (중복 입고를 막습니다)
     const allSerials = [...new Set(entries.map(e=> e.sn))];
-    const already = new Set();
+    // 같은 일련번호라도 모델이 다르면 다른 단말기입니다. 그래서 모델까지 함께 기억합니다.
+    const already = {};   // 일련번호 → 이미 재고에 있는 전산모델명 모음
     try{
       for(let i=0; i<allSerials.length; i+=10){
         const chunk = allSerials.slice(i, i+10);
         const s = await getDocs(query(collection(db,"inventoryItems"), where("serialNumber","in",chunk)));
-        s.forEach(d=>{ const v=d.data(); if(v.deleted !== true) already.add(String(v.serialNumber||"").trim()); });
+        s.forEach(d=>{
+          const v = d.data();
+          if(v.deleted === true) return;
+          const sn = String(v.serialNumber||"").trim();
+          if(!already[sn]) already[sn] = new Set();
+          already[sn].add(modelDupKey(v.systemModel||""));
+        });
       }
     }catch(e){}
 
@@ -8946,10 +8953,6 @@
       const line = ent.line;
       const serial = ent.sn;
       const rest = ent.hints;
-      if(seen.has(serial)){ skip.push({ label, reason:"붙여넣기 안에 같은 일련번호가 또 있습니다", raw:line }); return; }
-      seen.add(serial);
-      if(already.has(serial)){ skip.push({ label, reason:"이미 재고에 등록된 일련번호입니다", raw:line }); return; }
-
       // 품목 찾기 — 적어준 모델·색상으로 좁히고, 없으면 남은 품목 중 하나
       let cands = lines.filter(o=> remain[o.id] > 0);
       if(cands.length === 0){ bad.push({ label, reason:"이 주문에 남은 수량이 없습니다", raw:line }); return; }
@@ -8968,6 +8971,16 @@
         return;
       }
       const o = cands[0];
+      // 모델까지 같아야 같은 단말기로 봅니다. (같은 일련번호가 다른 모델에 있을 수 있습니다)
+      const mKey = modelDupKey(o.systemModel||"");
+      const seenKey = mKey + "|" + serial;
+      if(seen.has(seenKey)){
+        skip.push({ label, reason:"붙여넣기 안에 같은 모델·일련번호가 또 있습니다", raw:line }); return;
+      }
+      seen.add(seenKey);
+      if(already[serial] && already[serial].has(mKey)){
+        skip.push({ label, reason:"이미 재고에 등록된 일련번호입니다 (" + (o.systemModel||"-") + ")", raw:line }); return;
+      }
       remain[o.id] -= 1;
       ok.push({ label, serial, order:o });
     });
