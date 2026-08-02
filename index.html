@@ -315,7 +315,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-07-31 v309</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-07-31 v310</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -18225,6 +18225,8 @@
     const sel = document.getElementById("start-tab-select");
     if(!sel) return;
     const cur = (currentSettings && currentSettings.startTab) || "";
+    // 저장된 값이 지금 없는 화면이면(없앤 메뉴 등) 알려주고 「자동」으로 보여줍니다.
+    const curGone = cur && !document.getElementById(cur);
     const opts = [];
     document.querySelectorAll(".tab-btn[data-tab]").forEach(btn=>{
       const id = btn.dataset.tab;
@@ -18234,6 +18236,7 @@
       opts.push({ id, nm });
     });
     sel.innerHTML = '<option value="">자동 (권한에 따라)</option>'
+      + (curGone ? '<option value="'+comboEsc(cur)+'" selected>(없어진 화면: '+comboEsc(cur)+') — 다시 골라주세요</option>' : '')
       + opts.map(o=>'<option value="'+o.id+'"'+(o.id===cur?' selected':'')+'>'+comboEsc(o.nm)+'</option>').join("");
   };
 
@@ -21180,10 +21183,20 @@
   };
 
   window.switchTab = function(tabId){
+    // 없는 화면 이름이 들어오면(없앤 메뉴가 설정에 남은 경우 등) 아무것도 안 열리고 멈춥니다.
+    // 그래서 먼저 확인하고, 없으면 볼 수 있는 첫 화면으로 보냅니다.
+    const panel = document.getElementById(tabId);
+    if(!panel){
+      try{ sessionStorage.removeItem("lastTab"); }catch(e){}
+      const first = document.querySelector('.tab-btn[data-tab]:not([data-perm-hidden="1"])');
+      const fb = first && first.dataset.tab;
+      if(fb && fb !== tabId && document.getElementById(fb)) return switchTab(fb);
+      return;
+    }
     rememberTab(tabId);
     document.querySelectorAll(".tab-panel").forEach(el=>el.classList.remove("active"));
     document.querySelectorAll(".tab-btn").forEach(el=>el.classList.remove("active"));
-    document.getElementById(tabId).classList.add("active");
+    panel.classList.add("active");
     const btn = document.querySelector('.tab-btn[data-tab="'+tabId+'"]');
     if(btn) btn.classList.add("active");
 
