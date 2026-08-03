@@ -315,7 +315,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-07-31 v311</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-07-31 v314</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -1014,6 +1014,15 @@
         <div id="issuer-msg" style="font-size:12px;color:var(--navy);display:none;margin-top:8px;">저장되었습니다.</div>
       </div>
       <div class="card">
+        <h3>입출금 계좌 <span class="info-tip" title="입출금 내역을 등록할 때 고를 수 있는 계좌 별칭입니다. 은행·계좌번호를 다 적을 필요 없이 알아보기 쉬운 이름이면 됩니다.">ⓘ</span></h3>
+        <p class="desc">입출금 내역을 등록할 때 <b>어느 계좌로 들어오고 나갔는지</b> 고를 수 있습니다. 하나씩 추가하세요. (예: 우리은행 운영)</p>
+        <div class="inline-form">
+          <input type="text" id="new-bankaccount-input" placeholder="예: 우리은행 운영" style="max-width:300px;">
+          <button class="btn small" onclick="addBankAccount()">추가</button>
+        </div>
+        <div id="bankaccount-list"></div>
+      </div>
+      <div class="card">
         <h3>목록 페이지 크기 <span class="info-tip" title="모든 목록의 페이지 크기 선택칸에 나타나는 숫자입니다. 쉼표로 구분해서 원하는 만큼 넣으세요.">ⓘ</span></h3>
         <p class="desc">목록 오른쪽 위 선택칸에 표시될 숫자입니다. 쉼표로 구분해 입력하세요. (예: 10,20,30,100)</p>
         <div class="inline-form">
@@ -1516,6 +1525,9 @@
           <div class="stack-row"><label>날짜</label><input type="text" id="cb-date" placeholder="20260727"></div>
           <div class="stack-row"><label>금액</label><input type="text" id="cb-amount" placeholder="숫자만"></div>
           <div class="stack-row"><label>입금자명</label><input type="text" id="cb-payer" placeholder="통장에 찍힌 이름 (필수)"></div>
+          <div class="stack-row"><label>계좌 <span class="info-tip" title="어느 계좌로 들어오고 나갔는지 고릅니다. 목록은 사이트 설정 → 입출금 계좌에서 넣습니다.">ⓘ</span></label>
+            <select id="cb-account"><option value="">(선택 안 함)</option></select>
+          </div>
           <div class="stack-row"><label>업체명</label>
             <input type="text" id="cb-company" list="cb-company-datalist" placeholder="모르면 비워두세요 (타이핑하면 목록)">
             <datalist id="cb-company-datalist"></datalist>
@@ -1545,6 +1557,9 @@
           <div>업체 <b id="pp-company">-</b></div>
           <div>계좌 <span id="pp-account">-</span></div>
           <div>요청금액 <b id="pp-total">0</b> · 남은금액 <b id="pp-left" style="color:var(--danger);">0</b></div>
+        </div>
+        <div class="stack-row"><label>가져오기 <span class="info-tip" title="입출금 내역에 등록해둔 돈에서 가져옵니다. 남은 금액만큼 자동으로 채워지고, 저장하면 그만큼 잔액이 줄어듭니다. 금액이 딱 안 맞아도 나눠서 여러 번 쓸 수 있습니다.">ⓘ</span></label>
+          <select id="pp-pick" onchange="onPayPickChange()"><option value="">직접 입력</option></select>
         </div>
         <div class="stack-row"><label>금액</label><input type="text" id="pp-amount" placeholder="숫자만"></div>
         <div class="stack-row"><label>날짜</label><input type="text" id="pp-date" placeholder="20260727"></div>
@@ -2722,6 +2737,7 @@
         tipLabels = currentSettings.tipLabels || {};
         dashFontSize = currentSettings.dashFontSize || "medium";
         dashSumBg = currentSettings.dashSumBg || "none";
+
         if(currentSettings.profitLock && Array.isArray(currentSettings.profitLock.keys)){
           profitLock = { on: currentSettings.profitLock.on === true,
                          keys: currentSettings.profitLock.keys.length ? currentSettings.profitLock.keys : PROFIT_DEFAULT.slice() };
@@ -3265,6 +3281,38 @@
     if(currentSettings.pageSizeIncludeAll !== false) arr.push("all");
     return arr;
   }
+  // 입출금 계좌 별칭 — 다른 목록(통신사·위치 등)과 같은 방식으로 관리합니다.
+  let bankAccountList = [];
+  window.addBankAccount = async function(){
+    const input = document.getElementById("new-bankaccount-input");
+    const name = input.value.trim();
+    if(!name) return;
+    const names = await fetchNamesList("bankAccounts");
+    if(names.includes(name)){ alert("이미 있는 계좌입니다."); return; }
+    await addDoc(collection(db, "bankAccounts"), { name });
+    logAction("입출금 계좌 추가", name);
+    input.value = "";
+    loadBankAccountList();
+  };
+  function loadBankAccountList(){
+    renderEditableList({
+      collectionName:"bankAccounts", listElId:"bankaccount-list", label:"입출금 계좌",
+      reload: loadBankAccountList,
+      cascadeList:[{collection:"bankDeposits", field:"account"}],
+      afterChange: refreshBankAccounts
+    });
+  }
+  // 계좌 목록을 다시 읽어 선택칸에 반영합니다.
+  async function refreshBankAccounts(){
+    try{ bankAccountList = await fetchNamesList("bankAccounts"); }catch(e){ bankAccountList = []; }
+    const accSel = document.getElementById("cb-account");
+    if(accSel){
+      const cur = accSel.value;
+      accSel.innerHTML = '<option value="">(선택 안 함)</option>'
+        + bankAccountList.map(n=>'<option value="'+comboEsc(n)+'"'+(cur===n?' selected':'')+'>'+comboEsc(n)+'</option>').join("");
+    }
+  }
+
   window.savePageSizes = async function(){
     const raw = document.getElementById("page-sizes-input").value;
     const arr = raw.split(",").map(x=>Number(String(x).trim())).filter(n=> Number.isFinite(n) && n>0);
@@ -10627,6 +10675,8 @@
     if(!companiesCache.length){ try{ await fetchCompanies(); }catch(e){} }
     const dl = document.getElementById("cb-company-datalist");
     if(dl) dl.innerHTML = companiesCache.map(c=>'<option value="'+comboEsc(c.name||"")+'"></option>').join("");
+    // 계좌 별칭 목록 (사이트 설정 → 입출금 계좌에서 넣은 것)
+    await refreshBankAccounts();
 
     let snap;
     try{ snap = await getDocs(query(collection(db,"bankDeposits"), orderBy("date","desc"))); }
@@ -10642,6 +10692,7 @@
         kind: (x.kind === "out") ? "out" : "in",
         date: x.date || "-", amount: amt, used, left: Math.max(0, amt - used),
         payer: x.payer || "", company: (x.company||"").trim(), memo: x.memo || "",
+        account: x.account || "",
         uses: Array.isArray(x.uses) ? x.uses : []
       });
     });
@@ -10686,7 +10737,7 @@
       el.innerHTML = '<div class="list-empty">해당하는 내역이 없습니다.</div>';
     }else{
       el.innerHTML = '<div style="overflow-x:auto;"><table class="data-table">' +
-        '<thead><tr><th>구분</th><th>날짜</th><th class="ta-right">금액</th><th>입금자명</th><th>업체</th>' +
+        '<thead><tr><th>구분</th><th>날짜</th><th class="ta-right">금액</th><th>입금자명</th><th>계좌</th><th>업체</th>' +
         '<th class="ta-right">배분</th><th class="ta-right">남음</th><th>메모</th><th></th></tr></thead><tbody>' +
         cbPage.map(r=>{
           const isIn = r.kind === "in";
@@ -10695,6 +10746,7 @@
             '<td style="white-space:nowrap;">' + comboEsc(r.date) + '</td>' +
             '<td class="ta-right" style="font-weight:700;">' + r.amount.toLocaleString() + '</td>' +
             '<td>' + (r.payer ? comboEsc(r.payer) : '<span style="color:var(--gray);">-</span>') + '</td>' +
+            '<td>' + (r.account ? comboEsc(r.account) : '<span style="color:var(--gray);">-</span>') + '</td>' +
             '<td>' + (r.company ? '<b>' + comboEsc(r.company) + '</b>'
                                 : '<span style="color:#b8860b;">미연결</span>') + '</td>' +
             '<td class="ta-right">' + (r.used ? r.used.toLocaleString() : '-') + '</td>' +
@@ -10708,7 +10760,7 @@
                 : '<span style="color:var(--gray);">-</span>') +
             '</td></tr>';
           if(r.uses.length){
-            tr += '<tr><td colspan="9" style="background:#fafafa;font-size:11.5px;line-height:1.9;">' +
+            tr += '<tr><td colspan="10" style="background:#fafafa;font-size:11.5px;line-height:1.9;">' +
               r.uses.map(u=> '· 배분 ' + (Number(u.amount)||0).toLocaleString()
                 + (u.destination ? ' → ' + comboEsc(u.destination) : '')
                 + (u.date ? ' (' + comboEsc(u.date) + ')' : '')).join('<br>') +
@@ -10737,6 +10789,7 @@
     const amount = Number(String(document.getElementById("cb-amount").value).replace(/[^0-9.\-]/g,""));
     const payer  = document.getElementById("cb-payer").value.trim();
     const company= document.getElementById("cb-company").value.trim();
+    const account= (document.getElementById("cb-account")||{}).value || "";
     const memo   = document.getElementById("cb-memo").value.trim();
 
     if(date.length !== 8){ show("날짜를 20260727 형태로 넣어주세요."); return; }
@@ -10745,12 +10798,13 @@
 
     try{
       await addDoc(collection(db,"bankDeposits"), {
-        kind, date, amount, payer, company, memo,
+        kind, date, amount, payer, company, memo, account,
         usedAmount: 0, uses: [],
         createdBy: currentUser.name, createdByUsername: currentUser.username, createdAt: serverTimestamp()
       });
       logAction(kind === "out" ? "입출금 내역 등록 (출금)" : "입출금 내역 등록 (입금)",
         amount.toLocaleString() + " / " + date + " / " + payer + (company ? " / " + company : " / 업체 미연결")
+        + (account ? " / " + account : "")
         + (memo ? " / " + memo : ""));
     }catch(e){ show("저장에 실패했습니다."); return; }
 
@@ -10941,6 +10995,7 @@
   //  요청 줄의 [처리]를 누르면 열립니다. 승인 단계 없이 저장하면 바로 반영됩니다.
   //  대신 누가·언제·얼마를 넣었는지 이력에 남기고, 잘못 넣으면 지울 수 있습니다.
   let payProcTarget = null;   // { kind:"in"|"out", id, p }
+  let payPickCache = {};      // 골라 쓸 수 있는 입출금 내역
 
   window.openPayProcess = async function(kind, id, p){
     if(!hasPerm(currentUserPerms, "paymentProcess")){
@@ -10991,7 +11046,62 @@
     document.getElementById("pp-taxamount").value = p.taxInvoiceAmount || "";
     document.getElementById("pp-memo").value = "";
     document.getElementById("pp-msg").innerHTML = "";
+
+    // 입출금 내역에서 아직 안 쓴 돈을 골라 쓸 수 있게 목록을 채웁니다.
+    //  · 입금요청이면 <입금> 내역, 출금요청이면 <출금> 내역만 보여줍니다.
+    payPickCache = {};
+    const sel = document.getElementById("pp-pick");
+    if(sel){
+      sel.innerHTML = '<option value="">직접 입력</option>';
+      try{
+        const snap = await getDocs(query(collection(db,"bankDeposits"), orderBy("date","desc")));
+        const rows = [];
+        snap.forEach(d=>{
+          const x = d.data();
+          const rowKind = (x.kind === "out") ? "out" : "in";
+          if(rowKind !== kind) return;
+          const rest = (Number(x.amount)||0) - (Number(x.usedAmount)||0);
+          if(rest <= 0) return;
+          payPickCache[d.id] = { ...x, rest };
+          rows.push({ id:d.id, ...x, rest });
+        });
+        const firstWho = who.split(",")[0].trim();
+        rows.sort((a,b)=>{
+          const am = (String(a.company||"").trim() === firstWho) ? 0 : 1;
+          const bm = (String(b.company||"").trim() === firstWho) ? 0 : 1;
+          return am - bm || String(b.date||"").localeCompare(String(a.date||""));
+        });
+        sel.innerHTML += rows.map(r=>
+          '<option value="'+r.id+'">' + comboEsc(r.date||"-") + ' · ' + comboEsc(r.payer||"-")
+          + (r.company ? ' (' + comboEsc(r.company) + ')' : ' (업체 미연결)')
+          + ' · 남음 ' + r.rest.toLocaleString() + '</option>').join("");
+      }catch(e){}
+    }
+
     document.getElementById("payproc-overlay").style.display = "flex";
+  };
+
+  // 등록된 입출금을 고르면 금액·날짜·이름을 채웁니다.
+  //  금액은 <요청 남은금액>과 <입출금 남은금액> 중 작은 쪽으로 넣습니다.
+  window.onPayPickChange = function(){
+    const sel = document.getElementById("pp-pick");
+    if(!sel || !payProcTarget) return;
+    const id = sel.value;
+    if(!id){ return; }
+    const x = payPickCache[id];
+    if(!x) return;
+    const { kind, p } = payProcTarget;
+    const isIn = (kind === "in");
+    const total = Number(p.totalAmount) || 0;
+    const done  = Number(isIn ? p.receivedAmount : p.paidAmount) || 0;
+    const left  = Math.max(0, total - done);
+    const use = Math.min(left || x.rest, x.rest);
+    document.getElementById("pp-amount").value = use;
+    document.getElementById("pp-date").value   = x.date || todayStr();
+    if(x.payer) document.getElementById("pp-payer").value = x.payer;
+    document.getElementById("pp-msg").innerHTML =
+      '<span style="color:var(--gray);">이 내역의 남은 금액 <b>' + x.rest.toLocaleString() + '</b> 중 '
+      + '<b>' + use.toLocaleString() + '</b> 을 씁니다. 금액은 고쳐도 됩니다.</span>';
   };
 
   window.closePayProcess = function(){
@@ -11023,9 +11133,19 @@
       if(!confirm("요청금액보다 " + (before + amount - total).toLocaleString() + "원 많습니다.\n\n그래도 저장할까요?")) return;
     }
 
+    // 등록된 입출금에서 가져오는 경우, 남은 금액을 넘지 않는지 봅니다.
+    const pickId = (document.getElementById("pp-pick")||{}).value || "";
+    if(pickId){
+      const px = payPickCache[pickId];
+      if(px && amount > px.rest){
+        if(!confirm("고르신 내역의 남은 금액(" + px.rest.toLocaleString() + ")보다 "
+          + (amount - px.rest).toLocaleString() + "원 많습니다.\n\n그래도 저장할까요?")) return;
+      }
+    }
     // 승인 단계 없이 바로 반영되도록 승인된 기록으로 저장합니다.
     const rec = { amount, date, payer, memo, by: currentUser.name,
-                  approved:true, approvedBy: currentUser.name, approvedAt: date };
+                  approved:true, approvedBy: currentUser.name, approvedAt: date,
+                  ...(pickId ? { depositId: pickId } : {}) };
     const list = [...((isIn ? p.receipts : p.payments) || []), rec];
     const sum  = list.filter(x=> x.approved).reduce((n,x)=> n + (Number(x.amount)||0), 0);
     const full = total > 0 && sum >= total;
@@ -11061,11 +11181,27 @@
           }
         }
       }
+      // 고른 입출금 내역의 잔액을 그만큼 줄입니다.
+      if(pickId){
+        try{
+          const dsnap = await getDoc(doc(db,"bankDeposits", pickId));
+          if(dsnap.exists()){
+            const dx = dsnap.data();
+            await updateDoc(doc(db,"bankDeposits", pickId), {
+              usedAmount: (Number(dx.usedAmount)||0) + amount,
+              uses: [...(dx.uses||[]), { amount, date, destination: payer || "",
+                     memo: (isIn ? "입금요청" : "출금요청") + " 처리", by: currentUser.name }],
+              ...(dx.company ? {} : { company: payer || "" })
+            });
+          }
+        }catch(e){}
+      }
       logAction(isIn ? "입금 처리" : "출금 처리",
         (payer||"-") + " / " + amount.toLocaleString() + " / " + date
         + " / 누적 " + sum.toLocaleString() + "·요청 " + total.toLocaleString()
         + (full ? " / 완료" : " / 부분")
         + (taxOn ? " / 세금계산서 발행" : "")
+        + (pickId ? " / 등록내역에서 가져옴" : "")
         + (memo ? " / " + memo : ""));
     }catch(e){
       show("저장에 실패했습니다. " + comboEsc((e && e.message) ? e.message : String(e))); return;
@@ -21433,6 +21569,7 @@
         document.getElementById("pending-title-input").value = currentSettings.pendingTitle || DEFAULT_PENDING_TITLE;
         document.getElementById("pending-desc-input").value = currentSettings.pendingDesc || DEFAULT_PENDING_DESC;
         document.getElementById("pending-icon-input").value = currentSettings.pendingIconUrl || "";
+        loadBankAccountList();
         document.getElementById("page-sizes-input").value =
           (Array.isArray(currentSettings.pageSizes) && currentSettings.pageSizes.length>0)
             ? currentSettings.pageSizes.join(",") : DEFAULT_PAGE_SIZES.join(",");
