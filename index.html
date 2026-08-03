@@ -315,7 +315,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-07-31 v314</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-03 v316</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -355,6 +355,7 @@
           <button class="tab-btn" data-label-key="inv-admin" id="tabbtn-inv-admin" onclick="openInvAdminSection()" style="display:none;"><span class="tab-label-text">재고 기초설정</span></button>
           <button class="tab-btn" data-tab="tab-users" data-label-key="tab-users" id="tabbtn-users" onclick="switchTab('tab-users')" style="display:none;"><span class="tab-label-text">사용자 관리</span> <span id="user-admin-badge" style="display:none;background:var(--danger);color:#fff;font-size:10px;padding:1px 6px;margin-left:4px;">0</span></button>
           <button class="tab-btn" data-tab="tab-reqboard" data-label-key="tab-reqboard" id="tabbtn-reqboard" onclick="switchTab('tab-reqboard')" style="display:none;"><span class="tab-label-text">입출금리스트</span></button>
+          <button class="tab-btn" data-tab="tab-tax" data-label-key="tab-tax" id="tabbtn-tax" onclick="switchTab('tab-tax')" style="display:none;"><span class="tab-label-text">세금계산서</span></button>
           <button class="tab-btn" data-tab="tab-cashbook" data-label-key="tab-cashbook" id="tabbtn-cashbook" onclick="switchTab('tab-cashbook')" style="display:none;"><span class="tab-label-text">입출금 내역</span></button>
           <button class="tab-btn" data-tab="tab-paycheck" data-label-key="tab-paycheck" id="tabbtn-paycheck" onclick="switchTab('tab-paycheck')" style="display:none;"><span class="tab-label-text">단말기 입금 대조</span></button>
           <button class="tab-btn" data-tab="tab-lgrefund" data-label-key="tab-lgrefund" id="tabbtn-lgrefund" onclick="switchTab('tab-lgrefund')" style="display:none;"><span class="tab-label-text">LG 환불·수수료</span></button>
@@ -840,7 +841,14 @@
         <h3 style="margin-top:0;margin-bottom:4px;">할인율 계산기</h3>
         <p class="desc" style="margin-top:0;">모델명(또는 삼성코드)과 수량을 붙여넣으면 <b>등록된 모델의 출고가</b>로 총액을 냅니다.<br>
           <b>합계금액</b>을 넣으면 할인율을 <b>소수점 둘째자리</b>까지 계산합니다. 등록 안 된 모델은 빨갛게 알려드립니다.</p>
-        <textarea id="dc-text" rows="7" style="width:100%;border:1px solid var(--line);padding:8px;font-size:12.5px;font-family:monospace;box-sizing:border-box;" placeholder="SM-L355NZKAKOD&#9;30&#10;SM-L355NZSAKOD&#9;30&#10;SM-L345NZEAKOD&#9;20&#10;SM-L345NZKAKOD&#9;20&#10;&#10;(출고가가 함께 붙여넣어져 있어도 됩니다 — 등록된 출고가를 씁니다)"></textarea>
+        <div style="border:1px solid #e0c46c;background:#fff8e1;padding:8px 11px;margin-bottom:8px;font-size:12.5px;line-height:1.8;">
+          <b style="color:#8a6d0b;">사진에서 읽기</b>
+          <input type="file" id="dc-image" accept="image/*" onchange="onDiscountImage(event)" style="font-size:12px;margin-left:8px;">
+          <span style="color:var(--gray);">또는 아래 칸에 사진을 <b>Ctrl+V</b></span><br>
+          <span style="color:var(--gray);font-size:11.5px;">읽은 글자가 <b>틀릴 수 있습니다.</b> 계산하기 전에 꼭 눈으로 확인해주세요. 화면을 찍은 사진보다 <b>엑셀에서 복사</b>가 정확합니다.</span>
+          <div id="dc-ocr-msg" style="margin-top:4px;"></div>
+        </div>
+        <textarea id="dc-text" rows="9" onpaste="onDiscountPaste(event)" style="width:100%;border:1px solid var(--line);padding:8px;font-size:12.5px;font-family:monospace;box-sizing:border-box;" placeholder="SM-L355NZKAKOD&#9;30&#10;SM-L355NZSAKOD&#9;30&#10;SM-L345NZEAKOD&#9;20&#10;SM-L345NZKAKOD&#9;20&#10;&#10;(출고가가 함께 붙여넣어져 있어도 됩니다 — 등록된 출고가를 씁니다)&#10;(사진을 Ctrl+V 로 붙여넣어도 됩니다)"></textarea>
         <div class="tbar-row" style="display:flex;gap:0;flex-wrap:wrap;align-items:center;margin:8px 0;">
           <span style="font-size:12px;color:var(--gray);margin-right:6px;">합계금액</span>
           <input type="text" id="dc-actual" placeholder="실제 매입 합계금액" oninput="recalcDiscountCalc()" style="width:180px;height:28px;border:1px solid var(--line);padding:0 8px;font-size:12.5px;box-sizing:border-box;">
@@ -1506,6 +1514,64 @@
         <span class="btn-row" style="margin-top:8px;">
           <button class="btn small" style="width:auto;" onclick="submitReqEdit()">저장</button>
           <button class="btn small secondary" style="width:auto;" onclick="closeReqEdit()">닫기</button>
+        </span>
+      </div>
+    </div>
+
+    <div id="tab-tax" class="tab-panel">
+      <div class="card">
+        <h3 style="margin:0;">세금계산서 <span class="info-tip" title="매입·매출 세금계산서를 등록합니다. 매입 계산서 중 「B2B 사용가능」을 체크한 것은 은행 대출 증빙으로 쓸 수 있고, 대출에 쓴 만큼 한도가 줄어듭니다.">ⓘ</span></h3>
+        <p class="desc" style="margin-top:0;">매입·매출 세금계산서를 등록합니다.<br>
+          매입 계산서에 <b>「B2B 사용가능」</b>을 체크하면 그 금액만큼 <b>은행 대출 한도</b>가 생깁니다. 대출에 쓴 만큼 한도가 줄고, <b>남은 한도로 나눠서</b> 또 쓸 수 있습니다. 최대는 계산서 금액입니다.</p>
+        <div id="tax-cards" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px;"></div>
+
+        <div style="border:1px solid var(--line);background:#fafafa;padding:10px 12px;margin-bottom:12px;">
+          <div style="font-size:12.5px;font-weight:700;margin-bottom:6px;">새 계산서 등록</div>
+          <div class="stack-row"><label>구분</label>
+            <select id="tx-kind"><option value="buy">매입 (받은 계산서)</option><option value="sale">매출 (발행한 계산서)</option></select>
+          </div>
+          <div class="stack-row"><label>발행일</label><input type="text" id="tx-date" placeholder="20260831"></div>
+          <div class="stack-row"><label>거래처</label>
+            <input type="text" id="tx-company" list="tx-company-datalist" placeholder="타이핑하면 목록">
+            <datalist id="tx-company-datalist"></datalist>
+          </div>
+          <div class="stack-row"><label>계산서번호</label><input type="text" id="tx-no" placeholder="선택"></div>
+          <div class="stack-row"><label>금액</label><input type="text" id="tx-amount" placeholder="숫자만"></div>
+          <div class="stack-row"><label>B2B</label>
+            <label style="font-size:12.5px;"><input type="checkbox" id="tx-b2bok"> 사용가능 (매입 계산서만)</label>
+          </div>
+          <div class="stack-row"><label>메모</label><input type="text" id="tx-memo" placeholder="선택"></div>
+          <div id="tx-msg" style="font-size:12.5px;margin:6px 0;"></div>
+          <button class="btn small" style="width:auto;" onclick="submitTaxInvoice()">등록</button>
+        </div>
+
+        <span class="btn-row" style="display:inline-flex;margin-bottom:10px;">
+          <button class="btn small" id="tx-f-all" style="width:auto;" onclick="setTaxFilter('all')">전체</button>
+          <button class="btn small secondary" id="tx-f-buy" style="width:auto;" onclick="setTaxFilter('buy')">매입</button>
+          <button class="btn small secondary" id="tx-f-sale" style="width:auto;" onclick="setTaxFilter('sale')">매출</button>
+          <button class="btn small secondary" id="tx-f-b2b" style="width:auto;" onclick="setTaxFilter('b2b')">B2B 사용가능</button>
+          <button class="btn small secondary" id="tx-f-left" style="width:auto;" onclick="setTaxFilter('left')">한도 남음</button>
+        </span>
+        <div id="tax-pagination"></div>
+        <div id="tax-list"></div>
+      </div>
+    </div>
+
+    <!-- 세금계산서 수정 -->
+    <div id="taxedit-overlay" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.55);z-index:1100;align-items:center;justify-content:center;">
+      <div style="background:#fff;border:2px solid var(--navy);max-width:420px;width:96%;max-height:92vh;overflow-y:auto;padding:22px;position:relative;">
+        <button onclick="closeTaxEdit()" style="position:absolute;top:12px;right:12px;background:none;border:1px solid var(--navy);width:26px;height:26px;cursor:pointer;font-size:13px;">✕</button>
+        <h3 style="margin-top:0;margin-bottom:8px;">세금계산서 수정</h3>
+        <div class="stack-row"><label>발행일</label><input type="text" id="txe-date" placeholder="20260831"></div>
+        <div class="stack-row"><label>거래처</label><input type="text" id="txe-company"></div>
+        <div class="stack-row"><label>계산서번호</label><input type="text" id="txe-no"></div>
+        <div class="stack-row"><label>금액</label><input type="text" id="txe-amount"></div>
+        <div class="stack-row"><label>메모</label><input type="text" id="txe-memo"></div>
+        <div style="font-size:11.5px;color:var(--gray);margin:6px 0;">이미 B2B에 쓴 금액 <b id="txe-used">0</b> — 이보다 적은 금액으로는 바꿀 수 없습니다.</div>
+        <div id="txe-msg" style="font-size:12.5px;margin:6px 0;"></div>
+        <span class="btn-row" style="margin-top:6px;">
+          <button class="btn small" style="width:auto;" onclick="submitTaxEdit()">저장</button>
+          <button class="btn small secondary" style="width:auto;" onclick="closeTaxEdit()">닫기</button>
         </span>
       </div>
     </div>
@@ -7062,6 +7128,80 @@
     }catch(e){ el.style.display = "none"; }
   }
 
+  // ---------- 할인율 계산기 — 사진에서 읽기 ----------
+  //  사진에 있는 글자를 읽어 붙여넣기 칸에 넣습니다.
+  //  잘못 읽을 수 있으니 반드시 눈으로 확인한 뒤 계산해주세요.
+  //  화면을 찍은 사진은 격자무늬 때문에 특히 틀리기 쉽습니다.
+  let ocrBusy = false;
+
+  window.onDiscountImage = async function(ev){
+    const f = ev.target.files && ev.target.files[0];
+    if(!f) return;
+    await readImageToText(f);
+    ev.target.value = "";
+  };
+
+  // 붙여넣기(Ctrl+V)로도 사진을 받습니다.
+  window.onDiscountPaste = async function(ev){
+    const items = (ev.clipboardData && ev.clipboardData.items) || [];
+    for(const it of items){
+      if(it.type && it.type.indexOf("image") === 0){
+        const f = it.getAsFile();
+        if(f){ ev.preventDefault(); await readImageToText(f); return; }
+      }
+    }
+  };
+
+  async function readImageToText(file){
+    if(ocrBusy){ alert("이미 읽는 중입니다. 잠시만 기다려주세요."); return; }
+    const st = document.getElementById("dc-ocr-msg");
+    const show = (t, color)=>{ if(st) st.innerHTML = '<span style="color:' + (color||"var(--gray)") + ';">' + t + '</span>'; };
+
+    // 글자 읽기 도구를 처음 한 번만 내려받습니다.
+    if(typeof Tesseract === "undefined"){
+      show("글자를 읽는 도구를 준비하는 중입니다... (처음 한 번만 받습니다)");
+      try{
+        await new Promise((ok, ng)=>{
+          const s = document.createElement("script");
+          s.src = "https://cdnjs.cloudflare.com/ajax/libs/tesseract.js/5.1.0/tesseract.min.js";
+          s.onload = ok; s.onerror = ()=> ng(new Error("도구를 받지 못했습니다"));
+          document.head.appendChild(s);
+        });
+      }catch(e){
+        show("글자 읽기 도구를 받지 못했습니다. 인터넷 연결을 확인해주세요.", "var(--danger)"); return;
+      }
+    }
+
+    ocrBusy = true;
+    show("사진에서 글자를 읽는 중입니다... 10~30초 걸립니다.");
+    try{
+      const res = await Tesseract.recognize(file, "eng", {
+        logger: m=>{
+          if(m.status === "recognizing text" && st){
+            show("읽는 중... " + Math.round((m.progress||0) * 100) + "%");
+          }
+        }
+      });
+      const raw = (res && res.data && res.data.text) || "";
+      // 모델코드나 숫자가 있는 줄만 남깁니다. (머리글·설명 줄은 뺍니다)
+      const lines = raw.split(/\r?\n/).map(x=>x.trim()).filter(x=>{
+        if(!x) return false;
+        return /SM[-\s]?[A-Z0-9]{4,}/i.test(x) || /[0-9]{2,}/.test(x);
+      });
+      if(lines.length === 0){
+        show("사진에서 읽을 내용을 찾지 못했습니다. 더 크고 또렷한 사진으로 다시 해주세요.", "var(--danger)");
+        ocrBusy = false; return;
+      }
+      const ta = document.getElementById("dc-text");
+      ta.value = (ta.value ? ta.value.replace(/\s+$/,"") + "\n" : "") + lines.join("\n");
+      show("읽었습니다. <b>글자가 맞는지 꼭 확인한 뒤</b> 계산하기를 눌러주세요. "
+        + "모델코드는 한 글자만 달라도 다른 모델이 됩니다.", "#b8860b");
+    }catch(e){
+      show("읽는 중 문제가 생겼습니다. 사진을 바꿔 다시 해주세요.", "var(--danger)");
+    }
+    ocrBusy = false;
+  }
+
   // ---------- 할인율 계산기 ----------
   //  붙여넣은 모델명으로 등록된 모델의 출고가를 찾아 출고가 총액을 냅니다.
   //  실제 합계금액을 넣으면 할인율을 소수점 둘째자리까지 계산합니다.
@@ -7073,6 +7213,7 @@
     document.getElementById("dc-actual").value = "";
     document.getElementById("dc-rate").value = "";
     document.getElementById("dc-result").innerHTML = "";
+    { const om = document.getElementById("dc-ocr-msg"); if(om) om.innerHTML = ""; }
     dcRows = []; dcMissing = [];
     document.getElementById("dc-overlay").style.display = "flex";
     await fetchModelsCache();
@@ -10647,6 +10788,258 @@
     }
     closeReqEdit();
     loadReqBoard();
+  };
+
+  // ---------- 세금계산서 ----------
+  //  매입·매출 세금계산서를 등록하고, 매입 건은 B2B 대출 한도로 씁니다.
+  //   · 「B2B 사용 가능」을 체크한 계산서만 대출 증빙으로 쓸 수 있습니다.
+  //   · 대출에 쓴 만큼 한도가 줄어들고, 남은 한도로 나눠서 또 쓸 수 있습니다.
+  //   · 최대는 계산서 금액입니다. 그 이상은 쓸 수 없습니다.
+  let taxFilter = "all";       // all · buy · sale · b2b · left
+
+  window.setTaxFilter = function(f){
+    taxFilter = f;
+    ["all","buy","sale","b2b","left"].forEach(k=>{
+      const b = document.getElementById("tx-f-" + k);
+      if(b) b.className = "btn small" + (k === f ? "" : " secondary");
+    });
+    loadTaxList();
+  };
+
+  window.loadTaxList = async function(){
+    const el = document.getElementById("tax-list");
+    if(!el) return;
+    el.innerHTML = '<div class="list-empty">불러오는 중...</div>';
+    const canDo = hasPerm(currentUserPerms, "paymentProcess");
+
+    // 거래처 목록 (등록칸 자동완성)
+    if(!companiesCache.length){ try{ await fetchCompanies(); }catch(e){} }
+    const dl = document.getElementById("tx-company-datalist");
+    if(dl) dl.innerHTML = companiesCache.map(c=>'<option value="'+comboEsc(c.name||"")+'"></option>').join("");
+
+    let snap;
+    try{ snap = await getDocs(query(collection(db,"taxInvoices"), orderBy("issueDate","desc"))); }
+    catch(e){ el.innerHTML = '<div class="list-empty">불러오지 못했습니다.</div>'; return; }
+
+    const rows = [];
+    snap.forEach(d=>{
+      const x = d.data();
+      const amt = Number(x.amount)||0;
+      const used = Number(x.b2bUsed)||0;
+      rows.push({
+        id: d.id, kind: (x.kind === "sale") ? "sale" : "buy",
+        issueDate: x.issueDate || "-", company: x.company || "-",
+        invoiceNo: x.invoiceNo || "", amount: amt, memo: x.memo || "",
+        b2bOk: x.b2bOk === true, b2bUsed: used,
+        left: Math.max(0, amt - used),
+        uses: Array.isArray(x.b2bUses) ? x.b2bUses : []
+      });
+    });
+
+    const pick = (r)=>{
+      if(taxFilter === "all") return true;
+      if(taxFilter === "buy") return r.kind === "buy";
+      if(taxFilter === "sale") return r.kind === "sale";
+      if(taxFilter === "b2b") return r.b2bOk;
+      if(taxFilter === "left") return r.b2bOk && r.left > 0;
+      return true;
+    };
+    const view = rows.filter(pick);
+
+    // 페이지 나눔
+    const pg = document.getElementById("tax-pagination");
+    if(pg){ pg.innerHTML = ""; pg.appendChild(renderPaginationBar("taxInvoices", view.length, loadTaxList)); }
+    const { pageItems } = paginateSlice(view, "taxInvoices");
+
+    // 카드
+    let buyAmt=0, saleAmt=0, b2bLimit=0, b2bUsed=0, b2bLeft=0;
+    rows.forEach(r=>{
+      if(r.kind === "buy") buyAmt += r.amount; else saleAmt += r.amount;
+      if(r.b2bOk){ b2bLimit += r.amount; b2bUsed += r.b2bUsed; b2bLeft += r.left; }
+    });
+    const cardEl = document.getElementById("tax-cards");
+    if(cardEl){
+      const card = (label, value, color, note)=>
+        '<div style="border:1px solid '+(color?'var(--navy)':'var(--line)')+';padding:9px 12px;min-width:160px;background:'+(color?'#f4f7fb':'#fff')+';">'
+        + '<div style="font-size:11px;color:var(--gray);">'+label+'</div>'
+        + '<div style="font-size:16px;font-weight:700;'+(color?('color:'+color+';'):'')+'">'+value+'</div>'
+        + (note ? '<div style="font-size:10.5px;color:var(--gray);">'+note+'</div>' : '') + '</div>';
+      cardEl.innerHTML =
+        card("매입 계산서", buyAmt.toLocaleString(), "var(--danger)", "받은 계산서 합계") +
+        card("매출 계산서", saleAmt.toLocaleString(), "#1565c0", "발행한 계산서 합계") +
+        card("B2B 한도", b2bLimit.toLocaleString(), null, "사용 가능으로 체크한 것") +
+        card("B2B 사용액", b2bUsed.toLocaleString(), null, "대출에 쓴 금액") +
+        card("남은 한도", b2bLeft.toLocaleString(), "#2e7d32", "더 빌릴 수 있는 금액");
+    }
+
+    if(view.length === 0){
+      el.innerHTML = '<div class="list-empty">해당하는 계산서가 없습니다.</div>';
+      return;
+    }
+    el.innerHTML = '<div style="overflow-x:auto;"><table class="data-table" style="width:auto;">'
+      + '<thead><tr><th>구분</th><th>발행일</th><th>거래처</th><th>계산서번호</th>'
+      + '<th class="ta-right">금액</th><th>B2B</th><th class="ta-right">사용액</th>'
+      + '<th class="ta-right">남은한도</th><th>메모</th><th></th></tr></thead><tbody>'
+      + pageItems.map(r=>{
+          const isBuy = r.kind === "buy";
+          let tr = '<tr>'
+            + '<td><b style="color:'+(isBuy ? "var(--danger)" : "#1565c0")+';">'+(isBuy ? "매입" : "매출")+'</b></td>'
+            + '<td style="white-space:nowrap;">'+comboEsc(r.issueDate)+'</td>'
+            + '<td><b>'+comboEsc(r.company)+'</b></td>'
+            + '<td>'+(r.invoiceNo ? comboEsc(r.invoiceNo) : '<span style="color:var(--gray);">-</span>')+'</td>'
+            + '<td class="ta-right" style="font-weight:700;">'+r.amount.toLocaleString()+'</td>'
+            + '<td>' + (isBuy
+                ? '<label style="font-size:11.5px;cursor:pointer;"><input type="checkbox" class="tx-b2b" data-tx="'+r.id+'"'
+                  + (r.b2bOk ? ' checked' : '') + (canDo ? '' : ' disabled') + '> 사용가능</label>'
+                : '<span style="color:var(--gray);">-</span>') + '</td>'
+            + '<td class="ta-right">'+(r.b2bOk ? (r.b2bUsed ? r.b2bUsed.toLocaleString() : '-') : '<span style="color:var(--gray);">-</span>')+'</td>'
+            + '<td class="ta-right" style="color:'+(r.b2bOk && r.left>0 ? "#2e7d32" : "var(--gray)")+';font-weight:700;">'
+              + (r.b2bOk ? r.left.toLocaleString() : '-') + '</td>'
+            + '<td style="color:var(--gray);font-size:11.5px;">'+comboEsc(r.memo)+'</td>'
+            + '<td class="ta-right" style="white-space:nowrap;">'
+              + (canDo ? '<button class="btn small secondary" style="width:auto;" data-tx-edit="'+r.id+'">수정</button>'
+                       + '<button class="btn small secondary" style="width:auto;margin-left:4px;" data-tx-del="'+r.id+'">삭제</button>'
+                       : '<span style="color:var(--gray);">-</span>') + '</td>'
+            + '</tr>';
+          if(r.uses.length){
+            tr += '<tr><td colspan="10" style="background:#fafafa;font-size:11.5px;line-height:1.9;">'
+              + r.uses.map(u=>'· B2B 대출 '+(Number(u.amount)||0).toLocaleString()
+                  + (u.date ? ' ('+comboEsc(u.date)+')' : '')
+                  + (u.memo ? ' · '+comboEsc(u.memo) : '')).join('<br>')
+              + '</td></tr>';
+          }
+          return tr;
+        }).join("")
+      + '</tbody></table></div>';
+
+    document.querySelectorAll("#tab-tax .tx-b2b").forEach(cb=>{
+      cb.onchange = ()=> toggleTaxB2B(cb.dataset.tx, cb.checked);
+    });
+    document.querySelectorAll("#tab-tax [data-tx-edit]").forEach(b=>{
+      b.onclick = ()=> openTaxEdit(b.dataset.txEdit);
+    });
+    document.querySelectorAll("#tab-tax [data-tx-del]").forEach(b=>{
+      b.onclick = ()=> deleteTaxInvoice(b.dataset.txDel);
+    });
+  };
+
+  // 새 계산서 등록
+  window.submitTaxInvoice = async function(){
+    if(!hasPerm(currentUserPerms, "paymentProcess")){ alert("입력 권한이 없습니다."); return; }
+    const msg = document.getElementById("tx-msg");
+    const show = (t)=>{ msg.innerHTML = '<span style="color:var(--danger);">' + t + '</span>'; };
+    const kind    = document.getElementById("tx-kind").value;
+    const issueDate = String(document.getElementById("tx-date").value).replace(/\D/g,"");
+    const company = document.getElementById("tx-company").value.trim();
+    const invoiceNo = document.getElementById("tx-no").value.trim();
+    const amount  = Number(String(document.getElementById("tx-amount").value).replace(/[^0-9.]/g,""));
+    const memo    = document.getElementById("tx-memo").value.trim();
+    const b2bOk   = document.getElementById("tx-b2bok").checked;
+
+    if(issueDate.length !== 8){ show("발행일을 20260831 형태로 넣어주세요."); return; }
+    if(!company){ show("거래처를 넣어주세요."); return; }
+    if(!(amount > 0)){ show("금액을 숫자로 넣어주세요."); return; }
+
+    try{
+      await addDoc(collection(db,"taxInvoices"), {
+        kind, issueDate, company, invoiceNo, amount, memo,
+        b2bOk: (kind === "buy") ? b2bOk : false,
+        b2bUsed: 0, b2bUses: [],
+        createdBy: currentUser.name, createdAt: serverTimestamp()
+      });
+      logAction(kind === "buy" ? "매입 세금계산서 등록" : "매출 세금계산서 등록",
+        company + " / " + amount.toLocaleString() + " / " + issueDate
+        + (invoiceNo ? " / " + invoiceNo : "")
+        + (kind === "buy" && b2bOk ? " / B2B 사용가능" : ""));
+    }catch(e){ show("저장에 실패했습니다."); return; }
+
+    ["tx-company","tx-no","tx-amount","tx-memo"].forEach(id=>{ document.getElementById(id).value = ""; });
+    document.getElementById("tx-b2bok").checked = false;
+    msg.innerHTML = '<span style="color:#2e7d32;">등록했습니다.</span>';
+    loadTaxList();
+  };
+
+  // B2B 사용 가능 체크
+  window.toggleTaxB2B = async function(id, on){
+    if(!hasPerm(currentUserPerms, "paymentProcess")){ alert("권한이 없습니다."); loadTaxList(); return; }
+    try{
+      const snap = await getDoc(doc(db,"taxInvoices", id));
+      if(!snap.exists()) return;
+      const x = snap.data();
+      // 이미 대출에 쓴 계산서는 체크를 풀 수 없습니다. (한도가 어긋납니다)
+      if(!on && (Number(x.b2bUsed)||0) > 0){
+        alert("이미 B2B 대출에 " + (Number(x.b2bUsed)||0).toLocaleString() + "원을 쓴 계산서입니다.\n\n먼저 대출 쪽에서 되돌려주세요.");
+        loadTaxList(); return;
+      }
+      await updateDoc(doc(db,"taxInvoices", id), { b2bOk: !!on });
+      logAction("세금계산서 B2B 사용가능 변경",
+        (x.company||"-") + " / " + (Number(x.amount)||0).toLocaleString() + " / " + (on ? "사용가능" : "해제"));
+    }catch(e){ alert("바꾸지 못했습니다."); }
+    loadTaxList();
+  };
+
+  // 수정
+  let taxEditId = null;
+  window.openTaxEdit = async function(id){
+    const snap = await getDoc(doc(db,"taxInvoices", id));
+    if(!snap.exists()) return;
+    const x = snap.data();
+    taxEditId = id;
+    document.getElementById("txe-date").value = x.issueDate || "";
+    document.getElementById("txe-company").value = x.company || "";
+    document.getElementById("txe-no").value = x.invoiceNo || "";
+    document.getElementById("txe-amount").value = x.amount || "";
+    document.getElementById("txe-memo").value = x.memo || "";
+    document.getElementById("txe-used").textContent = (Number(x.b2bUsed)||0).toLocaleString();
+    document.getElementById("txe-msg").innerHTML = "";
+    document.getElementById("taxedit-overlay").style.display = "flex";
+  };
+  window.closeTaxEdit = function(){
+    document.getElementById("taxedit-overlay").style.display = "none";
+    taxEditId = null;
+  };
+  window.submitTaxEdit = async function(){
+    if(!taxEditId) return;
+    const msg = document.getElementById("txe-msg");
+    const issueDate = String(document.getElementById("txe-date").value).replace(/\D/g,"");
+    const company = document.getElementById("txe-company").value.trim();
+    const invoiceNo = document.getElementById("txe-no").value.trim();
+    const amount = Number(String(document.getElementById("txe-amount").value).replace(/[^0-9.]/g,""));
+    const memo = document.getElementById("txe-memo").value.trim();
+    if(issueDate.length !== 8){ msg.innerHTML = '<span style="color:var(--danger);">발행일을 20260831 형태로 넣어주세요.</span>'; return; }
+    if(!(amount > 0)){ msg.innerHTML = '<span style="color:var(--danger);">금액을 숫자로 넣어주세요.</span>'; return; }
+    try{
+      const snap = await getDoc(doc(db,"taxInvoices", taxEditId));
+      const used = snap.exists() ? (Number(snap.data().b2bUsed)||0) : 0;
+      // 이미 쓴 금액보다 적게는 못 줄입니다. (한도가 마이너스가 됩니다)
+      if(amount < used){
+        msg.innerHTML = '<span style="color:var(--danger);">이미 B2B에 ' + used.toLocaleString()
+          + '원을 썼습니다. 그보다 적은 금액으로는 바꿀 수 없습니다.</span>'; return;
+      }
+      await updateDoc(doc(db,"taxInvoices", taxEditId), { issueDate, company, invoiceNo, amount, memo });
+      logAction("세금계산서 수정", company + " / " + amount.toLocaleString() + " / " + issueDate);
+    }catch(e){ msg.innerHTML = '<span style="color:var(--danger);">저장에 실패했습니다.</span>'; return; }
+    closeTaxEdit();
+    loadTaxList();
+  };
+
+  // 삭제
+  window.deleteTaxInvoice = async function(id){
+    if(!hasPerm(currentUserPerms, "paymentProcess")){ alert("권한이 없습니다."); return; }
+    const snap = await getDoc(doc(db,"taxInvoices", id));
+    if(!snap.exists()) return;
+    const x = snap.data();
+    if((Number(x.b2bUsed)||0) > 0){
+      alert("이미 B2B 대출에 " + (Number(x.b2bUsed)||0).toLocaleString() + "원을 쓴 계산서라 지울 수 없습니다.\n\n먼저 대출 쪽에서 되돌려주세요.");
+      return;
+    }
+    if(!confirm("이 계산서를 지웁니다.\n\n" + (x.issueDate||"-") + " · " + (x.company||"-")
+      + " · " + (Number(x.amount)||0).toLocaleString() + "\n\n지울까요?")) return;
+    try{
+      await deleteDoc(doc(db,"taxInvoices", id));
+      logAction("세금계산서 삭제", (x.company||"-") + " / " + (Number(x.amount)||0).toLocaleString() + " / " + (x.issueDate||"-"));
+    }catch(e){ alert("지우지 못했습니다."); return; }
+    loadTaxList();
   };
 
   // ---------- 입출금 내역 ----------
@@ -21294,7 +21687,7 @@
     document.getElementById("signup-form").style.display="none";
     document.getElementById("login-form").style.display="block";
   };
-  const ADMIN_TAB_IDS = ["tab-site","tab-team","tab-users","tab-reqboard","tab-cashbook","tab-b2b","tab-logs"];
+  const ADMIN_TAB_IDS = ["tab-site","tab-team","tab-users","tab-reqboard","tab-cashbook","tab-tax","tab-b2b","tab-logs"];
   const INV_ADMIN_TAB_IDS = ["tab-inv-model","tab-inv-color","tab-inv-manufacturer","tab-inv-location","tab-inv-status","tab-inv-carrier"];
 
   window.toggleAdminMenu = function(){
@@ -21356,6 +21749,7 @@
     if(tabId==="tab-reservation") loadReservationTable();
     if(tabId==="tab-reqboard") loadReqBoard();
     if(tabId==="tab-cashbook"){ document.getElementById("cb-date").value = todayStr(); loadCashbook(); }
+    if(tabId==="tab-tax"){ document.getElementById("tx-date").value = todayStr(); loadTaxList(); }
     if(tabId==="tab-b2b") loadB2BTab();
     if(tabId==="tab-team") loadTeamList();
     if(tabId==="tab-users") loadUserAdminList();
@@ -21530,6 +21924,7 @@
       setMenu("tabbtn-users", showUsers);
       setMenu("tabbtn-reqboard", hasPerm(perms, "menuReqBoard") || showSettlement);
       setMenu("tabbtn-cashbook", hasPerm(perms, "menuReqBoard") || showSettlement);
+      setMenu("tabbtn-tax", hasPerm(perms, "menuReqBoard") || showSettlement);
       setMenu("tabbtn-b2b", showSettlement);
       setMenu("tabbtn-ledger", showLedger || showSettlement);
       setMenu("tabbtn-datacheck", showDataCheck || showSettlement);
