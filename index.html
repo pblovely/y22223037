@@ -320,7 +320,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-04 v319</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-04 v320</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -1798,11 +1798,11 @@
         <div id="ps-pw-msg" style="font-size:12px;margin-bottom:10px;display:none;"></div>
         <button class="btn small" style="width:auto;margin-bottom:20px;" onclick="changeMyPassword()">비밀번호 변경</button>
 
-        <h3 style="font-size:13px;margin-bottom:6px;">권한 요청</h3>
-        <p class="desc">필요한 권한을 체크하고 요청하면, 관리자가 확인 후 승인해드립니다.</p>
+        <h3 id="ps-perm-title" style="font-size:13px;margin-bottom:6px;">권한 요청</h3>
+        <p class="desc" id="ps-perm-desc">필요한 권한을 체크하고 요청하면, 관리자가 확인 후 승인해드립니다.</p>
         <div id="ps-perm-request-status" style="font-size:12px;color:var(--navy);margin-bottom:8px;display:none;"></div>
         <div class="check-panel" id="ps-perm-checks"></div>
-        <button class="btn small" style="width:auto;" onclick="submitPermissionRequest()">권한 주세요!</button>
+        <button class="btn small" id="ps-perm-btn" style="width:auto;" onclick="submitPermissionRequest()">권한 주세요!</button>
       </div>
     </div>
 
@@ -2590,6 +2590,7 @@
     paymentProcess:"입출금 처리 입력 (없으면 보기만 — 입금·이체 기록 못 넣음)",
     uiCustomize:"화면 문구·버튼 이름 수정 (마우스 오른쪽 클릭)",
     userApproval:"사용자 승인·추방", permissionManage:"권한 설정 관리(전체 관리자)",
+    selfPermission:"내 권한 스스로 켜고 끄기 (권한 설정 관리·데이터 초기화는 제외)",
     teamManage:"팀 관리", inventorySettings:"재고 기초설정 관리",
     settlementSettings:"정산 관리", siteSettings:"사이트 설정 관리", dataReset:"데이터 초기화"
   };
@@ -2597,7 +2598,7 @@
   const PERMISSION_GROUPS = [
     { title:"화면 메뉴", keys:["dashboard","menuInvWork","menuInvUpload","menuOrders","menuSaleReq","menuReservation","menuCompany","menuDataUpload","menuItemHistory","menuLgRefund","menuLedger","menuDataCheck","menuReqBoard"] },
     { title:"기능", keys:["excelExport","bulkEdit","bulkModelApply","companyEdit","listPriceOverride","cancelDelete","accountView","depositApprove","paymentProcess","uiCustomize"] },
-    { title:"관리자", keys:["userApproval","permissionManage","teamManage","inventorySettings","settlementSettings","siteSettings","dataReset"] }
+    { title:"관리자", keys:["userApproval","permissionManage","selfPermission","teamManage","inventorySettings","settlementSettings","siteSettings","dataReset"] }
   ];
   const PERMISSION_SUB_KEYS = ["menuInvUpload"];   // 상위 항목 아래에 들여쓰기할 항목
 
@@ -3638,6 +3639,40 @@
   };
 
   // ---------- 개인설정 (비밀번호 변경 / 권한 요청) ----------
+  // 내 권한을 직접 저장합니다. (「내 권한 스스로 켜고 끄기」 권한이 있는 사람만)
+  window.saveMyPermissions = async function(){
+    if(!hasPerm(currentUserPerms, "selfPermission")){ alert("권한이 없습니다."); return; }
+    const blocked = ["permissionManage", "dataReset"];
+    const checked = Array.from(document.querySelectorAll(".ps-perm-cb:checked")).map(cb=>cb.value);
+    // 지금 가진 권한에서 시작해, 막힌 권한은 그대로 두고 나머지만 바꿉니다.
+    const next = {};
+    ALL_PERM_KEYS.forEach(k=>{
+      if(blocked.includes(k)){ if(currentUserPerms[k] === true) next[k] = true; return; }
+      if(k === "selfPermission"){ next[k] = true; return; }   // 이 권한은 끄지 않습니다
+      if(checked.includes(k)) next[k] = true;
+    });
+    const before = ALL_PERM_KEYS.filter(k=> currentUserPerms[k] === true);
+    const after  = ALL_PERM_KEYS.filter(k=> next[k] === true);
+    const added   = after.filter(k=> !before.includes(k));
+    const removed = before.filter(k=> !after.includes(k));
+    if(added.length === 0 && removed.length === 0){ alert("바뀐 것이 없습니다."); return; }
+    if(!confirm("내 권한을 바꿉니다.\n\n"
+      + (added.length   ? "＋ 켜기 : " + added.map(k=>PERMISSION_LABELS[k]||k).join(", ") + "\n" : "")
+      + (removed.length ? "－ 끄기 : " + removed.map(k=>PERMISSION_LABELS[k]||k).join(", ") + "\n" : "")
+      + "\n저장하면 바로 반영됩니다. 진행할까요?")) return;
+    try{
+      await updateDoc(doc(db,"users",currentUser.uid), { permissions: next });
+      currentUserPerms = next;
+      logAction("내 권한 변경",
+        (added.length   ? "켬: " + added.map(k=>PERMISSION_LABELS[k]||k).join(", ") : "")
+        + (added.length && removed.length ? " / " : "")
+        + (removed.length ? "끔: " + removed.map(k=>PERMISSION_LABELS[k]||k).join(", ") : ""));
+    }catch(e){ alert("저장에 실패했습니다."); return; }
+    alert("바꿨습니다. 화면을 새로 그립니다.");
+    closePersonalSettingsModal();
+    applyPermissionsToMenus(currentUserPerms);
+  };
+
   window.openPersonalSettingsModal = async function(){
     document.getElementById("ps-my-info").textContent = currentUser.name + " (" + currentUser.username + ")";
     document.getElementById("ps-current-pw").value = "";
@@ -3647,6 +3682,20 @@
 
     const permChecksEl = document.getElementById("ps-perm-checks");
     permChecksEl.innerHTML = "";
+    // 「내 권한 스스로 켜고 끄기」 권한이 있으면 요청 대신 바로 켜고 끌 수 있게 보여줍니다.
+    const canSelf = hasPerm(currentUserPerms, "selfPermission");
+    const selfBlocked = ["permissionManage", "dataReset"];   // 이 둘은 스스로 못 켭니다
+    { const t = document.getElementById("ps-perm-title");
+      if(t) t.textContent = canSelf ? "내 권한 설정" : "권한 요청"; }
+    { const d = document.getElementById("ps-perm-desc");
+      if(d) d.innerHTML = canSelf
+        ? '필요한 권한을 <b>직접 켜고 끄실 수 있습니다.</b> 저장하면 바로 반영됩니다.<br>'
+          + '<b>권한 설정 관리</b>와 <b>데이터 초기화</b>는 관리자만 줄 수 있어 목록에 없습니다.'
+        : '필요한 권한을 체크하고 요청하면, 관리자가 확인 후 승인해드립니다.'; }
+    { const b = document.getElementById("ps-perm-btn");
+      if(b){ b.textContent = canSelf ? "내 권한 저장" : "권한 주세요!";
+             b.setAttribute("onclick", canSelf ? "saveMyPermissions()" : "submitPermissionRequest()"); } }
+
     let myPerms = {}, myRequest = null;
     if(currentUser.uid){
       const snap = await getDoc(doc(db,"users",currentUser.uid));
@@ -3657,17 +3706,27 @@
       }
     }
     ALL_PERM_KEYS.forEach(k=>{
+      // 스스로 켜는 사람에게는 막힌 권한을 아예 보여주지 않습니다.
+      if(canSelf && selfBlocked.includes(k)) return;
       const already = myPerms[k] === true;
       const label = document.createElement("label");
       label.style.display = "inline-flex"; label.style.alignItems = "center"; label.style.gap = "4px";
       label.style.marginRight = "12px"; label.style.marginBottom = "6px";
-      if(already) label.style.opacity = "0.5";
       const cb = document.createElement("input");
       cb.type = "checkbox"; cb.className = "ps-perm-cb"; cb.value = k;
-      if(already){ cb.checked = true; cb.disabled = true; }
-      else if(myRequest && myRequest.includes(k)){ cb.checked = true; }
+      if(canSelf){
+        // 켜고 끌 수 있습니다. 지금 상태를 그대로 보여줍니다.
+        cb.checked = already;
+        // 「스스로 켜고 끄기」 권한 자체는 끄면 되돌릴 수 없으니 잠급니다.
+        if(k === "selfPermission"){ cb.disabled = true; label.style.opacity = "0.5"; }
+      }else{
+        if(already){ cb.checked = true; cb.disabled = true; label.style.opacity = "0.5"; }
+        else if(myRequest && myRequest.includes(k)){ cb.checked = true; }
+      }
       label.appendChild(cb);
-      label.appendChild(document.createTextNode(" " + (PERMISSION_LABELS[k]||k) + (already?" (이미 보유)":"")));
+      label.appendChild(document.createTextNode(" " + (PERMISSION_LABELS[k]||k)
+        + (!canSelf && already ? " (이미 보유)" : "")
+        + (canSelf && k === "selfPermission" ? " (끌 수 없음)" : "")));
       permChecksEl.appendChild(label);
     });
 
@@ -3725,7 +3784,7 @@
     closePersonalSettingsModal();
   };
 
-  const ALL_PERM_KEYS = ["dashboard","menuInvWork","menuInvUpload","menuOrders","menuSaleReq","menuDataUpload","menuReservation","menuCompany","menuItemHistory","menuLgRefund","menuLedger","menuDataCheck","menuReqBoard","excelExport","bulkEdit","bulkModelApply","companyEdit","listPriceOverride","cancelDelete","accountView","depositApprove","paymentProcess","uiCustomize","userApproval","permissionManage","teamManage","inventorySettings","settlementSettings","siteSettings","dataReset"];
+  const ALL_PERM_KEYS = ["dashboard","menuInvWork","menuInvUpload","menuOrders","menuSaleReq","menuDataUpload","menuReservation","menuCompany","menuItemHistory","menuLgRefund","menuLedger","menuDataCheck","menuReqBoard","excelExport","bulkEdit","bulkModelApply","companyEdit","listPriceOverride","cancelDelete","accountView","depositApprove","paymentProcess","uiCustomize","userApproval","permissionManage","selfPermission","teamManage","inventorySettings","settlementSettings","siteSettings","dataReset"];
 
   async function loadUserAdminList(){
     const listEl = document.getElementById("user-admin-list");
