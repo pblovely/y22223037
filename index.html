@@ -4,7 +4,11 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title id="page-title">유통폰 관리 대시보드</title>
+<title id="page-title">편기쁨플라워</title>
+<meta property="og:title" content="편기쁨플라워">
+<meta property="og:description" content="로그인이 필요합니다">
+<meta property="og:type" content="website">
+<meta name="description" content="로그인이 필요합니다">
 <link id="page-favicon" rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%232b2b2b'/%3E%3Ctext x='32' y='44' font-size='38' font-family='sans-serif' font-weight='700' fill='white' text-anchor='middle'%3E폰%3C/text%3E%3C/svg%3E">
 <style>
   :root{
@@ -300,7 +304,8 @@
       <div class="field"><label>아이디</label><input type="text" id="signup-username"></div>
       <div class="field"><label>생년월일</label><input type="text" id="signup-birth" placeholder="예: 19900101" maxlength="8" inputmode="numeric"></div>
       <div class="field"><label>휴대폰번호</label><input type="tel" id="signup-phone" placeholder="010-0000-0000"></div>
-      <div class="field"><label>소속팀</label><select id="signup-team"><option value="">팀을 선택하세요</option></select></div>
+      <div class="field"><label>소속팀</label><select id="signup-team" onchange="onSignupTeamChange()"><option value="">팀을 선택하세요</option></select></div>
+      <div class="field" id="signup-team-manual-wrap" style="display:none;"><label>소속팀 직접 입력</label><input type="text" id="signup-team-manual" placeholder="팀 이름을 적어주세요"></div>
       <div class="field"><label>비밀번호</label><input type="password" id="signup-password"></div>
       <div class="field"><label>비밀번호 확인</label><input type="password" id="signup-password2"></div>
       <button class="btn" onclick="handleSignup()">가입 요청</button>
@@ -315,7 +320,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-04 v317</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-04 v318</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -3581,15 +3586,39 @@
   // (참고) 위 목록의 ▲▼ 는 표시 순서를 바꿉니다. 바꾼 순서는 모든 드롭다운에 그대로 반영됩니다.
 
   // ---------- 팀 ----------
+  window.onSignupTeamChange = function(){
+    const sel = document.getElementById("signup-team");
+    const box = document.getElementById("signup-team-manual-wrap");
+    if(!sel || !box) return;
+    box.style.display = (sel.value === "__manual__") ? "block" : "none";
+  };
   async function loadTeamsIntoSelect(){
     const sel = document.getElementById("signup-team");
+    if(!sel) return;
     sel.innerHTML = '<option value="">팀을 선택하세요</option>';
-    const snap = await getDocs(query(collection(db, "teams"), orderBy("name")));
-    snap.forEach(d=>{
+    try{
+      const snap = await getDocs(query(collection(db, "teams"), orderBy("name")));
+      snap.forEach(d=>{
+        const opt = document.createElement("option");
+        opt.value = d.data().name; opt.textContent = d.data().name;
+        sel.appendChild(opt);
+      });
+      // 팀이 하나도 없으면 알려줍니다.
+      if(snap.empty){
+        const opt = document.createElement("option");
+        opt.value = ""; opt.textContent = "(등록된 팀이 없습니다 — 관리자에게 요청해주세요)";
+        opt.disabled = true;
+        sel.appendChild(opt);
+      }
+    }catch(e){
+      // 보안규칙 등으로 목록을 못 읽는 경우 — 가입은 계속할 수 있게 직접 넣는 칸을 보여줍니다.
       const opt = document.createElement("option");
-      opt.value = d.data().name; opt.textContent = d.data().name;
+      opt.value = "__manual__"; opt.textContent = "직접 입력";
       sel.appendChild(opt);
-    });
+      const box = document.getElementById("signup-team-manual-wrap");
+      if(box) box.style.display = "block";
+      console.error("팀 목록을 읽지 못했습니다", e);
+    }
   }
   function loadTeamList(){
     renderEditableList({
@@ -21716,7 +21745,11 @@
     const username = document.getElementById("signup-username").value.trim();
     const birth = document.getElementById("signup-birth").value;
     const phone = document.getElementById("signup-phone").value.trim();
-    const team = document.getElementById("signup-team").value;
+    let team = document.getElementById("signup-team").value;
+    if(team === "__manual__"){
+      team = (document.getElementById("signup-team-manual")||{}).value || "";
+      team = String(team).trim();
+    }
     const pw = document.getElementById("signup-password").value;
     const pw2 = document.getElementById("signup-password2").value;
     if(!name||!username||!birth||!phone||!team||!pw||!pw2){ showMsg("signup-msg","모든 항목을 입력해주세요."); return; }
