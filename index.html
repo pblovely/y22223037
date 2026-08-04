@@ -320,7 +320,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-04 v321</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-04 v322</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -2233,6 +2233,12 @@
             <select id="quote-opt-list">
               <option value="yes">함께 표시 (할인 계산 근거)</option>
               <option value="no">표시 안 함</option>
+            </select>
+          </div>
+          <div class="stack-row"><label>색상 <span class="info-tip" title="배정된 재고의 색상별로 줄을 나눕니다. 아직 배정 안 된 수량은 「미배정」으로 따로 나옵니다. 같은 모델·색상은 하나로 합쳐집니다.">ⓘ</span></label>
+            <select id="quote-opt-color">
+              <option value="yes">색상별로 나누기 (배정된 색상 표시)</option>
+              <option value="no">나누지 않음 — 예약 단위 그대로</option>
             </select>
           </div>
           <div class="stack-row"><label>유효기간</label><input type="text" id="quote-opt-valid" maxlength="8" inputmode="numeric" placeholder="예: 20260731 (비우면 표시 안 함)"></div>
@@ -13603,6 +13609,69 @@
       '견적서에 나올 칸 — <b>' + cols.join(" · ") + '</b>';
   };
 
+  // 견적서 품목을 배정된 재고의 색상별로 나눕니다.
+  //  · 배정된 것은 그 재고의 색상으로, 아직 배정 안 된 수량은 「미배정」으로 나옵니다.
+  //  · 같은 모델·색상은 하나로 합칩니다.
+  //  · 순서는 예약 목록과 같게 — 모델명 숫자 낮은 순 → 기가수 낮은 순 → 색상 이름 순
+  async function splitQuoteItemsByColor(items){
+    const out = {};   // 열쇠: 모델|색상
+    const put = (base, color, qty)=>{
+      if(qty <= 0) return;
+      const key = (base.systemModel||"") + "|" + (base.baseModel||"") + "|" + (base.capacity||"") + "|" + color;
+      if(!out[key]){
+        out[key] = { ...base, color, qty:0, amount:0 };
+      }
+      out[key].qty += qty;
+      out[key].amount = (base.salePrice ? base.salePrice * out[key].qty : 0);
+    };
+
+    for(const it of items){
+      // 이 예약에서 만들어진 판매요청 → 매칭된 재고 → 색상별 개수
+      let allocated = 0;
+      const byColor = {};
+      try{
+        const srSnap = await getDocs(query(collection(db,"saleRequests"),
+          where("fromReservationId","==", it.reservationId)));
+        const itemIds = [];
+        srSnap.forEach(d=>{
+          const sr = d.data();
+          if(sr.status === "취소") return;
+          (sr.matchedItemIds||[]).forEach(id=> itemIds.push(id));
+        });
+        for(const id of itemIds){
+          const s = await getDoc(doc(db,"inventoryItems", id));
+          if(!s.exists()) continue;
+          const v = s.data();
+          const c = (v.systemColor || v.manufacturerColor || "").trim() || "미지정";
+          byColor[c] = (byColor[c] || 0) + 1;
+          allocated++;
+        }
+      }catch(e){}
+
+      Object.keys(byColor).forEach(c=> put(it, c, byColor[c]));
+      // 아직 배정 안 된 수량
+      const left = (Number(it.qty)||0) - allocated;
+      if(left > 0) put(it, "미배정", left);
+      // 배정도 없고 수량도 없으면 원래 줄을 그대로 둡니다.
+      if(allocated === 0 && left <= 0 && (Number(it.qty)||0) > 0) put(it, it.color || "미배정", Number(it.qty)||0);
+    }
+
+    // 정렬 — 모델명 숫자 낮은 순 → 기가수 낮은 순 → 색상 이름 순 (미배정은 맨 뒤)
+    const numOf = (s)=>{ const m = String(s||"").match(/([0-9]{2,4})/); return m ? Number(m[1]) : 99999; };
+    const headOf = (s)=> String(s||"").replace(/[0-9].*$/, "");
+    return Object.values(out).sort((a,b)=>{
+      const ha = headOf(a.baseModel || a.systemModel), hb = headOf(b.baseModel || b.systemModel);
+      if(ha !== hb) return ha.localeCompare(hb);
+      const na = numOf(a.baseModel || a.systemModel), nb = numOf(b.baseModel || b.systemModel);
+      if(na !== nb) return na - nb;
+      const ca = Number(a.capacity)||0, cb = Number(b.capacity)||0;
+      if(ca !== cb) return ca - cb;
+      if(a.color === "미배정") return 1;
+      if(b.color === "미배정") return -1;
+      return String(a.color||"").localeCompare(String(b.color||""));
+    });
+  }
+
   window.submitQuotation = async function(){
     if(!pendingQuote){ alert("발행할 내용이 없습니다."); return; }
     const msg = (t, err)=> showModelMsg("quote-opt-msg", t, err);
@@ -13613,8 +13682,16 @@
     const validUntil = (document.getElementById("quote-opt-valid").value||"").replace(/\D/g,"");
     const note = document.getElementById("quote-opt-note").value.trim();
 
-    const totalQty = items.reduce((n,x)=> n + x.qty, 0);
-    const totalAmount = items.reduce((n,x)=> n + x.amount, 0);
+    // 색상별로 나누기 — 배정된 재고의 색상을 가져와 줄을 나눕니다.
+    let finalItems = items;
+    const splitColor = (document.getElementById("quote-opt-color")||{}).value !== "no";
+    if(splitColor){
+      try{ finalItems = await splitQuoteItemsByColor(items); }
+      catch(e){ console.error("색상별 나누기 실패", e); finalItems = items; }
+    }
+
+    const totalQty = finalItems.reduce((n,x)=> n + x.qty, 0);
+    const totalAmount = finalItems.reduce((n,x)=> n + x.amount, 0);
     const today = todayStr();
     const qSnap = await getDocs(collection(db,"quotations"));
     let seq = 1;
@@ -13626,7 +13703,7 @@
         code, kind: quoteKind, destination, issueDate: today,
         validUntil,
         discMode, showListPrice: showList,      // 할인 표시 방식
-        note, items, totalQty, totalAmount, status:"발행",
+        note, items: finalItems, totalQty, totalAmount, status:"발행",
         createdBy: currentUser.name, createdByUsername: currentUser.username, createdAt: serverTimestamp()
       }), 12000, "견적서 발행");
       // 예약에 견적서 연결 (수정 잠금)
