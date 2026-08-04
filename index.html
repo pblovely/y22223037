@@ -320,7 +320,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-04 v322</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-04 v324</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -360,6 +360,7 @@
           <button class="tab-btn" data-label-key="inv-admin" id="tabbtn-inv-admin" onclick="openInvAdminSection()" style="display:none;"><span class="tab-label-text">재고 기초설정</span></button>
           <button class="tab-btn" data-tab="tab-users" data-label-key="tab-users" id="tabbtn-users" onclick="switchTab('tab-users')" style="display:none;"><span class="tab-label-text">사용자 관리</span> <span id="user-admin-badge" style="display:none;background:var(--danger);color:#fff;font-size:10px;padding:1px 6px;margin-left:4px;">0</span></button>
           <button class="tab-btn" data-tab="tab-reqboard" data-label-key="tab-reqboard" id="tabbtn-reqboard" onclick="switchTab('tab-reqboard')" style="display:none;"><span class="tab-label-text">입출금리스트</span></button>
+          <button class="tab-btn" data-tab="tab-recon" data-label-key="tab-recon" id="tabbtn-recon" onclick="switchTab('tab-recon')" style="display:none;"><span class="tab-label-text">입출금 대사</span></button>
           <button class="tab-btn" data-tab="tab-tax" data-label-key="tab-tax" id="tabbtn-tax" onclick="switchTab('tab-tax')" style="display:none;"><span class="tab-label-text">세금계산서</span></button>
           <button class="tab-btn" data-tab="tab-cashbook" data-label-key="tab-cashbook" id="tabbtn-cashbook" onclick="switchTab('tab-cashbook')" style="display:none;"><span class="tab-label-text">입출금 내역</span></button>
           <button class="tab-btn" data-tab="tab-paycheck" data-label-key="tab-paycheck" id="tabbtn-paycheck" onclick="switchTab('tab-paycheck')" style="display:none;"><span class="tab-label-text">단말기 입금 대조</span></button>
@@ -1516,6 +1517,60 @@
       </div>
     </div>
 
+    <div id="tab-recon" class="tab-panel">
+      <div class="card">
+        <h3 style="margin:0;">입출금 대사 <span class="info-tip" title="ERP에서 내려받은 입출금 파일을 올려 세금계산서와 맞춥니다. 거래일자·거래시간·계좌번호·금액으로 거래 하나를 가리므로, 같은 파일을 다시 올려도 이미 확인한 건은 그대로 유지됩니다.">ⓘ</span></h3>
+        <p class="desc" style="margin-top:0;">ERP 입출금 파일을 올려 <b>세금계산서와 맞춥니다.</b><br>
+          <b>거래일자 · 거래시간 · 계좌번호 · 금액</b>으로 거래를 가리므로, 파일을 다시 올려도 <b>이미 확인한 건은 그대로</b>입니다. 새 거래만 들어옵니다.</p>
+
+        <div style="border:1px solid var(--line);background:#fafafa;padding:10px 12px;margin-bottom:12px;">
+          <div style="font-size:12.5px;font-weight:700;margin-bottom:6px;">ERP 입출금 파일 올리기</div>
+          <input type="file" id="rc-file" accept=".xls,.xlsx" onchange="onReconFile(event)" style="font-size:12.5px;">
+          <span style="font-size:11.5px;color:var(--gray);margin-left:8px;">ERP에서 내려받은 파일 그대로 올리시면 됩니다.</span>
+          <div id="rc-upload-msg" style="font-size:12.5px;margin-top:6px;"></div>
+        </div>
+
+        <div id="recon-cards" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px;"></div>
+
+        <div style="margin-bottom:8px;">
+          <span class="btn-row" style="display:inline-flex;">
+            <button class="btn small" id="rc-f-todo" style="width:auto;" onclick="setReconFilter('todo')">확인 필요</button>
+            <button class="btn small secondary" id="rc-f-check" style="width:auto;" onclick="setReconFilter('check')">1차 확인</button>
+            <button class="btn small secondary" id="rc-f-done" style="width:auto;" onclick="setReconFilter('done')">완료</button>
+            <button class="btn small secondary" id="rc-f-skip" style="width:auto;" onclick="setReconFilter('skip')">대사 제외</button>
+            <button class="btn small secondary" id="rc-f-all" style="width:auto;" onclick="setReconFilter('all')">전체</button>
+          </span>
+          <span style="font-size:12px;color:var(--gray);margin:0 6px 0 12px;">법인</span>
+          <span class="btn-row" style="display:inline-flex;">
+            <button class="btn small" id="rc-c-all" style="width:auto;" onclick="setReconCorp('all')">전체</button>
+            <button class="btn small secondary" id="rc-c-포피플" style="width:auto;" onclick="setReconCorp('포피플')">포피플</button>
+            <button class="btn small secondary" id="rc-c-포피플즈" style="width:auto;" onclick="setReconCorp('포피플즈')">포피플즈</button>
+            <button class="btn small secondary" id="rc-c-미분류" style="width:auto;" onclick="setReconCorp('미분류')">미분류</button>
+          </span>
+        </div>
+        <div id="recon-pagination"></div>
+        <div id="recon-list"></div>
+      </div>
+    </div>
+
+    <!-- 입출금 대사 — 세금계산서 연결 -->
+    <div id="recontax-overlay" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.55);z-index:1100;align-items:center;justify-content:center;">
+      <div style="background:#fff;border:2px solid var(--navy);max-width:760px;width:96%;max-height:92vh;overflow-y:auto;padding:22px;position:relative;">
+        <button onclick="closeReconTax()" style="position:absolute;top:12px;right:12px;background:none;border:1px solid var(--navy);width:26px;height:26px;cursor:pointer;font-size:13px;">✕</button>
+        <h3 style="margin-top:0;margin-bottom:8px;">세금계산서 연결</h3>
+        <div id="rct-info" style="border:1px solid var(--line);background:#fafafa;padding:9px 11px;font-size:12.5px;line-height:1.8;margin-bottom:10px;"></div>
+        <p class="desc" style="margin-top:0;">금액이 비슷하고 날짜가 가까운 계산서를 보여드립니다. 골라서 연결하시면 <b>완료</b>로 바뀝니다.<br>
+          금액이 다르면 <b>차액</b>이 따로 남습니다. 고르지 않고 메모만 저장하셔도 됩니다.</p>
+        <div id="rct-list" style="max-height:300px;overflow-y:auto;border:1px solid var(--line);margin-bottom:10px;"></div>
+        <div class="stack-row"><label>메모</label><input type="text" id="rct-note" placeholder="차액 사유 등 (선택)"></div>
+        <div id="rct-msg" style="font-size:12.5px;margin:6px 0;"></div>
+        <span class="btn-row" style="margin-top:6px;">
+          <button class="btn small" style="width:auto;" onclick="submitReconTax()">저장</button>
+          <button class="btn small secondary" style="width:auto;" onclick="closeReconTax()">닫기</button>
+        </span>
+      </div>
+    </div>
+
     <div id="tab-tax" class="tab-panel">
       <div class="card">
         <h3 style="margin:0;">세금계산서 <span class="info-tip" title="매입·매출 세금계산서를 등록합니다. 매입 계산서 중 「B2B 사용가능」을 체크한 것은 은행 대출 증빙으로 쓸 수 있고, 대출에 쓴 만큼 한도가 줄어듭니다.">ⓘ</span></h3>
@@ -2239,6 +2294,14 @@
             <select id="quote-opt-color">
               <option value="yes">색상별로 나누기 (배정된 색상 표시)</option>
               <option value="no">나누지 않음 — 예약 단위 그대로</option>
+            </select>
+          </div>
+          <div class="stack-row" id="quote-opt-unalloc-row"><label>미배정 <span class="info-tip" title="아직 배정하지 않은 수량을 어떻게 보여줄지 고릅니다. 소계로 나누면 배정 완료분과 미배정분이 구분선으로 나뉘어 보입니다.">ⓘ</span></label>
+            <select id="quote-opt-unalloc">
+              <option value="split">아래에 따로 · 합계에 포함</option>
+              <option value="splitout">아래에 따로 · 합계에서 제외</option>
+              <option value="mix">구분 없이 섞어서</option>
+              <option value="hide">빼고 발행 (배정된 것만)</option>
             </select>
           </div>
           <div class="stack-row"><label>유효기간</label><input type="text" id="quote-opt-valid" maxlength="8" inputmode="numeric" placeholder="예: 20260731 (비우면 표시 안 함)"></div>
@@ -10814,6 +10877,361 @@
     loadReqBoard();
   };
 
+  // ---------- 입출금 대사 ----------
+  //  ERP 입출금 파일을 올려 세금계산서와 맞춥니다.
+  //  거래 하나를 가리는 열쇠: 거래일자 + 거래시간 + 계좌번호 + 입금액 + 출금액
+  //  같은 파일을 다시 올려도 이미 확인한 건은 그대로 유지됩니다. (새 거래만 추가)
+  let reconRows = [];          // 화면에 보이는 거래
+  let reconFilter = "todo";    // todo · done · skip · all
+  let reconCorp = "all";       // all · 포피플 · 포피플즈 · 미분류
+  let reconTaxCache = null;    // 세금계산서 후보 (한 번만 읽습니다)
+
+  // 계좌별칭 → 법인. 사이트 설정에서 바꿀 수 있게 만들 수 있습니다.
+  const RECON_CORP_RULES = [
+    { corp:"포피플",   match:["04_포피플", "05_포피플", "10_포피플"] },
+    { corp:"포피플즈", match:["24_포피플즈"] }
+  ];
+  function corpOf(acct){
+    const a = String(acct||"");
+    for(const r of RECON_CORP_RULES){
+      if(r.match.some(m=> a.indexOf(m) === 0)) return r.corp;
+    }
+    return "미분류";
+  }
+  // 거래 하나를 가리는 열쇠
+  function reconKey(x){
+    return [String(x.date||"").replace(/\D/g,""), String(x.time||"").replace(/\D/g,""),
+            String(x.acctNo||""), Number(x.inAmt)||0, Number(x.outAmt)||0].join("|");
+  }
+  // ERP 비고에서 상태를 읽습니다. (x·X = 제외 / o·O = 1차확인 / oo·OO = 완료)
+  function stateFromMemo(memo){
+    const m = String(memo||"").trim();
+    if(!m) return "todo";
+    const two = m.slice(0,2);
+    if(two === "oo" || two === "OO") return "done";
+    const one = m[0];
+    if(one === "x" || one === "X") return "skip";
+    if(one === "o" || one === "O") return "check";
+    return "todo";
+  }
+
+  window.setReconFilter = function(f){
+    reconFilter = f;
+    ["todo","check","done","skip","all"].forEach(k=>{
+      const b = document.getElementById("rc-f-" + k);
+      if(b) b.className = "btn small" + (k === f ? "" : " secondary");
+    });
+    renderReconList();
+  };
+  window.setReconCorp = function(c){
+    reconCorp = c;
+    ["all","포피플","포피플즈","미분류"].forEach(k=>{
+      const b = document.getElementById("rc-c-" + k);
+      if(b) b.className = "btn small" + (k === c ? "" : " secondary");
+    });
+    renderReconList();
+  };
+
+  // ERP 파일 올리기
+  window.onReconFile = async function(ev){
+    const f = ev.target.files && ev.target.files[0];
+    if(!f) return;
+    const msg = document.getElementById("rc-upload-msg");
+    const show = (t, color)=>{ msg.innerHTML = '<span style="color:' + (color||"var(--gray)") + ';">' + t + '</span>'; };
+    show("파일을 읽는 중입니다...");
+    try{
+      const buf = await f.arrayBuffer();
+      const wb = XLSX.read(buf, { type:"array" });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const aoa = XLSX.utils.sheet_to_json(ws, { header:1, raw:false, defval:"" });
+
+      // 머리글 줄 찾기 — "거래일자" 가 있는 줄
+      let hi = -1;
+      for(let i=0; i<Math.min(aoa.length, 20); i++){
+        if((aoa[i]||[]).some(c=> String(c).indexOf("거래일자") >= 0)){ hi = i; break; }
+      }
+      if(hi < 0){ show("「거래일자」가 있는 머리글 줄을 찾지 못했습니다. ERP에서 내려받은 파일이 맞는지 확인해주세요.", "var(--danger)"); return; }
+      const head = (aoa[hi]||[]).map(x=> String(x).trim());
+      const col = (name)=> head.findIndex(h=> h.indexOf(name) >= 0);
+      const cDate = col("거래일자"), cTime = col("거래시간"), cBank = col("은행"),
+            cNo = col("계좌번호"), cAlias = col("계좌별칭"), cDesc1 = col("적요1"),
+            cIn = col("입금"), cOut = col("출금"), cMemo = col("비고"),
+            cParty = col("상대계좌예금주명"), cDesc2 = col("적요2");
+      if(cDate < 0 || cIn < 0 || cOut < 0){ show("거래일자·입금·출금 칸을 찾지 못했습니다.", "var(--danger)"); return; }
+
+      const num = (v)=> Number(String(v||"").replace(/[^0-9.\-]/g, "")) || 0;
+      const rows = [];
+      for(let i=hi+1; i<aoa.length; i++){
+        const r = aoa[i] || [];
+        const inAmt = num(r[cIn]), outAmt = num(r[cOut]);
+        if(inAmt === 0 && outAmt === 0) continue;
+        if(inAmt > 1e9 || outAmt > 1e9) continue;     // 맨 아래 합계 줄은 뺍니다
+        const date = String(r[cDate]||"").trim().slice(0,10);
+        if(!date) continue;
+        rows.push({
+          date, time: String(r[cTime]||"").trim(),
+          bank: String(r[cBank]||"").trim(), acctNo: String(r[cNo]||"").trim(),
+          acct: String(r[cAlias]||"").trim(),
+          desc: String(r[cDesc1]||"").trim(), desc2: cDesc2>=0 ? String(r[cDesc2]||"").trim() : "",
+          inAmt, outAmt,
+          memo: cMemo>=0 ? String(r[cMemo]||"").trim() : "",
+          party: cParty>=0 ? String(r[cParty]||"").trim() : ""
+        });
+      }
+      if(rows.length === 0){ show("읽을 거래가 없습니다.", "var(--danger)"); return; }
+
+      show(rows.length + "건을 읽었습니다. 저장하는 중입니다...");
+      // 이미 저장된 것과 견줍니다. (열쇠가 같으면 새로 넣지 않습니다)
+      const snap = await getDocs(collection(db,"bankRecon"));
+      const have = new Map();
+      snap.forEach(d=> have.set(d.data().key, { id:d.id, ...d.data() }));
+
+      let added = 0, kept = 0;
+      for(let i=0; i<rows.length; i+=400){
+        const bt = writeBatch(db);
+        let n = 0;
+        rows.slice(i, i+400).forEach(x=>{
+          const key = reconKey(x);
+          if(have.has(key)){ kept++; return; }
+          const ref = doc(collection(db,"bankRecon"));
+          bt.set(ref, {
+            ...x, key, corp: corpOf(x.acct),
+            state: stateFromMemo(x.memo),      // 비고에 적힌 x·o·oo 를 그대로 씁니다
+            taxId: "", taxAmount: 0, diff: 0, note: "",
+            createdAt: serverTimestamp()
+          });
+          added++; n++;
+        });
+        if(n > 0) await bt.commit();
+      }
+      logAction("입출금 대사 파일 올림", f.name + " / 읽음 " + rows.length + "건 / 새로 " + added + "건 / 이미 있음 " + kept + "건");
+      show("새로 " + added + "건을 넣었습니다. 이미 있던 " + kept + "건은 그대로 두었습니다.", "#2e7d32");
+      loadReconList();
+    }catch(e){
+      show("읽지 못했습니다. " + comboEsc((e && e.message) ? e.message : String(e)), "var(--danger)");
+    }
+    ev.target.value = "";
+  };
+
+  window.loadReconList = async function(){
+    const el = document.getElementById("recon-list");
+    if(!el) return;
+    el.innerHTML = '<div class="list-empty">불러오는 중...</div>';
+    try{
+      const snap = await getDocs(query(collection(db,"bankRecon"), orderBy("date","desc")));
+      reconRows = [];
+      snap.forEach(d=> reconRows.push({ id:d.id, ...d.data() }));
+    }catch(e){
+      el.innerHTML = '<div class="list-empty">불러오지 못했습니다.</div>'; return;
+    }
+    renderReconList();
+  };
+
+  function renderReconList(){
+    const el = document.getElementById("recon-list");
+    if(!el) return;
+    const canDo = hasPerm(currentUserPerms, "paymentProcess");
+    const money = v => (Number(v)||0).toLocaleString();
+
+    const view = reconRows.filter(x=>{
+      if(reconCorp !== "all" && (x.corp||"미분류") !== reconCorp) return false;
+      if(reconFilter === "all") return true;
+      return (x.state||"todo") === reconFilter;
+    });
+
+    // 카드
+    const cnt = { todo:0, check:0, done:0, skip:0 };
+    const amt = { todo:0, check:0, done:0, skip:0 };
+    reconRows.forEach(x=>{
+      if(reconCorp !== "all" && (x.corp||"미분류") !== reconCorp) return;
+      const s = x.state || "todo";
+      if(cnt[s] === undefined) return;
+      cnt[s]++; amt[s] += Math.max(Number(x.inAmt)||0, Number(x.outAmt)||0);
+    });
+    const cardEl = document.getElementById("recon-cards");
+    if(cardEl){
+      const card = (label, value, color, note)=>
+        '<div style="border:1px solid ' + (color?'var(--navy)':'var(--line)') + ';padding:9px 12px;min-width:150px;background:' + (color?'#f4f7fb':'#fff') + ';">'
+        + '<div style="font-size:11px;color:var(--gray);">' + label + '</div>'
+        + '<div style="font-size:16px;font-weight:700;' + (color?('color:'+color+';'):'') + '">' + value + '</div>'
+        + (note ? '<div style="font-size:10.5px;color:var(--gray);">' + note + '</div>' : '') + '</div>';
+      cardEl.innerHTML =
+        card("확인 필요", cnt.todo + "건", "var(--danger)", money(amt.todo)) +
+        card("1차 확인", cnt.check + "건", "#b8860b", money(amt.check)) +
+        card("완료", cnt.done + "건", "#2e7d32", money(amt.done)) +
+        card("대사 제외", cnt.skip + "건", null, money(amt.skip));
+    }
+
+    // 페이지 나눔
+    const pg = document.getElementById("recon-pagination");
+    if(pg){ pg.innerHTML = ""; pg.appendChild(renderPaginationBar("bankRecon", view.length, renderReconList)); }
+    const { pageItems } = paginateSlice(view, "bankRecon");
+
+    if(view.length === 0){
+      el.innerHTML = '<div class="list-empty">해당하는 거래가 없습니다. 위에서 ERP 파일을 올려주세요.</div>';
+      return;
+    }
+    const stLabel = { todo:"확인 필요", check:"1차 확인", done:"완료", skip:"대사 제외" };
+    const stColor = { todo:"var(--danger)", check:"#b8860b", done:"#2e7d32", skip:"var(--gray)" };
+
+    el.innerHTML = '<div style="overflow-x:auto;"><table class="data-table" style="width:auto;">'
+      + '<thead><tr><th>상태</th><th>법인</th><th>날짜</th><th>시간</th><th>계좌</th>'
+      + '<th class="ta-right">입금</th><th class="ta-right">출금</th><th>적요</th><th>상대</th>'
+      + '<th>세금계산서</th><th class="ta-right">차액</th><th>메모</th><th></th></tr></thead><tbody>'
+      + pageItems.map(x=>{
+          const s = x.state || "todo";
+          return '<tr>'
+            + '<td style="color:' + stColor[s] + ';font-weight:700;white-space:nowrap;">' + stLabel[s] + '</td>'
+            + '<td>' + comboEsc(x.corp||"미분류") + '</td>'
+            + '<td style="white-space:nowrap;">' + comboEsc(x.date||"-") + '</td>'
+            + '<td style="white-space:nowrap;color:var(--gray);">' + comboEsc(x.time||"-") + '</td>'
+            + '<td>' + comboEsc(x.acct||"-") + '</td>'
+            + '<td class="ta-right" style="color:#1565c0;">' + (x.inAmt ? money(x.inAmt) : '-') + '</td>'
+            + '<td class="ta-right" style="color:var(--danger);">' + (x.outAmt ? money(x.outAmt) : '-') + '</td>'
+            + '<td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;">' + comboEsc(x.desc||"-") + '</td>'
+            + '<td>' + comboEsc(x.party||"-") + '</td>'
+            + '<td>' + (x.taxId
+                ? '<span style="color:#2e7d32;">' + comboEsc(x.taxLabel||"연결됨") + '</span>'
+                : '<span style="color:var(--gray);">-</span>') + '</td>'
+            + '<td class="ta-right" style="color:' + (x.diff ? "var(--danger)" : "var(--gray)") + ';">'
+              + (x.diff ? money(x.diff) : '-') + '</td>'
+            + '<td style="color:var(--gray);font-size:11.5px;max-width:150px;overflow:hidden;text-overflow:ellipsis;">'
+              + comboEsc(x.note || x.memo || "") + '</td>'
+            + '<td class="ta-right" style="white-space:nowrap;">'
+              + (canDo
+                  ? '<button class="btn small secondary" style="width:auto;" data-rc-tax="' + x.id + '">계산서</button>'
+                    + '<button class="btn small secondary" style="width:auto;margin-left:3px;" data-rc-st="' + x.id + '">상태</button>'
+                  : '<span style="color:var(--gray);">-</span>') + '</td>'
+            + '</tr>';
+        }).join("")
+      + '</tbody></table></div>';
+
+    document.querySelectorAll("#tab-recon [data-rc-tax]").forEach(b=>{
+      b.onclick = ()=> openReconTax(b.dataset.rcTax);
+    });
+    document.querySelectorAll("#tab-recon [data-rc-st]").forEach(b=>{
+      b.onclick = ()=> openReconState(b.dataset.rcSt);
+    });
+  }
+
+  // 상태 바꾸기
+  window.openReconState = async function(id){
+    const x = reconRows.find(r=> r.id === id);
+    if(!x) return;
+    const cur = x.state || "todo";
+    const v = prompt("상태를 골라주세요.\n\n1 = 확인 필요\n2 = 1차 확인 (메일·사진으로 받음)\n3 = 완료 (홈택스까지 대조)\n4 = 대사 제외 (계산서 없는 거래)\n\n지금 상태: "
+      + ({todo:"확인 필요",check:"1차 확인",done:"완료",skip:"대사 제외"}[cur]), "");
+    if(v === null) return;
+    const map = { "1":"todo", "2":"check", "3":"done", "4":"skip" };
+    const next = map[String(v).trim()];
+    if(!next){ alert("1~4 중에서 골라주세요."); return; }
+    let note = x.note || "";
+    if(next === "skip"){
+      const r = prompt("제외 사유를 적어주세요. (선택)", note);
+      if(r !== null) note = String(r).trim();
+    }
+    try{
+      await updateDoc(doc(db,"bankRecon", id), { state: next, note });
+      logAction("입출금 대사 상태 변경",
+        (x.date||"-") + " / " + Math.max(Number(x.inAmt)||0, Number(x.outAmt)||0).toLocaleString()
+        + " / " + ({todo:"확인 필요",check:"1차 확인",done:"완료",skip:"대사 제외"}[next])
+        + (note ? " / " + note : ""));
+    }catch(e){ alert("바꾸지 못했습니다."); return; }
+    loadReconList();
+  };
+
+  // 세금계산서 연결
+  let reconTaxTarget = null;
+  window.openReconTax = async function(id){
+    const x = reconRows.find(r=> r.id === id);
+    if(!x) return;
+    reconTaxTarget = x;
+    const amt = Math.max(Number(x.inAmt)||0, Number(x.outAmt)||0);
+    document.getElementById("rct-info").innerHTML =
+      comboEsc(x.date||"-") + " " + comboEsc(x.time||"") + " · <b>" + comboEsc(x.acct||"-") + "</b> · "
+      + (x.inAmt ? '<span style="color:#1565c0;">입금 ' : '<span style="color:var(--danger);">출금 ')
+      + amt.toLocaleString() + '</span>'
+      + (x.party ? " · " + comboEsc(x.party) : "")
+      + (x.desc ? '<br><span style="color:var(--gray);">' + comboEsc(x.desc) + '</span>' : '');
+    document.getElementById("rct-note").value = x.note || "";
+    document.getElementById("rct-msg").innerHTML = "";
+
+    // 세금계산서 후보 — 금액이 가깝고 날짜가 ±15일 안인 것
+    if(!reconTaxCache){
+      try{
+        const s = await getDocs(collection(db,"taxInvoices"));
+        reconTaxCache = [];
+        s.forEach(d=> reconTaxCache.push({ id:d.id, ...d.data() }));
+      }catch(e){ reconTaxCache = []; }
+    }
+    const d0 = Number(String(x.date||"").replace(/\D/g,"")) || 0;
+    const cands = reconTaxCache.map(t=>{
+      const ta = Number(t.amount)||0;
+      const td = Number(String(t.issueDate||"").replace(/\D/g,"")) || 0;
+      const diff = amt - ta;
+      const dayGap = Math.abs(td - d0);
+      return { ...t, diff, dayGap };
+    }).filter(t=> Math.abs(t.diff) <= Math.max(amt * 0.1, 100000) && t.dayGap <= 1500)
+      .sort((a,b)=> Math.abs(a.diff) - Math.abs(b.diff) || a.dayGap - b.dayGap)
+      .slice(0, 30);
+
+    const box = document.getElementById("rct-list");
+    if(cands.length === 0){
+      box.innerHTML = '<div class="list-empty">금액이 비슷한 계산서를 찾지 못했습니다. 세금계산서 화면에서 먼저 등록해주세요.</div>';
+    }else{
+      box.innerHTML = '<table class="data-table" style="width:auto;"><thead><tr>'
+        + '<th></th><th>구분</th><th>발행일</th><th>거래처</th><th class="ta-right">계산서금액</th><th class="ta-right">차액</th>'
+        + '</tr></thead><tbody>'
+        + cands.map(t=>'<tr><td><input type="radio" name="rct-pick" value="'+t.id+'" data-amt="'+(Number(t.amount)||0)+'" data-label="'
+            + comboEsc((t.issueDate||"") + " " + (t.company||"")) + '"></td>'
+          + '<td>' + (t.kind === "sale" ? "매출" : "매입") + '</td>'
+          + '<td>' + comboEsc(t.issueDate||"-") + '</td>'
+          + '<td><b>' + comboEsc(t.company||"-") + '</b></td>'
+          + '<td class="ta-right">' + (Number(t.amount)||0).toLocaleString() + '</td>'
+          + '<td class="ta-right" style="color:' + (t.diff ? "var(--danger)" : "#2e7d32") + ';">'
+            + (t.diff ? t.diff.toLocaleString() : "0") + '</td></tr>').join("")
+        + '</tbody></table>';
+    }
+    document.getElementById("recontax-overlay").style.display = "flex";
+  };
+  window.closeReconTax = function(){
+    document.getElementById("recontax-overlay").style.display = "none";
+    reconTaxTarget = null;
+  };
+  window.submitReconTax = async function(){
+    if(!reconTaxTarget) return;
+    const x = reconTaxTarget;
+    const picked = document.querySelector('input[name="rct-pick"]:checked');
+    const note = document.getElementById("rct-note").value.trim();
+    if(!picked){
+      // 계산서 없이 메모만 저장
+      try{
+        await updateDoc(doc(db,"bankRecon", x.id), { note });
+      }catch(e){ alert("저장에 실패했습니다."); return; }
+      closeReconTax(); loadReconList(); return;
+    }
+    const amt = Math.max(Number(x.inAmt)||0, Number(x.outAmt)||0);
+    const taxAmt = Number(picked.dataset.amt)||0;
+    const diff = amt - taxAmt;
+    if(diff !== 0){
+      if(!confirm("금액이 " + Math.abs(diff).toLocaleString() + "원 "
+        + (diff > 0 ? "많습니다" : "적습니다") + ".\n\n"
+        + "입출금 " + amt.toLocaleString() + "\n계산서 " + taxAmt.toLocaleString()
+        + "\n\n그래도 연결할까요? (차액은 따로 표시됩니다)")) return;
+    }
+    try{
+      await updateDoc(doc(db,"bankRecon", x.id), {
+        taxId: picked.value, taxLabel: picked.dataset.label, taxAmount: taxAmt,
+        diff, note, state: "done"
+      });
+      logAction("입출금 대사 계산서 연결",
+        (x.date||"-") + " / " + amt.toLocaleString() + " ↔ " + picked.dataset.label
+        + " " + taxAmt.toLocaleString() + (diff ? " / 차액 " + diff.toLocaleString() : ""));
+    }catch(e){ alert("저장에 실패했습니다."); return; }
+    closeReconTax();
+    loadReconList();
+  };
+
   // ---------- 세금계산서 ----------
   //  매입·매출 세금계산서를 등록하고, 매입 건은 B2B 대출 한도로 씁니다.
   //   · 「B2B 사용 가능」을 체크한 계산서만 대출 증빙으로 쓸 수 있습니다.
@@ -13690,8 +14108,27 @@
       catch(e){ console.error("색상별 나누기 실패", e); finalItems = items; }
     }
 
-    const totalQty = finalItems.reduce((n,x)=> n + x.qty, 0);
-    const totalAmount = finalItems.reduce((n,x)=> n + x.amount, 0);
+    // 미배정 처리 방식
+    const unallocMode = (document.getElementById("quote-opt-unalloc")||{}).value || "split";
+    if(splitColor){
+      if(unallocMode === "hide"){
+        finalItems = finalItems.filter(x=> x.color !== "미배정");
+        if(finalItems.length === 0){ msg("배정된 품목이 없어 발행할 수 없습니다.", true); return; }
+      }else if(unallocMode === "mix"){
+        // 구분 없이 섞습니다. 표시용 표시를 지웁니다.
+        finalItems = finalItems.map(x=> ({ ...x, unalloc:false }));
+      }else{
+        // 아래에 따로 — 미배정 줄에 표시를 달아둡니다.
+        finalItems = finalItems.map(x=> ({ ...x, unalloc: (x.color === "미배정") }));
+      }
+    }
+    // 합계 — "합계에서 제외"면 미배정을 빼고 냅니다.
+    const countItems = (unallocMode === "splitout" && splitColor)
+      ? finalItems.filter(x=> !x.unalloc) : finalItems;
+    const totalQty = countItems.reduce((n,x)=> n + x.qty, 0);
+    const totalAmount = countItems.reduce((n,x)=> n + x.amount, 0);
+    const unallocQty = finalItems.filter(x=> x.unalloc).reduce((n,x)=> n + x.qty, 0);
+    const unallocAmount = finalItems.filter(x=> x.unalloc).reduce((n,x)=> n + x.amount, 0);
     const today = todayStr();
     const qSnap = await getDocs(collection(db,"quotations"));
     let seq = 1;
@@ -13704,6 +14141,7 @@
         validUntil,
         discMode, showListPrice: showList,      // 할인 표시 방식
         note, items: finalItems, totalQty, totalAmount, status:"발행",
+        unallocMode, unallocQty, unallocAmount,
         createdBy: currentUser.name, createdByUsername: currentUser.username, createdAt: serverTimestamp()
       }), 12000, "견적서 발행");
       // 예약에 견적서 연결 (수정 잠금)
@@ -16179,7 +16617,28 @@
       '<th class="ta-right">'+(isBuy ? "입고가" : "단가")+'</th>' +
       '<th class="ta-right">금액</th>' +
       '</tr></thead><tbody>';
-    (q.items||[]).forEach((it,i)=>{
+    // 미배정을 아래에 따로 보여주는 경우, 배정 완료분과 미배정분을 나눠 그립니다.
+    const uMode = q.unallocMode || "mix";
+    const splitUnalloc = (uMode === "split" || uMode === "splitout")
+      && (q.items||[]).some(x=> x.unalloc);
+    const okItems = splitUnalloc ? (q.items||[]).filter(x=> !x.unalloc) : (q.items||[]);
+    const unItems = splitUnalloc ? (q.items||[]).filter(x=>  x.unalloc) : [];
+    const colCount = 5 + (showList?1:0) + (showPct?1:0) + (showAmt?1:0) + 1;
+    const subtotalRow = (label, list, color)=>{
+      const qy = list.reduce((n,x)=> n + (Number(x.qty)||0), 0);
+      const am = list.reduce((n,x)=> n + (Number(x.amount)||0), 0);
+      const lt = list.reduce((n,x)=> n + ((Number(x.listPrice)||0) * (Number(x.qty)||0)), 0);
+      return '<tr style="background:#f7f7f7;font-weight:700;">' +
+        '<td colspan="4"' + (color?' style="color:'+color+';"':'') + '>' + label + '</td>' +
+        '<td class="ta-right">'+qy+'</td>' +
+        (showList ? '<td class="ta-right">'+(lt?lt.toLocaleString():"-")+'</td>' : '') +
+        (showPct  ? '<td></td>' : '') +
+        (showAmt  ? '<td></td>' : '') +
+        '<td></td>' +
+        '<td class="ta-right">'+am.toLocaleString()+'</td></tr>';
+    };
+
+    (okItems).forEach((it,i)=>{
       const lp = (it.listPrice!=null) ? Number(it.listPrice) : null;
       const price = (it.salePrice!=null) ? Number(it.salePrice) : null;
       // 저장된 할인이 없으면 출고가와 단가로 역산합니다.
@@ -16196,8 +16655,34 @@
         '<td class="ta-right"><b>'+(price!=null ? price.toLocaleString() : '<span style="color:var(--danger);">미입력</span>')+'</b></td>' +
         '<td class="ta-right">'+(Number(it.amount)||0).toLocaleString()+'</td></tr>';
     });
+    // 미배정을 따로 보여주는 경우 — 소계와 구분선을 넣습니다.
+    if(splitUnalloc){
+      h += subtotalRow("배정 완료 소계", okItems);
+      h += '<tr><td colspan="'+colCount+'" style="background:#fafafa;border-top:2px solid var(--navy);'
+        + 'font-size:11.5px;color:var(--gray);padding:4px 7px;">아래는 <b>아직 배정하지 않은 수량</b>입니다.'
+        + (uMode === "splitout" ? ' (합계에 포함되지 않습니다)' : '') + '</td></tr>';
+      unItems.forEach((it, j)=>{
+        const lp = (it.listPrice!=null) ? Number(it.listPrice) : null;
+        const price = (it.salePrice!=null) ? Number(it.salePrice) : null;
+        const dAmt = (it.discountAmt!=null) ? Number(it.discountAmt) : ((lp!=null && price!=null) ? (lp-price) : null);
+        const dPct = (it.discountPct!=null) ? Number(it.discountPct) : ((lp && dAmt!=null) ? Number((dAmt/lp*100).toFixed(2)) : null);
+        h += '<tr><td style="color:var(--gray);">'+(okItems.length + j + 1)+'</td>' +
+          '<td>'+comboEsc(docModelLabel(it))+'</td>' +
+          '<td style="color:var(--gray);">미배정</td>' +
+          '<td>'+comboEsc(it.carrier||"-")+'</td>' +
+          '<td class="ta-right">'+(it.qty||0)+'</td>' +
+          (showList ? '<td class="ta-right">'+(lp!=null ? lp.toLocaleString() : "-")+'</td>' : '') +
+          (showPct  ? '<td class="ta-right">'+(dPct!=null ? dPct.toFixed(2)+"%" : "-")+'</td>' : '') +
+          (showAmt  ? '<td class="ta-right">'+(dAmt!=null ? dAmt.toLocaleString() : "-")+'</td>' : '') +
+          '<td class="ta-right"><b>'+(price!=null ? price.toLocaleString() : "-")+'</b></td>' +
+          '<td class="ta-right">'+(Number(it.amount)||0).toLocaleString()+'</td></tr>';
+      });
+      h += subtotalRow("미배정 소계", unItems, "var(--gray)");
+    }
     const vat = Math.round((Number(q.totalAmount)||0) / 11);
-    const totListAmt = (q.items||[]).reduce((n,x)=> n + ((Number(x.listPrice)||0) * (Number(x.qty)||0)), 0);
+    // 합계에 쓸 품목 — "합계에서 제외"면 미배정을 뺍니다.
+    const totalBase = (uMode === "splitout") ? okItems : (q.items||[]);
+    const totListAmt = totalBase.reduce((n,x)=> n + ((Number(x.listPrice)||0) * (Number(x.qty)||0)), 0);
     const avgPct = totListAmt ? ((totListAmt - (Number(q.totalAmount)||0)) / totListAmt * 100) : null;
     h += '<tr style="background:#fafafa;font-weight:700;border-top:2px solid var(--navy);">' +
       '<td colspan="4">합계</td><td class="ta-right">'+(q.totalQty||0)+'</td>' +
@@ -21782,7 +22267,7 @@
     document.getElementById("signup-form").style.display="none";
     document.getElementById("login-form").style.display="block";
   };
-  const ADMIN_TAB_IDS = ["tab-site","tab-team","tab-users","tab-reqboard","tab-cashbook","tab-tax","tab-b2b","tab-logs"];
+  const ADMIN_TAB_IDS = ["tab-site","tab-team","tab-users","tab-reqboard","tab-cashbook","tab-recon","tab-tax","tab-b2b","tab-logs"];
   const INV_ADMIN_TAB_IDS = ["tab-inv-model","tab-inv-color","tab-inv-manufacturer","tab-inv-location","tab-inv-status","tab-inv-carrier"];
 
   window.toggleAdminMenu = function(){
@@ -21845,6 +22330,7 @@
     if(tabId==="tab-reqboard") loadReqBoard();
     if(tabId==="tab-cashbook"){ document.getElementById("cb-date").value = todayStr(); loadCashbook(); }
     if(tabId==="tab-tax"){ document.getElementById("tx-date").value = todayStr(); loadTaxList(); }
+    if(tabId==="tab-recon"){ reconTaxCache = null; loadReconList(); }
     if(tabId==="tab-b2b") loadB2BTab();
     if(tabId==="tab-team") loadTeamList();
     if(tabId==="tab-users") loadUserAdminList();
@@ -22024,6 +22510,7 @@
       setMenu("tabbtn-reqboard", hasPerm(perms, "menuReqBoard") || showSettlement);
       setMenu("tabbtn-cashbook", hasPerm(perms, "menuReqBoard") || showSettlement);
       setMenu("tabbtn-tax", hasPerm(perms, "menuReqBoard") || showSettlement);
+      setMenu("tabbtn-recon", hasPerm(perms, "menuReqBoard") || showSettlement);
       setMenu("tabbtn-b2b", showSettlement);
       setMenu("tabbtn-ledger", showLedger || showSettlement);
       setMenu("tabbtn-datacheck", showDataCheck || showSettlement);
