@@ -315,7 +315,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-03 v316</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-04 v317</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -841,14 +841,7 @@
         <h3 style="margin-top:0;margin-bottom:4px;">할인율 계산기</h3>
         <p class="desc" style="margin-top:0;">모델명(또는 삼성코드)과 수량을 붙여넣으면 <b>등록된 모델의 출고가</b>로 총액을 냅니다.<br>
           <b>합계금액</b>을 넣으면 할인율을 <b>소수점 둘째자리</b>까지 계산합니다. 등록 안 된 모델은 빨갛게 알려드립니다.</p>
-        <div style="border:1px solid #e0c46c;background:#fff8e1;padding:8px 11px;margin-bottom:8px;font-size:12.5px;line-height:1.8;">
-          <b style="color:#8a6d0b;">사진에서 읽기</b>
-          <input type="file" id="dc-image" accept="image/*" onchange="onDiscountImage(event)" style="font-size:12px;margin-left:8px;">
-          <span style="color:var(--gray);">또는 아래 칸에 사진을 <b>Ctrl+V</b></span><br>
-          <span style="color:var(--gray);font-size:11.5px;">읽은 글자가 <b>틀릴 수 있습니다.</b> 계산하기 전에 꼭 눈으로 확인해주세요. 화면을 찍은 사진보다 <b>엑셀에서 복사</b>가 정확합니다.</span>
-          <div id="dc-ocr-msg" style="margin-top:4px;"></div>
-        </div>
-        <textarea id="dc-text" rows="9" onpaste="onDiscountPaste(event)" style="width:100%;border:1px solid var(--line);padding:8px;font-size:12.5px;font-family:monospace;box-sizing:border-box;" placeholder="SM-L355NZKAKOD&#9;30&#10;SM-L355NZSAKOD&#9;30&#10;SM-L345NZEAKOD&#9;20&#10;SM-L345NZKAKOD&#9;20&#10;&#10;(출고가가 함께 붙여넣어져 있어도 됩니다 — 등록된 출고가를 씁니다)&#10;(사진을 Ctrl+V 로 붙여넣어도 됩니다)"></textarea>
+        <textarea id="dc-text" rows="9" style="width:100%;border:1px solid var(--line);padding:8px;font-size:12.5px;font-family:monospace;box-sizing:border-box;" placeholder="SM-L355NZKAKOD&#9;30&#10;SM-L355NZSAKOD&#9;30&#10;SM-L345NZEAKOD&#9;20&#10;SM-L345NZKAKOD&#9;20&#10;&#10;(출고가가 함께 붙여넣어져 있어도 됩니다 — 등록된 출고가를 씁니다)"></textarea>
         <div class="tbar-row" style="display:flex;gap:0;flex-wrap:wrap;align-items:center;margin:8px 0;">
           <span style="font-size:12px;color:var(--gray);margin-right:6px;">합계금액</span>
           <input type="text" id="dc-actual" placeholder="실제 매입 합계금액" oninput="recalcDiscountCalc()" style="width:180px;height:28px;border:1px solid var(--line);padding:0 8px;font-size:12.5px;box-sizing:border-box;">
@@ -7128,80 +7121,6 @@
     }catch(e){ el.style.display = "none"; }
   }
 
-  // ---------- 할인율 계산기 — 사진에서 읽기 ----------
-  //  사진에 있는 글자를 읽어 붙여넣기 칸에 넣습니다.
-  //  잘못 읽을 수 있으니 반드시 눈으로 확인한 뒤 계산해주세요.
-  //  화면을 찍은 사진은 격자무늬 때문에 특히 틀리기 쉽습니다.
-  let ocrBusy = false;
-
-  window.onDiscountImage = async function(ev){
-    const f = ev.target.files && ev.target.files[0];
-    if(!f) return;
-    await readImageToText(f);
-    ev.target.value = "";
-  };
-
-  // 붙여넣기(Ctrl+V)로도 사진을 받습니다.
-  window.onDiscountPaste = async function(ev){
-    const items = (ev.clipboardData && ev.clipboardData.items) || [];
-    for(const it of items){
-      if(it.type && it.type.indexOf("image") === 0){
-        const f = it.getAsFile();
-        if(f){ ev.preventDefault(); await readImageToText(f); return; }
-      }
-    }
-  };
-
-  async function readImageToText(file){
-    if(ocrBusy){ alert("이미 읽는 중입니다. 잠시만 기다려주세요."); return; }
-    const st = document.getElementById("dc-ocr-msg");
-    const show = (t, color)=>{ if(st) st.innerHTML = '<span style="color:' + (color||"var(--gray)") + ';">' + t + '</span>'; };
-
-    // 글자 읽기 도구를 처음 한 번만 내려받습니다.
-    if(typeof Tesseract === "undefined"){
-      show("글자를 읽는 도구를 준비하는 중입니다... (처음 한 번만 받습니다)");
-      try{
-        await new Promise((ok, ng)=>{
-          const s = document.createElement("script");
-          s.src = "https://cdnjs.cloudflare.com/ajax/libs/tesseract.js/5.1.0/tesseract.min.js";
-          s.onload = ok; s.onerror = ()=> ng(new Error("도구를 받지 못했습니다"));
-          document.head.appendChild(s);
-        });
-      }catch(e){
-        show("글자 읽기 도구를 받지 못했습니다. 인터넷 연결을 확인해주세요.", "var(--danger)"); return;
-      }
-    }
-
-    ocrBusy = true;
-    show("사진에서 글자를 읽는 중입니다... 10~30초 걸립니다.");
-    try{
-      const res = await Tesseract.recognize(file, "eng", {
-        logger: m=>{
-          if(m.status === "recognizing text" && st){
-            show("읽는 중... " + Math.round((m.progress||0) * 100) + "%");
-          }
-        }
-      });
-      const raw = (res && res.data && res.data.text) || "";
-      // 모델코드나 숫자가 있는 줄만 남깁니다. (머리글·설명 줄은 뺍니다)
-      const lines = raw.split(/\r?\n/).map(x=>x.trim()).filter(x=>{
-        if(!x) return false;
-        return /SM[-\s]?[A-Z0-9]{4,}/i.test(x) || /[0-9]{2,}/.test(x);
-      });
-      if(lines.length === 0){
-        show("사진에서 읽을 내용을 찾지 못했습니다. 더 크고 또렷한 사진으로 다시 해주세요.", "var(--danger)");
-        ocrBusy = false; return;
-      }
-      const ta = document.getElementById("dc-text");
-      ta.value = (ta.value ? ta.value.replace(/\s+$/,"") + "\n" : "") + lines.join("\n");
-      show("읽었습니다. <b>글자가 맞는지 꼭 확인한 뒤</b> 계산하기를 눌러주세요. "
-        + "모델코드는 한 글자만 달라도 다른 모델이 됩니다.", "#b8860b");
-    }catch(e){
-      show("읽는 중 문제가 생겼습니다. 사진을 바꿔 다시 해주세요.", "var(--danger)");
-    }
-    ocrBusy = false;
-  }
-
   // ---------- 할인율 계산기 ----------
   //  붙여넣은 모델명으로 등록된 모델의 출고가를 찾아 출고가 총액을 냅니다.
   //  실제 합계금액을 넣으면 할인율을 소수점 둘째자리까지 계산합니다.
@@ -7213,7 +7132,6 @@
     document.getElementById("dc-actual").value = "";
     document.getElementById("dc-rate").value = "";
     document.getElementById("dc-result").innerHTML = "";
-    { const om = document.getElementById("dc-ocr-msg"); if(om) om.innerHTML = ""; }
     dcRows = []; dcMissing = [];
     document.getElementById("dc-overlay").style.display = "flex";
     await fetchModelsCache();
