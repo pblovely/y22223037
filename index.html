@@ -320,7 +320,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-05 v333</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-05 v334</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -11775,15 +11775,28 @@
         const gap = dayGap(x.date, t.issueDate);
         if(gap > days) return;
         const nameT = cleanName(t.company);
+        // 이름이 얼마나 맞는지 봅니다. 전혀 다르면 후보에서 뺍니다.
+        //  같음 → 확실 / 한쪽이 포함 → 아마도 / 두 글자 이상 겹침 → 아마도 / 그 외 → 제외
+        let nameKind = "no";
+        if(nameX && nameT){
+          if(nameX === nameT) nameKind = "same";
+          else if(nameX.indexOf(nameT) >= 0 || nameT.indexOf(nameX) >= 0) nameKind = "part";
+          else {
+            // 앞에서부터 몇 글자가 같은지 봅니다. (예: 신우빌딩 ↔ 신우빌딩관리단)
+            let n = 0;
+            while(n < nameX.length && n < nameT.length && nameX[n] === nameT[n]) n++;
+            if(n >= 2) nameKind = "head";
+          }
+        }
+        if(nameKind === "no") return;    // 이름이 전혀 다르면 이어주지 않습니다
         let score = 0;
         if(isBuy === wantBuy) score += 2;                       // 입출금 방향이 맞음
-        if(nameX && nameT){
-          if(nameX === nameT) score += 6;                        // 이름이 똑같음
-          else if(nameX.indexOf(nameT) >= 0 || nameT.indexOf(nameX) >= 0) score += 4;  // 한쪽이 포함
-        }
+        if(nameKind === "same") score += 6;
+        else if(nameKind === "part") score += 4;
+        else score += 2;
         score += Math.max(0, 3 - Math.floor(gap / 30));          // 날짜가 가까울수록
         if(score > bestScore){ bestScore = score; best = { t, gap, score,
-          exact: (nameX && nameT && nameX === nameT) }; }
+          exact: (nameKind === "same") }; }
       });
       if(!best) return;
       const row = { x, t: best.t, gap: best.gap, amt, exact: best.exact };
@@ -11799,15 +11812,28 @@
     const sureOk = pick(sure), maybeOk = pick(maybe);
     autoMatchResult = { sure: sureOk, maybe: maybeOk };
 
-    const line = (r, cls)=>
-      '<tr><td><input type="checkbox" class="' + cls + '" value="' + r.x.id + '" checked></td>'
-      + '<td>' + comboEsc(r.x.date) + '</td>'
-      + '<td class="ta-right">' + r.amt.toLocaleString() + '</td>'
+    const line = (r, cls)=>{
+      const taxAmt = Number(r.t.amount)||0;
+      const diff = r.amt - taxAmt;
+      const inOut = (Number(r.x.inAmt)||0) > 0 ? "입금" : "출금";
+      return '<tr><td><input type="checkbox" class="' + cls + '" value="' + r.x.id + '" checked></td>'
+      + '<td style="white-space:nowrap;">' + comboEsc(r.x.date) + '</td>'
+      + '<td style="white-space:nowrap;color:' + (inOut === "입금" ? "#1565c0" : "var(--danger)") + ';">' + inOut + '</td>'
+      + '<td class="ta-right" style="font-weight:700;">' + r.amt.toLocaleString() + '</td>'
       + '<td>' + comboEsc(r.x.party || r.x.desc || "-") + '</td>'
       + '<td style="color:var(--gray);">↔</td>'
       + '<td><b>' + comboEsc(r.t.company||"-") + '</b></td>'
-      + '<td>' + comboEsc(r.t.issueDate||"-") + '</td>'
+      + '<td style="white-space:nowrap;">' + comboEsc(r.t.issueDate||"-") + '</td>'
+      + '<td class="ta-right" style="font-weight:700;">' + taxAmt.toLocaleString() + '</td>'
+      + '<td class="ta-right" style="color:' + (diff ? "var(--danger)" : "#2e7d32") + ';font-weight:700;">'
+        + (diff ? diff.toLocaleString() : "0") + '</td>'
       + '<td class="ta-right" style="color:var(--gray);">' + r.gap + '일</td></tr>';
+    };
+    const headRow = (allId, allChecked)=>
+      '<tr><th><input type="checkbox" id="' + allId + '"' + (allChecked ? ' checked' : '') + '></th>'
+      + '<th>거래일</th><th>구분</th><th class="ta-right">입출금액</th><th>입출금 상대</th><th></th>'
+      + '<th>계산서 거래처</th><th>발행일</th><th class="ta-right">계산서 금액</th>'
+      + '<th class="ta-right">차액</th><th class="ta-right">날짜차이</th></tr>';
 
     msg.innerHTML = '확실 <b style="color:#2e7d32;">' + sureOk.length + '건</b> · '
       + '아마도 <b style="color:#b8860b;">' + maybeOk.length + '건</b> '
@@ -11815,13 +11841,11 @@
 
     box.innerHTML =
       (sureOk.length ? '<div style="font-size:12.5px;font-weight:700;color:#2e7d32;margin:8px 0 4px;">확실 — 금액·이름이 모두 맞습니다</div>'
-        + '<table class="data-table" style="width:auto;"><thead><tr><th><input type="checkbox" id="ram-all-sure" checked></th>'
-        + '<th>거래일</th><th class="ta-right">금액</th><th>입출금 상대</th><th></th><th>계산서 거래처</th><th>발행일</th><th class="ta-right">차이</th>'
-        + '</tr></thead><tbody>' + sureOk.map(r=> line(r, "ram-sure")).join("") + '</tbody></table>' : '')
-      + (maybeOk.length ? '<div style="font-size:12.5px;font-weight:700;color:#b8860b;margin:12px 0 4px;">아마도 — 금액은 맞는데 이름이 조금 다릅니다. 눈으로 보고 골라주세요</div>'
-        + '<table class="data-table" style="width:auto;"><thead><tr><th><input type="checkbox" id="ram-all-maybe"></th>'
-        + '<th>거래일</th><th class="ta-right">금액</th><th>입출금 상대</th><th></th><th>계산서 거래처</th><th>발행일</th><th class="ta-right">차이</th>'
-        + '</tr></thead><tbody>' + maybeOk.map(r=> line(r, "ram-maybe")).join("") + '</tbody></table>' : '')
+        + '<table class="data-table" style="width:auto;"><thead>' + headRow("ram-all-sure", true)
+        + '</thead><tbody>' + sureOk.map(r=> line(r, "ram-sure")).join("") + '</tbody></table>' : '')
+      + (maybeOk.length ? '<div style="font-size:12.5px;font-weight:700;color:#b8860b;margin:12px 0 4px;">아마도 — 이름이 조금 다릅니다. 눈으로 보고 골라주세요</div>'
+        + '<table class="data-table" style="width:auto;"><thead>' + headRow("ram-all-maybe", false)
+        + '</thead><tbody>' + maybeOk.map(r=> line(r, "ram-maybe")).join("") + '</tbody></table>' : '')
       + ((sureOk.length + maybeOk.length) === 0
         ? '<div class="list-empty">이어줄 만한 짝을 찾지 못했습니다. 날짜 범위를 넓혀보세요.</div>' : '');
 
@@ -11852,7 +11876,8 @@
             taxId: r.t.id,
             taxLabel: (r.t.issueDate||"") + " " + (r.t.company||""),
             taxAmount: Number(r.t.amount)||0,
-            diff: 0, state: "done", carryOver: false,
+            diff: r.amt - (Number(r.t.amount)||0),
+            state: "done", carryOver: false,
             note: (r.x.note || "") + (r.exact ? "" : " [자동매칭 확인필요]")
           });
         });
