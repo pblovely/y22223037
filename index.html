@@ -320,7 +320,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-05 v329</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-05 v332</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -1519,19 +1519,16 @@
 
     <div id="tab-recon" class="tab-panel">
       <div class="card">
-        <h3 style="margin:0;">입출금 대사 <span class="info-tip" title="ERP에서 내려받은 입출금 파일을 올려 세금계산서와 맞춥니다. 거래일자·거래시간·계좌번호·금액으로 거래 하나를 가리므로, 같은 파일을 다시 올려도 이미 확인한 건은 그대로 유지됩니다.">ⓘ</span></h3>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+          <h3 style="margin:0;">입출금 대사 <span class="info-tip" title="ERP에서 내려받은 입출금 파일을 올려 세금계산서와 맞춥니다. 거래일자·거래시간·계좌번호·금액으로 거래 하나를 가리므로, 같은 파일을 다시 올려도 이미 확인한 건은 그대로 유지됩니다.">ⓘ</span></h3>
+          <span class="btn-row">
+            <button class="btn small secondary" style="width:auto;" onclick="openReconCorp()">계좌 법인 배정</button>
+            <button class="btn small secondary" style="width:auto;" onclick="runAutoMatch()">자동 매칭</button>
+            <button class="btn small" style="width:auto;" onclick="openReconUpload()">+ ERP 파일 올리기</button>
+          </span>
+        </div>
         <p class="desc" style="margin-top:0;">ERP 입출금 파일을 올려 <b>세금계산서와 맞춥니다.</b><br>
           <b>거래일자 · 거래시간 · 계좌번호 · 금액</b>으로 거래를 가리므로, 파일을 다시 올려도 <b>이미 확인한 건은 그대로</b>입니다. 새 거래만 들어옵니다.</p>
-
-        <div style="border:1px solid var(--line);background:#fafafa;padding:10px 12px;margin-bottom:12px;">
-          <div style="font-size:12.5px;font-weight:700;margin-bottom:6px;">ERP 입출금 파일 올리기</div>
-          <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">
-            <input type="file" id="rc-file" accept=".xls,.xlsx" onchange="onReconFile(event)" style="font-size:12.5px;">
-            <span style="font-size:11.5px;color:var(--gray);">ERP에서 내려받은 파일 그대로 올리시면 됩니다.</span>
-            <button class="btn small danger" style="width:auto;margin-left:auto;" onclick="resetReconRows()">전체 삭제</button>
-          </div>
-          <div id="rc-upload-msg" style="font-size:12.5px;margin-top:6px;"></div>
-        </div>
 
         <div id="recon-cards" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px;"></div>
 
@@ -1557,6 +1554,90 @@
       </div>
     </div>
 
+    <!-- ERP 파일 올리기 -->
+    <div id="reconup-overlay" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.55);z-index:1100;align-items:center;justify-content:center;">
+      <div style="background:#fff;border:2px solid var(--navy);max-width:520px;width:96%;max-height:92vh;overflow-y:auto;padding:22px;position:relative;">
+        <button onclick="closeReconUpload()" style="position:absolute;top:12px;right:12px;background:none;border:1px solid var(--navy);width:26px;height:26px;cursor:pointer;font-size:13px;">✕</button>
+        <h3 style="margin-top:0;margin-bottom:4px;">ERP 입출금 파일 올리기</h3>
+        <p class="desc" style="margin-top:0;">ERP에서 내려받은 파일 <b>그대로</b> 올리시면 됩니다.<br>
+          <b>거래일자·거래시간·계좌번호·금액</b>으로 거래를 가리므로, 다시 올려도 <b>이미 확인한 건은 그대로</b>입니다. 새 거래와 <b>비고가 바뀐 것</b>만 반영됩니다.</p>
+        <input type="file" id="rc-file" accept=".xls,.xlsx" onchange="onReconFile(event)" style="font-size:12.5px;">
+        <div id="rc-upload-msg" style="font-size:12.5px;margin-top:8px;"></div>
+        <span class="btn-row" style="margin-top:12px;">
+          <button class="btn small danger" style="width:auto;" onclick="resetReconRows()">전체 삭제</button>
+          <button class="btn small secondary" style="width:auto;" onclick="closeReconUpload()">닫기</button>
+        </span>
+      </div>
+    </div>
+
+    <!-- 홈택스 파일 올리기 -->
+    <div id="taxup-overlay" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.55);z-index:1100;align-items:center;justify-content:center;">
+      <div style="background:#fff;border:2px solid var(--navy);max-width:560px;width:96%;max-height:92vh;overflow-y:auto;padding:22px;position:relative;">
+        <button onclick="closeTaxUpload()" style="position:absolute;top:12px;right:12px;background:none;border:1px solid var(--navy);width:26px;height:26px;cursor:pointer;font-size:13px;">✕</button>
+        <h3 style="margin-top:0;margin-bottom:4px;">홈택스 파일 올리기</h3>
+        <p class="desc" style="margin-top:0;">홈택스에서 내려받은 <b>목록 파일 그대로</b> 올리시면 됩니다.
+          <b>여러 개를 한 번에</b> 골라도 되고, 매입·매출·면세를 <b>알아서 구분</b>합니다.<br>
+          <b>승인번호</b>로 가려내므로 같은 파일을 다시 올려도 중복되지 않습니다.</p>
+        <div class="stack-row"><label>구분</label>
+          <select id="tx-upload-kind">
+            <option value="auto">자동으로 구분 (권장)</option>
+            <option value="buy">매입 세금계산서로</option>
+            <option value="buyfree">매입 계산서(면세)로</option>
+            <option value="sale">매출 세금계산서로</option>
+            <option value="salefree">매출 계산서(면세)로</option>
+          </select>
+        </div>
+        <div style="margin:8px 0;">
+          <input type="file" id="tx-file" accept=".xls,.xlsx" multiple onchange="onTaxFile(event)" style="font-size:12.5px;">
+        </div>
+        <div id="tx-upload-msg" style="font-size:12.5px;margin-top:6px;"></div>
+        <div id="tx-upload-hist" style="font-size:11.5px;color:var(--gray);margin-top:10px;line-height:1.8;border-top:1px solid var(--line);padding-top:8px;"></div>
+        <span class="btn-row" style="margin-top:12px;">
+          <button class="btn small danger" style="width:auto;" onclick="resetTaxInvoices()">전체 삭제</button>
+          <button class="btn small secondary" style="width:auto;" onclick="closeTaxUpload()">닫기</button>
+        </span>
+      </div>
+    </div>
+
+    <!-- 계좌 → 법인 배정 -->
+    <div id="reconcorp-overlay" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.55);z-index:1100;align-items:center;justify-content:center;">
+      <div style="background:#fff;border:2px solid var(--navy);max-width:520px;width:96%;max-height:92vh;overflow-y:auto;padding:22px;position:relative;">
+        <button onclick="closeReconCorp()" style="position:absolute;top:12px;right:12px;background:none;border:1px solid var(--navy);width:26px;height:26px;cursor:pointer;font-size:13px;">✕</button>
+        <h3 style="margin-top:0;margin-bottom:4px;">계좌 법인 배정</h3>
+        <p class="desc" style="margin-top:0;">계좌마다 어느 법인 것인지 정합니다. 한 번 정해두면 <b>다음에 파일을 올릴 때도 그대로</b> 쓰입니다.<br>
+          저장하면 <b>이미 들어 있는 거래에도 바로 반영</b>됩니다.</p>
+        <div id="rcc-list" style="max-height:340px;overflow-y:auto;border:1px solid var(--line);margin-bottom:10px;"></div>
+        <div id="rcc-msg" style="font-size:12.5px;margin:6px 0;"></div>
+        <span class="btn-row">
+          <button class="btn small" style="width:auto;" onclick="submitReconCorp()">저장</button>
+          <button class="btn small secondary" style="width:auto;" onclick="closeReconCorp()">닫기</button>
+        </span>
+      </div>
+    </div>
+
+    <!-- 자동 매칭 -->
+    <div id="automatch-overlay" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.55);z-index:1100;align-items:center;justify-content:center;">
+      <div style="background:#fff;border:2px solid var(--navy);max-width:900px;width:97%;max-height:92vh;overflow-y:auto;padding:22px;position:relative;">
+        <button onclick="closeAutoMatch()" style="position:absolute;top:12px;right:12px;background:none;border:1px solid var(--navy);width:26px;height:26px;cursor:pointer;font-size:13px;">✕</button>
+        <h3 style="margin-top:0;margin-bottom:4px;">자동 매칭</h3>
+        <p class="desc" style="margin-top:0;"><b>금액이 정확히 같고</b> 거래처 이름이 맞는 것을 찾아 이어줍니다.
+          이름은 <b>(주)·주식회사·공백</b>을 떼고 견줍니다.<br>
+          <b>확실</b>은 기본으로 체크돼 있고, <b>아마도</b>는 눈으로 보고 고르시면 됩니다.</p>
+        <div class="tbar-row" style="display:flex;gap:0;align-items:center;margin-bottom:8px;">
+          <span style="font-size:12px;color:var(--gray);margin-right:6px;">날짜 범위</span>
+          <input type="text" id="ram-days" value="90" style="width:70px;height:28px;border:1px solid var(--line);padding:0 8px;font-size:12.5px;box-sizing:border-box;">
+          <span style="font-size:12px;color:var(--gray);margin:0 8px;">일 안</span>
+          <button class="btn small secondary" style="width:auto;" onclick="runAutoMatch()">다시 찾기</button>
+        </div>
+        <div id="ram-msg" style="font-size:12.5px;margin:6px 0;"></div>
+        <div id="ram-list" style="max-height:420px;overflow-y:auto;"></div>
+        <span class="btn-row" style="margin-top:10px;">
+          <button class="btn small" style="width:auto;" onclick="submitAutoMatch()">고른 것 이어주기</button>
+          <button class="btn small secondary" style="width:auto;" onclick="closeAutoMatch()">닫기</button>
+        </span>
+      </div>
+    </div>
+
     <!-- 입출금 대사 — 세금계산서 연결 -->
     <div id="recontax-overlay" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.55);z-index:1100;align-items:center;justify-content:center;">
       <div style="background:#fff;border:2px solid var(--navy);max-width:760px;width:96%;max-height:92vh;overflow-y:auto;padding:22px;position:relative;">
@@ -1577,31 +1658,16 @@
 
     <div id="tab-tax" class="tab-panel">
       <div class="card">
-        <h3 style="margin:0;">세금계산서 <span class="info-tip" title="매입·매출 세금계산서를 등록합니다. 매입 계산서 중 「B2B 사용가능」을 체크한 것은 은행 대출 증빙으로 쓸 수 있고, 대출에 쓴 만큼 한도가 줄어듭니다.">ⓘ</span></h3>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+          <h3 style="margin:0;">세금계산서 <span class="info-tip" title="매입·매출 세금계산서를 등록합니다. 매입 계산서 중 「B2B 사용가능」을 체크한 것은 은행 대출 증빙으로 쓸 수 있고, 대출에 쓴 만큼 한도가 줄어듭니다.">ⓘ</span></h3>
+          <span class="btn-row">
+            <button class="btn small secondary" style="width:auto;" onclick="openTaxUpload()">홈택스 파일 올리기</button>
+            <button class="btn small" style="width:auto;" onclick="openTaxAdd()">+ 계산서 등록</button>
+          </span>
+        </div>
         <p class="desc" style="margin-top:0;">매입·매출 세금계산서를 등록합니다.<br>
           매입 계산서에 <b>「B2B 사용가능」</b>을 체크하면 그 금액만큼 <b>은행 대출 한도</b>가 생깁니다. 대출에 쓴 만큼 한도가 줄고, <b>남은 한도로 나눠서</b> 또 쓸 수 있습니다. 최대는 계산서 금액입니다.</p>
         <div id="tax-cards" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px;"></div>
-
-        <div style="border:1px solid var(--line);background:#fafafa;padding:10px 12px;margin-bottom:12px;">
-          <div style="font-size:12.5px;font-weight:700;margin-bottom:6px;">홈택스 파일 올리기</div>
-          <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">
-            <select id="tx-upload-kind" style="height:28px;border:1px solid var(--line);padding:0 6px;font-size:12.5px;">
-              <option value="auto">자동으로 구분 (권장)</option>
-              <option value="buy">매입 세금계산서로</option>
-              <option value="buyfree">매입 계산서(면세)로</option>
-              <option value="sale">매출 세금계산서로</option>
-              <option value="salefree">매출 계산서(면세)로</option>
-            </select>
-            <input type="file" id="tx-file" accept=".xls,.xlsx" multiple onchange="onTaxFile(event)" style="font-size:12.5px;">
-            <button class="btn small danger" style="width:auto;margin-left:auto;" onclick="resetTaxInvoices()">전체 삭제</button>
-          </div>
-          <div style="font-size:11.5px;color:var(--gray);margin-top:4px;">홈택스에서 내려받은 <b>목록 파일 그대로</b> 올리시면 됩니다. 매입·매출·면세계산서 모두 됩니다.
-            <b>여러 개를 한 번에</b> 골라도 되고, 매입·매출·면세를 <b>알아서 구분</b>합니다.
-            <b>승인번호</b>로 가려내므로 같은 파일을 다시 올려도 중복되지 않습니다.</div>
-          <div id="tx-upload-msg" style="font-size:12.5px;margin-top:6px;"></div>
-          <div id="tx-upload-hist" style="font-size:11.5px;color:var(--gray);margin-top:6px;line-height:1.8;"></div>
-        </div>
-
 
         <span class="btn-row" style="display:inline-flex;margin-bottom:10px;">
           <button class="btn small" id="tx-f-all" style="width:auto;" onclick="setTaxFilter('all')">전체</button>
@@ -1611,7 +1677,6 @@
           <button class="btn small secondary" id="tx-f-b2b" style="width:auto;" onclick="setTaxFilter('b2b')">B2B 사용가능</button>
           <button class="btn small secondary" id="tx-f-left" style="width:auto;" onclick="setTaxFilter('left')">한도 남음</button>
         </span>
-        <button class="btn small" style="width:auto;margin-left:10px;" onclick="openTaxAdd()">+ 계산서 등록</button>
         <div id="tax-pagination"></div>
         <div id="tax-list"></div>
       </div>
@@ -11164,12 +11229,18 @@
     { corp:"포피플",   match:["04_포피플", "05_포피플", "10_포피플"] },
     { corp:"포피플즈", match:["24_포피플즈"] }
   ];
-  function corpOf(acct){
+  // 기본 판정 — 계좌별칭 앞부분으로 봅니다. (직접 배정한 게 있으면 그것이 우선입니다)
+  function corpOfDefault(acct){
     const a = String(acct||"");
     for(const r of RECON_CORP_RULES){
       if(r.match.some(m=> a.indexOf(m) === 0)) return r.corp;
     }
     return "미분류";
+  }
+  function corpOf(acct){
+    const a = String(acct||"").trim();
+    if(reconCorpMap && reconCorpMap[a]) return reconCorpMap[a];
+    return corpOfDefault(a);
   }
   // 거래 하나를 가리는 열쇠
   function reconKey(x){
@@ -11325,6 +11396,15 @@
       show("읽지 못했습니다. " + comboEsc((e && e.message) ? e.message : String(e)), "var(--danger)");
     }
     ev.target.value = "";
+  };
+
+  window.openReconUpload = function(){
+    if(!hasPerm(currentUserPerms, "paymentProcess")){ alert("입력 권한이 없습니다."); return; }
+    document.getElementById("rc-upload-msg").innerHTML = "";
+    document.getElementById("reconup-overlay").style.display = "flex";
+  };
+  window.closeReconUpload = function(){
+    document.getElementById("reconup-overlay").style.display = "none";
   };
 
   window.loadReconList = async function(){
@@ -11555,6 +11635,227 @@
     loadReconList();
   };
 
+  // ---------- 계좌 → 법인 배정 ----------
+  //  사이트 설정이 아니라 이 화면에서 바로 정합니다. (파일을 올릴 때마다 쓰는 값이라)
+  //  정해두면 다음에 파일을 올릴 때도 그대로 적용됩니다.
+  let reconCorpMap = {};   // 계좌별칭 → 법인 이름
+
+  async function loadReconCorpMap(){
+    try{
+      const s = await getDoc(doc(db,"settings","reconCorp"));
+      reconCorpMap = (s.exists() && s.data().map) ? s.data().map : {};
+    }catch(e){ reconCorpMap = {}; }
+  }
+  window.openReconCorp = async function(){
+    await loadReconCorpMap();
+    // 지금 자료에 있는 계좌를 모읍니다.
+    const accts = [...new Set(reconRows.map(x=> String(x.acct||"").trim()).filter(Boolean))].sort();
+    const box = document.getElementById("rcc-list");
+    if(accts.length === 0){
+      box.innerHTML = '<div class="list-empty">ERP 파일을 먼저 올려주세요.</div>';
+    }else{
+      box.innerHTML = '<table class="data-table" style="width:auto;"><thead><tr>'
+        + '<th style="text-align:left;">계좌별칭</th><th>법인</th><th class="ta-right">건수</th></tr></thead><tbody>'
+        + accts.map(a=>{
+            const cur = reconCorpMap[a] || corpOfDefault(a);
+            const n = reconRows.filter(x=> String(x.acct||"").trim() === a).length;
+            return '<tr><td style="text-align:left;">' + comboEsc(a) + '</td>'
+              + '<td><select class="rcc-sel" data-acct="' + comboEsc(a) + '" style="height:26px;font-size:12px;border:1px solid var(--line);">'
+              + ["포피플","포피플즈","미분류"].map(c=>'<option value="'+c+'"'+(cur===c?' selected':'')+'>'+c+'</option>').join("")
+              + '</select></td>'
+              + '<td class="ta-right">' + n + '</td></tr>';
+          }).join("")
+        + '</tbody></table>';
+    }
+    document.getElementById("rcc-msg").innerHTML = "";
+    document.getElementById("reconcorp-overlay").style.display = "flex";
+  };
+  window.closeReconCorp = function(){
+    document.getElementById("reconcorp-overlay").style.display = "none";
+  };
+  window.submitReconCorp = async function(){
+    const map = {};
+    document.querySelectorAll(".rcc-sel").forEach(s=>{ map[s.dataset.acct] = s.value; });
+    const msg = document.getElementById("rcc-msg");
+    msg.innerHTML = '<span style="color:var(--gray);">저장하는 중입니다...</span>';
+    try{
+      await setDoc(doc(db,"settings","reconCorp"), { map }, { merge:true });
+      reconCorpMap = map;
+      // 이미 들어 있는 거래에도 바로 반영합니다.
+      const ops = [];
+      reconRows.forEach(x=>{
+        const want = map[String(x.acct||"").trim()] || "미분류";
+        if((x.corp||"") !== want) ops.push({ id:x.id, corp:want });
+      });
+      for(let i=0; i<ops.length; i+=400){
+        const bt = writeBatch(db);
+        ops.slice(i, i+400).forEach(o=> bt.update(doc(db,"bankRecon", o.id), { corp:o.corp }));
+        await bt.commit();
+      }
+      logAction("입출금 대사 법인 배정",
+        Object.entries(map).map(([k,v])=> k + "→" + v).join(", ") + " / 거래 " + ops.length + "건 반영");
+    }catch(e){ msg.innerHTML = '<span style="color:var(--danger);">저장에 실패했습니다.</span>'; return; }
+    closeReconCorp();
+    loadReconList();
+  };
+
+  // ---------- 자동 매칭 ----------
+  //  금액이 같고 거래처 이름이 맞으면 세금계산서를 자동으로 이어줍니다.
+  //  이름은 (주)·주식회사·공백·괄호를 떼고 견줍니다.
+  //  달을 넘겨 발행되는 계산서가 있어 날짜는 넓게 봅니다. (기본 90일)
+  let autoMatchResult = null;
+
+  function cleanName(s){
+    return String(s||"")
+      .replace(/\(주\)|\(유\)|\(사\)|주식회사|유한회사|합자회사|㈜|㈐/g, "")
+      .replace(/[\s\(\)\[\]\-·.,]/g, "")
+      .toLowerCase();
+  }
+  function dayGap(a, b){
+    const p = (s)=>{ const v = String(s||"").replace(/\D/g,""); 
+      if(v.length < 8) return null;
+      return new Date(+v.slice(0,4), +v.slice(4,6)-1, +v.slice(6,8)); };
+    const da = p(a), db2 = p(b);
+    if(!da || !db2) return 9999;
+    return Math.round(Math.abs(da - db2) / 86400000);
+  }
+
+  window.runAutoMatch = async function(){
+    if(!hasPerm(currentUserPerms, "paymentProcess")){ alert("권한이 없습니다."); return; }
+    const box = document.getElementById("ram-list");
+    const msg = document.getElementById("ram-msg");
+    const days = Number(String((document.getElementById("ram-days")||{}).value||"").replace(/\D/g,"")) || 90;
+    msg.innerHTML = '<span style="color:var(--gray);">세금계산서를 읽는 중입니다...</span>';
+    document.getElementById("automatch-overlay").style.display = "flex";
+
+    let taxes = [];
+    try{
+      const s = await getDocs(collection(db,"taxInvoices"));
+      s.forEach(d=> taxes.push({ id:d.id, ...d.data() }));
+    }catch(e){ msg.innerHTML = '<span style="color:var(--danger);">읽지 못했습니다.</span>'; return; }
+    if(taxes.length === 0){
+      msg.innerHTML = '<span style="color:var(--danger);">등록된 세금계산서가 없습니다. 먼저 홈택스 파일을 올려주세요.</span>';
+      box.innerHTML = ""; return;
+    }
+    // 이미 다른 거래에 이어진 계산서는 빼둡니다.
+    const usedTax = new Set(reconRows.map(x=> x.taxId).filter(Boolean));
+
+    // 금액으로 먼저 묶습니다.
+    const byAmt = {};
+    taxes.forEach(t=>{
+      if(usedTax.has(t.id)) return;
+      const a = Number(t.amount)||0;
+      if(!byAmt[a]) byAmt[a] = [];
+      byAmt[a].push(t);
+    });
+
+    const sure = [], maybe = [];
+    reconRows.forEach(x=>{
+      if(x.taxId) return;                       // 이미 이어진 것
+      if((x.state||"todo") === "skip") return;  // 대사 제외
+      if((x.state||"todo") === "done") return;  // 이미 완료
+      const amt = Math.max(Number(x.inAmt)||0, Number(x.outAmt)||0);
+      const cands = byAmt[amt] || [];
+      if(cands.length === 0) return;
+      // 입금이면 매출, 출금이면 매입 쪽을 먼저 봅니다.
+      const wantBuy = (Number(x.outAmt)||0) > 0;
+      const nameX = cleanName(x.party || x.desc || "");
+      let best = null, bestScore = -1;
+      cands.forEach(t=>{
+        const isBuy = (t.kind === "buy" || t.kind === "buyfree");
+        const gap = dayGap(x.date, t.issueDate);
+        if(gap > days) return;
+        const nameT = cleanName(t.company);
+        let score = 0;
+        if(isBuy === wantBuy) score += 2;                       // 입출금 방향이 맞음
+        if(nameX && nameT){
+          if(nameX === nameT) score += 6;                        // 이름이 똑같음
+          else if(nameX.indexOf(nameT) >= 0 || nameT.indexOf(nameX) >= 0) score += 4;  // 한쪽이 포함
+        }
+        score += Math.max(0, 3 - Math.floor(gap / 30));          // 날짜가 가까울수록
+        if(score > bestScore){ bestScore = score; best = { t, gap, score,
+          exact: (nameX && nameT && nameX === nameT) }; }
+      });
+      if(!best) return;
+      const row = { x, t: best.t, gap: best.gap, amt, exact: best.exact };
+      if(best.exact && best.score >= 8) sure.push(row); else maybe.push(row);
+    });
+
+    // 같은 계산서가 여러 거래에 걸리지 않게 합니다.
+    const taken = new Set();
+    const pick = (list)=> list.filter(r=>{
+      if(taken.has(r.t.id)) return false;
+      taken.add(r.t.id); return true;
+    });
+    const sureOk = pick(sure), maybeOk = pick(maybe);
+    autoMatchResult = { sure: sureOk, maybe: maybeOk };
+
+    const line = (r, cls)=>
+      '<tr><td><input type="checkbox" class="' + cls + '" value="' + r.x.id + '" checked></td>'
+      + '<td>' + comboEsc(r.x.date) + '</td>'
+      + '<td class="ta-right">' + r.amt.toLocaleString() + '</td>'
+      + '<td>' + comboEsc(r.x.party || r.x.desc || "-") + '</td>'
+      + '<td style="color:var(--gray);">↔</td>'
+      + '<td><b>' + comboEsc(r.t.company||"-") + '</b></td>'
+      + '<td>' + comboEsc(r.t.issueDate||"-") + '</td>'
+      + '<td class="ta-right" style="color:var(--gray);">' + r.gap + '일</td></tr>';
+
+    msg.innerHTML = '확실 <b style="color:#2e7d32;">' + sureOk.length + '건</b> · '
+      + '아마도 <b style="color:#b8860b;">' + maybeOk.length + '건</b> '
+      + '<span style="color:var(--gray);">(날짜 ' + days + '일 안, 금액이 정확히 같은 것만)</span>';
+
+    box.innerHTML =
+      (sureOk.length ? '<div style="font-size:12.5px;font-weight:700;color:#2e7d32;margin:8px 0 4px;">확실 — 금액·이름이 모두 맞습니다</div>'
+        + '<table class="data-table" style="width:auto;"><thead><tr><th><input type="checkbox" id="ram-all-sure" checked></th>'
+        + '<th>거래일</th><th class="ta-right">금액</th><th>입출금 상대</th><th></th><th>계산서 거래처</th><th>발행일</th><th class="ta-right">차이</th>'
+        + '</tr></thead><tbody>' + sureOk.map(r=> line(r, "ram-sure")).join("") + '</tbody></table>' : '')
+      + (maybeOk.length ? '<div style="font-size:12.5px;font-weight:700;color:#b8860b;margin:12px 0 4px;">아마도 — 금액은 맞는데 이름이 조금 다릅니다. 눈으로 보고 골라주세요</div>'
+        + '<table class="data-table" style="width:auto;"><thead><tr><th><input type="checkbox" id="ram-all-maybe"></th>'
+        + '<th>거래일</th><th class="ta-right">금액</th><th>입출금 상대</th><th></th><th>계산서 거래처</th><th>발행일</th><th class="ta-right">차이</th>'
+        + '</tr></thead><tbody>' + maybeOk.map(r=> line(r, "ram-maybe")).join("") + '</tbody></table>' : '')
+      + ((sureOk.length + maybeOk.length) === 0
+        ? '<div class="list-empty">이어줄 만한 짝을 찾지 못했습니다. 날짜 범위를 넓혀보세요.</div>' : '');
+
+    const allSure = document.getElementById("ram-all-sure");
+    if(allSure) allSure.onchange = ()=> document.querySelectorAll(".ram-sure").forEach(c=> c.checked = allSure.checked);
+    const allMaybe = document.getElementById("ram-all-maybe");
+    if(allMaybe){
+      allMaybe.onchange = ()=> document.querySelectorAll(".ram-maybe").forEach(c=> c.checked = allMaybe.checked);
+      document.querySelectorAll(".ram-maybe").forEach(c=> c.checked = false);
+    }
+  };
+  window.closeAutoMatch = function(){
+    document.getElementById("automatch-overlay").style.display = "none";
+    autoMatchResult = null;
+  };
+  window.submitAutoMatch = async function(){
+    if(!autoMatchResult) return;
+    const ids = new Set();
+    document.querySelectorAll(".ram-sure:checked, .ram-maybe:checked").forEach(c=> ids.add(c.value));
+    if(ids.size === 0){ alert("이어줄 것을 골라주세요."); return; }
+    const all = [...autoMatchResult.sure, ...autoMatchResult.maybe].filter(r=> ids.has(r.x.id));
+    if(!confirm(all.length + "건을 이어주고 <완료>로 바꿉니다.\n\n진행할까요?")) return;
+    try{
+      for(let i=0; i<all.length; i+=400){
+        const bt = writeBatch(db);
+        all.slice(i, i+400).forEach(r=>{
+          bt.update(doc(db,"bankRecon", r.x.id), {
+            taxId: r.t.id,
+            taxLabel: (r.t.issueDate||"") + " " + (r.t.company||""),
+            taxAmount: Number(r.t.amount)||0,
+            diff: 0, state: "done", carryOver: false,
+            note: (r.x.note || "") + (r.exact ? "" : " [자동매칭 확인필요]")
+          });
+        });
+        await bt.commit();
+      }
+      logAction("입출금 대사 자동 매칭", all.length + "건 연결");
+    }catch(e){ alert("저장에 실패했습니다."); return; }
+    closeAutoMatch();
+    alert(all.length + "건을 이어주었습니다.");
+    loadReconList();
+  };
+
   // ---------- 세금계산서 ----------
   //  매입·매출 세금계산서를 등록하고, 매입 건은 B2B 대출 한도로 씁니다.
   //   · 「B2B 사용 가능」을 체크한 계산서만 대출 증빙으로 쓸 수 있습니다.
@@ -11692,6 +11993,16 @@
     document.querySelectorAll("#tab-tax [data-tx-del]").forEach(b=>{
       b.onclick = ()=> deleteTaxInvoice(b.dataset.txDel);
     });
+  };
+
+  window.openTaxUpload = function(){
+    if(!hasPerm(currentUserPerms, "paymentProcess")){ alert("입력 권한이 없습니다."); return; }
+    document.getElementById("tx-upload-msg").innerHTML = "";
+    document.getElementById("taxup-overlay").style.display = "flex";
+    loadTaxUploadHistory();
+  };
+  window.closeTaxUpload = function(){
+    document.getElementById("taxup-overlay").style.display = "none";
   };
 
   window.openTaxAdd = function(){
@@ -22668,8 +22979,8 @@
     if(tabId==="tab-reservation") loadReservationTable();
     if(tabId==="tab-reqboard") loadReqBoard();
     if(tabId==="tab-cashbook"){ document.getElementById("cb-date").value = todayStr(); loadCashbook(); }
-    if(tabId==="tab-tax"){ loadTaxList(); loadTaxUploadHistory(); }
-    if(tabId==="tab-recon"){ reconTaxCache = null; loadReconList(); }
+    if(tabId==="tab-tax"){ loadTaxList(); }
+    if(tabId==="tab-recon"){ reconTaxCache = null; loadReconCorpMap().then(()=> loadReconList()); }
     if(tabId==="tab-b2b") loadB2BTab();
     if(tabId==="tab-team") loadTeamList();
     if(tabId==="tab-users") loadUserAdminList();
