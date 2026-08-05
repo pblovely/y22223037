@@ -320,7 +320,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-05 v335</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-05 v336</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -1646,9 +1646,10 @@
         <button onclick="closeReconTax()" style="position:absolute;top:12px;right:12px;background:none;border:1px solid var(--navy);width:26px;height:26px;cursor:pointer;font-size:13px;">✕</button>
         <h3 style="margin-top:0;margin-bottom:8px;">세금계산서 연결</h3>
         <div id="rct-info" style="border:1px solid var(--line);background:#fafafa;padding:9px 11px;font-size:12.5px;line-height:1.8;margin-bottom:10px;"></div>
-        <p class="desc" style="margin-top:0;">금액이 비슷하고 날짜가 가까운 계산서를 보여드립니다. 골라서 연결하시면 <b>완료</b>로 바뀝니다.<br>
-          금액이 다르면 <b>차액</b>이 따로 남습니다. 고르지 않고 메모만 저장하셔도 됩니다.</p>
-        <div id="rct-list" style="max-height:300px;overflow-y:auto;border:1px solid var(--line);margin-bottom:10px;"></div>
+        <p class="desc" style="margin-top:0;">금액이 비슷하거나 <b>같은 거래처</b>인 계산서를 보여드립니다. 골라서 이어주시면 <b>완료</b>로 바뀝니다.<br>
+          <b>상계</b>는 여러 장을 함께 고르시면 됩니다. <b>매출은 더하고 매입은 빼서</b> 입출금액과 맞춰봅니다.</p>
+        <div id="rct-list" style="max-height:280px;overflow-y:auto;border:1px solid var(--line);margin-bottom:8px;"></div>
+        <div id="rct-sum" style="border:1px solid var(--navy);background:#f4f7fb;padding:8px 11px;font-size:12.5px;line-height:1.8;margin-bottom:10px;"></div>
         <div class="stack-row"><label>메모</label><input type="text" id="rct-note" placeholder="차액 사유 등 (선택)"></div>
         <div id="rct-msg" style="font-size:12.5px;margin:6px 0;"></div>
         <span class="btn-row" style="margin-top:6px;">
@@ -11576,35 +11577,80 @@
       }catch(e){ reconTaxCache = []; }
     }
     const d0 = Number(String(x.date||"").replace(/\D/g,"")) || 0;
+    // 후보 — 금액이 비슷한 것 + 같은 거래처(사업자번호) 것
+    //  상계는 두 장을 더하고 빼서 맞추므로, 금액이 안 맞아도 같은 거래처면 보여줍니다.
+    const myBiz = String(x.bizNo||"").replace(/\D/g,"");
+    const myName = (typeof cleanName === "function") ? cleanName(x.party || x.company || "") : "";
     const cands = reconTaxCache.map(t=>{
       const ta = Number(t.amount)||0;
       const td = Number(String(t.issueDate||"").replace(/\D/g,"")) || 0;
       const diff = amt - ta;
       const dayGap = Math.abs(td - d0);
-      return { ...t, diff, dayGap };
-    }).filter(t=> Math.abs(t.diff) <= Math.max(amt * 0.1, 100000) && t.dayGap <= 1500)
-      .sort((a,b)=> Math.abs(a.diff) - Math.abs(b.diff) || a.dayGap - b.dayGap)
-      .slice(0, 30);
+      const tBiz = String(t.bizNo||"").replace(/\D/g,"");
+      const tName = (typeof cleanName === "function") ? cleanName(t.company) : "";
+      const sameParty = (myBiz && tBiz && myBiz === tBiz)
+        || (myName && tName && (myName === tName || myName.indexOf(tName) >= 0 || tName.indexOf(myName) >= 0));
+      return { ...t, diff, dayGap, sameParty };
+    }).filter(t=>{
+      if(t.dayGap > 1500) return false;
+      if(t.sameParty) return true;                                   // 같은 거래처면 금액이 달라도 보여줍니다 (상계용)
+      return Math.abs(t.diff) <= Math.max(amt * 0.1, 100000);
+    }).sort((a,b)=> (b.sameParty - a.sameParty) || Math.abs(a.diff) - Math.abs(b.diff) || a.dayGap - b.dayGap)
+      .slice(0, 40);
 
     const box = document.getElementById("rct-list");
     if(cands.length === 0){
       box.innerHTML = '<div class="list-empty">금액이 비슷한 계산서를 찾지 못했습니다. 세금계산서 화면에서 먼저 등록해주세요.</div>';
     }else{
       box.innerHTML = '<table class="data-table" style="width:auto;"><thead><tr>'
-        + '<th></th><th>구분</th><th>발행일</th><th>거래처</th><th class="ta-right">계산서금액</th><th class="ta-right">차액</th>'
+        + '<th></th><th>구분</th><th>발행일</th><th>거래처</th><th>사업자번호</th><th class="ta-right">계산서금액</th><th class="ta-right">차액</th>'
         + '</tr></thead><tbody>'
-        + cands.map(t=>'<tr><td><input type="radio" name="rct-pick" value="'+t.id+'" data-amt="'+(Number(t.amount)||0)+'" data-label="'
-            + comboEsc((t.issueDate||"") + " " + (t.company||"")) + '"></td>'
-          + '<td>' + (t.kind === "sale" ? "매출" : "매입") + '</td>'
+        + cands.map(t=>{
+            const isSale = (t.kind === "sale" || t.kind === "salefree");
+            return '<tr><td><input type="checkbox" class="rct-pick" value="'+t.id+'" data-amt="'+(Number(t.amount)||0)+'"'
+            + ' data-sale="' + (isSale ? "1" : "0") + '" data-label="'
+            + comboEsc((t.issueDate||"") + " " + (t.company||"")) + '" onchange="onReconTaxPick()"></td>'
+          + '<td style="color:' + (isSale ? "#1565c0" : "var(--danger)") + ';">' + (isSale ? "매출" : "매입") + '</td>'
           + '<td>' + comboEsc(t.issueDate||"-") + '</td>'
           + '<td><b>' + comboEsc(t.company||"-") + '</b></td>'
+          + '<td style="color:var(--gray);">' + comboEsc(t.bizNo||"-") + '</td>'
           + '<td class="ta-right">' + (Number(t.amount)||0).toLocaleString() + '</td>'
           + '<td class="ta-right" style="color:' + (t.diff ? "var(--danger)" : "#2e7d32") + ';">'
-            + (t.diff ? t.diff.toLocaleString() : "0") + '</td></tr>').join("")
+            + (t.diff ? t.diff.toLocaleString() : "0") + '</td></tr>';
+          }).join("")
         + '</tbody></table>';
     }
+    onReconTaxPick();
     document.getElementById("recontax-overlay").style.display = "flex";
   };
+  // 고른 계산서의 합계를 보여줍니다. 매출은 더하고 매입은 뺍니다. (상계)
+  window.onReconTaxPick = function(){
+    if(!reconTaxTarget) return;
+    const el = document.getElementById("rct-sum");
+    if(!el) return;
+    const picked = Array.from(document.querySelectorAll(".rct-pick:checked"));
+    if(picked.length === 0){ el.innerHTML = '<span style="color:var(--gray);">고른 계산서가 없습니다. 골라주시거나, 메모만 저장하셔도 됩니다.</span>'; return; }
+    const x = reconTaxTarget;
+    const amt = Math.max(Number(x.inAmt)||0, Number(x.outAmt)||0);
+    const isIn = (Number(x.inAmt)||0) > 0;
+    let sale = 0, buy = 0;
+    picked.forEach(c=>{
+      const v = Number(c.dataset.amt)||0;
+      if(c.dataset.sale === "1") sale += v; else buy += v;
+    });
+    // 입금이면 (매출 − 매입), 출금이면 (매입 − 매출) 이 입출금액과 맞아야 합니다.
+    const net = isIn ? (sale - buy) : (buy - sale);
+    const diff = amt - net;
+    el.innerHTML =
+      '고른 계산서 <b>' + picked.length + '장</b> · '
+      + '매출 <b style="color:#1565c0;">' + sale.toLocaleString() + '</b> − '
+      + '매입 <b style="color:var(--danger);">' + buy.toLocaleString() + '</b> = '
+      + '<b>' + net.toLocaleString() + '</b><br>'
+      + (isIn ? '입금' : '출금') + ' <b>' + amt.toLocaleString() + '</b> − 상계 <b>' + net.toLocaleString() + '</b> = '
+      + '<b style="color:' + (diff === 0 ? "#2e7d32" : "var(--danger)") + ';">차액 ' + diff.toLocaleString() + '</b>'
+      + (diff === 0 ? ' <span style="color:#2e7d32;">딱 맞습니다</span>' : '');
+  };
+
   window.closeReconTax = function(){
     document.getElementById("recontax-overlay").style.display = "none";
     reconTaxTarget = null;
@@ -11612,9 +11658,9 @@
   window.submitReconTax = async function(){
     if(!reconTaxTarget) return;
     const x = reconTaxTarget;
-    const picked = document.querySelector('input[name="rct-pick"]:checked');
+    const picked = Array.from(document.querySelectorAll(".rct-pick:checked"));
     const note = document.getElementById("rct-note").value.trim();
-    if(!picked){
+    if(picked.length === 0){
       // 계산서 없이 메모만 저장
       try{
         await updateDoc(doc(db,"bankRecon", x.id), { note });
@@ -11622,23 +11668,36 @@
       closeReconTax(); loadReconList(); return;
     }
     const amt = Math.max(Number(x.inAmt)||0, Number(x.outAmt)||0);
-    const taxAmt = Number(picked.dataset.amt)||0;
-    const diff = amt - taxAmt;
+    const isIn = (Number(x.inAmt)||0) > 0;
+    let sale = 0, buy = 0;
+    const links = picked.map(c=>{
+      const v = Number(c.dataset.amt)||0;
+      if(c.dataset.sale === "1") sale += v; else buy += v;
+      return { id: c.value, label: c.dataset.label, amount: v, isSale: c.dataset.sale === "1" };
+    });
+    const net = isIn ? (sale - buy) : (buy - sale);
+    const diff = amt - net;
     if(diff !== 0){
       if(!confirm("금액이 " + Math.abs(diff).toLocaleString() + "원 "
         + (diff > 0 ? "많습니다" : "적습니다") + ".\n\n"
-        + "입출금 " + amt.toLocaleString() + "\n계산서 " + taxAmt.toLocaleString()
-        + "\n\n그래도 연결할까요? (차액은 따로 표시됩니다)")) return;
+        + (isIn ? "입금" : "출금") + " " + amt.toLocaleString()
+        + "\n계산서 " + picked.length + "장 상계 " + net.toLocaleString()
+        + "\n\n그래도 이어줄까요? (차액은 따로 남습니다)")) return;
     }
     try{
       await updateDoc(doc(db,"bankRecon", x.id), {
-        taxId: picked.value, taxLabel: picked.dataset.label, taxAmount: taxAmt,
-        diff, note, state: "done",
-        carryOver: false   // 완료되면 이월 표시를 자동으로 풉니다
+        taxId: links[0].id,                                   // 대표 한 장 (예전 방식과 맞추려고)
+        taxIds: links.map(l=> l.id),                          // 이어준 계산서 전부
+        taxLinks: links,
+        taxLabel: links.length === 1 ? links[0].label
+                  : (links[0].label + " 외 " + (links.length-1) + "장 상계"),
+        taxAmount: net, diff, note, state: "done", carryOver: false
       });
       logAction("입출금 대사 계산서 연결",
-        (x.date||"-") + " / " + amt.toLocaleString() + " ↔ " + picked.dataset.label
-        + " " + taxAmt.toLocaleString() + (diff ? " / 차액 " + diff.toLocaleString() : ""));
+        (x.date||"-") + " / " + amt.toLocaleString() + " ↔ "
+        + links.map(l=> (l.isSale ? "매출 " : "매입 ") + l.label + " " + l.amount.toLocaleString()).join(" + ")
+        + (links.length > 1 ? " / 상계 " + net.toLocaleString() : "")
+        + (diff ? " / 차액 " + diff.toLocaleString() : ""));
     }catch(e){ alert("저장에 실패했습니다."); return; }
     closeReconTax();
     loadReconList();
