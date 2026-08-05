@@ -320,7 +320,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-05 v328</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-05 v329</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -1602,30 +1602,6 @@
           <div id="tx-upload-hist" style="font-size:11.5px;color:var(--gray);margin-top:6px;line-height:1.8;"></div>
         </div>
 
-        <div style="border:1px solid var(--line);background:#fafafa;padding:10px 12px;margin-bottom:12px;">
-          <div style="font-size:12.5px;font-weight:700;margin-bottom:6px;">새 계산서 등록 <span style="color:var(--gray);font-weight:400;">— 하나씩 직접 넣을 때</span></div>
-          <div class="stack-row"><label>구분</label>
-            <select id="tx-kind">
-              <option value="buy">매입 세금계산서</option>
-              <option value="buyfree">매입 계산서 (면세)</option>
-              <option value="sale">매출 세금계산서</option>
-              <option value="salefree">매출 계산서 (면세)</option>
-            </select>
-          </div>
-          <div class="stack-row"><label>발행일</label><input type="text" id="tx-date" placeholder="20260831"></div>
-          <div class="stack-row"><label>거래처</label>
-            <input type="text" id="tx-company" list="tx-company-datalist" placeholder="타이핑하면 목록">
-            <datalist id="tx-company-datalist"></datalist>
-          </div>
-          <div class="stack-row"><label>계산서번호</label><input type="text" id="tx-no" placeholder="선택"></div>
-          <div class="stack-row"><label>금액</label><input type="text" id="tx-amount" placeholder="숫자만"></div>
-          <div class="stack-row"><label>B2B</label>
-            <label style="font-size:12.5px;"><input type="checkbox" id="tx-b2bok"> 사용가능 (매입 계산서만)</label>
-          </div>
-          <div class="stack-row"><label>메모</label><input type="text" id="tx-memo" placeholder="선택"></div>
-          <div id="tx-msg" style="font-size:12.5px;margin:6px 0;"></div>
-          <button class="btn small" style="width:auto;" onclick="submitTaxInvoice()">등록</button>
-        </div>
 
         <span class="btn-row" style="display:inline-flex;margin-bottom:10px;">
           <button class="btn small" id="tx-f-all" style="width:auto;" onclick="setTaxFilter('all')">전체</button>
@@ -1635,8 +1611,42 @@
           <button class="btn small secondary" id="tx-f-b2b" style="width:auto;" onclick="setTaxFilter('b2b')">B2B 사용가능</button>
           <button class="btn small secondary" id="tx-f-left" style="width:auto;" onclick="setTaxFilter('left')">한도 남음</button>
         </span>
+        <button class="btn small" style="width:auto;margin-left:10px;" onclick="openTaxAdd()">+ 계산서 등록</button>
         <div id="tax-pagination"></div>
         <div id="tax-list"></div>
+      </div>
+    </div>
+
+    <!-- 세금계산서 등록 -->
+    <div id="taxadd-overlay" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.55);z-index:1100;align-items:center;justify-content:center;">
+      <div style="background:#fff;border:2px solid var(--navy);max-width:440px;width:96%;max-height:92vh;overflow-y:auto;padding:22px;position:relative;">
+        <button onclick="closeTaxAdd()" style="position:absolute;top:12px;right:12px;background:none;border:1px solid var(--navy);width:26px;height:26px;cursor:pointer;font-size:13px;">✕</button>
+        <h3 style="margin-top:0;margin-bottom:4px;">계산서 등록</h3>
+        <p class="desc" style="margin-top:0;">하나씩 직접 넣을 때 씁니다. 홈택스 파일로 올리시면 한 번에 들어갑니다.</p>
+        <div class="stack-row"><label>구분</label>
+          <select id="tx-kind">
+            <option value="buy">매입 세금계산서</option>
+            <option value="buyfree">매입 계산서 (면세)</option>
+            <option value="sale">매출 세금계산서</option>
+            <option value="salefree">매출 계산서 (면세)</option>
+          </select>
+        </div>
+        <div class="stack-row"><label>발행일</label><input type="text" id="tx-date" placeholder="20260831"></div>
+        <div class="stack-row"><label>거래처</label>
+          <input type="text" id="tx-company" list="tx-company-datalist" placeholder="타이핑하면 목록">
+          <datalist id="tx-company-datalist"></datalist>
+        </div>
+        <div class="stack-row"><label>계산서번호</label><input type="text" id="tx-no" placeholder="선택"></div>
+        <div class="stack-row"><label>금액</label><input type="text" id="tx-amount" placeholder="숫자만"></div>
+        <div class="stack-row"><label>B2B</label>
+          <label style="font-size:12.5px;"><input type="checkbox" id="tx-b2bok"> 사용가능 (매입 세금계산서만)</label>
+        </div>
+        <div class="stack-row"><label>메모</label><input type="text" id="tx-memo" placeholder="선택"></div>
+        <div id="tx-msg" style="font-size:12.5px;margin:6px 0;"></div>
+        <span class="btn-row" style="margin-top:6px;">
+          <button class="btn small" style="width:auto;" onclick="submitTaxInvoice()">등록</button>
+          <button class="btn small secondary" style="width:auto;" onclick="closeTaxAdd()">닫기</button>
+        </span>
       </div>
     </div>
 
@@ -11684,6 +11694,18 @@
     });
   };
 
+  window.openTaxAdd = function(){
+    if(!hasPerm(currentUserPerms, "paymentProcess")){ alert("입력 권한이 없습니다."); return; }
+    document.getElementById("tx-date").value = todayStr();
+    ["tx-company","tx-no","tx-amount","tx-memo"].forEach(id=>{ const e=document.getElementById(id); if(e) e.value = ""; });
+    document.getElementById("tx-b2bok").checked = false;
+    document.getElementById("tx-msg").innerHTML = "";
+    document.getElementById("taxadd-overlay").style.display = "flex";
+  };
+  window.closeTaxAdd = function(){
+    document.getElementById("taxadd-overlay").style.display = "none";
+  };
+
   // 새 계산서 등록
   window.submitTaxInvoice = async function(){
     if(!hasPerm(currentUserPerms, "paymentProcess")){ alert("입력 권한이 없습니다."); return; }
@@ -11714,9 +11736,7 @@
         + (kind === "buy" && b2bOk ? " / B2B 사용가능" : ""));
     }catch(e){ show("저장에 실패했습니다."); return; }
 
-    ["tx-company","tx-no","tx-amount","tx-memo"].forEach(id=>{ document.getElementById(id).value = ""; });
-    document.getElementById("tx-b2bok").checked = false;
-    msg.innerHTML = '<span style="color:#2e7d32;">등록했습니다.</span>';
+    closeTaxAdd();
     loadTaxList();
   };
 
@@ -22648,7 +22668,7 @@
     if(tabId==="tab-reservation") loadReservationTable();
     if(tabId==="tab-reqboard") loadReqBoard();
     if(tabId==="tab-cashbook"){ document.getElementById("cb-date").value = todayStr(); loadCashbook(); }
-    if(tabId==="tab-tax"){ document.getElementById("tx-date").value = todayStr(); loadTaxList(); loadTaxUploadHistory(); }
+    if(tabId==="tab-tax"){ loadTaxList(); loadTaxUploadHistory(); }
     if(tabId==="tab-recon"){ reconTaxCache = null; loadReconList(); }
     if(tabId==="tab-b2b") loadB2BTab();
     if(tabId==="tab-team") loadTeamList();
