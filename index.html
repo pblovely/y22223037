@@ -320,7 +320,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-05 v337</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-05 v339</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -1649,6 +1649,12 @@
         <div id="rct-info" style="border:1px solid var(--line);background:#fafafa;padding:9px 11px;font-size:12.5px;line-height:1.8;margin-bottom:10px;"></div>
         <p class="desc" style="margin-top:0;">금액이 비슷하거나 <b>같은 거래처</b>인 계산서를 보여드립니다. 골라서 이어주시면 <b>완료</b>로 바뀝니다.<br>
           <b>상계</b>는 여러 장을 함께 고르시면 됩니다. <b>매출은 더하고 매입은 빼서</b> 입출금액과 맞춰봅니다.</p>
+        <div class="tbar-row" style="display:flex;gap:0;flex-wrap:wrap;align-items:center;margin-bottom:8px;">
+          <input type="text" id="rct-search" placeholder="거래처명 또는 사업자번호로 찾기" oninput="filterReconTaxList()" style="width:260px;height:28px;border:1px solid var(--line);padding:0 8px;font-size:12.5px;box-sizing:border-box;">
+          <button class="btn small secondary" style="width:auto;margin-left:-1px;" onclick="clearReconTaxSearch()">비우기</button>
+          <label style="font-size:12px;margin-left:12px;"><input type="checkbox" id="rct-all-tax" onchange="reloadReconTaxList()"> 전부 보기</label>
+          <span id="rct-count" style="font-size:11.5px;color:var(--gray);margin-left:10px;"></span>
+        </div>
         <div id="rct-list" style="max-height:280px;overflow-y:auto;border:1px solid var(--line);margin-bottom:8px;"></div>
         <div id="rct-sum" style="border:1px solid var(--navy);background:#f4f7fb;padding:8px 11px;font-size:12.5px;line-height:1.8;margin-bottom:10px;"></div>
         <div class="stack-row"><label>메모</label><input type="text" id="rct-note" placeholder="차액 사유 등 (선택)"></div>
@@ -11564,6 +11570,7 @@
 
   // 세금계산서 연결
   let reconTaxTarget = null;
+  let reconTaxPicked = new Set();   // 검색을 바꿔도 고른 것이 풀리지 않게 기억합니다
   window.openReconTax = async function(id){
     const x = reconRows.find(r=> r.id === id);
     if(!x) return;
@@ -11577,6 +11584,9 @@
       + (x.desc ? '<br><span style="color:var(--gray);">' + comboEsc(x.desc) + '</span>' : '');
     document.getElementById("rct-note").value = x.note || "";
     document.getElementById("rct-msg").innerHTML = "";
+    reconTaxPicked = new Set();
+    { const s = document.getElementById("rct-search"); if(s) s.value = ""; }
+    { const a = document.getElementById("rct-all-tax"); if(a) a.checked = false; }
 
     // 세금계산서 후보 — 금액이 가깝고 날짜가 ±15일 안인 것
     if(!reconTaxCache){
@@ -11587,8 +11597,22 @@
       }catch(e){ reconTaxCache = []; }
     }
     const d0 = Number(String(x.date||"").replace(/\D/g,"")) || 0;
+    renderReconTaxCands();
+  };
+
+  // 후보 목록을 그립니다. (검색어·전부 보기에 따라 다시 그립니다)
+  window.renderReconTaxCands = function(){
+    const x = reconTaxTarget;
+    if(!x) return;
+    const amt = Math.max(Number(x.inAmt)||0, Number(x.outAmt)||0);
+    const d0 = Number(String(x.date||"").replace(/\D/g,"")) || 0;
+    const box = document.getElementById("rct-list");
+    const showAll = (document.getElementById("rct-all-tax")||{}).checked;
+    const q = String((document.getElementById("rct-search")||{}).value || "").trim();
+    const qName = (typeof cleanName === "function") ? cleanName(q) : q.toLowerCase();
+    const qBiz = q.replace(/\D/g,"");
+
     // 후보 — 금액이 비슷한 것 + 같은 거래처(사업자번호) 것
-    //  상계는 두 장을 더하고 빼서 맞추므로, 금액이 안 맞아도 같은 거래처면 보여줍니다.
     const myBiz = String(x.bizNo||"").replace(/\D/g,"");
     const myName = (typeof cleanName === "function") ? cleanName(x.party || x.company || "") : "";
     const cands = reconTaxCache.map(t=>{
@@ -11602,24 +11626,38 @@
         || (myName && tName && (myName === tName || myName.indexOf(tName) >= 0 || tName.indexOf(myName) >= 0));
       return { ...t, diff, dayGap, sameParty };
     }).filter(t=>{
+      // 검색어가 있으면 거래처명·사업자번호·계산서번호로 찾습니다. (금액·날짜와 무관하게)
+      if(q){
+        const tName = (typeof cleanName === "function") ? cleanName(t.company) : String(t.company||"").toLowerCase();
+        const tBiz = String(t.bizNo||"").replace(/\D/g,"");
+        const hitName = qName && tName && tName.indexOf(qName) >= 0;
+        const hitBiz  = qBiz.length >= 3 && tBiz && tBiz.indexOf(qBiz) >= 0;
+        const hitNo   = String(t.invoiceNo||"").indexOf(q) >= 0;
+        return hitName || hitBiz || hitNo;
+      }
+      if(showAll) return true;                                       // 전부 보기
       if(t.dayGap > 1500) return false;
       if(t.sameParty) return true;                                   // 같은 거래처면 금액이 달라도 보여줍니다 (상계용)
       return Math.abs(t.diff) <= Math.max(amt * 0.1, 100000);
     }).sort((a,b)=> (b.sameParty - a.sameParty) || Math.abs(a.diff) - Math.abs(b.diff) || a.dayGap - b.dayGap)
-      .slice(0, 40);
+      .slice(0, (q || showAll) ? 200 : 40);
 
-    const box = document.getElementById("rct-list");
+
     if(cands.length === 0){
-      box.innerHTML = '<div class="list-empty">금액이 비슷한 계산서를 찾지 못했습니다. 세금계산서 화면에서 먼저 등록해주세요.</div>';
+      { const c = document.getElementById("rct-count"); if(c) c.textContent = "0건"; }
+      box.innerHTML = '<div class="list-empty">찾은 계산서가 없습니다. 검색어를 바꾸거나 <b>전부 보기</b>를 켜보세요.</div>';
     }else{
+      { const c = document.getElementById("rct-count");
+        if(c) c.textContent = cands.length + "건" + (cands.length >= 200 ? " (200건까지)" : ""); }
       box.innerHTML = '<table class="data-table" style="width:auto;"><thead><tr>'
         + '<th></th><th>구분</th><th>발행일</th><th>거래처</th><th>사업자번호</th><th class="ta-right">계산서금액</th><th class="ta-right">차액</th>'
         + '</tr></thead><tbody>'
         + cands.map(t=>{
             const isSale = (t.kind === "sale" || t.kind === "salefree");
+            const wasPicked = reconTaxPicked.has(t.id);
             return '<tr><td><input type="checkbox" class="rct-pick" value="'+t.id+'" data-amt="'+(Number(t.amount)||0)+'"'
             + ' data-sale="' + (isSale ? "1" : "0") + '" data-label="'
-            + comboEsc((t.issueDate||"") + " " + (t.company||"")) + '" onchange="onReconTaxPick()"></td>'
+            + comboEsc((t.issueDate||"") + " " + (t.company||"")) + '"' + (wasPicked ? ' checked' : '') + ' onchange="onReconTaxPick()"></td>'
           + '<td style="color:' + (isSale ? "#1565c0" : "var(--danger)") + ';">' + (isSale ? "매출" : "매입") + '</td>'
           + '<td>' + comboEsc(t.issueDate||"-") + '</td>'
           + '<td><b>' + comboEsc(t.company||"-") + '</b></td>'
@@ -11636,9 +11674,16 @@
   // 고른 계산서의 합계를 보여줍니다. 매출은 더하고 매입은 뺍니다. (상계)
   window.onReconTaxPick = function(){
     if(!reconTaxTarget) return;
+    // 지금 화면에 보이는 것들의 체크 상태를 기억에 반영합니다.
+    document.querySelectorAll(".rct-pick").forEach(c=>{
+      if(c.checked) reconTaxPicked.add(c.value); else reconTaxPicked.delete(c.value);
+    });
     const el = document.getElementById("rct-sum");
     if(!el) return;
-    const picked = Array.from(document.querySelectorAll(".rct-pick:checked"));
+    const picked = (reconTaxCache||[]).filter(t=> reconTaxPicked.has(t.id))
+      .map(t=>({ value:t.id, dataset:{ amt: String(Number(t.amount)||0),
+                 sale: (t.kind === "sale" || t.kind === "salefree") ? "1" : "0",
+                 label: (t.issueDate||"") + " " + (t.company||"") } }));
     if(picked.length === 0){ el.innerHTML = '<span style="color:var(--gray);">고른 계산서가 없습니다. 골라주시거나, 메모만 저장하셔도 됩니다.</span>'; return; }
     const x = reconTaxTarget;
     const amt = Math.max(Number(x.inAmt)||0, Number(x.outAmt)||0);
@@ -11661,6 +11706,13 @@
       + (diff === 0 ? ' <span style="color:#2e7d32;">딱 맞습니다</span>' : '');
   };
 
+  window.filterReconTaxList = function(){ renderReconTaxCands(); onReconTaxPick(); };
+  window.reloadReconTaxList = function(){ renderReconTaxCands(); onReconTaxPick(); };
+  window.clearReconTaxSearch = function(){
+    const s = document.getElementById("rct-search"); if(s) s.value = "";
+    renderReconTaxCands(); onReconTaxPick();
+  };
+
   window.closeReconTax = function(){
     document.getElementById("recontax-overlay").style.display = "none";
     reconTaxTarget = null;
@@ -11668,7 +11720,10 @@
   window.submitReconTax = async function(){
     if(!reconTaxTarget) return;
     const x = reconTaxTarget;
-    const picked = Array.from(document.querySelectorAll(".rct-pick:checked"));
+    const picked = (reconTaxCache||[]).filter(t=> reconTaxPicked.has(t.id))
+      .map(t=>({ value:t.id, dataset:{ amt: String(Number(t.amount)||0),
+                 sale: (t.kind === "sale" || t.kind === "salefree") ? "1" : "0",
+                 label: (t.issueDate||"") + " " + (t.company||"") } }));
     const note = document.getElementById("rct-note").value.trim();
     if(picked.length === 0){
       // 계산서 없이 메모만 저장
