@@ -320,7 +320,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-05 v336</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-05 v337</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -1539,6 +1539,7 @@
             <button class="btn small" id="rc-f-todo" style="width:auto;" onclick="setReconFilter('todo')">확인 필요</button>
             <button class="btn small secondary" id="rc-f-check" style="width:auto;" onclick="setReconFilter('check')">1차 확인</button>
             <button class="btn small secondary" id="rc-f-done" style="width:auto;" onclick="setReconFilter('done')">완료</button>
+            <button class="btn small secondary" id="rc-f-diff" style="width:auto;" onclick="setReconFilter('diff')">차액</button>
             <button class="btn small secondary" id="rc-f-skip" style="width:auto;" onclick="setReconFilter('skip')">대사 제외</button>
             <button class="btn small secondary" id="rc-f-carry" style="width:auto;" onclick="setReconFilter('carry')">이월</button>
             <button class="btn small secondary" id="rc-f-all" style="width:auto;" onclick="setReconFilter('all')">전체</button>
@@ -11282,7 +11283,7 @@
 
   window.setReconFilter = function(f){
     reconFilter = f;
-    ["todo","check","done","skip","carry","all"].forEach(k=>{
+    ["todo","check","done","diff","skip","carry","all"].forEach(k=>{
       const b = document.getElementById("rc-f-" + k);
       if(b) b.className = "btn small" + (k === f ? "" : " secondary");
     });
@@ -11438,15 +11439,20 @@
       if(reconCorp !== "all" && (x.corp||"미분류") !== reconCorp) return false;
       if(reconFilter === "all") return true;
       if(reconFilter === "carry") return x.carryOver === true;
+      if(reconFilter === "diff") return (Number(x.diff)||0) !== 0;   // 차액이 있는 것 (상태와 무관)
       return (x.state||"todo") === reconFilter;
     });
 
     // 카드
     const cnt = { todo:0, check:0, done:0, skip:0 };
     const amt = { todo:0, check:0, done:0, skip:0 };
+    let diffCnt = 0, diffAmt = 0, carryCnt = 0;
     reconRows.forEach(x=>{
       if(reconCorp !== "all" && (x.corp||"미분류") !== reconCorp) return;
       const s = x.state || "todo";
+      const d = Number(x.diff)||0;
+      if(d !== 0){ diffCnt++; diffAmt += d; }
+      if(x.carryOver === true) carryCnt++;
       if(cnt[s] === undefined) return;
       cnt[s]++; amt[s] += Math.max(Number(x.inAmt)||0, Number(x.outAmt)||0);
     });
@@ -11461,6 +11467,9 @@
         card("확인 필요", cnt.todo + "건", "var(--danger)", money(amt.todo)) +
         card("1차 확인", cnt.check + "건", "#b8860b", money(amt.check)) +
         card("완료", cnt.done + "건", "#2e7d32", money(amt.done)) +
+        card("차액", diffCnt + "건", diffCnt ? "var(--danger)" : null,
+             (diffAmt >= 0 ? "+" : "") + money(diffAmt) + " · 입출금 − 계산서") +
+        card("이월", carryCnt + "건", carryCnt ? "#1565c0" : null, "다음 달로 넘김") +
         card("대사 제외", cnt.skip + "건", null, money(amt.skip));
     }
 
@@ -11484,7 +11493,8 @@
           const s = x.state || "todo";
           return '<tr>'
             + '<td style="color:' + stColor[s] + ';font-weight:700;white-space:nowrap;">' + stLabel[s]
-              + (x.carryOver ? '<br><span style="background:#eef4fb;border:1px solid #1565c0;color:#1565c0;font-size:10.5px;padding:0 4px;">이월</span>' : '') + '</td>'
+              + ((Number(x.diff)||0) !== 0 ? ' <span style="background:#fdecea;border:1px solid var(--danger);color:var(--danger);font-size:10.5px;padding:0 4px;">차액</span>' : '')
+              + (x.carryOver ? ' <span style="background:#eef4fb;border:1px solid #1565c0;color:#1565c0;font-size:10.5px;padding:0 4px;">이월</span>' : '') + '</td>'
             + '<td>' + comboEsc(x.corp||"미분류") + '</td>'
             + '<td style="white-space:nowrap;">' + comboEsc(x.date||"-") + '</td>'
             + '<td style="white-space:nowrap;color:var(--gray);">' + comboEsc(x.time||"-") + '</td>'
@@ -11827,7 +11837,16 @@
       if(cands.length === 0) return;
       // 입금이면 매출, 출금이면 매입 쪽을 먼저 봅니다.
       const wantBuy = (Number(x.outAmt)||0) > 0;
-      const nameX = cleanName(x.party || x.desc || "");
+      // 이름 후보 — 상대예금주·적요 외에 메모(ERP 비고)에 적어두신 사업자명도 봅니다.
+      const nameSrc = [];
+      if(x.party) nameSrc.push(x.party);
+      if(x.desc) nameSrc.push(x.desc);
+      const memoTxt = String(x.note || x.memo || "").replace(/^[oOxX]+/, "");
+      if(memoTxt){
+        memoTxt.split(/[\/·,\s]+/).forEach(t=>{ if(t && t.length >= 2) nameSrc.push(t); });
+        nameSrc.push(memoTxt);
+      }
+      const namesX = [...new Set(nameSrc.map(cleanName).filter(v=> v && v.length >= 2))];
       let best = null, bestScore = -1;
       cands.forEach(t=>{
         const isBuy = (t.kind === "buy" || t.kind === "buyfree");
@@ -11836,16 +11855,21 @@
         const nameT = cleanName(t.company);
         // 이름이 얼마나 맞는지 봅니다. 전혀 다르면 후보에서 뺍니다.
         //  같음 → 확실 / 한쪽이 포함 → 아마도 / 두 글자 이상 겹침 → 아마도 / 그 외 → 제외
-        let nameKind = "no";
-        if(nameX && nameT){
-          if(nameX === nameT) nameKind = "same";
-          else if(nameX.indexOf(nameT) >= 0 || nameT.indexOf(nameX) >= 0) nameKind = "part";
+        // 여러 이름 후보 중 가장 잘 맞는 것을 씁니다.
+        let nameKind = "no", usedName = "";
+        for(const nameX of namesX){
+          if(!nameT) break;
+          let k = "no";
+          if(nameX === nameT) k = "same";
+          else if(nameX.indexOf(nameT) >= 0 || nameT.indexOf(nameX) >= 0) k = "part";
           else {
-            // 앞에서부터 몇 글자가 같은지 봅니다. (예: 신우빌딩 ↔ 신우빌딩관리단)
             let n = 0;
             while(n < nameX.length && n < nameT.length && nameX[n] === nameT[n]) n++;
-            if(n >= 2) nameKind = "head";
+            if(n >= 2) k = "head";
           }
+          const rank = { no:0, head:1, part:2, same:3 };
+          if(rank[k] > rank[nameKind]){ nameKind = k; usedName = nameX; }
+          if(nameKind === "same") break;
         }
         if(nameKind === "no") return;    // 이름이 전혀 다르면 이어주지 않습니다
         let score = 0;
@@ -11855,11 +11879,15 @@
         else score += 2;
         score += Math.max(0, 3 - Math.floor(gap / 30));          // 날짜가 가까울수록
         if(score > bestScore){ bestScore = score; best = { t, gap, score,
-          exact: (nameKind === "same") }; }
+          exact: (nameKind === "same"), usedName }; }
       });
       if(!best) return;
-      const row = { x, t: best.t, gap: best.gap, amt, exact: best.exact };
-      if(best.exact && best.score >= 8) sure.push(row); else maybe.push(row);
+      // 사업자번호가 같으면 이름이 조금 달라도 확실로 봅니다.
+      const bizX = String(x.bizNo||"").replace(/\D/g,"");
+      const bizT = String(best.t.bizNo||"").replace(/\D/g,"");
+      const sameBiz = bizX && bizT && bizX === bizT;
+      const row = { x, t: best.t, gap: best.gap, amt, exact: best.exact || sameBiz };
+      if((best.exact || sameBiz) && best.score >= 8) sure.push(row); else maybe.push(row);
     });
 
     // 같은 계산서가 여러 거래에 걸리지 않게 합니다.
@@ -11879,7 +11907,7 @@
       + '<td style="white-space:nowrap;">' + comboEsc(r.x.date) + '</td>'
       + '<td style="white-space:nowrap;color:' + (inOut === "입금" ? "#1565c0" : "var(--danger)") + ';">' + inOut + '</td>'
       + '<td class="ta-right" style="font-weight:700;">' + r.amt.toLocaleString() + '</td>'
-      + '<td>' + comboEsc(r.x.party || r.x.desc || "-") + '</td>'
+      + '<td>' + comboEsc(r.x.party || r.x.desc || "-") + ((r.x.note || r.x.memo) ? '<br><span style="color:var(--gray);font-size:11px;">메모: ' + comboEsc(String(r.x.note || r.x.memo || "").slice(0,26)) + '</span>' : '') + '</td>'
       + '<td style="color:var(--gray);">↔</td>'
       + '<td><b>' + comboEsc(r.t.company||"-") + '</b></td>'
       + '<td style="white-space:nowrap;">' + comboEsc(r.t.issueDate||"-") + '</td>'
