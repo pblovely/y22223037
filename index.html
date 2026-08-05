@@ -320,7 +320,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-05 v332</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-05 v333</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -1461,6 +1461,7 @@
           <input type="text" id="rbd-from" placeholder="시작일 20260701" onchange="loadReqBoard()" style="width:130px;height:28px;border:1px solid var(--line);padding:0 8px;font-size:12.5px;margin-left:-1px;box-sizing:border-box;">
           <input type="text" id="rbd-to" placeholder="종료일 20260731" onchange="loadReqBoard()" style="width:130px;height:28px;border:1px solid var(--line);padding:0 8px;font-size:12.5px;margin-left:-1px;box-sizing:border-box;">
           <button class="btn small secondary" style="width:auto;margin-left:-1px;" onclick="clearReqBoardCond()">비우기</button>
+          <span id="dl-reqboard" style="margin-left:6px;"></span>
           <button class="btn small secondary" style="width:auto;margin-left:6px;" onclick="toggleReqViewPanel()">보기 설정</button>
           <button class="btn small danger" id="rbd-reset-btn" style="width:auto;margin-left:6px;display:none;" onclick="resetAllPayProcessing()">전체 되돌리기</button>
         </div>
@@ -1524,6 +1525,7 @@
           <span class="btn-row">
             <button class="btn small secondary" style="width:auto;" onclick="openReconCorp()">계좌 법인 배정</button>
             <button class="btn small secondary" style="width:auto;" onclick="runAutoMatch()">자동 매칭</button>
+            <span id="dl-recon"></span>
             <button class="btn small" style="width:auto;" onclick="openReconUpload()">+ ERP 파일 올리기</button>
           </span>
         </div>
@@ -1661,6 +1663,7 @@
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
           <h3 style="margin:0;">세금계산서 <span class="info-tip" title="매입·매출 세금계산서를 등록합니다. 매입 계산서 중 「B2B 사용가능」을 체크한 것은 은행 대출 증빙으로 쓸 수 있고, 대출에 쓴 만큼 한도가 줄어듭니다.">ⓘ</span></h3>
           <span class="btn-row">
+            <span id="dl-tax"></span>
             <button class="btn small secondary" style="width:auto;" onclick="openTaxUpload()">홈택스 파일 올리기</button>
             <button class="btn small" style="width:auto;" onclick="openTaxAdd()">+ 계산서 등록</button>
           </span>
@@ -1761,6 +1764,7 @@
           <button class="btn small" style="width:auto;" onclick="submitCashbook()">등록</button>
         </div>
 
+        <span id="dl-cashbook" style="margin-right:6px;"></span>
         <span class="btn-row" style="display:inline-flex;margin-bottom:10px;">
           <button class="btn small" id="cb-f-all" style="width:auto;" onclick="setCashbookFilter('all')">전체</button>
           <button class="btn small secondary" id="cb-f-in" style="width:auto;" onclick="setCashbookFilter('in')">입금</button>
@@ -10932,6 +10936,8 @@
       const [k, id, i] = b.dataset.delrec.split("|");
       b.onclick = ()=> deletePayRecord(k, id, Number(i));
     });
+    // 엑셀 다운로드 (화면에 보이는 순서 그대로)
+    addDownloadBtn("dl-reqboard", "reqboard-list", "입출금리스트");
   };
 
   // 요청 정보 수정 (요청일 · 세금계산서 · 비고)
@@ -11513,6 +11519,9 @@
     document.querySelectorAll("#tab-recon [data-rc-cy]").forEach(b=>{
       b.onclick = ()=> toggleCarryOver(b.dataset.rcCy);
     });
+    // 엑셀 다운로드 · 보기 설정 (화면에 보이는 순서 그대로 내려받습니다)
+    addDownloadBtn("dl-recon", "recon-list", "입출금대사");
+    addViewCfgBtn("dl-recon", "recon-list");
   }
 
   // 상태 바꾸기
@@ -11993,6 +12002,9 @@
     document.querySelectorAll("#tab-tax [data-tx-del]").forEach(b=>{
       b.onclick = ()=> deleteTaxInvoice(b.dataset.txDel);
     });
+    // 엑셀 다운로드 · 보기 설정 (화면에 보이는 순서 그대로 내려받습니다)
+    addDownloadBtn("dl-tax", "tax-list", "세금계산서");
+    addViewCfgBtn("dl-tax", "tax-list");
   };
 
   window.openTaxUpload = function(){
@@ -12262,6 +12274,9 @@
     document.querySelectorAll("#tab-cashbook [data-cb-del]").forEach(b=>{
       b.onclick = ()=> deleteCashbookRow(b.dataset.cbDel);
     });
+    // 엑셀 다운로드 · 보기 설정 (화면에 보이는 순서 그대로)
+    addDownloadBtn("dl-cashbook", "cashbook-list", "입출금내역");
+    addViewCfgBtn("dl-cashbook", "cashbook-list");
   };
 
   // 새 내역 등록
