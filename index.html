@@ -320,7 +320,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-05 v327</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-05 v328</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -1586,17 +1586,20 @@
           <div style="font-size:12.5px;font-weight:700;margin-bottom:6px;">홈택스 파일 올리기</div>
           <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">
             <select id="tx-upload-kind" style="height:28px;border:1px solid var(--line);padding:0 6px;font-size:12.5px;">
-              <option value="buy">매입 세금계산서</option>
-              <option value="buyfree">매입 계산서 (면세)</option>
-              <option value="sale">매출 세금계산서</option>
-              <option value="salefree">매출 계산서 (면세)</option>
+              <option value="auto">자동으로 구분 (권장)</option>
+              <option value="buy">매입 세금계산서로</option>
+              <option value="buyfree">매입 계산서(면세)로</option>
+              <option value="sale">매출 세금계산서로</option>
+              <option value="salefree">매출 계산서(면세)로</option>
             </select>
-            <input type="file" id="tx-file" accept=".xls,.xlsx" onchange="onTaxFile(event)" style="font-size:12.5px;">
+            <input type="file" id="tx-file" accept=".xls,.xlsx" multiple onchange="onTaxFile(event)" style="font-size:12.5px;">
             <button class="btn small danger" style="width:auto;margin-left:auto;" onclick="resetTaxInvoices()">전체 삭제</button>
           </div>
           <div style="font-size:11.5px;color:var(--gray);margin-top:4px;">홈택스에서 내려받은 <b>목록 파일 그대로</b> 올리시면 됩니다. 매입·매출·면세계산서 모두 됩니다.
+            <b>여러 개를 한 번에</b> 골라도 되고, 매입·매출·면세를 <b>알아서 구분</b>합니다.
             <b>승인번호</b>로 가려내므로 같은 파일을 다시 올려도 중복되지 않습니다.</div>
           <div id="tx-upload-msg" style="font-size:12.5px;margin-top:6px;"></div>
+          <div id="tx-upload-hist" style="font-size:11.5px;color:var(--gray);margin-top:6px;line-height:1.8;"></div>
         </div>
 
         <div style="border:1px solid var(--line);background:#fafafa;padding:10px 12px;margin-bottom:12px;">
@@ -10908,12 +10911,60 @@
   //  홈택스에서 내려받은 목록 파일을 그대로 올립니다.
   //  승인번호로 거래를 가리므로, 같은 파일을 다시 올려도 중복되지 않습니다.
   window.onTaxFile = async function(ev){
-    const f = ev.target.files && ev.target.files[0];
-    if(!f) return;
+    const files = Array.from((ev.target && ev.target.files) || []);
+    if(files.length === 0) return;
     const msg = document.getElementById("tx-upload-msg");
     const show = (t, color)=>{ msg.innerHTML = '<span style="color:' + (color||"var(--gray)") + ';">' + t + '</span>'; };
-    const kind = (document.getElementById("tx-upload-kind")||{}).value || "buy";
-    show("파일을 읽는 중입니다...");
+    const picked = (document.getElementById("tx-upload-kind")||{}).value || "auto";
+    const results = [];
+    for(let fi=0; fi<files.length; fi++){
+      const f = files[fi];
+      show("(" + (fi+1) + "/" + files.length + ") " + comboEsc(f.name) + " 을 읽는 중입니다...");
+      const r = await readOneTaxFile(f, picked, show);
+      if(r) results.push(r);
+    }
+    // 올린 기록을 남깁니다. (언제까지 넣었는지 보시라고)
+    try{
+      for(const r of results){
+        await addDoc(collection(db,"taxUploads"), {
+          fileName: r.fileName, kindLabel: r.kindLabel,
+          read: r.read, added: r.added, updated: r.updated, kept: r.kept,
+          minDate: r.minDate, maxDate: r.maxDate,
+          by: currentUser.name, at: serverTimestamp()
+        });
+      }
+    }catch(e){}
+    const tot = results.reduce((a,r)=>({read:a.read+r.read, added:a.added+r.added,
+      updated:a.updated+r.updated, kept:a.kept+r.kept}), {read:0,added:0,updated:0,kept:0});
+    show(files.length + "개 파일 · 읽음 " + tot.read + "건 → 새로 <b>" + tot.added
+      + "건</b> · 바뀜 <b>" + tot.updated + "건</b> · 그대로 " + tot.kept + "건"
+      + (results.length ? '<div style="margin-top:6px;color:var(--gray);font-size:11.5px;line-height:1.8;">'
+          + results.map(r=>'· ' + comboEsc(r.fileName) + ' — <b>' + comboEsc(r.kindLabel) + '</b> '
+              + r.read + '건 (' + comboEsc(r.minDate||"-") + ' ~ ' + comboEsc(r.maxDate||"-") + ')').join('<br>')
+          + '</div>' : ''), "#2e7d32");
+    loadTaxList();
+    loadTaxUploadHistory();
+    ev.target.value = "";
+  };
+
+  // 올린 기록을 보여줍니다.
+  window.loadTaxUploadHistory = async function(){
+    const el = document.getElementById("tx-upload-hist");
+    if(!el) return;
+    try{
+      const snap = await getDocs(query(collection(db,"taxUploads"), orderBy("at","desc")));
+      const rows = []; snap.forEach(d=> rows.push(d.data()));
+      if(rows.length === 0){ el.innerHTML = ""; return; }
+      el.innerHTML = '<b>지금까지 올린 파일</b> (최근 8개)<br>'
+        + rows.slice(0,8).map(r=>'· <b>' + comboEsc(r.kindLabel||"-") + '</b> '
+            + comboEsc(r.fileName||"-") + ' — ' + (r.read||0) + '건 ('
+            + comboEsc(r.minDate||"-") + ' ~ ' + comboEsc(r.maxDate||"-") + ')'
+            + ' · 새로 ' + (r.added||0) + ' · ' + comboEsc(r.by||"-")).join('<br>');
+    }catch(e){ el.innerHTML = ""; }
+  };
+
+  // 파일 하나를 읽습니다.
+  async function readOneTaxFile(f, picked, show){
     try{
       const buf = await f.arrayBuffer();
       const wb = XLSX.read(buf, { type:"array" });
@@ -10925,7 +10976,17 @@
       for(let i=0; i<Math.min(aoa.length, 20); i++){
         if((aoa[i]||[]).some(c=> String(c).indexOf("승인번호") >= 0)){ hi = i; break; }
       }
-      if(hi < 0){ show("「승인번호」가 있는 머리글 줄을 찾지 못했습니다. 홈택스에서 내려받은 목록 파일이 맞는지 확인해주세요.", "var(--danger)"); return; }
+      if(hi < 0){ show(comboEsc(f.name) + " : 「승인번호」가 있는 머리글 줄을 찾지 못했습니다.", "var(--danger)"); return null; }
+
+      // 파일 위쪽에 적힌 제목으로 매입·매출을 알아냅니다. (예: "매입 전자(수정) 세금계산서 목록조회")
+      let title = "";
+      for(let i=0; i<hi; i++){
+        const t = (aoa[i]||[]).map(c=> String(c)).join(" ");
+        if(t.indexOf("목록조회") >= 0){ title = t; break; }
+      }
+      const titleBuy  = title.indexOf("매입") >= 0;
+      const titleSale = title.indexOf("매출") >= 0;
+      const titleTax  = title.indexOf("세금계산서") >= 0;
       const head = (aoa[hi]||[]).map(x=> String(x).trim());
       const idx = (name)=> head.findIndex(h=> h === name);
       const like = (name)=> head.findIndex(h=> h.indexOf(name) >= 0);
@@ -10939,10 +11000,17 @@
       head.forEach((h,i)=>{ if(h === "상호") nameCols.push(i); });
       const bizCols = [];
       head.forEach((h,i)=>{ if(h.indexOf("사업자등록번호") >= 0) bizCols.push(i); });
+      // 구분을 정합니다. 「자동」이면 파일 제목을 따르고, 직접 고르셨으면 그대로 씁니다.
+      let kind = picked;
+      if(picked === "auto"){
+        if(titleBuy) kind = titleTax ? "buy" : "buyfree";
+        else if(titleSale) kind = titleTax ? "sale" : "salefree";
+        else kind = "buy";
+      }
       const isBuy = (kind === "buy" || kind === "buyfree");
       const cName = isBuy ? (nameCols[0] ?? -1) : (nameCols[1] ?? nameCols[0] ?? -1);
       const cBiz  = isBuy ? (bizCols[0] ?? -1)  : (bizCols[1] ?? bizCols[0] ?? -1);
-      if(cDate < 0 || cNo < 0 || cTotal < 0){ show("작성일자·승인번호·합계금액 칸을 찾지 못했습니다.", "var(--danger)"); return; }
+      if(cDate < 0 || cNo < 0 || cTotal < 0){ show(comboEsc(f.name) + " : 작성일자·승인번호·합계금액 칸을 찾지 못했습니다.", "var(--danger)"); return null; }
 
       const num = (v)=> Number(String(v||"").replace(/[^0-9.\-]/g, "")) || 0;
       const rows = [];
@@ -10968,8 +11036,7 @@
           vat: cVat>=0 ? num(r[cVat]) : 0
         });
       }
-      if(rows.length === 0){ show("읽을 계산서가 없습니다.", "var(--danger)"); return; }
-      show(rows.length + "건을 읽었습니다. 저장하는 중입니다...");
+      if(rows.length === 0){ show(comboEsc(f.name) + " : 읽을 계산서가 없습니다.", "var(--danger)"); return null; }
 
       // 이미 있는 승인번호는 넣지 않습니다.
       const snap = await getDocs(collection(db,"taxInvoices"));
@@ -11009,18 +11076,17 @@
         ops.slice(i, i+400).forEach(o=> o.t === "set" ? bt.set(o.ref, o.data) : bt.update(o.ref, o.data));
         await bt.commit();
       }
-      logAction(({buy:"매입 세금계산서",buyfree:"매입 계산서(면세)",sale:"매출 세금계산서",salefree:"매출 계산서(면세)"}[kind]||kind) + " 파일 올림",
+      const kindLabel = {buy:"매입 세금계산서",buyfree:"매입 계산서(면세)",sale:"매출 세금계산서",salefree:"매출 계산서(면세)"}[kind]||kind;
+      const dates = rows.map(x=> x.issueDate).filter(Boolean).sort();
+      logAction(kindLabel + " 파일 올림",
         f.name + " / 읽음 " + rows.length + "건 / 새로 " + added + "건 / 바뀜 " + updated + "건 / 그대로 " + kept + "건");
-      show("새로 <b>" + added + "건</b> · 내용 바뀜 <b>" + updated + "건</b> · 그대로 " + kept + "건"
-        + (changed.length ? '<div style="margin-top:6px;font-size:11.5px;color:var(--gray);line-height:1.7;">'
-            + changed.slice(0,6).map(c=>'· ' + comboEsc(c.company||"-") + ' : ' + comboEsc(c.what)).join('<br>')
-            + (changed.length>6 ? '<br>... 외 ' + (changed.length-6) + '개' : '') + '</div>' : ''), "#2e7d32");
-      loadTaxList();
+      return { fileName: f.name, kindLabel, read: rows.length, added, updated, kept,
+               minDate: dates[0]||"", maxDate: dates[dates.length-1]||"" };
     }catch(e){
-      show("읽지 못했습니다. " + comboEsc((e && e.message) ? e.message : String(e)), "var(--danger)");
+      show(comboEsc(f.name) + " : 읽지 못했습니다. " + comboEsc((e && e.message) ? e.message : String(e)), "var(--danger)");
+      return null;
     }
-    ev.target.value = "";
-  };
+  }
 
   // 세금계산서 전부 지우기
   window.resetTaxInvoices = async function(){
@@ -22582,7 +22648,7 @@
     if(tabId==="tab-reservation") loadReservationTable();
     if(tabId==="tab-reqboard") loadReqBoard();
     if(tabId==="tab-cashbook"){ document.getElementById("cb-date").value = todayStr(); loadCashbook(); }
-    if(tabId==="tab-tax"){ document.getElementById("tx-date").value = todayStr(); loadTaxList(); }
+    if(tabId==="tab-tax"){ document.getElementById("tx-date").value = todayStr(); loadTaxList(); loadTaxUploadHistory(); }
     if(tabId==="tab-recon"){ reconTaxCache = null; loadReconList(); }
     if(tabId==="tab-b2b") loadB2BTab();
     if(tabId==="tab-team") loadTeamList();
