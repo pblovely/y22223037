@@ -320,7 +320,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-04 v326</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-05 v327</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -1586,8 +1586,10 @@
           <div style="font-size:12.5px;font-weight:700;margin-bottom:6px;">홈택스 파일 올리기</div>
           <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">
             <select id="tx-upload-kind" style="height:28px;border:1px solid var(--line);padding:0 6px;font-size:12.5px;">
-              <option value="buy">매입 (받은 계산서)</option>
-              <option value="sale">매출 (발행한 계산서)</option>
+              <option value="buy">매입 세금계산서</option>
+              <option value="buyfree">매입 계산서 (면세)</option>
+              <option value="sale">매출 세금계산서</option>
+              <option value="salefree">매출 계산서 (면세)</option>
             </select>
             <input type="file" id="tx-file" accept=".xls,.xlsx" onchange="onTaxFile(event)" style="font-size:12.5px;">
             <button class="btn small danger" style="width:auto;margin-left:auto;" onclick="resetTaxInvoices()">전체 삭제</button>
@@ -1600,7 +1602,12 @@
         <div style="border:1px solid var(--line);background:#fafafa;padding:10px 12px;margin-bottom:12px;">
           <div style="font-size:12.5px;font-weight:700;margin-bottom:6px;">새 계산서 등록 <span style="color:var(--gray);font-weight:400;">— 하나씩 직접 넣을 때</span></div>
           <div class="stack-row"><label>구분</label>
-            <select id="tx-kind"><option value="buy">매입 (받은 계산서)</option><option value="sale">매출 (발행한 계산서)</option></select>
+            <select id="tx-kind">
+              <option value="buy">매입 세금계산서</option>
+              <option value="buyfree">매입 계산서 (면세)</option>
+              <option value="sale">매출 세금계산서</option>
+              <option value="salefree">매출 계산서 (면세)</option>
+            </select>
           </div>
           <div class="stack-row"><label>발행일</label><input type="text" id="tx-date" placeholder="20260831"></div>
           <div class="stack-row"><label>거래처</label>
@@ -1621,6 +1628,7 @@
           <button class="btn small" id="tx-f-all" style="width:auto;" onclick="setTaxFilter('all')">전체</button>
           <button class="btn small secondary" id="tx-f-buy" style="width:auto;" onclick="setTaxFilter('buy')">매입</button>
           <button class="btn small secondary" id="tx-f-sale" style="width:auto;" onclick="setTaxFilter('sale')">매출</button>
+          <button class="btn small secondary" id="tx-f-free" style="width:auto;" onclick="setTaxFilter('free')">면세</button>
           <button class="btn small secondary" id="tx-f-b2b" style="width:auto;" onclick="setTaxFilter('b2b')">B2B 사용가능</button>
           <button class="btn small secondary" id="tx-f-left" style="width:auto;" onclick="setTaxFilter('left')">한도 남음</button>
         </span>
@@ -10924,14 +10932,16 @@
 
       const cDate = like("작성일자"), cNo = like("승인번호"),
             cIssue = like("발급일자"), cTotal = like("합계금액"),
-            cSupply = like("공급가액"), cVat = like("세액");
+            cSupply = like("공급가액"), cVat = like("세액"),
+            cCls = like("전자세금계산서분류");
       // 상호가 두 개 있습니다 — 매입이면 공급자(앞), 매출이면 공급받는자(뒤)
       const nameCols = [];
       head.forEach((h,i)=>{ if(h === "상호") nameCols.push(i); });
       const bizCols = [];
       head.forEach((h,i)=>{ if(h.indexOf("사업자등록번호") >= 0) bizCols.push(i); });
-      const cName = (kind === "buy") ? (nameCols[0] ?? -1) : (nameCols[1] ?? nameCols[0] ?? -1);
-      const cBiz  = (kind === "buy") ? (bizCols[0] ?? -1)  : (bizCols[1] ?? bizCols[0] ?? -1);
+      const isBuy = (kind === "buy" || kind === "buyfree");
+      const cName = isBuy ? (nameCols[0] ?? -1) : (nameCols[1] ?? nameCols[0] ?? -1);
+      const cBiz  = isBuy ? (bizCols[0] ?? -1)  : (bizCols[1] ?? bizCols[0] ?? -1);
       if(cDate < 0 || cNo < 0 || cTotal < 0){ show("작성일자·승인번호·합계금액 칸을 찾지 못했습니다.", "var(--danger)"); return; }
 
       const num = (v)=> Number(String(v||"").replace(/[^0-9.\-]/g, "")) || 0;
@@ -10944,8 +10954,11 @@
         if(!no || amount === 0) continue;
         if(seenNo.has(no)) continue;      // 품목이 여러 줄이면 한 건으로 봅니다
         seenNo.add(no);
+        // 파일에 적힌 분류로 면세 여부를 판단합니다. ("계산서" = 면세, 세액 칸이 없습니다)
+        const cls = cCls>=0 ? String(r[cCls]||"").trim() : "";
+        const free = (cls === "계산서") || (cVat < 0);
         rows.push({
-          kind,
+          kind: isBuy ? (free ? "buyfree" : "buy") : (free ? "salefree" : "sale"),
           issueDate: String(r[cDate]||"").trim().replace(/\D/g,"").slice(0,8),
           invoiceNo: no,
           company: cName>=0 ? String(r[cName]||"").trim() : "",
@@ -10996,7 +11009,7 @@
         ops.slice(i, i+400).forEach(o=> o.t === "set" ? bt.set(o.ref, o.data) : bt.update(o.ref, o.data));
         await bt.commit();
       }
-      logAction(kind === "buy" ? "매입 세금계산서 파일 올림" : "매출 세금계산서 파일 올림",
+      logAction(({buy:"매입 세금계산서",buyfree:"매입 계산서(면세)",sale:"매출 세금계산서",salefree:"매출 계산서(면세)"}[kind]||kind) + " 파일 올림",
         f.name + " / 읽음 " + rows.length + "건 / 새로 " + added + "건 / 바뀜 " + updated + "건 / 그대로 " + kept + "건");
       show("새로 <b>" + added + "건</b> · 내용 바뀜 <b>" + updated + "건</b> · 그대로 " + kept + "건"
         + (changed.length ? '<div style="margin-top:6px;font-size:11.5px;color:var(--gray);line-height:1.7;">'
@@ -11475,7 +11488,7 @@
 
   window.setTaxFilter = function(f){
     taxFilter = f;
-    ["all","buy","sale","b2b","left"].forEach(k=>{
+    ["all","buy","sale","free","b2b","left"].forEach(k=>{
       const b = document.getElementById("tx-f-" + k);
       if(b) b.className = "btn small" + (k === f ? "" : " secondary");
     });
@@ -11503,7 +11516,7 @@
       const amt = Number(x.amount)||0;
       const used = Number(x.b2bUsed)||0;
       rows.push({
-        id: d.id, kind: (x.kind === "sale") ? "sale" : "buy",
+        id: d.id, kind: ["buy","buyfree","sale","salefree"].includes(x.kind) ? x.kind : "buy",
         issueDate: x.issueDate || "-", company: x.company || "-",
         invoiceNo: x.invoiceNo || "", amount: amt, memo: x.memo || "",
         b2bOk: x.b2bOk === true, b2bUsed: used,
@@ -11512,10 +11525,12 @@
       });
     });
 
+    const isBuyKind = (k)=> k === "buy" || k === "buyfree";
     const pick = (r)=>{
       if(taxFilter === "all") return true;
-      if(taxFilter === "buy") return r.kind === "buy";
-      if(taxFilter === "sale") return r.kind === "sale";
+      if(taxFilter === "buy") return isBuyKind(r.kind);
+      if(taxFilter === "sale") return !isBuyKind(r.kind);
+      if(taxFilter === "free") return r.kind === "buyfree" || r.kind === "salefree";
       if(taxFilter === "b2b") return r.b2bOk;
       if(taxFilter === "left") return r.b2bOk && r.left > 0;
       return true;
@@ -11528,9 +11543,10 @@
     const { pageItems } = paginateSlice(view, "taxInvoices");
 
     // 카드
-    let buyAmt=0, saleAmt=0, b2bLimit=0, b2bUsed=0, b2bLeft=0;
+    let buyAmt=0, saleAmt=0, freeAmt=0, b2bLimit=0, b2bUsed=0, b2bLeft=0;
     rows.forEach(r=>{
-      if(r.kind === "buy") buyAmt += r.amount; else saleAmt += r.amount;
+      if(isBuyKind(r.kind)) buyAmt += r.amount; else saleAmt += r.amount;
+      if(r.kind === "buyfree" || r.kind === "salefree") freeAmt += r.amount;
       if(r.b2bOk){ b2bLimit += r.amount; b2bUsed += r.b2bUsed; b2bLeft += r.left; }
     });
     const cardEl = document.getElementById("tax-cards");
@@ -11541,8 +11557,9 @@
         + '<div style="font-size:16px;font-weight:700;'+(color?('color:'+color+';'):'')+'">'+value+'</div>'
         + (note ? '<div style="font-size:10.5px;color:var(--gray);">'+note+'</div>' : '') + '</div>';
       cardEl.innerHTML =
-        card("매입 계산서", buyAmt.toLocaleString(), "var(--danger)", "받은 계산서 합계") +
-        card("매출 계산서", saleAmt.toLocaleString(), "#1565c0", "발행한 계산서 합계") +
+        card("매입", buyAmt.toLocaleString(), "var(--danger)", "받은 계산서 합계") +
+        card("매출", saleAmt.toLocaleString(), "#1565c0", "발행한 계산서 합계") +
+        card("면세", freeAmt.toLocaleString(), null, "계산서(면세) 합계") +
         card("B2B 한도", b2bLimit.toLocaleString(), null, "사용 가능으로 체크한 것") +
         card("B2B 사용액", b2bUsed.toLocaleString(), null, "대출에 쓴 금액") +
         card("남은 한도", b2bLeft.toLocaleString(), "#2e7d32", "더 빌릴 수 있는 금액");
@@ -11557,14 +11574,16 @@
       + '<th class="ta-right">금액</th><th>B2B</th><th class="ta-right">사용액</th>'
       + '<th class="ta-right">남은한도</th><th>메모</th><th></th></tr></thead><tbody>'
       + pageItems.map(r=>{
-          const isBuy = r.kind === "buy";
+          const isBuy = isBuyKind(r.kind);
+          const free = (r.kind === "buyfree" || r.kind === "salefree");
           let tr = '<tr>'
-            + '<td><b style="color:'+(isBuy ? "var(--danger)" : "#1565c0")+';">'+(isBuy ? "매입" : "매출")+'</b></td>'
+            + '<td style="white-space:nowrap;"><b style="color:'+(isBuy ? "var(--danger)" : "#1565c0")+';">'+(isBuy ? "매입" : "매출")+'</b>'
+              + (free ? '<br><span style="background:#f2f2f2;border:1px solid var(--line);color:var(--gray);font-size:10.5px;padding:0 4px;">면세</span>' : '') + '</td>'
             + '<td style="white-space:nowrap;">'+comboEsc(r.issueDate)+'</td>'
             + '<td><b>'+comboEsc(r.company)+'</b></td>'
             + '<td>'+(r.invoiceNo ? comboEsc(r.invoiceNo) : '<span style="color:var(--gray);">-</span>')+'</td>'
             + '<td class="ta-right" style="font-weight:700;">'+r.amount.toLocaleString()+'</td>'
-            + '<td>' + (isBuy
+            + '<td>' + (r.kind === "buy"
                 ? '<label style="font-size:11.5px;cursor:pointer;"><input type="checkbox" class="tx-b2b" data-tx="'+r.id+'"'
                   + (r.b2bOk ? ' checked' : '') + (canDo ? '' : ' disabled') + '> 사용가능</label>'
                 : '<span style="color:var(--gray);">-</span>') + '</td>'
@@ -11623,7 +11642,7 @@
         b2bUsed: 0, b2bUses: [],
         createdBy: currentUser.name, createdAt: serverTimestamp()
       });
-      logAction(kind === "buy" ? "매입 세금계산서 등록" : "매출 세금계산서 등록",
+      logAction(({buy:"매입 세금계산서",buyfree:"매입 계산서(면세)",sale:"매출 세금계산서",salefree:"매출 계산서(면세)"}[kind]||kind) + " 등록",
         company + " / " + amount.toLocaleString() + " / " + issueDate
         + (invoiceNo ? " / " + invoiceNo : "")
         + (kind === "buy" && b2bOk ? " / B2B 사용가능" : ""));
