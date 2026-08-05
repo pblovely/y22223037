@@ -320,7 +320,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-04 v325</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-04 v326</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -1541,6 +1541,7 @@
             <button class="btn small secondary" id="rc-f-check" style="width:auto;" onclick="setReconFilter('check')">1차 확인</button>
             <button class="btn small secondary" id="rc-f-done" style="width:auto;" onclick="setReconFilter('done')">완료</button>
             <button class="btn small secondary" id="rc-f-skip" style="width:auto;" onclick="setReconFilter('skip')">대사 제외</button>
+            <button class="btn small secondary" id="rc-f-carry" style="width:auto;" onclick="setReconFilter('carry')">이월</button>
             <button class="btn small secondary" id="rc-f-all" style="width:auto;" onclick="setReconFilter('all')">전체</button>
           </span>
           <span style="font-size:12px;color:var(--gray);margin:0 6px 0 12px;">법인</span>
@@ -10959,25 +10960,48 @@
 
       // 이미 있는 승인번호는 넣지 않습니다.
       const snap = await getDocs(collection(db,"taxInvoices"));
-      const have = new Set();
-      snap.forEach(d=>{ const v=d.data(); if(v.invoiceNo) have.add(String(v.invoiceNo).trim()); });
+      const have = new Map();
+      snap.forEach(d=>{ const v=d.data(); if(v.invoiceNo) have.set(String(v.invoiceNo).trim(), { id:d.id, ...v }); });
 
-      let added = 0, kept = 0;
-      for(let i=0; i<rows.length; i+=400){
+      let added = 0, kept = 0, updated = 0;
+      const changed = [];
+      const ops = [];
+      rows.forEach(x=>{
+        const old = have.get(x.invoiceNo);
+        if(!old){
+          ops.push({ t:"set", ref: doc(collection(db,"taxInvoices")), data:{
+            ...x, memo:"", b2bOk:false, b2bUsed:0, b2bUses:[],
+            createdBy: currentUser.name, createdAt: serverTimestamp() }});
+          added++; return;
+        }
+        // 이미 있는 건 — 금액·거래처·날짜가 바뀌었으면 고칩니다.
+        // B2B 사용 여부와 사용액은 앱에서 관리하는 값이라 손대지 않습니다.
+        const patch = {};
+        if((Number(old.amount)||0) !== x.amount) patch.amount = x.amount;
+        if(x.company && String(old.company||"") !== x.company) patch.company = x.company;
+        if(x.issueDate && String(old.issueDate||"") !== x.issueDate) patch.issueDate = x.issueDate;
+        if((Number(old.supply)||0) !== x.supply) patch.supply = x.supply;
+        if((Number(old.vat)||0) !== x.vat) patch.vat = x.vat;
+        // 이미 B2B에 쓴 금액보다 적게는 못 줄입니다.
+        if(patch.amount !== undefined && patch.amount < (Number(old.b2bUsed)||0)) delete patch.amount;
+        if(Object.keys(patch).length > 0){
+          ops.push({ t:"update", ref: doc(db,"taxInvoices", old.id), data:patch });
+          updated++;
+          changed.push({ company:x.company,
+            what: Object.keys(patch).map(k=>({amount:"금액",company:"거래처",issueDate:"발행일",supply:"공급가액",vat:"세액"}[k]||k)).join(", ") });
+        }else kept++;
+      });
+      for(let i=0; i<ops.length; i+=400){
         const bt = writeBatch(db);
-        let n = 0;
-        rows.slice(i, i+400).forEach(x=>{
-          if(have.has(x.invoiceNo)){ kept++; return; }
-          const ref = doc(collection(db,"taxInvoices"));
-          bt.set(ref, { ...x, memo:"", b2bOk:false, b2bUsed:0, b2bUses:[],
-                        createdBy: currentUser.name, createdAt: serverTimestamp() });
-          added++; n++;
-        });
-        if(n > 0) await bt.commit();
+        ops.slice(i, i+400).forEach(o=> o.t === "set" ? bt.set(o.ref, o.data) : bt.update(o.ref, o.data));
+        await bt.commit();
       }
       logAction(kind === "buy" ? "매입 세금계산서 파일 올림" : "매출 세금계산서 파일 올림",
-        f.name + " / 읽음 " + rows.length + "건 / 새로 " + added + "건 / 이미 있음 " + kept + "건");
-      show("새로 " + added + "건을 넣었습니다. 이미 있던 " + kept + "건은 그대로 두었습니다.", "#2e7d32");
+        f.name + " / 읽음 " + rows.length + "건 / 새로 " + added + "건 / 바뀜 " + updated + "건 / 그대로 " + kept + "건");
+      show("새로 <b>" + added + "건</b> · 내용 바뀜 <b>" + updated + "건</b> · 그대로 " + kept + "건"
+        + (changed.length ? '<div style="margin-top:6px;font-size:11.5px;color:var(--gray);line-height:1.7;">'
+            + changed.slice(0,6).map(c=>'· ' + comboEsc(c.company||"-") + ' : ' + comboEsc(c.what)).join('<br>')
+            + (changed.length>6 ? '<br>... 외 ' + (changed.length-6) + '개' : '') + '</div>' : ''), "#2e7d32");
       loadTaxList();
     }catch(e){
       show("읽지 못했습니다. " + comboEsc((e && e.message) ? e.message : String(e)), "var(--danger)");
@@ -11013,9 +11037,15 @@
   window.resetReconRows = async function(){
     if(!hasPerm(currentUserPerms, "paymentProcess")){ alert("권한이 없습니다."); return; }
     const snap = await getDocs(collection(db,"bankRecon"));
-    const all = []; snap.forEach(d=> all.push(d.id));
-    if(all.length === 0){ alert("지울 내역이 없습니다."); return; }
-    if(!confirm("입출금 대사 내역 " + all.length + "건을 모두 지웁니다.\n\n"
+    const all = []; const carry = [];
+    snap.forEach(d=>{ const v = d.data();
+      if(v.carryOver === true) carry.push(d.id); else all.push(d.id); });
+    if(all.length === 0){
+      alert(carry.length ? "지울 내역이 없습니다. (이월 " + carry.length + "건은 남습니다)" : "지울 내역이 없습니다.");
+      return;
+    }
+    if(!confirm("입출금 대사 내역 " + all.length + "건을 지웁니다.\n\n"
+      + (carry.length ? "※ 이월로 표시한 " + carry.length + "건은 남깁니다.\n" : "")
       + "확인해둔 상태와 계산서 연결도 함께 사라집니다.\n\n되돌릴 수 없습니다. 진행할까요?")) return;
     const typed = prompt('확인을 위해 "초기화" 를 그대로 입력해주세요.', "");
     if(String(typed||"").trim() !== "초기화"){ alert("입력이 달라 중단했습니다."); return; }
@@ -11025,9 +11055,9 @@
         all.slice(i, i+400).forEach(id=> bt.delete(doc(db,"bankRecon", id)));
         await bt.commit();
       }
-      logAction("입출금 대사 전체 삭제", all.length + "건");
+      logAction("입출금 대사 전체 삭제", all.length + "건 삭제" + (carry.length ? " / 이월 " + carry.length + "건 유지" : ""));
     }catch(e){ alert("지우지 못했습니다."); return; }
-    alert(all.length + "건을 지웠습니다.");
+    alert(all.length + "건을 지웠습니다." + (carry.length ? "\n이월 " + carry.length + "건은 남겼습니다." : ""));
     loadReconList();
   };
 
@@ -11069,9 +11099,23 @@
     return "todo";
   }
 
+  // 이월 표시 — 초기화해도 남깁니다. 완료되면 자동으로 풀립니다.
+  window.toggleCarryOver = async function(id){
+    if(!hasPerm(currentUserPerms, "paymentProcess")){ alert("권한이 없습니다."); return; }
+    const x = reconRows.find(r=> r.id === id);
+    if(!x) return;
+    const on = !x.carryOver;
+    try{
+      await updateDoc(doc(db,"bankRecon", id), { carryOver: on });
+      logAction(on ? "입출금 대사 이월 표시" : "입출금 대사 이월 해제",
+        (x.date||"-") + " / " + Math.max(Number(x.inAmt)||0, Number(x.outAmt)||0).toLocaleString());
+    }catch(e){ alert("바꾸지 못했습니다."); return; }
+    loadReconList();
+  };
+
   window.setReconFilter = function(f){
     reconFilter = f;
-    ["todo","check","done","skip","all"].forEach(k=>{
+    ["todo","check","done","skip","carry","all"].forEach(k=>{
       const b = document.getElementById("rc-f-" + k);
       if(b) b.className = "btn small" + (k === f ? "" : " secondary");
     });
@@ -11140,26 +11184,53 @@
       const have = new Map();
       snap.forEach(d=> have.set(d.data().key, { id:d.id, ...d.data() }));
 
-      let added = 0, kept = 0;
-      for(let i=0; i<rows.length; i+=400){
-        const bt = writeBatch(db);
-        let n = 0;
-        rows.slice(i, i+400).forEach(x=>{
-          const key = reconKey(x);
-          if(have.has(key)){ kept++; return; }
-          const ref = doc(collection(db,"bankRecon"));
-          bt.set(ref, {
+      let added = 0, kept = 0, updated = 0;
+      const changed = [];
+      const ops = [];
+      rows.forEach(x=>{
+        const key = reconKey(x);
+        const old = have.get(key);
+        if(!old){
+          ops.push({ t:"set", ref: doc(collection(db,"bankRecon")), data:{
             ...x, key, corp: corpOf(x.acct),
             state: stateFromMemo(x.memo),      // 비고에 적힌 x·o·oo 를 그대로 씁니다
-            taxId: "", taxAmount: 0, diff: 0, note: "",
+            memoState: stateFromMemo(x.memo),  // ERP 비고가 뜻하던 상태 (나중에 견주려고 남깁니다)
+            taxId: "", taxAmount: 0, diff: 0, note: "", carryOver: false,
             createdAt: serverTimestamp()
-          });
-          added++; n++;
-        });
-        if(n > 0) await bt.commit();
+          }});
+          added++; return;
+        }
+        const newState = stateFromMemo(x.memo);
+        const oldMemoState = old.memoState || stateFromMemo(old.memo || "");
+        const patch = {};
+        if(String(old.memo||"") !== String(x.memo||"")){
+          patch.memo = x.memo;
+          patch.memoState = newState;
+          // 앱에서 상태를 손대지 않았으면 ERP 비고를 따릅니다.
+          // (앱에서 바꾼 것은 그대로 지킵니다 — ERP 비고가 덮어쓰지 않게)
+          const touchedInApp = (old.state !== oldMemoState) || old.taxId;
+          if(!touchedInApp && old.state !== newState){
+            patch.state = newState;
+            changed.push({ date:x.date, amt: Math.max(x.inAmt, x.outAmt),
+                           from: old.memo || "(없음)", to: x.memo || "(없음)" });
+          }
+        }
+        if(Object.keys(patch).length > 0){ ops.push({ t:"update", ref: doc(db,"bankRecon", old.id), data:patch }); updated++; }
+        else kept++;
+      });
+      for(let i=0; i<ops.length; i+=400){
+        const bt = writeBatch(db);
+        ops.slice(i, i+400).forEach(o=> o.t === "set" ? bt.set(o.ref, o.data) : bt.update(o.ref, o.data));
+        await bt.commit();
       }
-      logAction("입출금 대사 파일 올림", f.name + " / 읽음 " + rows.length + "건 / 새로 " + added + "건 / 이미 있음 " + kept + "건");
-      show("새로 " + added + "건을 넣었습니다. 이미 있던 " + kept + "건은 그대로 두었습니다.", "#2e7d32");
+      logAction("입출금 대사 파일 올림", f.name + " / 읽음 " + rows.length + "건 / 새로 " + added
+        + "건 / 비고 바뀜 " + updated + "건 / 그대로 " + kept + "건");
+      show("새로 <b>" + added + "건</b> · 비고 바뀜 <b>" + updated + "건</b> · 그대로 " + kept + "건"
+        + (changed.length ? '<div style="margin-top:6px;font-size:11.5px;color:var(--gray);line-height:1.7;">'
+            + '상태가 바뀐 줄 ' + changed.length + '개<br>'
+            + changed.slice(0,6).map(c=>'· ' + comboEsc(c.date) + ' ' + c.amt.toLocaleString()
+                + ' : ' + comboEsc(c.from) + ' → ' + comboEsc(c.to)).join('<br>')
+            + (changed.length>6 ? '<br>... 외 ' + (changed.length-6) + '개' : '') + '</div>' : ''), "#2e7d32");
       loadReconList();
     }catch(e){
       show("읽지 못했습니다. " + comboEsc((e && e.message) ? e.message : String(e)), "var(--danger)");
@@ -11190,6 +11261,7 @@
     const view = reconRows.filter(x=>{
       if(reconCorp !== "all" && (x.corp||"미분류") !== reconCorp) return false;
       if(reconFilter === "all") return true;
+      if(reconFilter === "carry") return x.carryOver === true;
       return (x.state||"todo") === reconFilter;
     });
 
@@ -11235,7 +11307,8 @@
       + pageItems.map(x=>{
           const s = x.state || "todo";
           return '<tr>'
-            + '<td style="color:' + stColor[s] + ';font-weight:700;white-space:nowrap;">' + stLabel[s] + '</td>'
+            + '<td style="color:' + stColor[s] + ';font-weight:700;white-space:nowrap;">' + stLabel[s]
+              + (x.carryOver ? '<br><span style="background:#eef4fb;border:1px solid #1565c0;color:#1565c0;font-size:10.5px;padding:0 4px;">이월</span>' : '') + '</td>'
             + '<td>' + comboEsc(x.corp||"미분류") + '</td>'
             + '<td style="white-space:nowrap;">' + comboEsc(x.date||"-") + '</td>'
             + '<td style="white-space:nowrap;color:var(--gray);">' + comboEsc(x.time||"-") + '</td>'
@@ -11255,6 +11328,8 @@
               + (canDo
                   ? '<button class="btn small secondary" style="width:auto;" data-rc-tax="' + x.id + '">계산서</button>'
                     + '<button class="btn small secondary" style="width:auto;margin-left:3px;" data-rc-st="' + x.id + '">상태</button>'
+                    + '<button class="btn small ' + (x.carryOver ? '' : 'secondary') + '" style="width:auto;margin-left:3px;" data-rc-cy="' + x.id + '">'
+                    + (x.carryOver ? '이월중' : '이월') + '</button>'
                   : '<span style="color:var(--gray);">-</span>') + '</td>'
             + '</tr>';
         }).join("")
@@ -11265,6 +11340,9 @@
     });
     document.querySelectorAll("#tab-recon [data-rc-st]").forEach(b=>{
       b.onclick = ()=> openReconState(b.dataset.rcSt);
+    });
+    document.querySelectorAll("#tab-recon [data-rc-cy]").forEach(b=>{
+      b.onclick = ()=> toggleCarryOver(b.dataset.rcCy);
     });
   }
 
@@ -11285,7 +11363,8 @@
       if(r !== null) note = String(r).trim();
     }
     try{
-      await updateDoc(doc(db,"bankRecon", id), { state: next, note });
+      await updateDoc(doc(db,"bankRecon", id), { state: next, note,
+        ...(next === "done" ? { carryOver:false } : {}) });   // 완료면 이월 자동 해제
       logAction("입출금 대사 상태 변경",
         (x.date||"-") + " / " + Math.max(Number(x.inAmt)||0, Number(x.outAmt)||0).toLocaleString()
         + " / " + ({todo:"확인 필요",check:"1차 확인",done:"완료",skip:"대사 제외"}[next])
@@ -11376,7 +11455,8 @@
     try{
       await updateDoc(doc(db,"bankRecon", x.id), {
         taxId: picked.value, taxLabel: picked.dataset.label, taxAmount: taxAmt,
-        diff, note, state: "done"
+        diff, note, state: "done",
+        carryOver: false   // 완료되면 이월 표시를 자동으로 풉니다
       });
       logAction("입출금 대사 계산서 연결",
         (x.date||"-") + " / " + amt.toLocaleString() + " ↔ " + picked.dataset.label
