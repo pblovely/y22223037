@@ -320,7 +320,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-05 v339</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-05 v340</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -11287,6 +11287,30 @@
     loadReconList();
   };
 
+  // 차액을 확인 완료로 표시합니다. 표시하면 「차액」 목록에서 빠집니다.
+  //  (수수료 차감 등 사유가 확인된 차액을 정리할 때 씁니다)
+  window.toggleDiffOk = async function(id){
+    if(!hasPerm(currentUserPerms, "paymentProcess")){ alert("권한이 없습니다."); return; }
+    const x = reconRows.find(r=> r.id === id);
+    if(!x) return;
+    const on = !x.diffOk;
+    let note = x.note || "";
+    if(on){
+      const d = Number(x.diff)||0;
+      const r = prompt("차액 " + d.toLocaleString() + "원을 확인 완료로 표시합니다.\n\n"
+        + "사유를 적어주세요. (선택 — 예: 수수료 차감, 부분입금)", note);
+      if(r === null) return;
+      note = String(r).trim();
+    }
+    try{
+      await updateDoc(doc(db,"bankRecon", id), { diffOk: on, note });
+      logAction(on ? "차액 확인 완료" : "차액 확인 해제",
+        (x.date||"-") + " / 차액 " + (Number(x.diff)||0).toLocaleString()
+        + (note ? " / " + note : ""));
+    }catch(e){ alert("바꾸지 못했습니다."); return; }
+    loadReconList();
+  };
+
   window.setReconFilter = function(f){
     reconFilter = f;
     ["todo","check","done","diff","skip","carry","all"].forEach(k=>{
@@ -11445,7 +11469,8 @@
       if(reconCorp !== "all" && (x.corp||"미분류") !== reconCorp) return false;
       if(reconFilter === "all") return true;
       if(reconFilter === "carry") return x.carryOver === true;
-      if(reconFilter === "diff") return (Number(x.diff)||0) !== 0;   // 차액이 있는 것 (상태와 무관)
+      // 차액이 있는 것 중 아직 확인 안 한 것만 (상태와 무관)
+      if(reconFilter === "diff") return (Number(x.diff)||0) !== 0 && x.diffOk !== true;
       return (x.state||"todo") === reconFilter;
     });
 
@@ -11457,7 +11482,7 @@
       if(reconCorp !== "all" && (x.corp||"미분류") !== reconCorp) return;
       const s = x.state || "todo";
       const d = Number(x.diff)||0;
-      if(d !== 0){ diffCnt++; diffAmt += d; }
+      if(d !== 0 && x.diffOk !== true){ diffCnt++; diffAmt += d; }   // 확인 끝난 차액은 세지 않습니다
       if(x.carryOver === true) carryCnt++;
       if(cnt[s] === undefined) return;
       cnt[s]++; amt[s] += Math.max(Number(x.inAmt)||0, Number(x.outAmt)||0);
@@ -11474,7 +11499,7 @@
         card("1차 확인", cnt.check + "건", "#b8860b", money(amt.check)) +
         card("완료", cnt.done + "건", "#2e7d32", money(amt.done)) +
         card("차액", diffCnt + "건", diffCnt ? "var(--danger)" : null,
-             (diffAmt >= 0 ? "+" : "") + money(diffAmt) + " · 입출금 − 계산서") +
+             (diffAmt >= 0 ? "+" : "") + money(diffAmt) + " · 아직 확인 안 한 것") +
         card("이월", carryCnt + "건", carryCnt ? "#1565c0" : null, "다음 달로 넘김") +
         card("대사 제외", cnt.skip + "건", null, money(amt.skip));
     }
@@ -11499,7 +11524,11 @@
           const s = x.state || "todo";
           return '<tr>'
             + '<td style="color:' + stColor[s] + ';font-weight:700;white-space:nowrap;">' + stLabel[s]
-              + ((Number(x.diff)||0) !== 0 ? ' <span style="background:#fdecea;border:1px solid var(--danger);color:var(--danger);font-size:10.5px;padding:0 4px;">차액</span>' : '')
+              + ((Number(x.diff)||0) !== 0
+                  ? (x.diffOk === true
+                      ? ' <span style="background:#f2f2f2;border:1px solid var(--line);color:var(--gray);font-size:10.5px;padding:0 4px;">차액 확인</span>'
+                      : ' <span style="background:#fdecea;border:1px solid var(--danger);color:var(--danger);font-size:10.5px;padding:0 4px;">차액</span>')
+                  : '')
               + (x.carryOver ? ' <span style="background:#eef4fb;border:1px solid #1565c0;color:#1565c0;font-size:10.5px;padding:0 4px;">이월</span>' : '') + '</td>'
             + '<td>' + comboEsc(x.corp||"미분류") + '</td>'
             + '<td style="white-space:nowrap;">' + comboEsc(x.date||"-") + '</td>'
@@ -11522,6 +11551,9 @@
                     + '<button class="btn small secondary" style="width:auto;margin-left:3px;" data-rc-st="' + x.id + '">상태</button>'
                     + '<button class="btn small ' + (x.carryOver ? '' : 'secondary') + '" style="width:auto;margin-left:3px;" data-rc-cy="' + x.id + '">'
                     + (x.carryOver ? '이월중' : '이월') + '</button>'
+                    + ((Number(x.diff)||0) !== 0
+                        ? '<button class="btn small ' + (x.diffOk ? '' : 'secondary') + '" style="width:auto;margin-left:3px;" data-rc-dk="' + x.id + '">'
+                          + (x.diffOk ? '차액확인됨' : '차액확인') + '</button>' : '')
                   : '<span style="color:var(--gray);">-</span>') + '</td>'
             + '</tr>';
         }).join("")
@@ -11535,6 +11567,9 @@
     });
     document.querySelectorAll("#tab-recon [data-rc-cy]").forEach(b=>{
       b.onclick = ()=> toggleCarryOver(b.dataset.rcCy);
+    });
+    document.querySelectorAll("#tab-recon [data-rc-dk]").forEach(b=>{
+      b.onclick = ()=> toggleDiffOk(b.dataset.rcDk);
     });
     // 엑셀 다운로드 · 보기 설정 (화면에 보이는 순서 그대로 내려받습니다)
     addDownloadBtn("dl-recon", "recon-list", "입출금대사");
