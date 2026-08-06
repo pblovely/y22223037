@@ -320,7 +320,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-05 v340</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-05 v341</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -1552,6 +1552,12 @@
             <button class="btn small secondary" id="rc-c-미분류" style="width:auto;" onclick="setReconCorp('미분류')">미분류</button>
           </span>
         </div>
+        <div class="tbar-row" style="display:flex;gap:0;flex-wrap:wrap;align-items:center;margin-bottom:8px;">
+          <input type="text" id="rc-search" placeholder="거래처·적요·메모·금액으로 찾기" oninput="renderReconList()" style="width:280px;height:28px;border:1px solid var(--line);padding:0 8px;font-size:12.5px;box-sizing:border-box;">
+          <button class="btn small secondary" style="width:auto;margin-left:-1px;" onclick="clearReconSearch()">비우기</button>
+          <input type="text" id="rc-from" placeholder="시작일 20260101" onchange="renderReconList()" style="width:130px;height:28px;border:1px solid var(--line);padding:0 8px;font-size:12.5px;margin-left:8px;box-sizing:border-box;">
+          <input type="text" id="rc-to" placeholder="종료일 20260131" onchange="renderReconList()" style="width:130px;height:28px;border:1px solid var(--line);padding:0 8px;font-size:12.5px;margin-left:-1px;box-sizing:border-box;">
+        </div>
         <div id="recon-pagination"></div>
         <div id="recon-list"></div>
       </div>
@@ -1685,6 +1691,8 @@
           <button class="btn small secondary" id="tx-f-buy" style="width:auto;" onclick="setTaxFilter('buy')">매입</button>
           <button class="btn small secondary" id="tx-f-sale" style="width:auto;" onclick="setTaxFilter('sale')">매출</button>
           <button class="btn small secondary" id="tx-f-free" style="width:auto;" onclick="setTaxFilter('free')">면세</button>
+          <button class="btn small secondary" id="tx-f-linked" style="width:auto;" onclick="setTaxFilter('linked')">대사 완료</button>
+          <button class="btn small secondary" id="tx-f-unlinked" style="width:auto;" onclick="setTaxFilter('unlinked')">대사 미완료</button>
           <button class="btn small secondary" id="tx-f-b2b" style="width:auto;" onclick="setTaxFilter('b2b')">B2B 사용가능</button>
           <button class="btn small secondary" id="tx-f-left" style="width:auto;" onclick="setTaxFilter('left')">한도 남음</button>
         </span>
@@ -11319,6 +11327,10 @@
     });
     renderReconList();
   };
+  window.clearReconSearch = function(){
+    ["rc-search","rc-from","rc-to"].forEach(id=>{ const e=document.getElementById(id); if(e) e.value=""; });
+    renderReconList();
+  };
   window.setReconCorp = function(c){
     reconCorp = c;
     ["all","포피플","포피플즈","미분류"].forEach(k=>{
@@ -11459,14 +11471,33 @@
     renderReconList();
   };
 
-  function renderReconList(){
+  window.renderReconList = function(){
     const el = document.getElementById("recon-list");
     if(!el) return;
     const canDo = hasPerm(currentUserPerms, "paymentProcess");
     const money = v => (Number(v)||0).toLocaleString();
 
+    // 검색어·기간
+    const q = String((document.getElementById("rc-search")||{}).value || "").trim().toLowerCase();
+    const qNum = q.replace(/[^0-9]/g, "");
+    const from = String((document.getElementById("rc-from")||{}).value || "").replace(/\D/g,"");
+    const to   = String((document.getElementById("rc-to")||{}).value || "").replace(/\D/g,"");
+
     const view = reconRows.filter(x=>{
       if(reconCorp !== "all" && (x.corp||"미분류") !== reconCorp) return false;
+      const d = String(x.date||"").replace(/\D/g,"");
+      if(from && d && d < from) return false;
+      if(to && d && d > to) return false;
+      if(q){
+        const hay = [x.party, x.desc, x.desc2, x.note, x.memo, x.acct, x.taxLabel]
+          .map(v=> String(v||"").toLowerCase()).join(" ");
+        let hit = hay.indexOf(q) >= 0;
+        if(!hit && qNum.length >= 3){
+          const amts = String(Number(x.inAmt)||0) + " " + String(Number(x.outAmt)||0) + " " + String(Number(x.taxAmount)||0);
+          hit = amts.indexOf(qNum) >= 0;
+        }
+        if(!hit) return false;
+      }
       if(reconFilter === "all") return true;
       if(reconFilter === "carry") return x.carryOver === true;
       // 차액이 있는 것 중 아직 확인 안 한 것만 (상태와 무관)
@@ -12076,7 +12107,7 @@
 
   window.setTaxFilter = function(f){
     taxFilter = f;
-    ["all","buy","sale","free","b2b","left"].forEach(k=>{
+    ["all","buy","sale","free","linked","unlinked","b2b","left"].forEach(k=>{
       const b = document.getElementById("tx-f-" + k);
       if(b) b.className = "btn small" + (k === f ? "" : " secondary");
     });
@@ -12098,6 +12129,21 @@
     try{ snap = await getDocs(query(collection(db,"taxInvoices"), orderBy("issueDate","desc"))); }
     catch(e){ el.innerHTML = '<div class="list-empty">불러오지 못했습니다.</div>'; return; }
 
+    // 입출금 대사에서 이어준 계산서를 찾아둡니다. (완료·미완료를 보여주려고)
+    const linked = new Map();
+    try{
+      const rs = await getDocs(collection(db,"bankRecon"));
+      rs.forEach(d=>{
+        const v = d.data();
+        const ids = Array.isArray(v.taxIds) ? v.taxIds : (v.taxId ? [v.taxId] : []);
+        ids.forEach(tid=>{
+          if(!linked.has(tid)) linked.set(tid, []);
+          linked.get(tid).push({ date:v.date, inAmt:Number(v.inAmt)||0, outAmt:Number(v.outAmt)||0,
+                                 diff:Number(v.diff)||0 });
+        });
+      });
+    }catch(e){}
+
     const rows = [];
     snap.forEach(d=>{
       const x = d.data();
@@ -12108,6 +12154,7 @@
         issueDate: x.issueDate || "-", company: x.company || "-",
         invoiceNo: x.invoiceNo || "", amount: amt, memo: x.memo || "",
         b2bOk: x.b2bOk === true, b2bUsed: used,
+        linked: linked.get(d.id) || [],
         left: Math.max(0, amt - used),
         uses: Array.isArray(x.b2bUses) ? x.b2bUses : []
       });
@@ -12119,6 +12166,8 @@
       if(taxFilter === "buy") return isBuyKind(r.kind);
       if(taxFilter === "sale") return !isBuyKind(r.kind);
       if(taxFilter === "free") return r.kind === "buyfree" || r.kind === "salefree";
+      if(taxFilter === "linked") return (r.linked||[]).length > 0;      // 대사 완료
+      if(taxFilter === "unlinked") return (r.linked||[]).length === 0;  // 대사 미완료
       if(taxFilter === "b2b") return r.b2bOk;
       if(taxFilter === "left") return r.b2bOk && r.left > 0;
       return true;
@@ -12132,7 +12181,9 @@
 
     // 카드
     let buyAmt=0, saleAmt=0, freeAmt=0, b2bLimit=0, b2bUsed=0, b2bLeft=0;
+    let linkedCnt=0, unlinkedCnt=0, unlinkedAmt=0;
     rows.forEach(r=>{
+      if((r.linked||[]).length > 0) linkedCnt++; else { unlinkedCnt++; unlinkedAmt += r.amount; }
       if(isBuyKind(r.kind)) buyAmt += r.amount; else saleAmt += r.amount;
       if(r.kind === "buyfree" || r.kind === "salefree") freeAmt += r.amount;
       if(r.b2bOk){ b2bLimit += r.amount; b2bUsed += r.b2bUsed; b2bLeft += r.left; }
@@ -12150,7 +12201,9 @@
         card("면세", freeAmt.toLocaleString(), null, "계산서(면세) 합계") +
         card("B2B 한도", b2bLimit.toLocaleString(), null, "사용 가능으로 체크한 것") +
         card("B2B 사용액", b2bUsed.toLocaleString(), null, "대출에 쓴 금액") +
-        card("남은 한도", b2bLeft.toLocaleString(), "#2e7d32", "더 빌릴 수 있는 금액");
+        card("남은 한도", b2bLeft.toLocaleString(), "#2e7d32", "더 빌릴 수 있는 금액") +
+        card("대사 완료", linkedCnt + "건", "#2e7d32", "입출금과 이어진 것") +
+        card("대사 미완료", unlinkedCnt + "건", unlinkedCnt ? "var(--danger)" : null, unlinkedAmt.toLocaleString());
     }
 
     if(view.length === 0){
@@ -12160,7 +12213,7 @@
     el.innerHTML = '<div style="overflow-x:auto;"><table class="data-table" style="width:auto;">'
       + '<thead><tr><th>구분</th><th>발행일</th><th>거래처</th><th>계산서번호</th>'
       + '<th class="ta-right">금액</th><th>B2B</th><th class="ta-right">사용액</th>'
-      + '<th class="ta-right">남은한도</th><th>메모</th><th></th></tr></thead><tbody>'
+      + '<th class="ta-right">남은한도</th><th>대사</th><th>메모</th><th></th></tr></thead><tbody>'
       + pageItems.map(r=>{
           const isBuy = isBuyKind(r.kind);
           const free = (r.kind === "buyfree" || r.kind === "salefree");
@@ -12178,6 +12231,13 @@
             + '<td class="ta-right">'+(r.b2bOk ? (r.b2bUsed ? r.b2bUsed.toLocaleString() : '-') : '<span style="color:var(--gray);">-</span>')+'</td>'
             + '<td class="ta-right" style="color:'+(r.b2bOk && r.left>0 ? "#2e7d32" : "var(--gray)")+';font-weight:700;">'
               + (r.b2bOk ? r.left.toLocaleString() : '-') + '</td>'
+            + '<td style="white-space:nowrap;">' + ((r.linked||[]).length
+                ? '<span style="color:#2e7d32;font-weight:700;">완료</span>'
+                  + '<br><span style="color:var(--gray);font-size:11px;">'
+                  + r.linked.map(l=> comboEsc(l.date||"-") + " " + ((l.inAmt||l.outAmt)||0).toLocaleString()
+                      + (l.diff ? ' <span style="color:var(--danger);">차액 ' + l.diff.toLocaleString() + '</span>' : '')).join("<br>")
+                  + '</span>'
+                : '<span style="color:var(--danger);">미완료</span>') + '</td>'
             + '<td style="color:var(--gray);font-size:11.5px;">'+comboEsc(r.memo)+'</td>'
             + '<td class="ta-right" style="white-space:nowrap;">'
               + (canDo ? '<button class="btn small secondary" style="width:auto;" data-tx-edit="'+r.id+'">수정</button>'
@@ -12185,7 +12245,7 @@
                        : '<span style="color:var(--gray);">-</span>') + '</td>'
             + '</tr>';
           if(r.uses.length){
-            tr += '<tr><td colspan="10" style="background:#fafafa;font-size:11.5px;line-height:1.9;">'
+            tr += '<tr><td colspan="11" style="background:#fafafa;font-size:11.5px;line-height:1.9;">'
               + r.uses.map(u=>'· B2B 대출 '+(Number(u.amount)||0).toLocaleString()
                   + (u.date ? ' ('+comboEsc(u.date)+')' : '')
                   + (u.memo ? ' · '+comboEsc(u.memo) : '')).join('<br>')
