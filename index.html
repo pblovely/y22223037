@@ -320,7 +320,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-05 v341</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-05 v342</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -1691,6 +1691,7 @@
           <button class="btn small secondary" id="tx-f-buy" style="width:auto;" onclick="setTaxFilter('buy')">매입</button>
           <button class="btn small secondary" id="tx-f-sale" style="width:auto;" onclick="setTaxFilter('sale')">매출</button>
           <button class="btn small secondary" id="tx-f-free" style="width:auto;" onclick="setTaxFilter('free')">면세</button>
+          <button class="btn small secondary" id="tx-f-manual" style="width:auto;" onclick="setTaxFilter('manual')">수기</button>
           <button class="btn small secondary" id="tx-f-linked" style="width:auto;" onclick="setTaxFilter('linked')">대사 완료</button>
           <button class="btn small secondary" id="tx-f-unlinked" style="width:auto;" onclick="setTaxFilter('unlinked')">대사 미완료</button>
           <button class="btn small secondary" id="tx-f-b2b" style="width:auto;" onclick="setTaxFilter('b2b')">B2B 사용가능</button>
@@ -1722,6 +1723,9 @@
         </div>
         <div class="stack-row"><label>계산서번호</label><input type="text" id="tx-no" placeholder="선택"></div>
         <div class="stack-row"><label>금액</label><input type="text" id="tx-amount" placeholder="숫자만"></div>
+        <div class="stack-row"><label>수기 <span class="info-tip" title="홈택스 전자계산서가 아니라 종이로 주고받은 계산서입니다. 체크해두면 목록에서 따로 볼 수 있습니다.">ⓘ</span></label>
+          <label style="font-size:12.5px;"><input type="checkbox" id="tx-manual"> 수기 계산서 (종이로 주고받음)</label>
+        </div>
         <div class="stack-row"><label>B2B</label>
           <label style="font-size:12.5px;"><input type="checkbox" id="tx-b2bok"> 사용가능 (매입 세금계산서만)</label>
         </div>
@@ -1730,6 +1734,32 @@
         <span class="btn-row" style="margin-top:6px;">
           <button class="btn small" style="width:auto;" onclick="submitTaxInvoice()">등록</button>
           <button class="btn small secondary" style="width:auto;" onclick="closeTaxAdd()">닫기</button>
+        </span>
+      </div>
+    </div>
+
+    <!-- 세금계산서 → 입출금 잇기 -->
+    <div id="taxlink-overlay" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.55);z-index:1100;align-items:center;justify-content:center;">
+      <div style="background:#fff;border:2px solid var(--navy);max-width:900px;width:97%;max-height:92vh;overflow-y:auto;padding:22px;position:relative;">
+        <button onclick="closeTaxLink()" style="position:absolute;top:12px;right:12px;background:none;border:1px solid var(--navy);width:26px;height:26px;cursor:pointer;font-size:13px;">✕</button>
+        <h3 style="margin-top:0;margin-bottom:4px;">입출금 잇기</h3>
+        <div id="txl-info" style="border:1px solid var(--line);background:#fafafa;padding:9px 11px;font-size:12.5px;line-height:1.8;margin-bottom:8px;"></div>
+        <p class="desc" style="margin-top:0;">이 계산서와 맞는 <b>입출금</b>을 골라 이어줍니다. 여러 건에 나눠 들어온 경우 <b>여러 개</b>를 고르시면 됩니다.<br>
+          입출금이 아예 없는 건(<b>상계·현금</b> 등)은 사유를 적고 <b>입출금 없이 완료</b>를 눌러주세요.</p>
+        <div class="tbar-row" style="display:flex;gap:0;flex-wrap:wrap;align-items:center;margin-bottom:8px;">
+          <input type="text" id="txl-search" placeholder="상대·적요·메모·금액으로 찾기" oninput="renderTaxLinkCands()" style="width:260px;height:28px;border:1px solid var(--line);padding:0 8px;font-size:12.5px;box-sizing:border-box;">
+          <button class="btn small secondary" style="width:auto;margin-left:-1px;" onclick="clearTaxLinkSearch()">비우기</button>
+          <label style="font-size:12px;margin-left:12px;"><input type="checkbox" id="txl-all" onchange="renderTaxLinkCands()"> 전부 보기</label>
+          <span id="txl-count" style="font-size:11.5px;color:var(--gray);margin-left:10px;"></span>
+        </div>
+        <div id="txl-list" style="max-height:300px;overflow-y:auto;border:1px solid var(--line);margin-bottom:8px;"></div>
+        <div id="txl-sum" style="border:1px solid var(--navy);background:#f4f7fb;padding:8px 11px;font-size:12.5px;line-height:1.8;margin-bottom:10px;"></div>
+        <div class="stack-row"><label>메모·사유</label><input type="text" id="txl-note" placeholder="입출금 없이 완료할 때는 사유가 필요합니다"></div>
+        <div id="txl-msg" style="font-size:12.5px;margin:6px 0;"></div>
+        <span class="btn-row" style="margin-top:6px;">
+          <button class="btn small" style="width:auto;" onclick="submitTaxLink()">고른 입출금과 잇기</button>
+          <button class="btn small secondary" style="width:auto;" onclick="submitTaxNoLink()">입출금 없이 완료</button>
+          <button class="btn small secondary" style="width:auto;" onclick="closeTaxLink()">닫기</button>
         </span>
       </div>
     </div>
@@ -11237,6 +11267,198 @@
     loadReconList();
   };
 
+  // ---------- 계산서에서 입출금 잇기 ----------
+  //  입출금 대사의 반대 방향입니다. 계산서를 골라 입출금을 찾아 잇습니다.
+  //  입출금이 없는 건(상계·현금 등)은 「입출금 없이 완료」로 처리합니다.
+  let taxLinkTarget = null;
+  let taxLinkCache = null;
+  let taxLinkPicked = new Set();
+
+  window.openTaxLink = async function(id){
+    if(!hasPerm(currentUserPerms, "paymentProcess")){ alert("권한이 없습니다."); return; }
+    const snap = await getDoc(doc(db,"taxInvoices", id));
+    if(!snap.exists()) return;
+    const t = { id, ...snap.data() };
+    taxLinkTarget = t;
+    taxLinkPicked = new Set();
+
+    const isBuy = (t.kind === "buy" || t.kind === "buyfree");
+    document.getElementById("txl-info").innerHTML =
+      '<b>' + (isBuy ? "매입" : "매출") + '</b> · ' + comboEsc(t.issueDate||"-") + ' · <b>'
+      + comboEsc(t.company||"-") + '</b>' + (t.bizNo ? ' <span style="color:var(--gray);">' + comboEsc(t.bizNo) + '</span>' : '')
+      + '<br>계산서 금액 <b>' + (Number(t.amount)||0).toLocaleString() + '</b>';
+    document.getElementById("txl-note").value = "";
+    document.getElementById("txl-msg").innerHTML = "";
+    { const s = document.getElementById("txl-search"); if(s) s.value = ""; }
+    { const a = document.getElementById("txl-all"); if(a) a.checked = false; }
+
+    if(!taxLinkCache){
+      try{
+        const s = await getDocs(collection(db,"bankRecon"));
+        taxLinkCache = [];
+        s.forEach(d=> taxLinkCache.push({ id:d.id, ...d.data() }));
+      }catch(e){ taxLinkCache = []; }
+    }
+    renderTaxLinkCands();
+    document.getElementById("taxlink-overlay").style.display = "flex";
+  };
+  window.closeTaxLink = function(){
+    document.getElementById("taxlink-overlay").style.display = "none";
+    taxLinkTarget = null;
+  };
+  window.clearTaxLinkSearch = function(){
+    const s = document.getElementById("txl-search"); if(s) s.value = "";
+    renderTaxLinkCands();
+  };
+
+  window.renderTaxLinkCands = function(){
+    const t = taxLinkTarget;
+    if(!t) return;
+    const box = document.getElementById("txl-list");
+    const amt = Number(t.amount)||0;
+    const isBuy = (t.kind === "buy" || t.kind === "buyfree");
+    const d0 = Number(String(t.issueDate||"").replace(/\D/g,"")) || 0;
+    const showAll = (document.getElementById("txl-all")||{}).checked;
+    const q = String((document.getElementById("txl-search")||{}).value || "").trim().toLowerCase();
+    const qNum = q.replace(/[^0-9]/g, "");
+    const tName = (typeof cleanName === "function") ? cleanName(t.company) : "";
+    const tBiz = String(t.bizNo||"").replace(/\D/g,"");
+
+    const cands = (taxLinkCache||[]).map(x=>{
+      const xAmt = Math.max(Number(x.inAmt)||0, Number(x.outAmt)||0);
+      const xd = Number(String(x.date||"").replace(/\D/g,"")) || 0;
+      const gap = (d0 && xd) ? Math.abs(Math.round((new Date(String(xd).slice(0,4), +String(xd).slice(4,6)-1, +String(xd).slice(6,8))
+                     - new Date(String(d0).slice(0,4), +String(d0).slice(4,6)-1, +String(d0).slice(6,8))) / 86400000)) : 9999;
+      const xName = (typeof cleanName === "function") ? cleanName(x.party || x.desc || "") : "";
+      const xBiz = String(x.bizNo||"").replace(/\D/g,"");
+      const sameParty = (tBiz && xBiz && tBiz === xBiz)
+        || (tName && xName && (tName === xName || tName.indexOf(xName) >= 0 || xName.indexOf(tName) >= 0));
+      return { ...x, xAmt, gap, diff: xAmt - amt, sameParty };
+    }).filter(x=>{
+      if(x.taxId) return false;                     // 이미 다른 계산서에 이어진 것
+      if(q){
+        const hay = [x.party, x.desc, x.note, x.memo, x.acct].map(v=> String(v||"").toLowerCase()).join(" ");
+        let hit = hay.indexOf(q) >= 0;
+        if(!hit && qNum.length >= 3) hit = (String(x.xAmt).indexOf(qNum) >= 0);
+        return hit;
+      }
+      if(showAll) return true;
+      // 매입 계산서면 출금, 매출이면 입금 쪽을 먼저 봅니다.
+      const dirOk = isBuy ? (Number(x.outAmt)||0) > 0 : (Number(x.inAmt)||0) > 0;
+      if(!dirOk) return false;
+      if(x.sameParty) return true;
+      return Math.abs(x.diff) <= Math.max(amt * 0.1, 100000) && x.gap <= 120;
+    }).sort((a,b)=> (b.sameParty - a.sameParty) || Math.abs(a.diff) - Math.abs(b.diff) || a.gap - b.gap)
+      .slice(0, (q || showAll) ? 200 : 40);
+
+    const cnt = document.getElementById("txl-count");
+    if(cnt) cnt.textContent = cands.length + "건";
+    if(cands.length === 0){
+      box.innerHTML = '<div class="list-empty">이을 만한 입출금을 찾지 못했습니다. 검색어를 바꾸거나 <b>전부 보기</b>를 켜보세요.</div>';
+      onTaxLinkPick(); return;
+    }
+    box.innerHTML = '<table class="data-table" style="width:auto;"><thead><tr>'
+      + '<th></th><th>날짜</th><th>계좌</th><th class="ta-right">입금</th><th class="ta-right">출금</th>'
+      + '<th>상대</th><th>적요</th><th class="ta-right">차액</th></tr></thead><tbody>'
+      + cands.map(x=>{
+          const on = taxLinkPicked.has(x.id);
+          return '<tr><td><input type="checkbox" class="txl-pick" value="' + x.id + '"'
+            + ' data-amt="' + x.xAmt + '" data-in="' + (Number(x.inAmt)||0) + '"'
+            + (on ? ' checked' : '') + ' onchange="onTaxLinkPick()"></td>'
+            + '<td style="white-space:nowrap;">' + comboEsc(x.date||"-") + '</td>'
+            + '<td>' + comboEsc(x.acct||"-") + '</td>'
+            + '<td class="ta-right" style="color:#1565c0;">' + ((Number(x.inAmt)||0) ? (Number(x.inAmt)||0).toLocaleString() : '-') + '</td>'
+            + '<td class="ta-right" style="color:var(--danger);">' + ((Number(x.outAmt)||0) ? (Number(x.outAmt)||0).toLocaleString() : '-') + '</td>'
+            + '<td>' + comboEsc(x.party || "-") + '</td>'
+            + '<td style="color:var(--gray);font-size:11.5px;">' + comboEsc(x.desc || "") + '</td>'
+            + '<td class="ta-right" style="color:' + (x.diff ? "var(--danger)" : "#2e7d32") + ';">'
+              + (x.diff ? x.diff.toLocaleString() : "0") + '</td></tr>';
+        }).join("")
+      + '</tbody></table>';
+    onTaxLinkPick();
+  };
+
+  window.onTaxLinkPick = function(){
+    document.querySelectorAll(".txl-pick").forEach(c=>{
+      if(c.checked) taxLinkPicked.add(c.value); else taxLinkPicked.delete(c.value);
+    });
+    const el = document.getElementById("txl-sum");
+    if(!el || !taxLinkTarget) return;
+    const amt = Number(taxLinkTarget.amount)||0;
+    const picked = (taxLinkCache||[]).filter(x=> taxLinkPicked.has(x.id));
+    if(picked.length === 0){
+      el.innerHTML = '<span style="color:var(--gray);">고른 입출금이 없습니다. 아래 <b>입출금 없이 완료</b>로 처리하실 수도 있습니다.</span>';
+      return;
+    }
+    const sum = picked.reduce((n,x)=> n + Math.max(Number(x.inAmt)||0, Number(x.outAmt)||0), 0);
+    const diff = sum - amt;
+    el.innerHTML = '고른 입출금 <b>' + picked.length + '건</b> 합계 <b>' + sum.toLocaleString() + '</b> · '
+      + '계산서 <b>' + amt.toLocaleString() + '</b> = '
+      + '<b style="color:' + (diff === 0 ? "#2e7d32" : "var(--danger)") + ';">차액 ' + diff.toLocaleString() + '</b>'
+      + (diff === 0 ? ' <span style="color:#2e7d32;">딱 맞습니다</span>' : '');
+  };
+
+  window.submitTaxLink = async function(){
+    if(!taxLinkTarget) return;
+    const t = taxLinkTarget;
+    const note = document.getElementById("txl-note").value.trim();
+    const picked = (taxLinkCache||[]).filter(x=> taxLinkPicked.has(x.id));
+    if(picked.length === 0){ alert("이을 입출금을 골라주세요. 없으면 <입출금 없이 완료>를 눌러주세요."); return; }
+    const amt = Number(t.amount)||0;
+    const sum = picked.reduce((n,x)=> n + Math.max(Number(x.inAmt)||0, Number(x.outAmt)||0), 0);
+    const diff = sum - amt;
+    if(diff !== 0){
+      if(!confirm("금액이 " + Math.abs(diff).toLocaleString() + "원 "
+        + (diff > 0 ? "많습니다" : "적습니다") + ".\n\n입출금 " + sum.toLocaleString()
+        + "\n계산서 " + amt.toLocaleString() + "\n\n그래도 이어줄까요?")) return;
+    }
+    try{
+      const bt = writeBatch(db);
+      picked.forEach(x=>{
+        bt.update(doc(db,"bankRecon", x.id), {
+          taxId: t.id, taxIds: [t.id],
+          taxLinks: [{ id:t.id, label:(t.issueDate||"") + " " + (t.company||""),
+                       amount: amt, isSale: !(t.kind === "buy" || t.kind === "buyfree") }],
+          taxLabel: (t.issueDate||"") + " " + (t.company||""),
+          taxAmount: amt,
+          diff: Math.max(Number(x.inAmt)||0, Number(x.outAmt)||0) - amt,
+          state: "done", carryOver: false,
+          note: note || x.note || ""
+        });
+      });
+      await bt.commit();
+      logAction("세금계산서에서 입출금 연결",
+        (t.issueDate||"-") + " " + (t.company||"-") + " " + amt.toLocaleString()
+        + " ↔ 입출금 " + picked.length + "건 " + sum.toLocaleString()
+        + (diff ? " / 차액 " + diff.toLocaleString() : "") + (note ? " / " + note : ""));
+    }catch(e){ alert("저장에 실패했습니다."); return; }
+    taxLinkCache = null;
+    closeTaxLink();
+    loadTaxList();
+  };
+
+  // 입출금 없이 완료 (상계·현금거래 등)
+  window.submitTaxNoLink = async function(){
+    if(!taxLinkTarget) return;
+    const t = taxLinkTarget;
+    const note = document.getElementById("txl-note").value.trim();
+    if(!note){
+      document.getElementById("txl-msg").innerHTML =
+        '<span style="color:var(--danger);">사유를 적어주세요. (예: 상계 처리, 현금 거래)</span>';
+      return;
+    }
+    if(!confirm("입출금 없이 완료로 표시합니다.\n\n"
+      + (t.company||"-") + " " + (Number(t.amount)||0).toLocaleString()
+      + "\n사유: " + note + "\n\n진행할까요?")) return;
+    try{
+      await updateDoc(doc(db,"taxInvoices", t.id), { noBankDone: true, noBankNote: note });
+      logAction("세금계산서 입출금 없이 완료",
+        (t.issueDate||"-") + " " + (t.company||"-") + " " + (Number(t.amount)||0).toLocaleString() + " / " + note);
+    }catch(e){ alert("저장에 실패했습니다."); return; }
+    closeTaxLink();
+    loadTaxList();
+  };
+
   // ---------- 입출금 대사 ----------
   //  ERP 입출금 파일을 올려 세금계산서와 맞춥니다.
   //  거래 하나를 가리는 열쇠: 거래일자 + 거래시간 + 계좌번호 + 입금액 + 출금액
@@ -12107,7 +12329,7 @@
 
   window.setTaxFilter = function(f){
     taxFilter = f;
-    ["all","buy","sale","free","linked","unlinked","b2b","left"].forEach(k=>{
+    ["all","buy","sale","free","manual","linked","unlinked","b2b","left"].forEach(k=>{
       const b = document.getElementById("tx-f-" + k);
       if(b) b.className = "btn small" + (k === f ? "" : " secondary");
     });
@@ -12154,6 +12376,8 @@
         issueDate: x.issueDate || "-", company: x.company || "-",
         invoiceNo: x.invoiceNo || "", amount: amt, memo: x.memo || "",
         b2bOk: x.b2bOk === true, b2bUsed: used,
+        manual: x.manual === true,
+        noBankDone: x.noBankDone === true, noBankNote: x.noBankNote || "",
         linked: linked.get(d.id) || [],
         left: Math.max(0, amt - used),
         uses: Array.isArray(x.b2bUses) ? x.b2bUses : []
@@ -12166,8 +12390,9 @@
       if(taxFilter === "buy") return isBuyKind(r.kind);
       if(taxFilter === "sale") return !isBuyKind(r.kind);
       if(taxFilter === "free") return r.kind === "buyfree" || r.kind === "salefree";
-      if(taxFilter === "linked") return (r.linked||[]).length > 0;      // 대사 완료
-      if(taxFilter === "unlinked") return (r.linked||[]).length === 0;  // 대사 미완료
+      if(taxFilter === "manual") return r.manual === true;             // 수기 계산서
+      if(taxFilter === "linked") return (r.linked||[]).length > 0 || r.noBankDone;
+      if(taxFilter === "unlinked") return (r.linked||[]).length === 0 && !r.noBankDone;
       if(taxFilter === "b2b") return r.b2bOk;
       if(taxFilter === "left") return r.b2bOk && r.left > 0;
       return true;
@@ -12183,7 +12408,7 @@
     let buyAmt=0, saleAmt=0, freeAmt=0, b2bLimit=0, b2bUsed=0, b2bLeft=0;
     let linkedCnt=0, unlinkedCnt=0, unlinkedAmt=0;
     rows.forEach(r=>{
-      if((r.linked||[]).length > 0) linkedCnt++; else { unlinkedCnt++; unlinkedAmt += r.amount; }
+      if((r.linked||[]).length > 0 || r.noBankDone) linkedCnt++; else { unlinkedCnt++; unlinkedAmt += r.amount; }
       if(isBuyKind(r.kind)) buyAmt += r.amount; else saleAmt += r.amount;
       if(r.kind === "buyfree" || r.kind === "salefree") freeAmt += r.amount;
       if(r.b2bOk){ b2bLimit += r.amount; b2bUsed += r.b2bUsed; b2bLeft += r.left; }
@@ -12219,7 +12444,8 @@
           const free = (r.kind === "buyfree" || r.kind === "salefree");
           let tr = '<tr>'
             + '<td style="white-space:nowrap;"><b style="color:'+(isBuy ? "var(--danger)" : "#1565c0")+';">'+(isBuy ? "매입" : "매출")+'</b>'
-              + (free ? '<br><span style="background:#f2f2f2;border:1px solid var(--line);color:var(--gray);font-size:10.5px;padding:0 4px;">면세</span>' : '') + '</td>'
+              + (free ? ' <span style="background:#f2f2f2;border:1px solid var(--line);color:var(--gray);font-size:10.5px;padding:0 4px;">면세</span>' : '')
+              + (r.manual ? ' <span style="background:#fff8e1;border:1px solid #e0c46c;color:#8a6d0b;font-size:10.5px;padding:0 4px;">수기</span>' : '') + '</td>'
             + '<td style="white-space:nowrap;">'+comboEsc(r.issueDate)+'</td>'
             + '<td><b>'+comboEsc(r.company)+'</b></td>'
             + '<td>'+(r.invoiceNo ? comboEsc(r.invoiceNo) : '<span style="color:var(--gray);">-</span>')+'</td>'
@@ -12237,10 +12463,14 @@
                   + r.linked.map(l=> comboEsc(l.date||"-") + " " + ((l.inAmt||l.outAmt)||0).toLocaleString()
                       + (l.diff ? ' <span style="color:var(--danger);">차액 ' + l.diff.toLocaleString() + '</span>' : '')).join("<br>")
                   + '</span>'
-                : '<span style="color:var(--danger);">미완료</span>') + '</td>'
+                : (r.noBankDone
+                    ? '<span style="color:#2e7d32;font-weight:700;">완료</span>'
+                      + '<br><span style="color:var(--gray);font-size:11px;">입출금 없음 · ' + comboEsc(r.noBankNote||"") + '</span>'
+                    : '<span style="color:var(--danger);">미완료</span>')) + '</td>'
             + '<td style="color:var(--gray);font-size:11.5px;">'+comboEsc(r.memo)+'</td>'
             + '<td class="ta-right" style="white-space:nowrap;">'
-              + (canDo ? '<button class="btn small secondary" style="width:auto;" data-tx-edit="'+r.id+'">수정</button>'
+              + (canDo ? ((r.linked||[]).length === 0 && !r.noBankDone ? '<button class="btn small" style="width:auto;margin-right:3px;" data-tx-link="'+r.id+'">입출금 잇기</button>' : '')
+                       + '<button class="btn small secondary" style="width:auto;" data-tx-edit="'+r.id+'">수정</button>'
                        + '<button class="btn small secondary" style="width:auto;margin-left:4px;" data-tx-del="'+r.id+'">삭제</button>'
                        : '<span style="color:var(--gray);">-</span>') + '</td>'
             + '</tr>';
@@ -12260,6 +12490,9 @@
     });
     document.querySelectorAll("#tab-tax [data-tx-edit]").forEach(b=>{
       b.onclick = ()=> openTaxEdit(b.dataset.txEdit);
+    });
+    document.querySelectorAll("#tab-tax [data-tx-link]").forEach(b=>{
+      b.onclick = ()=> openTaxLink(b.dataset.txLink);
     });
     document.querySelectorAll("#tab-tax [data-tx-del]").forEach(b=>{
       b.onclick = ()=> deleteTaxInvoice(b.dataset.txDel);
@@ -12284,6 +12517,7 @@
     document.getElementById("tx-date").value = todayStr();
     ["tx-company","tx-no","tx-amount","tx-memo"].forEach(id=>{ const e=document.getElementById(id); if(e) e.value = ""; });
     document.getElementById("tx-b2bok").checked = false;
+    document.getElementById("tx-manual").checked = false;
     document.getElementById("tx-msg").innerHTML = "";
     document.getElementById("taxadd-overlay").style.display = "flex";
   };
@@ -12303,6 +12537,7 @@
     const amount  = Number(String(document.getElementById("tx-amount").value).replace(/[^0-9.]/g,""));
     const memo    = document.getElementById("tx-memo").value.trim();
     const b2bOk   = document.getElementById("tx-b2bok").checked;
+    const manual  = document.getElementById("tx-manual").checked;
 
     if(issueDate.length !== 8){ show("발행일을 20260831 형태로 넣어주세요."); return; }
     if(!company){ show("거래처를 넣어주세요."); return; }
@@ -12310,7 +12545,7 @@
 
     try{
       await addDoc(collection(db,"taxInvoices"), {
-        kind, issueDate, company, invoiceNo, amount, memo,
+        kind, issueDate, company, invoiceNo, amount, memo, manual,
         b2bOk: (kind === "buy") ? b2bOk : false,
         b2bUsed: 0, b2bUses: [],
         createdBy: currentUser.name, createdAt: serverTimestamp()
