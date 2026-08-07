@@ -355,7 +355,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-08 v402</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-08 v403</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -2527,6 +2527,8 @@
           <div class="stack-row"><label>판매가 (선택)</label><input type="number" id="os-saleprice" oninput="osRecalc('saleprice')"></div>
           <div class="stack-row"><label>판매할인</label><input type="number" id="os-saleamt" oninput="osRecalc('saleamt')"></div>
           <div class="stack-row"><label>판매할인%</label><input type="number" step="0.01" id="os-salepct" oninput="osRecalc('salepct')"></div>
+          <div class="stack-row"><label>비고1 <span class="info-tip" title="도착 등록으로 재고가 만들어질 때 재고의 비고1에 그대로 들어갑니다. 나중에 재고에서 고칠 수 있습니다.">ⓘ</span></label><input type="text" id="os-note1" placeholder="재고 비고1에 들어갑니다 (선택)"></div>
+          <div class="stack-row"><label>비고2</label><input type="text" id="os-note2" placeholder="재고 비고2에 들어갑니다 (선택)"></div>
         </div>
         <div style="border:1px solid var(--line);background:#fff;padding:9px 11px;margin-top:10px;font-size:12.5px;line-height:1.8;">
           <b id="os-summary">-</b>
@@ -6915,7 +6917,8 @@
     await fetchModelsCache();
     document.getElementById("os-date").value = todayStr();
     ["os-expected","os-paydue","os-listprice","os-preamt","os-prepct","os-otheramt","os-otherpct",
-     "os-purchase","os-saleprice","os-saleamt","os-salepct"].forEach(id=> document.getElementById(id).value = "");
+     "os-purchase","os-saleprice","os-saleamt","os-salepct",
+     "os-note1","os-note2"].forEach(id=> document.getElementById(id).value = "");
     document.getElementById("os-qty").value = "1";
     document.getElementById("os-payment").value = "normal";
     document.getElementById("os-msg").style.display = "none";
@@ -7034,6 +7037,8 @@
         destination: dest, salePrice: sale || null,
         saleDiscountAmt: document.getElementById("os-saleamt").value ? osNum("os-saleamt") : null,
         saleDiscountPct: document.getElementById("os-salepct").value ? Number(osNum("os-salepct").toFixed(2)) : null,
+        note1: document.getElementById("os-note1").value.trim(),
+        note2: document.getElementById("os-note2").value.trim(),
         status: "주문중",
         createdBy: currentUser.name, createdByUsername: currentUser.username, createdAt: serverTimestamp()
       });
@@ -9836,6 +9841,7 @@
               profit: (o.salePrice && o.purchasePrice) ? (Number(o.salePrice)-Number(o.purchasePrice)) : null,
               imei:"", status: sell ? "판매" : "보유중",
               orderDate:o.orderDate||"", inDate, expectedSaleDate:"", outDate: sell ? outDate : "",
+              note1: o.note1 || "", note2: o.note2 || "",
               entryType:"imei", quantity:1, serialNumber:sn,
               orderId: oid,
               createdBy: currentUser.name, createdByUsername: currentUser.username,
@@ -10042,6 +10048,7 @@
         saleDiscountAmt:o.saleDiscountAmt||null, saleDiscount:o.saleDiscountPct||null,
         profit: (o.salePrice && o.purchasePrice) ? (Number(o.salePrice)-Number(o.purchasePrice)) : null,
         imei:"", status: autoSell ? "판매" : "보유중", orderDate:o.orderDate||"", inDate, expectedSaleDate:"", outDate,
+        note1: o.note1 || "", note2: o.note2 || "",
         entryType:"imei", quantity:1, serialNumber:e.serial,
         orderId: currentArrivalOrderId,
         createdAt: serverTimestamp()
