@@ -335,7 +335,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-07 v370</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-07 v371</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -15300,21 +15300,45 @@
           // 지금 묶여 있지 않으면, 예전에 취소된 판매요청을 찾아봅니다.
           //  (취소하면 재고의 연결이 끊어져서 그냥은 안 보입니다)
           let past = [], pastErr = "";
+          const seenSr = new Set();
+          const addSr = (id, v)=>{ if(!seenSr.has(id)){ seenSr.add(id); past.push({ id, ...v }); } };
+          // ㉮ 취소할 때 남겨둔 흔적으로 바로 찾습니다.
+          if(it.lastSaleRequestId){
+            try{
+              const s1 = await getDoc(doc(db,"saleRequests", it.lastSaleRequestId));
+              if(s1.exists()) addSr(it.lastSaleRequestId, s1.data());
+            }catch(e){}
+          }
+          // ㉯ 판매요청에 이 재고가 적혀 있는지 찾습니다.
           try{
-            const ps = await getDocs(query(collection(db,"saleRequests"),
-              where("matchedItemIds","array-contains", it.id)));
-            ps.forEach(d=> past.push({ id:d.id, ...d.data() }));
+            const all = await getDocs(collection(db,"saleRequests"));
+            all.forEach(d=>{
+              const v = d.data();
+              const ids = Array.isArray(v.matchedItemIds) ? v.matchedItemIds : [];
+              if(ids.includes(it.id)) addSr(d.id, v);
+            });
           }catch(e){ pastErr = (e && e.message) ? e.message : String(e); }
-          // 그래도 못 찾으면 전부 훑어봅니다. (취소하면서 연결이 지워진 경우)
+          // ㉰ 그래도 없으면 단말 이력의 <출고> 기록으로 찾습니다.
+          //    (예전에 취소된 건은 연결이 지워져 있을 수 있습니다)
           if(past.length === 0){
             try{
-              const all = await getDocs(collection(db,"saleRequests"));
-              all.forEach(d=>{
-                const v = d.data();
-                const ids = Array.isArray(v.matchedItemIds) ? v.matchedItemIds : [];
-                if(ids.includes(it.id)) past.push({ id:d.id, ...v });
-              });
-            }catch(e){ pastErr = pastErr || ((e && e.message) ? e.message : String(e)); }
+              const hs2 = await getDocs(query(collection(db,"itemHistory"),
+                where("serialNumber","==", sn)));
+              const outs = [];
+              hs2.forEach(d=>{ const v = d.data();
+                if(v.type === "outbound" || v.type === "salereq" || v.type === "matched") outs.push(v); });
+              if(outs.length){
+                const who = [...new Set(outs.map(o=> String(o.detail||"").split("·")[0].trim()).filter(Boolean))];
+                const all2 = await getDocs(collection(db,"saleRequests"));
+                all2.forEach(d=>{
+                  const v = d.data();
+                  if(v.status !== "취소") return;
+                  const dest = String(v.destination||"").trim();
+                  if(!dest) return;
+                  if(who.some(w=> w.indexOf(dest) >= 0 || dest.indexOf(w) >= 0)) addSr(d.id, v);
+                });
+              }
+            }catch(e){}
           }
           if(past.length){
             html += sec("예전 판매요청 (취소됨)",
@@ -15598,7 +15622,9 @@
           bt.update(doc(db,"inventoryItems", x.id), {
             status:"보유중", outDate:"", destination:"",
             salePrice:null, saleDiscountAmt:null, saleDiscount:null,
-            profit:null, saleRequestId:null
+            profit:null, saleRequestId:null,
+            lastSaleRequestId: x.lineId || null,      // 되돌릴 때 찾으려고 남겨둡니다
+            lastSaleBatchId: r.id || null
           });
         });
         await bt.commit();
@@ -15778,7 +15804,9 @@
           batch.update(doc(db,"inventoryItems", x.id), {
             status:"보유중", outDate:"", destination:"",
             salePrice:null, saleDiscountAmt:null, saleDiscount:null,
-            profit:null, saleRequestId:null
+            profit:null, saleRequestId:null,
+            lastSaleRequestId: saleRequestId || null,   // 되돌릴 때 찾으려고 남겨둡니다
+            lastSaleBatchId: (sr && sr.batchId) || null
           });
         });
         await batch.commit();
