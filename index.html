@@ -355,7 +355,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-08 v411</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-08 v412</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -1629,6 +1629,7 @@
             <button class="btn small secondary" id="rbd-k-in" style="width:auto;" onclick="setReqBoardKind('in')">입금</button>
             <button class="btn small secondary" id="rbd-k-credit" style="width:auto;" onclick="setReqBoardKind('credit')">여신·선입금</button>
             <button class="btn small secondary" id="rbd-k-cb" style="width:auto;" onclick="setReqBoardKind('cb')">입출금 내역</button>
+            <button class="btn small secondary" id="rbd-k-loan" style="width:auto;" onclick="setReqBoardKind('loan')">B2B 대출</button>
           </span>
           <label style="font-size:12px;margin-left:10px;white-space:nowrap;">
             <input type="checkbox" id="rbd-cb-open" onchange="toggleCbOpenOnly(this.checked)"> 안 쓴 것만 <span class="info-tip" title="「입출금 내역」 구분에서만 씁니다. 끄면 배분이 끝난 내역까지 다 보입니다.">ⓘ</span>
@@ -11317,7 +11318,7 @@
   };
   window.setReqBoardKind = function(k){
     reqBoardKind = k;
-    ["all","out","in","credit","cb"].forEach(x=>{
+    ["all","out","in","credit","cb","loan"].forEach(x=>{
       const b = document.getElementById("rbd-k-" + x);
       if(b) b.className = "btn small" + (x === k ? "" : " secondary");
     });
@@ -11441,7 +11442,7 @@
     // <입출금 내역>을 함께 보여줍니다.
     //  기본은 「미배분」만 나옵니다. 배분이 끝난 돈은 요청 줄에 이미 나오므로 겹치지 않게 뺍니다.
     //  「입출금 내역」 구분을 고르면 배분완료까지 다 나옵니다. (입출금 내역 화면 대신)
-    const showDoneCb = (reqBoardKind === "cb") && !cbOpenOnly;
+    const showDoneCb = (reqBoardKind === "cb" || reqBoardKind === "loan") && !cbOpenOnly;
     try{
       const cbSnap = await getDocs(collection(db,"bankDeposits"));
       cbSnap.forEach(d=>{
@@ -11454,13 +11455,17 @@
         const isOpen = left > 0;
         rows.push({
           kind: isIn ? "cbin" : "cbout",
-          label: isIn ? "입금 내역" : "출금 내역",
-          color: isIn ? "#1565c0" : "var(--danger)",
+          label: (v.fromLoanId ? "B2B 대출" : (isIn ? "입금 내역" : "출금 내역")),
+          color: (v.fromLoanId ? "#6a1b9a" : (isIn ? "#1565c0" : "var(--danger)")),
+          isLoan: !!v.fromLoanId,
           id: d.id, p:null, cb:true, cbUsed: used,
           who: (v.company || "").trim() || (v.payer || "-"),
           noCompany: !String(v.company||"").trim(),
-          sub: (isOpen ? "아직 요청에 안 붙임" : "배분 " + used.toLocaleString())
-               + (v.account ? " · " + v.account : ""),
+          sub: (v.fromLoanId
+                 ? String(v.memo||"B2B 대출 실행").replace(/^B2B 대출 실행:\s*/, "")
+                   + (isOpen ? "" : " · 배분 " + used.toLocaleString())
+                 : ((isOpen ? "아직 요청에 안 붙임" : "배분 " + used.toLocaleString())
+                    + (v.account ? " · " + v.account : ""))),
           date: v.date || "",
           owe: isIn ? 0 : (isOpen ? left : amt), recv: isIn ? (isOpen ? left : amt) : 0,
           done: isOpen ? 0 : amt, left: isOpen ? left : 0,
@@ -11491,6 +11496,7 @@
       if(reqBoardKind === "in")  return r.kind === "in"  || r.kind === "cbin";
       if(reqBoardKind === "out") return r.kind === "out" || r.kind === "cbout";
       if(reqBoardKind === "cb")  return r.kind === "cbin" || r.kind === "cbout";
+      if(reqBoardKind === "loan") return !!r.isLoan;
       return r.kind === reqBoardKind;
     };
     const stateOk = (r)=>{
