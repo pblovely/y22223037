@@ -350,7 +350,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-08 v394</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-08 v395</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -1554,7 +1554,7 @@
             <button class="btn small" style="width:auto;" onclick="openCashbookAdd()">+ 내역 등록</button>
           </span>
         </div>
-        <p class="desc" style="margin-top:0;">출금요청 · 여신결제 주문 · 삼성전자 선입금 · 입금요청을 <b>한 표</b>에서 봅니다.
+        <p class="desc" style="margin-top:0;">출금요청 · 여신결제 주문 · 삼성전자 선입금 · 입금요청 · <b>입출금 내역</b>을 <b>한 표</b>에서 봅니다.
           금액은 <b>줘야 할 돈 / 받아야 할 돈</b>으로 나눠 표시하고, <b>선입금</b>은 「미반영」으로만 나옵니다.</p>
         <div id="reqboard-cards" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:8px;"></div>
         <div id="reqboard-cards-pick" style="display:none;flex-wrap:wrap;gap:10px;margin-bottom:10px;"></div>
@@ -1593,8 +1593,11 @@
             <button class="btn small secondary" id="rbd-k-out" style="width:auto;" onclick="setReqBoardKind('out')">출금</button>
             <button class="btn small secondary" id="rbd-k-in" style="width:auto;" onclick="setReqBoardKind('in')">입금</button>
             <button class="btn small secondary" id="rbd-k-credit" style="width:auto;" onclick="setReqBoardKind('credit')">여신·선입금</button>
-            <button class="btn small secondary" id="rbd-k-cb" style="width:auto;" onclick="setReqBoardKind('cb')">미배분 내역</button>
+            <button class="btn small secondary" id="rbd-k-cb" style="width:auto;" onclick="setReqBoardKind('cb')">입출금 내역</button>
           </span>
+          <label style="font-size:12px;margin-left:10px;white-space:nowrap;">
+            <input type="checkbox" id="rbd-cb-open" onchange="toggleCbOpenOnly(this.checked)"> 안 쓴 것만
+          </label>
         </div>
         <div id="reqboard-pagination"></div>
         <div id="reqboard-list"></div>
@@ -10943,6 +10946,7 @@
   //  열은 「보기 설정」에서 사람마다 골라 저장합니다. (사용자 문서에 저장 — 재고 목록과 같은 방식)
   let reqBoardFilter = "all";    // all · todo · done · hold · cancel
   let reqBoardKind = "all";      // all · out · in · credit
+  let cbOpenOnly = false;        // 입출금 내역 중 「안 쓴 것만」 볼지 여부
   const reqBoardCache = { out:{}, in:{} };
 
   // 표에 넣을 수 있는 열 목록
@@ -11018,6 +11022,10 @@
       const b = document.getElementById("rbd-k-" + x);
       if(b) b.className = "btn small" + (x === k ? "" : " secondary");
     });
+    loadReqBoard();
+  };
+  window.toggleCbOpenOnly = function(on){
+    cbOpenOnly = !!on;
     loadReqBoard();
   };
   window.clearReqBoardCond = function(){
@@ -11131,8 +11139,8 @@
     });
     const creditLeft = creditIn + creditClub - creditUse;
 
-    // 아직 요청에 배분하지 않은 <입출금 내역>도 함께 보여줍니다.
-    //  요청에 처리하면 배분되어 이 줄에서 사라지고, 요청 줄의 처리액에 반영됩니다.
+    // <입출금 내역>을 함께 보여줍니다.
+    //  아직 요청에 안 붙인 것은 「미배분」, 다 쓴 것은 「배분완료」로 나옵니다.
     try{
       const cbSnap = await getDocs(collection(db,"bankDeposits"));
       cbSnap.forEach(d=>{
@@ -11140,22 +11148,24 @@
         const amt = Number(v.amount)||0;
         const used = Number(v.usedAmount)||0;
         const left = amt - used;
-        if(left <= 0) return;
+        if(cbOpenOnly && left <= 0) return;   // 「안 쓴 것만」을 켠 경우
         const isIn = (v.kind !== "out");
+        const isOpen = left > 0;
         rows.push({
           kind: isIn ? "cbin" : "cbout",
           label: isIn ? "입금 내역" : "출금 내역",
           color: isIn ? "#1565c0" : "var(--danger)",
-          id: d.id, p:null, cb:true,
+          id: d.id, p:null, cb:true, cbUsed: used,
           who: (v.company || "").trim() || (v.payer || "-"),
           noCompany: !String(v.company||"").trim(),
-          sub: "아직 요청에 안 붙임" + (v.account ? " · " + v.account : ""),
+          sub: (isOpen ? "아직 요청에 안 붙임" : "배분 " + used.toLocaleString())
+               + (v.account ? " · " + v.account : ""),
           date: v.date || "",
-          owe: isIn ? 0 : left, recv: isIn ? left : 0,
-          done: 0, left: left,
+          owe: isIn ? 0 : (isOpen ? left : amt), recv: isIn ? (isOpen ? left : amt) : 0,
+          done: isOpen ? 0 : amt, left: isOpen ? left : 0,
           payDate: v.date || "", payMemo: v.memo || "",
-          taxDate:"", taxAmount:0, status:"미배분",
-          finished:false, onHold:false, holdReason:"",
+          taxDate:"", taxAmount:0, status: isOpen ? "미배분" : "배분완료",
+          finished: !isOpen, onHold:false, holdReason:"",
           canceled:false, recs:[], inSum:false,
           canProcess:false, canEdit:false
         });
@@ -11275,7 +11285,11 @@
               ? '<button class="btn small secondary" style="width:auto;margin-left:4px;" data-rbd-edit="' + r.kind + '|' + r.id + '">수정</button>' : '') +
             ((r.canEdit && canDo && !r.canceled)
               ? '<button class="btn small danger" style="width:auto;margin-left:4px;" data-rbd-cancel="' + r.kind + '|' + r.id + '">취소</button>' : '') +
-            ((!r.canProcess && !r.canEdit) ? '<span style="color:var(--gray);">-</span>' : '') +
+            ((r.cb && canDo)
+              ? '<button class="btn small secondary" style="width:auto;" data-rbd-cbco="' + r.id + '">업체 연결</button>'
+                + ((r.cbUsed > 0) ? ''
+                   : '<button class="btn small danger" style="width:auto;margin-left:4px;" data-rbd-cbdel="' + r.id + '">지우기</button>') : '') +
+            ((!r.canProcess && !r.canEdit && !r.cb) ? '<span style="color:var(--gray);">-</span>' : '') +
           '</td></tr>';
         if(r.recs.length){
           tr += '<tr><td colspan="' + (cols.length+1) + '" style="background:#fff;font-size:11.5px;line-height:1.9;">' +
@@ -11375,6 +11389,12 @@
     document.querySelectorAll("#tab-reqboard [data-delrec]").forEach(b=>{
       const [k, id, i] = b.dataset.delrec.split("|");
       b.onclick = ()=> deletePayRecord(k, id, Number(i));
+    });
+    document.querySelectorAll("#tab-reqboard [data-rbd-cbco]").forEach(b=>{
+      b.onclick = async ()=>{ await setCashbookCompany(b.dataset.rbdCbco); loadReqBoard(); };
+    });
+    document.querySelectorAll("#tab-reqboard [data-rbd-cbdel]").forEach(b=>{
+      b.onclick = async ()=>{ await deleteCashbookRow(b.dataset.rbdCbdel); loadReqBoard(); };
     });
     // 엑셀 다운로드 (화면에 보이는 순서 그대로)
     addDownloadBtn("dl-reqboard", "reqboard-list", "입출금리스트");
@@ -13798,7 +13818,7 @@
         (Number(x.amount)||0).toLocaleString() + " / " + (x.payer||"-") + " / "
         + (cur || "미연결") + " → " + (val || "미연결"));
     }catch(e){ alert("바꾸지 못했습니다."); return; }
-    loadCashbook();
+    refreshCashViews();
   };
 
   // 잘못 넣은 내역 지우기
@@ -13819,7 +13839,7 @@
       logAction("입출금 내역 지움",
         (Number(x.amount)||0).toLocaleString() + " / " + (x.date||"-") + " / " + (x.payer||"-"));
     }catch(e){ alert("지우지 못했습니다."); return; }
-    loadCashbook();
+    refreshCashViews();
   };
 
   // ---------- 입출금 처리 전체 되돌리기 ----------
