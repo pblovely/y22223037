@@ -320,7 +320,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-07 v350</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-07 v351</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -14748,15 +14748,17 @@
   };
 
   window.goSaleFromFind = function(id){
+    if(!id){ alert("판매요청을 찾지 못했습니다."); return; }
     closeSerialFind();
-    highlightSaleId = id || null;
-    // 취소된 건도 찾을 수 있게 「전체」로 바꿔둡니다.
-    switchTab("tab-salereq");   // 판매 관리 탭의 실제 이름입니다
-    // 취소된 건도 찾을 수 있게 「전체」로 바꿔둡니다. (setSaleFilter 가 목록도 다시 그립니다)
-    setTimeout(()=>{
-      if(typeof setSaleFilter === "function") setSaleFilter("all");
-      else if(typeof loadSaleRequestList === "function") loadSaleRequestList();
-    }, 60);
+    // 취소된 건도 보이도록 「전체」로 먼저 바꿉니다.
+    //  (탭을 열면 목록이 한 번 그려지므로, 그 전에 필터와 표시 대상을 정해둡니다)
+    saleListFilter = "all";
+    ["ing","done","waiting","cancel","all"].forEach(k=>{
+      const btn = document.getElementById("sale-filter-" + k);
+      if(btn) btn.className = "btn small" + (k === "all" ? "" : " secondary");
+    });
+    highlightSaleId = id;
+    switchTab("tab-salereq");   // 탭을 열면 loadSaleRequestList() 가 실행됩니다
   };
 
   // ---------- 판매 취소 — 일련번호 고르기 ----------
@@ -18898,16 +18900,30 @@
     });
     // 찾아온 줄을 노랗게 표시하고 화면을 그쪽으로 옮깁니다.
     if(highlightSaleId){
-      const btn = listEl.querySelector('[data-detail="' + highlightSaleId + '"]');
-      const tr = btn ? btn.closest("tr") : null;
-      if(tr){
-        tr.style.background = "#fff8e1";
-        tr.style.outline = "2px solid #e0c46c";
-        try{ tr.scrollIntoView({ block:"center", behavior:"smooth" }); }catch(e){}
-        // 8초 뒤에 표시를 지웁니다.
-        setTimeout(()=>{ tr.style.background = ""; tr.style.outline = ""; }, 8000);
-      }
+      const wantId = highlightSaleId;
       highlightSaleId = null;
+      setTimeout(()=>{
+        const el2 = document.getElementById("sale-request-list");
+        const btn = el2 ? el2.querySelector('[data-detail="' + wantId + '"]') : null;
+        const tr = btn ? btn.closest("tr") : null;
+        if(!tr){
+          alert("그 판매요청을 목록에서 찾지 못했습니다.\n\n필터나 페이지를 확인해주세요.");
+          return;
+        }
+        // 줄 전체가 노랗게 보이도록 칸마다 색을 넣습니다.
+        tr.querySelectorAll("td").forEach(td=>{
+          td.style.background = "#fff3b0";
+          td.style.borderTop = "2px solid #d4a017";
+          td.style.borderBottom = "2px solid #d4a017";
+        });
+        try{ tr.scrollIntoView({ block:"center", behavior:"smooth" }); }catch(e){}
+        // 10초 뒤에 표시를 지웁니다.
+        setTimeout(()=>{
+          tr.querySelectorAll("td").forEach(td=>{
+            td.style.background = ""; td.style.borderTop = ""; td.style.borderBottom = "";
+          });
+        }, 10000);
+      }, 120);
     }
     listEl.querySelectorAll('[data-cancel-sr]').forEach(btn=>{
       const r = rows.find(x=>x.id === btn.dataset.cancelSr);
