@@ -320,7 +320,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-07 v363</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-07 v364</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -17745,7 +17745,19 @@
     if(user) rows = rows.filter(r=> r.by === user);
     // 전산모델명으로도 좁힙니다. (같은 일련번호가 여러 모델에 있을 때)
     if(modelQ) rows = rows.filter(r=> String(r.systemModel||"").toLowerCase().includes(modelQ));
-    rows.sort((a,b)=> ((b.at&&b.at.seconds)||0) - ((a.at&&a.at.seconds)||0));
+    rows.sort((a,b)=>{
+      // 예전 것이 위로 옵니다. (실제 일어난 순서대로 보시라고)
+      const ta = (a.at && a.at.seconds) || 0, tb = (b.at && b.at.seconds) || 0;
+      if(ta !== tb) return ta - tb;
+      // 같은 초에 저장된 것은 나노초까지 봅니다.
+      const na = (a.at && a.at.nanoseconds) || 0, nb = (b.at && b.at.nanoseconds) || 0;
+      if(na !== nb) return na - nb;
+      // 그래도 같으면 실제 일어나는 순서로 세웁니다.
+      const RANK = { inbound:1, replaced:1, restored:1, salereq:2, matched:2,
+                     outbound:3, activate:4, location:5, price:5, edited:5,
+                     status:6, deactivate:6, returned:7, deleted:8 };
+      return (RANK[a.type] || 5) - (RANK[b.type] || 5);
+    });
 
     document.getElementById("ih-summary").style.display = "none";
     if(rows.length === 0){
@@ -17937,7 +17949,19 @@
       const snap = await getDocs(query(collection(db,"itemHistory"), where("serialNumber","==",serial)));
       snap.forEach(d=> rows.push({ id:d.id, ...d.data() }));
     }catch(e){}
-    rows.sort((a,b)=> ((b.at&&b.at.seconds)||0) - ((a.at&&a.at.seconds)||0));
+    rows.sort((a,b)=>{
+      // 예전 것이 위로 옵니다. (실제 일어난 순서대로 보시라고)
+      const ta = (a.at && a.at.seconds) || 0, tb = (b.at && b.at.seconds) || 0;
+      if(ta !== tb) return ta - tb;
+      // 같은 초에 저장된 것은 나노초까지 봅니다.
+      const na = (a.at && a.at.nanoseconds) || 0, nb = (b.at && b.at.nanoseconds) || 0;
+      if(na !== nb) return na - nb;
+      // 그래도 같으면 실제 일어나는 순서로 세웁니다.
+      const RANK = { inbound:1, replaced:1, restored:1, salereq:2, matched:2,
+                     outbound:3, activate:4, location:5, price:5, edited:5,
+                     status:6, deactivate:6, returned:7, deleted:8 };
+      return (RANK[a.type] || 5) - (RANK[b.type] || 5);
+    });
     body.innerHTML = head + (rows.length
       ? renderItemHistoryTable(rows, true)
       : '<div class="list-empty">아직 기록이 없습니다.<br><span style="color:var(--gray);">이력은 이 기능을 넣은 뒤 작업부터 쌓입니다.</span></div>');
