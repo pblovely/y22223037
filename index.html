@@ -320,7 +320,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-05 v344</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-05 v345</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -820,6 +820,24 @@
         <span class="btn-row">
           <button class="btn small" style="width:auto;" onclick="runInvPick()">찾기</button>
           <button class="btn small secondary" style="width:auto;" onclick="closeInvPick()">닫기</button>
+        </span>
+      </div>
+    </div>
+
+    <!-- 판매 취소 — 일련번호 고르기 -->
+    <div id="salecancel-overlay" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.55);z-index:1100;align-items:center;justify-content:center;">
+      <div style="background:#fff;border:2px solid var(--navy);max-width:620px;width:96%;max-height:92vh;overflow-y:auto;padding:22px;position:relative;">
+        <button onclick="closeSaleCancelPick()" style="position:absolute;top:12px;right:12px;background:none;border:1px solid var(--navy);width:26px;height:26px;cursor:pointer;font-size:13px;">✕</button>
+        <h3 style="margin-top:0;margin-bottom:4px;">판매 취소 — 되돌릴 단말기 고르기</h3>
+        <p class="desc" style="margin-top:0;">체크한 단말기만 <b>보유중</b>으로 되돌립니다.<br>
+          <b>일부만 고르면</b> 그 대수만 빠지고 판매요청은 남습니다. <b>전부 고르면</b> 판매요청이 취소됩니다.</p>
+        <div id="scp-info" style="border:1px solid var(--line);background:#fafafa;padding:8px 11px;font-size:12.5px;margin-bottom:8px;"></div>
+        <div id="scp-list" style="max-height:280px;overflow-y:auto;border:1px solid var(--line);margin-bottom:8px;"></div>
+        <div class="stack-row"><label>취소 사유</label><input type="text" id="scp-reason" placeholder="필수"></div>
+        <div id="scp-msg" style="font-size:12.5px;margin:6px 0;"></div>
+        <span class="btn-row" style="margin-top:6px;">
+          <button class="btn small danger" style="width:auto;" onclick="submitSaleCancelPick()">되돌리기</button>
+          <button class="btn small secondary" style="width:auto;" onclick="closeSaleCancelPick()">닫기</button>
         </span>
       </div>
     </div>
@@ -6014,6 +6032,24 @@
     };
 
     if(editingItemId){
+      // 판매요청에 묶인 재고면 판매 관련 값이 바뀌는지 보고 알려줍니다.
+      {
+        const cur = (lastRenderedItems||[]).find(x=> x.id === editingItemId);
+        if(cur && cur.saleRequestId){
+          const changed = SALE_LOCKED_FIELDS.filter(k=>{
+            const a = (cur[k] === undefined || cur[k] === null) ? "" : String(cur[k]);
+            const b = (base[k] === undefined || base[k] === null) ? "" : String(base[k]);
+            return a !== b;
+          });
+          if(changed.length > 0){
+            if(!confirm("이 재고는 판매요청에 묶여 있습니다.\n\n"
+              + "바꾸시려는 값: " + changed.map(k=> SALE_LOCKED_LABEL[k]||k).join(", ") + "\n\n"
+              + "여기서 바꾸면 판매요청·예약 배정과 어긋납니다.\n"
+              + "되돌리시려면 <판매 관리>에서 취소하시는 것이 맞습니다.\n\n"
+              + "그래도 바꿀까요?")) return;
+          }
+        }
+      }
       const qty = entryType==="qty" ? (Number(document.getElementById("item-qty-input").value) || 1) : 1;
       const serialNumber = entryType==="imei" ? document.getElementById("item-serial-input").value.trim() : "";
       if(entryType==="imei"){
@@ -14560,6 +14596,148 @@
           + (miss.length>10 ? '<br>... 외 '+(miss.length-10)+'줄' : '') + '</div>' : '');
   }
 
+  // ---------- 판매 취소 — 일련번호 고르기 ----------
+  //  매칭된 재고가 있으면 어떤 단말기를 되돌릴지 골라서 취소합니다.
+  //  일부만 고르면 그 대수만 빠지고 판매요청은 남습니다. 전부 고르면 요청 자체가 취소됩니다.
+  let saleCancelTarget = null;   // { r, items:[{id, serial, model, color, lineId}] }
+
+  window.openSaleCancelPick = async function(r){
+    if(!r) return;
+
+    // 매칭된 재고를 모읍니다.
+    const items = [];
+    for(const l of (r.lines||[])){
+      for(const iid of (l.matchedItemIds||[])){
+        try{
+          const s = await getDoc(doc(db,"inventoryItems", iid));
+          if(s.exists()){
+            const v = s.data();
+            items.push({ id:iid, lineId:l.id, serial:v.serialNumber||"-",
+                         model: docModelLabel(v), color: v.systemColor||v.manufacturerColor||"-",
+                         carrier: v.carrier||"-" });
+          }else{
+            items.push({ id:iid, lineId:l.id, serial:"(재고 없음)", model:"-", color:"-", carrier:"-" });
+          }
+        }catch(e){}
+      }
+    }
+    // 붙은 재고가 없으면 예전 방식으로 통째 취소합니다.
+    if(items.length === 0){ alert("붙어 있는 재고가 없습니다. 다시 시도해주세요."); return; }
+
+    saleCancelTarget = { r, items };
+    document.getElementById("scp-info").innerHTML =
+      '<b>' + comboEsc(r.b.destination||"-") + '</b> · '
+      + (r.lines||[]).reduce((n,l)=> n + (Number(l.quantity)||0), 0) + '개 · '
+      + (r.b.depositReceived ? '<span style="color:#2e7d32;font-weight:700;">입금완료</span>' : '입금 전');
+    document.getElementById("scp-list").innerHTML =
+      '<table class="data-table" style="width:auto;"><thead><tr>'
+      + '<th style="width:34px;"><input type="checkbox" id="scp-all" checked></th>'
+      + '<th style="text-align:left;">일련번호</th><th style="text-align:left;">모델</th><th>색상</th><th>통신사</th>'
+      + '</tr></thead><tbody>'
+      + items.map((x,i)=>'<tr><td><input type="checkbox" class="scp-ck" value="'+i+'" checked></td>'
+          + '<td style="text-align:left;">'+comboEsc(x.serial)+'</td>'
+          + '<td style="text-align:left;">'+comboEsc(x.model)+'</td>'
+          + '<td>'+comboEsc(x.color)+'</td><td>'+comboEsc(x.carrier)+'</td></tr>').join("")
+      + '</tbody></table>';
+    document.getElementById("scp-reason").value = "";
+    document.getElementById("scp-msg").innerHTML = "";
+    document.getElementById("salecancel-overlay").style.display = "flex";
+    const all = document.getElementById("scp-all");
+    if(all) all.onchange = ()=> document.querySelectorAll(".scp-ck").forEach(c=> c.checked = all.checked);
+  };
+  window.closeSaleCancelPick = function(){
+    document.getElementById("salecancel-overlay").style.display = "none";
+    saleCancelTarget = null;
+  };
+
+  window.submitSaleCancelPick = async function(){
+    if(!saleCancelTarget) return;
+    const { r, items } = saleCancelTarget;
+    const msg = document.getElementById("scp-msg");
+    const picked = Array.from(document.querySelectorAll(".scp-ck:checked")).map(c=> items[Number(c.value)]);
+    if(picked.length === 0){ msg.innerHTML = '<span style="color:var(--danger);">되돌릴 일련번호를 골라주세요.</span>'; return; }
+    const reason = document.getElementById("scp-reason").value.trim();
+    if(!reason){ msg.innerHTML = '<span style="color:var(--danger);">취소 사유를 넣어주세요.</span>'; return; }
+
+    const isAll = picked.length === items.length;
+    if(!confirm(
+      (isAll ? "이 판매요청을 전부 취소합니다." : "고른 " + picked.length + "대만 되돌립니다.") + "\n\n"
+      + "· 재고 " + picked.length + "대를 <보유중>으로 되돌립니다\n"
+      + "  (판매처·판매가·출고일을 비웁니다)\n"
+      + (isAll ? "· 판매요청이 취소 상태가 됩니다\n" : "· 판매요청의 수량이 그만큼 줄어듭니다\n")
+      + (r.b.depositReceived ? "\n※ 입금완료된 건입니다. 정산을 함께 확인해주세요.\n" : "")
+      + "\n되돌릴 수 없습니다. 진행할까요?")) return;
+
+    try{
+      // 1) 고른 재고를 보유중으로
+      for(let i=0; i<picked.length; i+=300){
+        const bt = writeBatch(db);
+        picked.slice(i, i+300).forEach(x=>{
+          bt.update(doc(db,"inventoryItems", x.id), {
+            status:"보유중", outDate:"", destination:"",
+            salePrice:null, saleDiscountAmt:null, saleDiscount:null,
+            profit:null, saleRequestId:null
+          });
+        });
+        await bt.commit();
+      }
+      for(const x of picked){
+        await logItem(x.id, x.serial, "status", "판매 취소로 <보유중> 되돌림 · 사유: " + reason, {});
+      }
+      // 2) 판매요청 — 전부면 취소, 일부면 줄마다 수량·매칭을 줄입니다
+      if(isAll){
+        const meta = { status:"취소", cancelReason: reason,
+                       cancelledAt: serverTimestamp(), cancelledBy: currentUser.name };
+        if(r.isLegacy){
+          await updateDoc(doc(db,"saleRequests", r.id), meta);
+        }else{
+          await updateDoc(doc(db,"saleRequestBatches", r.id), meta);
+          for(const l of (r.lines||[])){ await updateDoc(doc(db,"saleRequests", l.id), { status:"취소" }); }
+        }
+      }else{
+        // 줄마다 빠진 재고를 빼고 수량을 줄입니다.
+        for(const l of (r.lines||[])){
+          const gone = picked.filter(p=> p.lineId === l.id).map(p=> p.id);
+          if(gone.length === 0) continue;
+          const rest = (l.matchedItemIds||[]).filter(id=> !gone.includes(id));
+          const nextQty = Math.max(0, (Number(l.quantity)||0) - gone.length);
+          await updateDoc(doc(db,"saleRequests", l.id), {
+            quantity: nextQty, fulfilledCount: rest.length, matchedItemIds: rest,
+            ...(nextQty === 0 ? { status:"취소" } : {})
+          });
+        }
+      }
+      // 3) 예약에서 나온 요청이면 배정 수량도 줄입니다
+      for(const l of (r.lines||[])){
+        if(!l.fromReservationId) continue;
+        const gone = picked.filter(p=> p.lineId === l.id).length;
+        if(gone === 0) continue;
+        try{
+          const rs = await getDoc(doc(db,"reservations", l.fromReservationId));
+          if(rs.exists()){
+            const cur = Number(rs.data().allocatedQty)||0;
+            await updateDoc(doc(db,"reservations", l.fromReservationId),
+              { allocatedQty: Math.max(0, cur - gone) });
+          }
+        }catch(e){}
+      }
+    }catch(e){
+      msg.innerHTML = '<span style="color:var(--danger);">되돌리지 못했습니다. '
+        + comboEsc((e&&e.message)?e.message:String(e)) + '</span>';
+      return;
+    }
+
+    logAction(isAll ? "판매요청 취소" : "판매요청 일부 취소",
+      (r.b.destination||"-") + " / " + picked.length + "대 / "
+      + picked.map(x=>x.serial).slice(0,8).join(", ") + (picked.length>8 ? " 외" : "")
+      + " / 사유: " + reason);
+    closeSaleCancelPick();
+    alert(picked.length + "대를 되돌렸습니다.");
+    clearCache("inventory"); clearDashCache();
+    loadSaleRequestList();
+    loadReservationTable();
+  };
+
   // ---------- 배정 취소 — 일련번호 고르기 ----------
   //  매칭된 재고가 있으면 어떤 단말기를 되돌릴지 골라서 취소합니다.
   //  일부만 고르면 그 대수만 빠지고 배정은 남습니다. 전부 고르면 배정 자체가 취소됩니다.
@@ -18494,6 +18672,9 @@
     listEl.querySelectorAll('[data-cancel-sr]').forEach(btn=>{
       const r = rows.find(x=>x.id === btn.dataset.cancelSr);
       btn.onclick = async ()=>{
+        // 매칭된 재고가 있으면 어떤 단말기를 되돌릴지 골라서 취소합니다.
+        const hasItems = (r.lines||[]).some(l=> (l.matchedItemIds||[]).length > 0);
+        if(hasItems){ openSaleCancelPick(r); return; }
         if(!confirm("이 판매요청을 취소하시겠습니까?")) return;
         const reason = prompt("취소 사유를 입력해주세요. (필수)", "");
         if(reason === null) return;
@@ -19662,6 +19843,24 @@
     setTimeout(()=>{ closeMultiEdit(); closeBulkChangeModal(); }, 900);
   };
 
+  // ---------- 판매요청에 묶인 재고 보호 ----------
+  //  재고 목록에서 판매 관련 값을 바꾸면 판매요청과 어긋납니다.
+  //  (재고만 바뀌고 판매요청·예약 배정은 그대로 남습니다)
+  const SALE_LOCKED_FIELDS = ["status", "destination", "salePrice", "saleDiscountAmt",
+                              "saleDiscount", "outDate", "profit"];
+  const SALE_LOCKED_LABEL = { status:"현재상태", destination:"판매처", salePrice:"판매가",
+                              saleDiscountAmt:"판매할인", saleDiscount:"판매할인%",
+                              outDate:"출고일", profit:"수익" };
+  // 고른 재고 중 판매요청에 묶인 것을 찾습니다.
+  function findSaleLinked(ids){
+    const out = [];
+    (ids||[]).forEach(id=>{
+      const it = (lastRenderedItems||[]).find(x=> x.id === id);
+      if(it && it.saleRequestId) out.push(it);
+    });
+    return out;
+  }
+
   window.applyBulkEdit = async function(){
     let ids = getSelectedInventoryIds();
     if(ids.length===0){ alert("적용할 재고를 먼저 선택해주세요."); return; }
@@ -19679,6 +19878,19 @@
     const valEl = document.getElementById("bulk-edit-value");
     let newVal = valEl.value;
     if(newVal === ""){ alert("적용할 값을 입력해주세요."); return; }
+
+    // 판매요청에 묶인 재고는 판매 관련 값을 여기서 바꿀 수 없습니다.
+    if(SALE_LOCKED_FIELDS.includes(key)){
+      const locked = findSaleLinked(ids);
+      if(locked.length > 0){
+        alert("고르신 재고 중 " + locked.length + "대가 판매요청에 묶여 있습니다.\n\n"
+          + locked.slice(0,5).map(x=> "· " + (x.serialNumber||"-") + " " + (x.destination||"")).join("\n")
+          + (locked.length > 5 ? "\n... 외 " + (locked.length-5) + "대" : "")
+          + "\n\n여기서 「" + fieldDef.label + "」을 바꾸면 판매요청·예약 배정과 어긋납니다.\n"
+          + "되돌리시려면 <판매 관리>에서 취소하거나, <예약 배정>에서 배정 취소해주세요.");
+        return;
+      }
+    }
 
     const isNumberField = fieldDef.type === "number";
     const parsedVal = isNumberField ? Number(newVal) : newVal;
