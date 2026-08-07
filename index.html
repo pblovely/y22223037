@@ -320,7 +320,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-07 v359</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-07 v360</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -1686,9 +1686,14 @@
         <p class="desc" style="margin-top:0;">메뉴를 <b>끌어서</b> 원하는 자리로 옮기실 수 있습니다.
           <b>⇈ ⇊</b> 는 맨 위·맨 아래, <b>▲ ▼</b> 는 한 칸, <b>◀ ▶</b> 는 다른 그룹으로 옮깁니다.<br>
           <b>접기 가능</b>을 켜면 눌러서 펼치고 닫는 그룹이 됩니다. 메뉴가 하나도 안 보이는 그룹은 화면에 나오지 않습니다.</p>
-        <span class="btn-row" style="margin-bottom:10px;">
+        <div class="tbar-row" style="display:flex;gap:0;flex-wrap:wrap;align-items:center;margin-bottom:10px;">
           <button class="btn small secondary" style="width:auto;" onclick="addMenuGroup()">+ 그룹 추가</button>
-        </span>
+          <span style="font-size:12px;color:var(--gray);margin:0 6px 0 14px;">그룹 제목 모양</span>
+          <select id="mlay-style" onchange="onMenuStyleChange()" style="height:28px;border:1px solid var(--line);padding:0 6px;font-size:12.5px;box-sizing:border-box;">
+            <option value="plain">작은 제목 글씨</option>
+            <option value="bar">회색 띠</option>
+          </select>
+        </div>
         <div id="mlay-body"></div>
         <span class="btn-row" style="margin-top:10px;">
           <button class="btn small" style="width:auto;" onclick="saveMenuLayout()">저장</button>
@@ -21554,11 +21559,15 @@
     const adm = { id:"g-admin", name:"관리자", collapsible:true, items:[] };
     document.querySelectorAll("#admin-group .tab-btn[data-tab]").forEach(b=>{ if(b.id) adm.items.push(b.id); });
     groups.push(adm);
-    return { groups };
+    return { groups, style:"plain" };
   }
   function getMenuLayout(){
     const L = currentSettings && currentSettings.menuLayout;
-    if(L && Array.isArray(L.groups) && L.groups.length) return JSON.parse(JSON.stringify(L));
+    if(L && Array.isArray(L.groups) && L.groups.length){
+      const c = JSON.parse(JSON.stringify(L));
+      if(!c.style) c.style = "plain";
+      return c;
+    }
     return currentLayoutFromDom();
   }
 
@@ -21577,6 +21586,8 @@
     // 화면에 없는 옛 메뉴는 뺍니다.
     const alive = new Set(all.map(x=> x.id));
     menuLayoutDraft.groups.forEach(g=> g.items = (g.items||[]).filter(id=> alive.has(id)));
+    { const s = document.getElementById("mlay-style");
+      if(s) s.value = menuLayoutDraft.style || "plain"; }
     renderMenuLayout();
     document.getElementById("menulayout-overlay").style.display = "flex";
   };
@@ -21716,6 +21727,11 @@
     renderMenuLayout();
   }
 
+  window.onMenuStyleChange = function(){
+    if(!menuLayoutDraft) return;
+    menuLayoutDraft.style = (document.getElementById("mlay-style")||{}).value || "plain";
+  };
+
   window.addMenuGroup = function(){
     if(!menuLayoutDraft) return;
     const nm = prompt("새 그룹 이름을 넣어주세요.", "새 그룹");
@@ -21737,7 +21753,8 @@
       await setDoc(doc(db,"settings","general"), { menuLayout: menuLayoutDraft }, { merge:true });
       currentSettings.menuLayout = JSON.parse(JSON.stringify(menuLayoutDraft));
       logAction("메뉴 배치 변경",
-        menuLayoutDraft.groups.map(g=> g.name + "(" + (g.items||[]).length + ")").join(" / "));
+        (menuLayoutDraft.style === "bar" ? "회색 띠 / " : "작은 제목 / ")
+        + menuLayoutDraft.groups.map(g=> g.name + "(" + (g.items||[]).length + ")").join(" / "));
     }catch(e){ alert("저장에 실패했습니다."); return; }
     closeMenuLayout();
     alert("저장했습니다. 화면을 새로 불러옵니다.");
@@ -21781,21 +21798,40 @@
         return b && b.dataset.permHidden !== "1";
       });
       if(!hasAny) return;                       // 볼 게 없으면 그룹도 안 보입니다
+      // 제목 모양 — plain(작은 제목 글씨) 또는 bar(회색 띠)
+      const barStyle = (L.style === "bar");
+      const mkTitle = (text, onClick, openText)=>{
+        const el = document.createElement(onClick ? "button" : "div");
+        el.style.cssText = barStyle
+          ? "display:block;width:100%;text-align:left;padding:9px 16px;font-size:12px;font-weight:700;color:var(--navy);background:#f2f2f2;border:none;border-top:1px solid var(--line);border-bottom:1px solid var(--line);" + (onClick ? "cursor:pointer;" : "")
+          : "display:block;width:100%;text-align:left;padding:12px 16px 4px;font-size:11px;color:var(--gray);background:none;border:none;" + (onClick ? "cursor:pointer;" : "");
+        if(onClick){
+          el.innerHTML = '<span>' + comboEsc(text) + '</span>'
+            + '<span style="float:right;font-weight:400;color:var(--gray);">' + openText + '</span>';
+          el.onclick = onClick;
+        }else{
+          el.textContent = text;
+        }
+        return el;
+      };
       if(g.collapsible){
-        const btn = document.createElement("button");
-        btn.className = "menu-group-btn";
-        btn.textContent = g.name;
-        btn.style.cssText = "display:block;width:100%;text-align:left;padding:9px 16px;font-size:12.5px;font-weight:700;color:var(--navy);background:#eee;border:none;cursor:pointer;border-top:1px solid var(--line);margin-top:8px;";
         const box = document.createElement("div");
         box.style.display = "none";
-        btn.onclick = ()=>{ box.style.display = (box.style.display === "none") ? "block" : "none"; };
+        let btn = mkTitle(g.name, null, "");
+        const redraw = ()=>{
+          const open = (box.style.display !== "none");
+          const nb = mkTitle(g.name, ()=>{
+            box.style.display = open ? "none" : "block";
+            const nn = redraw();
+            btn.replaceWith(nn); btn = nn;
+          }, open ? "닫기" : "열기");
+          return nb;
+        };
+        btn = redraw();
         (g.items||[]).forEach(id=>{ const b = document.getElementById(id); if(b) box.appendChild(b); });
         wrap.appendChild(btn); wrap.appendChild(box);
       }else{
-        const ttl = document.createElement("div");
-        ttl.className = "sidebar-section-label";
-        ttl.textContent = g.name;
-        wrap.appendChild(ttl);
+        wrap.appendChild(mkTitle(g.name, null, ""));
         (g.items||[]).forEach(id=>{ const b = document.getElementById(id); if(b) wrap.appendChild(b); });
       }
     });
