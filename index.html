@@ -350,7 +350,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-08 v397</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-08 v398</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -1596,7 +1596,7 @@
             <button class="btn small secondary" id="rbd-k-cb" style="width:auto;" onclick="setReqBoardKind('cb')">입출금 내역</button>
           </span>
           <label style="font-size:12px;margin-left:10px;white-space:nowrap;">
-            <input type="checkbox" id="rbd-cb-open" onchange="toggleCbOpenOnly(this.checked)"> 안 쓴 것만
+            <input type="checkbox" id="rbd-cb-open" onchange="toggleCbOpenOnly(this.checked)"> 안 쓴 것만 <span class="info-tip" title="「입출금 내역」 구분에서만 씁니다. 끄면 배분이 끝난 내역까지 다 보입니다.">ⓘ</span>
           </label>
         </div>
         <div id="reqboard-pagination"></div>
@@ -11162,7 +11162,9 @@
     const creditLeft = creditIn + creditClub - creditUse;
 
     // <입출금 내역>을 함께 보여줍니다.
-    //  아직 요청에 안 붙인 것은 「미배분」, 다 쓴 것은 「배분완료」로 나옵니다.
+    //  기본은 「미배분」만 나옵니다. 배분이 끝난 돈은 요청 줄에 이미 나오므로 겹치지 않게 뺍니다.
+    //  「입출금 내역」 구분을 고르면 배분완료까지 다 나옵니다. (입출금 내역 화면 대신)
+    const showDoneCb = (reqBoardKind === "cb") && !cbOpenOnly;
     try{
       const cbSnap = await getDocs(collection(db,"bankDeposits"));
       cbSnap.forEach(d=>{
@@ -11170,7 +11172,7 @@
         const amt = Number(v.amount)||0;
         const used = Number(v.usedAmount)||0;
         const left = amt - used;
-        if(cbOpenOnly && left <= 0) return;   // 「안 쓴 것만」을 켠 경우
+        if(!showDoneCb && left <= 0) return;   // 배분이 끝난 것은 요청 줄에 이미 나옵니다.
         const isIn = (v.kind !== "out");
         const isOpen = left > 0;
         rows.push({
