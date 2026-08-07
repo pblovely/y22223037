@@ -320,7 +320,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-07 v349</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-07 v350</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -14787,11 +14787,26 @@
     // 붙은 재고가 없으면 예전 방식으로 통째 취소합니다.
     if(items.length === 0){ alert("붙어 있는 재고가 없습니다. 다시 시도해주세요."); return; }
 
-    saleCancelTarget = { r, items };
+    // 입금요청이 걸려 있는지 봅니다. (걸려 있으면 함께 정리해야 합니다)
+    let depReq = null;
+    if(r.b.depositRequestId){
+      try{
+        const ds = await getDoc(doc(db,"saleDepositRequests", r.b.depositRequestId));
+        if(ds.exists()) depReq = { id: r.b.depositRequestId, ...ds.data() };
+      }catch(e){}
+    }
+    saleCancelTarget = { r, items, depReq };
     document.getElementById("scp-info").innerHTML =
       '<b>' + comboEsc(r.b.destination||"-") + '</b> · '
       + (r.lines||[]).reduce((n,l)=> n + (Number(l.quantity)||0), 0) + '개 · '
-      + (r.b.depositReceived ? '<span style="color:#2e7d32;font-weight:700;">입금완료</span>' : '입금 전');
+      + (r.b.depositReceived ? '<span style="color:#2e7d32;font-weight:700;">입금완료</span>' : '입금 전')
+      + (depReq && depReq.status !== "취소"
+          ? '<br><span style="color:#b8860b;font-weight:700;">입금요청이 걸려 있습니다</span>'
+            + ' <span style="color:var(--gray);">' + comboEsc(depReq.requestDate||"-")
+            + ' · 요청액 ' + (Number(depReq.totalAmount)||0).toLocaleString()
+            + ' · 받은 금액 ' + (Number(depReq.receivedAmount)||0).toLocaleString()
+            + ' · ' + comboEsc(depReq.status||"-") + '</span>'
+          : '');
     document.getElementById("scp-list").innerHTML =
       '<table class="data-table" style="width:auto;"><thead><tr>'
       + '<th style="width:34px;"><input type="checkbox" id="scp-all" checked></th>'
@@ -14829,6 +14844,11 @@
       + "  (판매처·판매가·출고일을 비웁니다)\n"
       + (isAll ? "· 판매요청이 취소 상태가 됩니다\n" : "· 판매요청의 수량이 그만큼 줄어듭니다\n")
       + (r.b.depositReceived ? "\n※ 입금완료된 건입니다. 정산을 함께 확인해주세요.\n" : "")
+      + (isAll && depReq && depReq.status !== "취소"
+          ? "\n※ 이 판매요청에 <입금요청>이 걸려 있습니다.\n"
+            + "   " + (depReq.requestDate||"-") + " · " + (Number(depReq.totalAmount)||0).toLocaleString()
+            + " · " + (depReq.status||"-") + "\n"
+            + "   다음 창에서 입금요청도 함께 취소할지 여쭙겠습니다.\n" : "")
       + "\n되돌릴 수 없습니다. 진행할까요?")) return;
 
     try{
@@ -14890,15 +14910,51 @@
       return;
     }
 
+    // 전부 취소한 경우 — 걸려 있는 입금요청도 함께 정리할지 물어봅니다.
+    let depDone = "";
+    if(isAll && depReq && depReq.status !== "취소"){
+      const got = Number(depReq.receivedAmount)||0;
+      const refs = Array.isArray(depReq.saleBatchRefs) ? depReq.saleBatchRefs : [];
+      const onlyThis = refs.length <= 1;      // 이 판매요청 하나만 묶인 입금요청인지
+      if(!onlyThis){
+        alert("이 입금요청에는 다른 판매요청도 함께 묶여 있습니다 (" + refs.length + "건).\n\n"
+          + "입금요청은 그대로 두었습니다. <입출금리스트>에서 금액을 직접 고쳐주세요.");
+        depDone = " / 입금요청은 그대로 (여러 건 묶임)";
+      }else if(got > 0){
+        alert("이 입금요청은 이미 " + got.toLocaleString() + "원을 받았습니다.\n\n"
+          + "함부로 취소하면 정산이 어긋나므로 그대로 두었습니다.\n"
+          + "<입출금리스트>에서 직접 확인해주세요.");
+        depDone = " / 입금요청은 그대로 (받은 금액 있음)";
+      }else if(confirm("이 판매요청에 걸려 있는 <입금요청>도 함께 취소할까요?\n\n"
+          + (depReq.requestDate||"-") + " · " + (Number(depReq.totalAmount)||0).toLocaleString()
+          + " · " + (depReq.status||"-") + "\n\n"
+          + "· 예 → 입금요청도 취소 상태가 됩니다\n"
+          + "· 아니오 → 입금요청은 그대로 둡니다 (직접 정리하셔야 합니다)")){
+        try{
+          await updateDoc(doc(db,"saleDepositRequests", depReq.id), {
+            status: "취소", cancelReason: reason,
+            cancelledAt: serverTimestamp(), cancelledBy: currentUser.name
+          });
+          logAction("판매 입금요청 취소",
+            (r.b.destination||"-") + " / " + (Number(depReq.totalAmount)||0).toLocaleString()
+            + " / 판매요청 취소와 함께 / 사유: " + reason);
+          depDone = " / 입금요청도 취소";
+        }catch(e){ alert("입금요청을 취소하지 못했습니다. <입출금리스트>에서 확인해주세요."); }
+      }else{
+        depDone = " / 입금요청은 그대로";
+      }
+    }
+
     logAction(isAll ? "판매요청 취소" : "판매요청 일부 취소",
       (r.b.destination||"-") + " / " + picked.length + "대 / "
       + picked.map(x=>x.serial).slice(0,8).join(", ") + (picked.length>8 ? " 외" : "")
-      + " / 사유: " + reason);
+      + " / 사유: " + reason + depDone);
     closeSaleCancelPick();
     alert(picked.length + "대를 되돌렸습니다.");
     clearCache("inventory"); clearDashCache();
     loadSaleRequestList();
     loadReservationTable();
+    if(typeof loadReqBoard === "function") loadReqBoard();
   };
 
   // ---------- 배정 취소 — 일련번호 고르기 ----------
