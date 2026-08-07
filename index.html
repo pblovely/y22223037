@@ -342,7 +342,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-07 v386</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-08 v388</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -6482,6 +6482,15 @@
       }else{
         payload.createdAt = serverTimestamp();
         payload.updatedAt = serverTimestamp();
+        // 새로 등록한 업체가 목록 맨 위로 오게 순서를 가장 앞으로 줍니다.
+        {
+          let minOrder = 0;
+          (companiesCache || []).forEach(c=>{
+            const v = Number(c.sortOrder);
+            if(Number.isFinite(v) && v < minOrder) minOrder = v;
+          });
+          payload.sortOrder = minOrder - 1;
+        }
         await withTimeout(addDoc(collection(db,"companies"), payload), 12000, "업체 저장");
         logAction("업체 등록", payload.name);
       }
@@ -19705,7 +19714,7 @@
     loadSaleRequestList();
   };
 
-  async function loadSaleRequestList(){
+  window.loadSaleRequestList = async function(){
     const listEl = document.getElementById("sale-request-list");
     if(!listEl) return;
     listEl.innerHTML = '<div class="list-empty">불러오는 중...</div>';
