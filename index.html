@@ -279,14 +279,19 @@
   .data-table.dash-agg th, .data-table.dash-agg td{ padding:3px 7px; white-space:nowrap; }
   /* 업체별 지표 표 — 좌우로 늘리지 않고 내용 너비만 차지하며 왼쪽에 붙입니다. */
   .data-table.resv-dest-fit{ width:auto !important; min-width:0 !important; margin:0 !important; table-layout:auto; }
-  .data-table.resv-dest-fit th, .data-table.resv-dest-fit td{ white-space:nowrap; padding-left:10px; padding-right:10px; }
+  .data-table.resv-dest-fit th, .data-table.resv-dest-fit td{ white-space:nowrap; padding-left:6px; padding-right:6px; }
   .data-table.resv-dest-fit th:first-child, .data-table.resv-dest-fit td:first-child{ padding-left:0; }
   /* 순서 옮기기 화살표 — 자리를 적게 차지하도록 작게 만듭니다. */
   .ord-btn{ width:auto !important; min-width:0 !important; padding:0 5px !important; height:18px !important;
             line-height:18px !important; font-size:10px !important; box-sizing:border-box; }
   .ord-btn:disabled{ opacity:.3; }
   .data-table th, .data-table td{ padding:2px 5px; text-align:center; vertical-align:middle; white-space:nowrap; line-height:1.2; height:24px; box-sizing:border-box; }
-  .data-table .btn.small{ padding:3px 9px; }
+  /* 표 안의 버튼 — 칸 높이(24px)보다 작게 만들어 줄이 늘어나지 않게 합니다. */
+  .data-table .btn.small{ padding:0 7px !important; font-size:11px !important;
+    height:20px !important; min-height:20px !important; }
+  /* 줄 간격을 더 좁힌 보기에서는 버튼도 같이 줄입니다. */
+  .vc-tiny .data-table .btn.small{ height:17px !important; min-height:17px !important; padding:0 5px !important; font-size:10px !important; }
+  .vc-tight .data-table .btn.small{ height:19px !important; min-height:19px !important; padding:0 6px !important; font-size:10.5px !important; }
   .data-table thead tr{ background:#fff; border-bottom:2px solid var(--navy); }
   /* 목록 표를 담은 칸만 골라, 그 안에서 위아래·좌우로 움직이게 합니다.
      (다른 용도로 overflow 를 쓰는 칸은 건드리지 않습니다) */
@@ -350,7 +355,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-08 v398</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-08 v400</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -1779,6 +1784,9 @@
           <div>입금자명 <b id="cbco-payer">-</b></div>
           <div>금액 <b id="cbco-amount">0</b> · 날짜 <span id="cbco-date">-</span></div>
           <div>지금 연결 <b id="cbco-cur">미연결</b></div>
+        </div>
+        <div class="stack-row"><label>붙일 요청 <span class="info-tip" title="이 돈을 어느 요청에 붙일지 고릅니다. 고르면 처리 창이 열리고 금액이 자동으로 채워집니다. 붙일 요청이 없으면 비워두고 업체만 연결하세요.">ⓘ</span></label>
+          <select id="cbco-req"><option value="">(안 붙임 — 업체만 연결)</option></select>
         </div>
         <div class="stack-row"><label>업체</label>
           <select id="cbco-select"><option value="">(연결 안 함)</option></select>
@@ -13849,6 +13857,37 @@
     const sel = document.getElementById("cbco-select");
     sel.innerHTML = '<option value="">(연결 안 함)</option>'
       + names.map(n=>'<option value="'+comboEsc(n)+'"'+(cur===n?' selected':'')+'>'+comboEsc(n)+'</option>').join("");
+
+    // 붙일 수 있는 요청 — 아직 안 끝난 것만. 같은 업체 것을 위로 올립니다.
+    cbCoTarget.kind = (x.kind === "out") ? "out" : "in";
+    const rk = cbCoTarget.kind;
+    const reqSel = document.getElementById("cbco-req");
+    const cand = [];
+    Object.keys(reqBoardCache[rk] || {}).forEach(rid=>{
+      const p = reqBoardCache[rk][rid];
+      if(!p) return;
+      if(p.status === "취소") return;
+      const tot  = Number(p.totalAmount)||0;
+      const done = Number(rk === "in" ? p.receivedAmount : p.paidAmount)||0;
+      const rest = tot - done;
+      if(rest <= 0) return;
+      const who = ((rk === "in" ? (p.destinations||[]) : (p.sources||[])).filter(Boolean).join(", ")) || "-";
+      cand.push({ id:rid, who, rest, date:(p.requestDate||"") });
+    });
+    const curCo = cur;
+    cand.sort((a,b)=>{
+      const am = (a.who.split(",")[0].trim() === curCo) ? 0 : 1;
+      const bm = (b.who.split(",")[0].trim() === curCo) ? 0 : 1;
+      return am - bm || String(b.date).localeCompare(String(a.date));
+    });
+    reqSel.innerHTML = '<option value="">(안 붙임 — 업체만 연결)</option>'
+      + cand.map(c=>'<option value="'+c.id+'">' + comboEsc(c.who) + ' · ' + comboEsc(c.date||"-")
+        + ' · 남은 ' + c.rest.toLocaleString()
+        + (c.rest === cbCoTarget.amount ? "  ← 금액 같음" : "") + '</option>').join("");
+    // 금액이 딱 맞는 요청이 하나뿐이면 미리 골라둡니다. (저장은 사람이 누릅니다)
+    const exact = cand.filter(c=> c.rest === cbCoTarget.amount);
+    if(exact.length === 1) reqSel.value = exact[0].id;
+
     document.getElementById("cbco-overlay").style.display = "flex";
   };
   window.closeCbCompany = function(){
@@ -13858,19 +13897,41 @@
   window.submitCbCompany = async function(){
     if(!cbCoTarget) return;
     if(!hasPerm(currentUserPerms, "paymentProcess")){ alert("권한이 없습니다."); return; }
-    const { id, cur, payer, amount } = cbCoTarget;
-    const val = String(document.getElementById("cbco-select").value || "").trim();
-    if(val === cur){ closeCbCompany(); return; }
-    if(!confirm("업체 연결을 바꿉니다.\n\n" + (cur || "미연결") + " → " + (val || "미연결") + "\n\n진행할까요?")) return;
-    try{
-      await updateDoc(doc(db,"bankDeposits", id), { company: val });
-      logAction("입출금 내역 업체 연결",
-        amount.toLocaleString() + " / " + payer + " / "
-        + (cur || "미연결") + " → " + (val || "미연결"));
-    }catch(e){
-      document.getElementById("cbco-msg").innerHTML = '<span style="color:var(--danger);">바꾸지 못했습니다.</span>';
+    const { id, cur, payer, amount, kind } = cbCoTarget;
+    const val   = String(document.getElementById("cbco-select").value || "").trim();
+    const reqId = String(document.getElementById("cbco-req").value || "").trim();
+
+    // ① 업체가 바뀌었으면 먼저 저장합니다.
+    if(val !== cur){
+      if(!confirm("업체 연결을 바꿉니다.\n\n" + (cur || "미연결") + " → " + (val || "미연결") + "\n\n진행할까요?")) return;
+      try{
+        await updateDoc(doc(db,"bankDeposits", id), { company: val });
+        logAction("입출금 내역 업체 연결",
+          amount.toLocaleString() + " / " + payer + " / "
+          + (cur || "미연결") + " → " + (val || "미연결"));
+      }catch(e){
+        document.getElementById("cbco-msg").innerHTML = '<span style="color:var(--danger);">바꾸지 못했습니다.</span>';
+        return;
+      }
+    }
+
+    // ② 붙일 요청을 골랐으면 처리 창을 열어 그 돈을 미리 담아둡니다.
+    //    실제 저장은 처리 창에서 사람이 확인하고 누릅니다. (여기서 바로 바꾸지 않습니다)
+    if(reqId){
+      const p = reqBoardCache[kind] ? reqBoardCache[kind][reqId] : null;
+      if(!p){ alert("요청을 찾을 수 없습니다. 새로고침 후 다시 해주세요."); return; }
+      closeCbCompany();
+      await openPayProcess(kind, reqId, p);
+      const pick = document.getElementById("pp-pick");
+      if(pick){
+        pick.value = id;
+        if(pick.value === id) onPayPickChange();
+        else document.getElementById("pp-msg").innerHTML =
+          '<span style="color:var(--danger);">이 내역을 골라 쓸 수 없습니다. 남은 금액이 없거나 구분이 다릅니다.</span>';
+      }
       return;
     }
+
     closeCbCompany();
     refreshCashViews();
   };
