@@ -99,6 +99,13 @@
   .sidebar .tab-btn.active{ border-bottom-color:transparent; border-left-color:var(--navy); background:#fff; }
   #admin-toggle-btn{ display:block; width:100%; text-align:left; padding:14px 16px 6px; font-size:14px; font-weight:700; color:var(--navy); background:none; border:none; cursor:pointer; border-top:1px solid var(--line); margin-top:8px; }
   #admin-toggle-btn:hover{ color:#000; }
+  /* 메뉴 배치를 쓰는 중이면 옛 껍데기는 무조건 감춥니다.
+     (자바스크립트로 감춰도 나중에 실행되는 코드가 다시 보이게 만들어서 CSS 로 막습니다) */
+  body.menu-layout-on #work-group,
+  body.menu-layout-on #admin-toggle-btn,
+  body.menu-layout-on #admin-group,
+  body.menu-layout-on #app-sidebar > .sidebar-section-label{ display:none !important; }
+  body.menu-layout-on #menu-layout-wrap .sidebar-section-label{ display:block !important; }
   #admin-group.tabbar{ margin-bottom:4px; }
   .content-wrap{ flex:1; min-width:0; }
   .tab-panel{ display:none; padding:12px 10px; }
@@ -335,7 +342,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-07 v381</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-07 v383</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -22121,7 +22128,11 @@
 
   window.applyMenuLayout = function(){
     const L = currentSettings && currentSettings.menuLayout;
-    if(!L || !Array.isArray(L.groups) || !L.groups.length) return;
+    if(!L || !Array.isArray(L.groups) || !L.groups.length){
+      document.body.classList.remove("menu-layout-on");
+      return;
+    }
+    document.body.classList.add("menu-layout-on");
     const sidebar = document.getElementById("app-sidebar");
     if(!sidebar) return;
     const names = {};
