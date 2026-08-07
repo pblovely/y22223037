@@ -355,7 +355,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-08 v418</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-08 v420</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -21210,9 +21210,53 @@
     if(saleDiscountAmt) patch.saleDiscountAmt = Number(saleDiscountAmt);
     if(saleDiscountPct) patch.saleDiscount = Number(saleDiscountPct);
     await updateDoc(doc(db,"inventoryItems", itemDoc.id), patch);
-    logAction("즉시 판매 처리", dest+" / 일련번호 "+serial+(salePrice?" / "+Number(salePrice).toLocaleString():""));
 
-    resultEl.innerHTML = '<b>판매 처리 완료</b> — '+docModelLabel(it)+' / '+serial;
+    // 판매요청도 함께 만듭니다. 그래야 판매 관리에 뜨고 입금요청을 만들 수 있습니다.
+    //  판매가가 없으면 받을 금액이 정해지지 않아 만들지 않습니다.
+    let madeReq = false;
+    if(salePrice){
+      try{
+        const srBatch = await addDoc(collection(db,"saleRequestBatches"), {
+          destination: dest, requestDate: outDate,
+          depositRequired: Number(salePrice), depositReceived:false, depositReceivedDate:"",
+          lineCount: 1, status:"대기중",
+          createdBy: currentUser.name, createdByUsername: currentUser.username, createdAt: serverTimestamp()
+        });
+        const srRef = await addDoc(collection(db,"saleRequests"), {
+          batchId: srBatch.id, destination: dest,
+          modelId: it.modelId||null, baseModel: it.baseModel||"",
+          capacity: it.capacity||"", systemModel: it.systemModel||"", petName: it.petName||"",
+          manufacturerColor: it.manufacturerColor||"", systemColor: it.systemColor||"", sku: it.sku||"",
+          carrier: it.carrier||"",
+          quantity: 1, fulfilledCount: 1, matchedItemIds: [itemDoc.id],
+          salePrice: Number(salePrice),
+          saleDiscountAmt: saleDiscountAmt ? Number(saleDiscountAmt) : null,
+          saleDiscountPct: saleDiscountPct ? Number(saleDiscountPct) : null,
+          listPrice: it.listPrice || null,
+          requestDate: outDate, status: "매칭완료",
+          createdBy: currentUser.name, createdByUsername: currentUser.username, createdAt: serverTimestamp()
+        });
+        // 재고에 판매요청을 이어둡니다. (단말기 입금 대조에서 따라갑니다)
+        await updateDoc(doc(db,"inventoryItems", itemDoc.id), { saleRequestId: srRef.id });
+        await writeMatchLogs(srRef.id,
+          { destination:dest, systemModel:it.systemModel, petName:it.petName, salePrice:Number(salePrice) },
+          [{ id:itemDoc.id, ...it }], "즉시 판매", outDate);
+        madeReq = true;
+      }catch(e){ console.error("판매요청 생성 실패", e); }
+    }
+
+    logAction("즉시 판매 처리", dest+" / 일련번호 "+serial
+      +(salePrice?" / "+Number(salePrice).toLocaleString():"")
+      +(madeReq ? " / 판매요청 생성" : " / 판매가 없어 판매요청 안 만듦"));
+
+    // 처리한 내용을 알려주고 창을 닫습니다. (칸만 비우면 끝난 건지 헷갈립니다)
+    alert("판매 처리했습니다.\n\n  " + docModelLabel(it) + "\n  일련번호 " + serial
+      + "\n  판매처 " + dest + "\n  출고일 " + outDate
+      + (salePrice ? "\n  판매가 " + Number(salePrice).toLocaleString() : "")
+      + "\n\n" + (madeReq
+          ? "판매요청도 만들었습니다. 판매 관리에서 입금요청을 만드시면 됩니다."
+          : "판매가를 넣지 않아 판매요청은 안 만들었습니다.\n받을 돈이 있으면 판매가를 넣고 다시 해주세요."));
+    resultEl.innerHTML = "";
     document.getElementById("instant-sale-serial-input").value = "";
     document.getElementById("instant-sale-model-display").value = "";
     document.getElementById("instant-sale-listprice-display").value = "";
@@ -21223,6 +21267,7 @@
     document.getElementById("instant-sale-profit-display").value = "";
     loadInventoryList();
     loadSaleRequestList();
+    closeInstantSaleModal();
   };
 
   // ---------- 정산 탭 ----------
@@ -25986,6 +26031,7 @@
     if(!dest){ alert("판매처를 선택해주세요."); return; }
 
     let sold = 0; const notFound = [];
+    const madeLines = [];   // 판매요청으로 묶을 품목들
     for(const r of dataRows){
       const snap = await getDocs(query(collection(db,"inventoryItems"), where("serialNumber","==",r.serial)));
       if(snap.empty){ notFound.push(r.serial); continue; }
@@ -25999,10 +26045,46 @@
       }
       await updateDoc(doc(db,"inventoryItems", itemDoc.id), patch);
       sold++;
+      if(salePrice) madeLines.push({ id:itemDoc.id, it, salePrice:Number(salePrice) });
     }
 
-    logAction("텍스트 붙여넣기 판매처리", dest+" / "+sold+"건");
-    let html = '<b>'+sold+'건 판매처리 완료</b>';
+    // 판매요청도 한 묶음으로 만듭니다. 그래야 판매 관리에 뜨고 입금요청을 만들 수 있습니다.
+    let madeReq = 0;
+    if(madeLines.length){
+      try{
+        const total = madeLines.reduce((n,x)=> n + x.salePrice, 0);
+        const srBatch = await addDoc(collection(db,"saleRequestBatches"), {
+          destination: dest, requestDate: outDate,
+          depositRequired: total, depositReceived:false, depositReceivedDate:"",
+          lineCount: madeLines.length, status:"대기중",
+          createdBy: currentUser.name, createdByUsername: currentUser.username, createdAt: serverTimestamp()
+        });
+        for(const x of madeLines){
+          const srRef = await addDoc(collection(db,"saleRequests"), {
+            batchId: srBatch.id, destination: dest,
+            modelId: x.it.modelId||null, baseModel: x.it.baseModel||"",
+            capacity: x.it.capacity||"", systemModel: x.it.systemModel||"", petName: x.it.petName||"",
+            manufacturerColor: x.it.manufacturerColor||"", systemColor: x.it.systemColor||"", sku: x.it.sku||"",
+            carrier: x.it.carrier||"",
+            quantity: 1, fulfilledCount: 1, matchedItemIds: [x.id],
+            salePrice: x.salePrice, listPrice: x.it.listPrice || null,
+            requestDate: outDate, status: "매칭완료",
+            createdBy: currentUser.name, createdByUsername: currentUser.username, createdAt: serverTimestamp()
+          });
+          await updateDoc(doc(db,"inventoryItems", x.id), { saleRequestId: srRef.id });
+          await writeMatchLogs(srRef.id,
+            { destination:dest, systemModel:x.it.systemModel, petName:x.it.petName, salePrice:x.salePrice },
+            [{ id:x.id, ...x.it }], "붙여넣기 판매처리", outDate);
+          madeReq++;
+        }
+      }catch(e){ console.error("판매요청 생성 실패", e); }
+    }
+
+    logAction("텍스트 붙여넣기 판매처리", dest+" / "+sold+"건"
+      + (madeReq ? " / 판매요청 " + madeReq + "건 생성" : " / 판매가 없어 판매요청 안 만듦"));
+    let html = '<b>'+sold+'건 판매처리 완료</b>'
+      + (madeReq ? ' · 판매요청 <b>'+madeReq+'건</b>을 한 묶음으로 만들었습니다.'
+                 : ' <span style="color:var(--danger);">판매가가 없어 판매요청은 안 만들었습니다.</span>');
     if(notFound.length>0) html += '<div style="color:var(--danger);margin-top:6px;">재고를 못 찾아 처리 안 된 일련번호:<br>'+notFound.join(", ")+'</div>';
     resultEl.innerHTML = html;
     loadInventoryList();
