@@ -355,7 +355,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-08 v407</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-08 v408</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -402,7 +402,8 @@
           <button class="tab-btn" data-tab="tab-lgrefund" data-label-key="tab-lgrefund" id="tabbtn-lgrefund" onclick="switchTab('tab-lgrefund')" style="display:none;"><span class="tab-label-text">LG 환불·수수료</span></button>
           <button class="tab-btn" data-tab="tab-datacheck" data-label-key="tab-datacheck" id="tabbtn-datacheck" onclick="switchTab('tab-datacheck')" style="display:none;"><span class="tab-label-text">데이터 점검</span></button>
           <button class="tab-btn" data-tab="tab-ledger" data-label-key="tab-ledger" id="tabbtn-ledger" onclick="switchTab('tab-ledger')" style="display:none;"><span class="tab-label-text">거래처 정산</span></button>
-          <button class="tab-btn" data-tab="tab-b2b" data-label-key="tab-b2b" id="tabbtn-b2b" onclick="switchTab('tab-b2b')" style="display:none;"><span class="tab-label-text">삼성 B2B 여신</span></button>
+          <button class="tab-btn" data-tab="tab-b2b" data-label-key="tab-b2b" id="tabbtn-b2b" onclick="switchTab('tab-b2b')" style="display:none;"><span class="tab-label-text">삼성여신</span></button>
+          <button class="tab-btn" data-tab="tab-loan" data-label-key="tab-loan" id="tabbtn-loan" onclick="switchTab('tab-loan')" style="display:none;"><span class="tab-label-text">B2B 대출</span></button>
           <button class="tab-btn" data-tab="tab-logs" data-label-key="tab-logs" id="tabbtn-logs" onclick="switchTab('tab-logs')" style="display:none;"><span class="tab-label-text">이력</span></button>
         </div>
       </div>
@@ -2153,20 +2154,12 @@
 
     <div id="tab-b2b" class="tab-panel">
       <div class="card">
-        <h3>삼성 B2B 여신 관리 <span class="info-tip" title="포피플에서 삼성에 직접입금하거나 B2B대출로 입금하면 여신이 쌓입니다. 그 여신에서 단말기를 할인된 가격으로 주문해서 차감됩니다. B2B대출 관련 수수료·이자는 여신과 별개의 비용입니다.">ⓘ</span></h3>
+        <h3>삼성여신 <span class="info-tip" title="포피플에서 삼성에 직접입금하거나 B2B대출로 입금하면 여신이 쌓입니다. 그 여신에서 단말기를 할인된 가격으로 주문해서 차감됩니다. B2B대출 관련 수수료·이자는 여신과 별개의 비용입니다.">ⓘ</span></h3>
         <div id="b2b-stat-cards" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px;"></div>
         <button class="btn small secondary" style="width:auto;" onclick="showOrderAmountCheck()">주문 금액 검산</button>
         <button class="btn small secondary" style="width:auto;" onclick="showB2BOrderUseDetail()">주문사용 내역 보기</button>
         <div id="b2b-orderuse-detail" style="display:none;margin-top:10px;"></div>
         <p class="desc" style="margin-top:6px;">주문사용 기록은 <b>주문 관리를 열 때 자동으로 맞춰집니다.</b> 수기로 넣은 기록은 건드리지 않습니다.</p>
-      </div>
-
-      <div class="card">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
-          <h3 style="margin:0;">B2B 대출 관리 <span class="info-tip" title="6개월 만기 대출을 건별로 관리합니다. 대출을 실행하면 여신이 자동으로 충전되고, 매달 이자·MP수수료를 기록하면 대출비용에 반영됩니다. 3개월 연장도 기록됩니다.">ⓘ</span></h3>
-          <button class="btn small" style="width:auto;" onclick="openLoanModal()">+ 대출 등록</button>
-        </div>
-        <div id="loan-list"></div>
       </div>
 
       <div class="card">
@@ -2212,6 +2205,19 @@
         <h3>거래 내역</h3>
         <div style="margin-bottom:8px;"><span id="dl-b2b"></span></div>
         <div id="b2b-ledger-list"></div>
+      </div>
+    </div>
+
+    <div id="tab-loan" class="tab-panel">
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+          <h3 style="margin:0;">B2B 대출 <span class="info-tip" title="은행에서 빌린 B2B 대출을 건별로 관리합니다. 대출을 실행하면 고른 대상의 여신이 충전됩니다. 이자·수수료는 은행에 내는 돈이라 여신 잔액과는 별개의 비용입니다.">ⓘ</span></h3>
+          <button class="btn small" style="width:auto;" onclick="openLoanModal()">+ 대출 등록</button>
+        </div>
+        <p class="desc" style="margin-top:0;">은행에서 빌린 돈을 건별로 관리합니다. 실행하면 <b>고른 대상의 여신이 충전</b>됩니다.<br>
+          <b>이자·수수료는 은행에 내는 돈</b>이라 여신 잔액에는 영향이 없고, 비용으로만 잡힙니다.
+          이자일은 <b>기업은행 매월 말일 · 대구은행 매월 실행일</b> 기준이며 첫 회차는 한 달 뒤입니다.</p>
+        <div id="loan-list"></div>
       </div>
     </div>
 
@@ -26157,7 +26163,7 @@
     document.getElementById("signup-form").style.display="none";
     document.getElementById("login-form").style.display="block";
   };
-  const ADMIN_TAB_IDS = ["tab-site","tab-team","tab-users","tab-reqboard","tab-cashbook","tab-recon","tab-tax","tab-b2b","tab-logs"];
+  const ADMIN_TAB_IDS = ["tab-site","tab-team","tab-users","tab-reqboard","tab-cashbook","tab-recon","tab-tax","tab-b2b","tab-loan","tab-logs"];
   const INV_ADMIN_TAB_IDS = ["tab-inv-model","tab-inv-color","tab-inv-manufacturer","tab-inv-location","tab-inv-status","tab-inv-carrier"];
 
   window.toggleAdminMenu = function(){
@@ -26233,7 +26239,7 @@
     if(tabId==="tab-itemhistory" && typeof initItemHistoryTab === "function") initItemHistoryTab();
     if(tabId==="tab-lgrefund" && typeof loadLgRefund === "function") loadLgRefund();
     if(tabId==="tab-paycheck" && typeof loadPayCheck === "function") loadPayCheck();
-    if(tabId==="tab-b2b" && typeof loadLoanList === "function") loadLoanList();
+    if(tabId==="tab-loan" && typeof loadLoanList === "function") loadLoanList();
     if(tabId==="tab-site" && typeof renderHiddenList === "function") renderHiddenList();
     if(tabId==="tab-site" && typeof renderCacheTargets === "function") renderCacheTargets();
     if(tabId==="tab-site"){
@@ -26405,6 +26411,7 @@
       setMenu("tabbtn-tax", hasPerm(perms, "menuReqBoard") || showSettlement);
       setMenu("tabbtn-recon", hasPerm(perms, "menuReqBoard") || showSettlement);
       setMenu("tabbtn-b2b", showSettlement);
+      setMenu("tabbtn-loan", showSettlement);
       setMenu("tabbtn-ledger", showLedger || showSettlement);
       setMenu("tabbtn-datacheck", showDataCheck || showSettlement);
       setMenu("tabbtn-itemhistory", showItemHist || showAnyWorkMenu);
