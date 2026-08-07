@@ -355,7 +355,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-08 v413</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-08 v415</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -1820,7 +1820,7 @@
           <select id="cbco-req"><option value="">(안 붙임 — 업체만 연결)</option></select>
         </div>
         <div class="stack-row"><label>업체</label>
-          <select id="cbco-select"><option value="">(연결 안 함)</option></select>
+          <select id="cbco-select" onchange="refreshCbReqList()"><option value="">(연결 안 함)</option></select>
         </div>
         <div id="cbco-msg" style="font-size:12.5px;margin:6px 0;"></div>
         <span class="btn-row" style="margin-top:6px;">
@@ -14134,10 +14134,20 @@
     sel.innerHTML = '<option value="">(연결 안 함)</option>'
       + names.map(n=>'<option value="'+comboEsc(n)+'"'+(cur===n?' selected':'')+'>'+comboEsc(n)+'</option>').join("");
 
-    // 붙일 수 있는 요청 — 아직 안 끝난 것만. 같은 업체 것을 위로 올립니다.
     cbCoTarget.kind = (x.kind === "out") ? "out" : "in";
-    const rk = cbCoTarget.kind;
+    refreshCbReqList();
+
+    document.getElementById("cbco-overlay").style.display = "flex";
+  };
+  // 붙일 수 있는 요청을 채웁니다. 아직 안 끝난 것만 담습니다.
+  //  업체가 정해져 있으면 그 업체 요청만 보여줍니다. (다른 업체에 잘못 붙는 것을 막습니다)
+  //  업체를 바꾸면 목록도 함께 바뀝니다.
+  window.refreshCbReqList = function(){
+    if(!cbCoTarget) return;
+    const rk = cbCoTarget.kind || "in";
     const reqSel = document.getElementById("cbco-req");
+    if(!reqSel) return;
+    const co = String((document.getElementById("cbco-select")||{}).value || "").trim();
     const cand = [];
     Object.keys(reqBoardCache[rk] || {}).forEach(rid=>{
       const p = reqBoardCache[rk][rid];
@@ -14148,24 +14158,26 @@
       const rest = tot - done;
       if(rest <= 0) return;
       const who = ((rk === "in" ? (p.destinations||[]) : (p.sources||[])).filter(Boolean).join(", ")) || "-";
+      if(co && !who.split(",").map(t=>t.trim()).includes(co)) return;
       cand.push({ id:rid, who, rest, date:(p.requestDate||"") });
     });
-    const curCo = cur;
-    cand.sort((a,b)=>{
-      const am = (a.who.split(",")[0].trim() === curCo) ? 0 : 1;
-      const bm = (b.who.split(",")[0].trim() === curCo) ? 0 : 1;
-      return am - bm || String(b.date).localeCompare(String(a.date));
-    });
+    cand.sort((a,b)=> String(b.date).localeCompare(String(a.date)));
+    if(cand.length === 0){
+      reqSel.innerHTML = '<option value="">'
+        + (co ? comboEsc(co) + " — 붙일 요청이 없습니다" : "붙일 요청이 없습니다") + '</option>';
+      return;
+    }
     reqSel.innerHTML = '<option value="">(안 붙임 — 업체만 연결)</option>'
-      + cand.map(c=>'<option value="'+c.id+'">' + comboEsc(c.who) + ' · ' + comboEsc(c.date||"-")
+      + cand.map(c=>'<option value="'+c.id+'">'
+        + (co ? "" : comboEsc(c.who) + " · ")
+        + comboEsc(c.date||"-")
         + ' · 남은 ' + c.rest.toLocaleString()
         + (c.rest === cbCoTarget.amount ? "  ← 금액 같음" : "") + '</option>').join("");
     // 금액이 딱 맞는 요청이 하나뿐이면 미리 골라둡니다. (저장은 사람이 누릅니다)
     const exact = cand.filter(c=> c.rest === cbCoTarget.amount);
     if(exact.length === 1) reqSel.value = exact[0].id;
-
-    document.getElementById("cbco-overlay").style.display = "flex";
   };
+
   window.closeCbCompany = function(){
     document.getElementById("cbco-overlay").style.display = "none";
     cbCoTarget = null;
@@ -25512,24 +25524,48 @@
     document.getElementById("paste-sale-modal-overlay").style.display = "none";
   };
 
+  //  한 줄에 칸이 몇 개든 받습니다. 모델·색상 칸은 건너뛰고 숫자만 골라냅니다.
+  //   · 1,234,000 처럼 쉼표가 있으면 금액으로 봅니다.
+  //   · 쉼표 없는 4자리 이상 숫자가 하나면 일련번호,
+  //     두 개 이상이면 앞이 일련번호 · 뒤가 판매가입니다. (예전 규칙 그대로)
+  //   · 업체명처럼 숫자가 아닌 칸은 판매처를 찾는 데 씁니다.
   function parsePasteSaleText(text){
+    const norm = v => String(v||"").trim().toLowerCase();
+    const modelSet = new Set(), colorSet = new Set();
+    (modelsCache||[]).forEach(m=>{
+      [m.systemModel, m.baseModel, m.petName].forEach(v=>{ if(v) modelSet.add(norm(v)); });
+      (m.colors||[]).forEach(c=>{
+        [c.manufacturerColor, c.systemColor].forEach(v=>{ if(v) colorSet.add(norm(v)); });
+      });
+    });
+    const isSn    = x => /^[0-9]{4,}$/.test(x);
+    const isMoney = x => /^[0-9][0-9,]*$/.test(x) && x.indexOf(",") >= 0;
+
     const lines = text.split(/\r?\n/).map(l=>l.trim()).filter(l=>l);
-    const dataRows = []; const contextLines = [];
+    const dataRows = []; const ctxSet = new Set(); const contextLines = [];
     lines.forEach(line=>{
-      const parts = line.split(/\t+| {2,}/).map(p=>p.trim()).filter(p=>p);
-      if(parts.length===1 && /^\d{4,}$/.test(parts[0])){
-        dataRows.push({ serial:parts[0], price:null });
-      }else if(parts.length===2 && /^\d{4,}$/.test(parts[0]) && /^\d+$/.test(parts[1])){
-        dataRows.push({ serial:parts[0], price:Number(parts[1]) });
+      const parts = line.split(/\t+| {2,}|\s+/).map(p=>p.trim()).filter(p=>p);
+      const useful = parts.filter(p=> !modelSet.has(norm(p)) && !colorSet.has(norm(p)));
+      const sns   = useful.filter(isSn);
+      const money = useful.filter(isMoney).map(x=> Number(x.replace(/,/g,"")));
+      const words = useful.filter(x=> !isSn(x) && !isMoney(x));
+      if(sns.length === 1){
+        dataRows.push({ serial: sns[0], price: money.length ? money[0] : null });
+        words.forEach(w=> ctxSet.add(w));
+      }else if(sns.length >= 2){
+        dataRows.push({ serial: sns[0], price: Number(sns[1]) });
+        words.forEach(w=> ctxSet.add(w));
       }else{
         contextLines.push(line);
       }
     });
+    ctxSet.forEach(w=>{ if(!contextLines.includes(w)) contextLines.push(w); });
     return { dataRows, contextLines };
   }
 
   window.analyzePasteSale = async function(){
     const text = document.getElementById("paste-sale-textarea").value;
+    try{ await fetchModelsCache(); }catch(e){}   // 모델·색상 칸을 건너뛰려면 목록이 필요합니다.
     const { dataRows, contextLines } = parsePasteSaleText(text);
     const analysisEl = document.getElementById("paste-sale-analysis");
     if(dataRows.length===0){
