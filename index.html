@@ -335,7 +335,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-07 v374</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-07 v375</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -1707,6 +1707,36 @@
       </div>
     </div>
 
+    <!-- 입출금 내역 등록 -->
+    <div id="cbadd-overlay" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.55);z-index:1100;align-items:center;justify-content:center;">
+      <div style="background:#fff;border:2px solid var(--navy);max-width:460px;width:96%;max-height:92vh;overflow-y:auto;padding:22px;position:relative;">
+        <button onclick="closeCashbookAdd()" style="position:absolute;top:12px;right:12px;background:none;border:1px solid var(--navy);width:26px;height:26px;cursor:pointer;font-size:13px;">✕</button>
+        <h3 style="margin-top:0;margin-bottom:4px;">새 내역 등록</h3>
+        <p class="desc" style="margin-top:0;">통장에 찍힌 대로 적어둡니다. <b>업체를 모르면 비워두세요.</b></p>
+
+                    <div class="stack-row"><label>구분</label>
+            <select id="cb-kind"><option value="in">입금 (받은 돈)</option><option value="out">출금 (보낸 돈)</option></select>
+          </div>
+          <div class="stack-row"><label>날짜</label><input type="text" id="cb-date" placeholder="20260727"></div>
+          <div class="stack-row"><label>금액</label><input type="text" id="cb-amount" placeholder="숫자만"></div>
+          <div class="stack-row"><label>입금자명</label><input type="text" id="cb-payer" placeholder="통장에 찍힌 이름 (필수)"></div>
+          <div class="stack-row"><label>계좌 <span class="info-tip" title="어느 계좌로 들어오고 나갔는지 고릅니다. 목록은 사이트 설정 → 입출금 계좌에서 넣습니다.">ⓘ</span></label>
+            <select id="cb-account"><option value="">(선택 안 함)</option></select>
+          </div>
+          <div class="stack-row"><label>업체명</label>
+            <input type="text" id="cb-company" list="cb-company-datalist" placeholder="모르면 비워두세요 (타이핑하면 목록)">
+            <datalist id="cb-company-datalist"></datalist>
+          </div>
+          <div class="stack-row"><label>메모</label><input type="text" id="cb-memo" placeholder="선택"></div>
+          <div id="cb-msg" style="font-size:12.5px;margin:6px 0;"></div>
+          <button class="btn small" style="width:auto;" onclick="submitCashbook()">등록</button>
+        
+        <span class="btn-row" style="margin-top:6px;">
+          <button class="btn small secondary" style="width:auto;" onclick="closeCashbookAdd()">닫기</button>
+        </span>
+      </div>
+    </div>
+
     <!-- 메뉴 배치 -->
     <div id="menulayout-overlay" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.55);z-index:1120;align-items:center;justify-content:center;">
       <div style="background:#fff;border:2px solid var(--navy);max-width:620px;width:96%;max-height:92vh;overflow-y:auto;padding:22px;position:relative;">
@@ -1946,30 +1976,14 @@
 
     <div id="tab-cashbook" class="tab-panel">
       <div class="card">
-        <h3 style="margin:0;">입출금 내역 <span class="info-tip" title="실제로 오간 돈을 그대로 적는 곳입니다. 요청이 없어도 먼저 적어둘 수 있고, 업체를 모르면 비워두고 나중에 연결합니다.">ⓘ</span></h3>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+          <h3 style="margin:0;">입출금 내역 <span class="info-tip" title="실제로 오간 돈을 그대로 적는 곳입니다. 요청이 없어도 먼저 적어둘 수 있고, 업체를 모르면 비워두고 나중에 연결합니다.">ⓘ</span></h3>
+          <button class="btn small" style="width:auto;" onclick="openCashbookAdd()">+ 내역 등록</button>
+        </div>
         <p class="desc" style="margin-top:0;">통장에 찍힌 대로 적어둡니다. <b>거래처가 미리 보낸 돈(선수금)</b>도 여기 적습니다.<br>
           <b>업체를 모르면 비워두세요.</b> 나중에 「업체 찾기」로 연결하시면 됩니다. 앞의 「입출금 요청」은 <b>요청</b> 기준, 이 화면은 <b>실제로 오간 돈</b> 기준입니다.</p>
         <div id="cashbook-cards" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px;"></div>
 
-        <div style="border:1px solid var(--line);background:#fff;padding:10px 12px;margin-bottom:12px;">
-          <div style="font-size:12.5px;font-weight:700;margin-bottom:6px;">새 내역 등록</div>
-          <div class="stack-row"><label>구분</label>
-            <select id="cb-kind"><option value="in">입금 (받은 돈)</option><option value="out">출금 (보낸 돈)</option></select>
-          </div>
-          <div class="stack-row"><label>날짜</label><input type="text" id="cb-date" placeholder="20260727"></div>
-          <div class="stack-row"><label>금액</label><input type="text" id="cb-amount" placeholder="숫자만"></div>
-          <div class="stack-row"><label>입금자명</label><input type="text" id="cb-payer" placeholder="통장에 찍힌 이름 (필수)"></div>
-          <div class="stack-row"><label>계좌 <span class="info-tip" title="어느 계좌로 들어오고 나갔는지 고릅니다. 목록은 사이트 설정 → 입출금 계좌에서 넣습니다.">ⓘ</span></label>
-            <select id="cb-account"><option value="">(선택 안 함)</option></select>
-          </div>
-          <div class="stack-row"><label>업체명</label>
-            <input type="text" id="cb-company" list="cb-company-datalist" placeholder="모르면 비워두세요 (타이핑하면 목록)">
-            <datalist id="cb-company-datalist"></datalist>
-          </div>
-          <div class="stack-row"><label>메모</label><input type="text" id="cb-memo" placeholder="선택"></div>
-          <div id="cb-msg" style="font-size:12.5px;margin:6px 0;"></div>
-          <button class="btn small" style="width:auto;" onclick="submitCashbook()">등록</button>
-        </div>
 
         <span id="dl-cashbook" style="margin-right:6px;"></span>
         <span class="btn-row" style="display:inline-flex;margin-bottom:10px;">
@@ -13421,6 +13435,19 @@
     addViewCfgBtn("dl-cashbook", "cashbook-list");
   };
 
+  window.openCashbookAdd = function(){
+    if(!hasPerm(currentUserPerms, "paymentProcess")){ alert("입력 권한이 없습니다."); return; }
+    document.getElementById("cb-date").value = todayStr();
+    ["cb-amount","cb-payer","cb-company","cb-memo"].forEach(id=>{
+      const e = document.getElementById(id); if(e) e.value = "";
+    });
+    document.getElementById("cb-msg").innerHTML = "";
+    document.getElementById("cbadd-overlay").style.display = "flex";
+  };
+  window.closeCashbookAdd = function(){
+    document.getElementById("cbadd-overlay").style.display = "none";
+  };
+
   // 새 내역 등록
   window.submitCashbook = async function(){
     if(!hasPerm(currentUserPerms, "paymentProcess")){ alert("입력 권한이 없습니다."); return; }
@@ -13450,8 +13477,7 @@
         + (memo ? " / " + memo : ""));
     }catch(e){ show("저장에 실패했습니다."); return; }
 
-    ["cb-amount","cb-payer","cb-company","cb-memo"].forEach(id=>{ document.getElementById(id).value = ""; });
-    msgEl.innerHTML = '<span style="color:#2e7d32;">등록했습니다.</span>';
+    closeCashbookAdd();
     loadCashbook();
   };
 
