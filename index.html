@@ -320,7 +320,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-07 v353</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-07 v354</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -606,6 +606,13 @@
           <button class="btn small secondary" id="resvs-part" style="width:auto;border:1px solid var(--navy);margin-left:-1px;" onclick="setResvStateFilter('part')">일부배정</button>
           <button class="btn small secondary" id="resvs-done" style="width:auto;border:1px solid var(--navy);margin-left:-1px;" onclick="setResvStateFilter('done')">배정완료</button>
           <span id="dl-reservation" style="margin-left:10px;"></span>
+        </div>
+        <div class="tbar-row" style="display:flex;gap:0;flex-wrap:wrap;align-items:center;margin-bottom:8px;">
+          <input type="text" id="resv-search" placeholder="거래처·모델·색상·금액으로 찾기" oninput="loadReservationList()" style="width:280px;height:28px;border:1px solid var(--line);padding:0 8px;font-size:12.5px;box-sizing:border-box;">
+          <button class="btn small secondary" style="width:auto;margin-left:-1px;" onclick="clearResvSearch()">비우기</button>
+          <input type="text" id="resv-from" placeholder="시작일 20260101" onchange="loadReservationList()" style="width:130px;height:28px;border:1px solid var(--line);padding:0 8px;font-size:12.5px;margin-left:8px;box-sizing:border-box;">
+          <input type="text" id="resv-to" placeholder="종료일 20260131" onchange="loadReservationList()" style="width:130px;height:28px;border:1px solid var(--line);padding:0 8px;font-size:12.5px;margin-left:-1px;box-sizing:border-box;">
+          <span id="resv-search-count" style="font-size:11.5px;color:var(--gray);margin-left:10px;"></span>
         </div>
         <div id="quotation-list-area" style="display:none;margin-bottom:10px;"></div>
         <div id="resv-model-notice" style="display:none;font-size:12.5px;padding:9px 11px;margin-bottom:8px;border:1px solid var(--danger);background:#fdecea;line-height:1.7;"></div>
@@ -18346,7 +18353,14 @@
   };
 
   // 예약 목록 — 한 줄씩 보여주고 수정·삭제·배정을 여기서 합니다.
-  async function loadReservationList(){
+  window.clearResvSearch = function(){
+    ["resv-search","resv-from","resv-to"].forEach(id=>{
+      const e = document.getElementById(id); if(e) e.value = "";
+    });
+    loadReservationList();
+  };
+
+  window.loadReservationList = async function(){
     const el = document.getElementById("reservation-list-area");
     if(!el) return;
     el.innerHTML = '<div class="list-empty">불러오는 중...</div>';
@@ -18357,6 +18371,39 @@
     const alcMap = await fetchAllocatedByResv();
     rows.forEach(r=>{ r.allocatedQty = alcMap[r.id] || 0; });
 
+    // 검색어·기간으로 먼저 거릅니다.
+    {
+      const q = String((document.getElementById("resv-search")||{}).value || "").trim().toLowerCase();
+      const qNum = q.replace(/[^0-9]/g, "");
+      const from = String((document.getElementById("resv-from")||{}).value || "").replace(/\D/g,"");
+      const to   = String((document.getElementById("resv-to")||{}).value || "").replace(/\D/g,"");
+      const before = rows.length;
+      if(from || to){
+        rows = rows.filter(r=>{
+          const d = String(r.requestDate||"").replace(/\D/g,"");
+          if(!d) return true;
+          if(from && d < from) return false;
+          if(to && d > to) return false;
+          return true;
+        });
+      }
+      if(q){
+        rows = rows.filter(r=>{
+          const hay = [r.destination, r.systemModel, r.baseModel, r.petName,
+                       r.systemColor, r.manufacturerColor, r.carrier, r.sku]
+            .map(v=> String(v||"").toLowerCase()).join(" ");
+          if(hay.indexOf(q) >= 0) return true;
+          if(qNum.length >= 3){
+            const nums = [r.salePrice, r.listPrice, r.orderedQty, r.allocatedQty]
+              .map(v=> String(Number(v)||0)).join(" ");
+            if(nums.indexOf(qNum) >= 0) return true;
+          }
+          return false;
+        });
+      }
+      const cntEl = document.getElementById("resv-search-count");
+      if(cntEl) cntEl.textContent = (q || from || to) ? (rows.length + " / " + before + "건") : "";
+    }
     if(resvListFilter === "sale") rows = rows.filter(r=> r.kind !== "buy");
     if(resvListFilter === "buy")  rows = rows.filter(r=> r.kind === "buy");
     // 배정 진행 상태로도 걸러줍니다.
