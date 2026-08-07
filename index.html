@@ -88,7 +88,7 @@
   .pending-box.banned h2{ color:var(--danger); }
   .group-label{ padding:12px 24px 4px 24px; font-size:11px; font-weight:700; color:var(--gray); letter-spacing:0.5px; background:#eaeaea; }
   .tabbar{ display:flex; background:#fff; border-bottom:1px solid var(--line); padding:0 24px; flex-wrap:wrap; }
-  .tab-btn{ padding:9px 18px 9px 22px; font-size:12.5px; font-weight:400; color:var(--gray); background:none; border:none; cursor:pointer; border-bottom:3px solid transparent; }
+  .tab-btn{ padding:9px 16px; font-size:12.5px; font-weight:400; color:var(--gray); background:none; border:none; cursor:pointer; border-bottom:3px solid transparent; }
   .tab-btn.active{ color:var(--navy); font-weight:700; background:none; border-left:3px solid var(--navy); }
   .tab-btn:hover{ color:var(--navy); }
   .app-body{ display:flex; align-items:flex-start; }
@@ -335,7 +335,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-07 v378</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-07 v379</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -25439,7 +25439,6 @@
       setMenu("tabbtn-company", showCompany || showAnyWorkMenu);
       // 저장된 메뉴 순서를 적용합니다.
       if(typeof applyMenuOrder === "function") applyMenuOrder();
-      if(typeof applyMenuLayout === "function") applyMenuLayout();
       if(typeof syncTopbarHeight === "function") setTimeout(syncTopbarHeight, 80);
 
       const hasAnyAdmin = (showSite||showTeam||showInvAdmin||showUsers||showSettlement||showLogs);
@@ -25476,6 +25475,10 @@
         document.getElementById("issuer-contact-input").value = currentSettings.issuerContact || "";
         document.getElementById("issuer-account-input").value = currentSettings.issuerAccount || "";
       }
+
+      // 권한에 따라 메뉴를 보이고 감춘 뒤에 배치를 적용합니다.
+      //  (순서가 반대면 권한 처리가 옛 메뉴를 다시 보이게 만듭니다)
+      if(typeof applyMenuLayout === "function") applyMenuLayout();
 
       // 새로고침이면 보던 화면으로, 새로 로그인했으면 설정한 시작 화면으로 갑니다.
       const canOpen = (id)=>{
