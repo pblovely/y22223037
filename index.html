@@ -94,7 +94,7 @@
   .app-body{ display:flex; align-items:flex-start; }
   .sidebar{ width:190px; flex-shrink:0; background:#fff; border-right:1px solid var(--line);
     position:sticky; top:var(--topbar-h); align-self:flex-start; max-height:calc(100vh - var(--topbar-h)); overflow-y:auto; z-index:800; }
-  .sidebar-section-label{ padding:14px 16px 6px 16px; font-size:14px; font-weight:700; color:var(--navy); letter-spacing:0; }
+  .sidebar-section-label{ padding:14px 16px 6px 19px; font-size:14px; font-weight:700; color:var(--navy); letter-spacing:0; }
   .sidebar .tab-btn{ display:block; width:100%; text-align:left; padding:9px 16px; border-bottom:none; border-left:3px solid transparent; }
   .sidebar .tab-btn.active{ border-bottom-color:transparent; border-left-color:var(--navy); background:#fff; }
   #admin-toggle-btn{ display:block; width:100%; text-align:left; padding:14px 16px 6px; font-size:14px; font-weight:700; color:var(--navy); background:none; border:none; cursor:pointer; border-top:1px solid var(--line); margin-top:8px; }
@@ -342,7 +342,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-07 v384</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-07 v386</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -18536,12 +18536,13 @@
       + '되돌리시려면 <b>재고 수정</b>에서 상태·판매처·판매가를 맞추시고, 진짜 취소하실 거면 <b>판매 관리에서 취소</b>해주세요.</p>'
       + '<div style="overflow-x:auto;"><table class="data-table" style="width:auto;">'
       + '<thead><tr><th>일련번호</th><th>지금 상태</th><th>판매처</th><th>요청일</th><th></th></tr></thead><tbody>'
-      + rows.slice(0, 200).map(r=>'<tr>'
+      + rows.slice(0, 200).map((r, i)=>'<tr>'
           + '<td><b>' + comboEsc(r.serial) + '</b></td>'
           + '<td style="color:var(--danger);">' + comboEsc(r.status) + '</td>'
           + '<td>' + comboEsc(r.dest) + '</td>'
           + '<td>' + comboEsc(r.date) + '</td>'
-          + '<td><button class="btn small secondary" style="width:auto;" onclick="goSaleFromFind(\''
+          + '<td style="white-space:nowrap;"><button class="btn small" style="width:auto;" data-dcfix="' + i + '">판매로 맞추기</button>'
+          + '<button class="btn small secondary" style="width:auto;" onclick="goSaleFromFind(\''
             + comboEsc(r.batchId) + '\')">판매 관리에서 보기</button></td></tr>').join("")
       + '</tbody></table></div>'
       + (rows.length > 200 ? '<div style="color:var(--gray);font-size:11.5px;margin-top:6px;">200대까지만 보여드립니다.</div>' : '');
@@ -18549,7 +18550,72 @@
     if(old) old.remove();
     box.id = "dc-mismatch-box";
     el.appendChild(box);
+    box.querySelectorAll("[data-dcfix]").forEach(b=>{
+      b.onclick = ()=> fixOneMismatch(Number(b.dataset.dcfix));
+    });
+    const allBtn = document.createElement("button");
+    allBtn.className = "btn small";
+    allBtn.style.cssText = "width:auto;margin-top:10px;";
+    allBtn.textContent = "위 " + rows.length + "대 한 번에 맞추기";
+    allBtn.onclick = ()=> fixAllMismatch();
+    box.appendChild(allBtn);
     try{ box.scrollIntoView({ block:"center", behavior:"smooth" }); }catch(e){}
+  };
+
+  // 판매요청의 값을 재고에 그대로 넣어 맞춥니다.
+  async function applyMismatchFix(r){
+    await updateDoc(doc(db,"inventoryItems", r.itemId), {
+      status: "판매",
+      destination: r.dest === "-" ? "" : r.dest,
+      salePrice: r.salePrice,
+      saleDiscountAmt: r.saleDiscountAmt,
+      saleDiscount: r.saleDiscountPct,
+      outDate: r.outDate || "",
+      saleRequestId: r.srId
+    });
+    await logItem(r.itemId, r.serial, "status",
+      "데이터 점검에서 판매요청에 맞춤 · " + (r.dest||"-")
+      + (r.salePrice != null ? " · 판매가 " + Number(r.salePrice).toLocaleString() : ""), {});
+  }
+
+  window.fixOneMismatch = async function(i){
+    const rows = window.__dcMismatch || [];
+    const r = rows[i];
+    if(!r) return;
+    if(!hasPerm(currentUserPerms, "bulkEdit") && !hasPerm(currentUserPerms, "menuInvWork")){
+      alert("권한이 없습니다."); return;
+    }
+    if(!confirm("이 재고를 판매요청에 맞춰 <판매>로 바꿉니다.\n\n"
+      + "  일련번호 " + r.serial + "\n  판매처 " + r.dest + "\n"
+      + (r.salePrice != null ? "  판매가 " + Number(r.salePrice).toLocaleString() + "\n" : "")
+      + (r.outDate ? "  출고일 " + r.outDate + "\n" : "")
+      + "\n진행할까요?")) return;
+    try{ await applyMismatchFix(r); }
+    catch(e){ alert("바꾸지 못했습니다.\n" + ((e&&e.message)?e.message:String(e))); return; }
+    logAction("데이터 점검 — 판매로 맞춤", r.serial + " / " + r.dest);
+    alert("맞췄습니다.");
+    clearCache("inventory"); clearDashCache();
+    runDataCheck();
+  };
+
+  window.fixAllMismatch = async function(){
+    const rows = window.__dcMismatch || [];
+    if(rows.length === 0) return;
+    if(!hasPerm(currentUserPerms, "bulkEdit") && !hasPerm(currentUserPerms, "menuInvWork")){
+      alert("권한이 없습니다."); return;
+    }
+    if(!confirm(rows.length + "대를 판매요청에 맞춰 <판매>로 바꿉니다.\n\n"
+      + rows.slice(0,6).map(r=> "· " + r.serial + " → " + r.dest).join("\n")
+      + (rows.length > 6 ? "\n... 외 " + (rows.length-6) + "대" : "")
+      + "\n\n되돌릴 수 없습니다. 진행할까요?")) return;
+    let done = 0, fail = 0;
+    for(const r of rows){
+      try{ await applyMismatchFix(r); done++; }catch(e){ fail++; }
+    }
+    logAction("데이터 점검 — 판매로 한 번에 맞춤", done + "대 성공" + (fail ? " / " + fail + "대 실패" : ""));
+    alert(done + "대를 맞췄습니다." + (fail ? "\n" + fail + "대는 실패했습니다." : ""));
+    clearCache("inventory"); clearDashCache();
+    runDataCheck();
   };
 
   window.runDataCheck = async function(){
@@ -18619,9 +18685,13 @@
           const it = items[iid];
           if(!it || it.deleted === true) return;
           if(it.status !== "판매"){
-            mismatch.push({ srId:d.id, batchId: sr.batchId || d.id,
+            mismatch.push({ srId:d.id, itemId:iid, batchId: sr.batchId || d.id,
               dest: sr.destination || "-", date: sr.requestDate || "-",
-              serial: it.serialNumber || "-", status: it.status || "-" });
+              serial: it.serialNumber || "-", status: it.status || "-",
+              salePrice: (sr.salePrice != null) ? Number(sr.salePrice) : null,
+              saleDiscountAmt: (sr.saleDiscountAmt != null) ? Number(sr.saleDiscountAmt) : null,
+              saleDiscountPct: (sr.saleDiscountPct != null) ? Number(sr.saleDiscountPct) : null,
+              outDate: sr.outDate || sr.requestDate || "" });
           }
         });
       });
@@ -22214,8 +22284,8 @@
       const mkTitle = (text, onClick, openText)=>{
         const el = document.createElement(onClick ? "button" : "div");
         el.style.cssText = barStyle
-          ? "display:block;width:100%;text-align:left;padding:14px 16px 6px;font-size:14px;font-weight:700;color:var(--navy);background:none;border:none;border-top:1px solid var(--line);" + (onClick ? "cursor:pointer;" : "")
-          : "display:block;width:100%;text-align:left;padding:14px 16px 6px;font-size:14px;font-weight:700;color:var(--navy);background:none;border:none;" + (onClick ? "cursor:pointer;" : "");
+          ? "display:block;width:100%;text-align:left;padding:14px 16px 6px 19px;font-size:14px;font-weight:700;color:var(--navy);background:none;border:none;border-top:1px solid var(--line);" + (onClick ? "cursor:pointer;" : "")
+          : "display:block;width:100%;text-align:left;padding:14px 16px 6px 19px;font-size:14px;font-weight:700;color:var(--navy);background:none;border:none;" + (onClick ? "cursor:pointer;" : "");
         el.textContent = text;
         if(onClick) el.onclick = onClick;
         return el;
@@ -22229,7 +22299,7 @@
           b.style.setProperty("font-size", "14px", "important");
           b.style.setProperty("font-weight", "700", "important");
           b.style.setProperty("color", "var(--navy)", "important");
-          b.style.setProperty("padding", "14px 16px 6px", "important");
+          b.style.setProperty("padding", "14px 16px 6px 16px", "important");
           if(barStyle) b.style.setProperty("border-top", "1px solid var(--line)", "important");
           wrap.appendChild(b);
         }
