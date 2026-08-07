@@ -335,7 +335,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-07 v369</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-07 v370</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -586,6 +586,11 @@
         <div id="sale-col-picker" style="display:none;border:1px solid var(--navy);background:#fff;padding:10px 12px;margin-bottom:8px;"></div>
         <div id="sale-orphan-notice" style="display:none;font-size:12.5px;padding:9px 11px;margin-bottom:8px;border:1px solid var(--danger);background:#fdecea;line-height:1.7;"></div>
         <div id="sale-model-notice" style="display:none;font-size:12.5px;padding:9px 11px;margin-bottom:8px;border:1px solid var(--danger);background:#fdecea;line-height:1.7;"></div>
+        <div class="tbar-row" style="display:flex;gap:0;flex-wrap:wrap;align-items:center;margin-bottom:8px;">
+          <input type="text" id="sale-search" placeholder="판매처·통신사·모델·일련번호·금액으로 찾기" oninput="loadSaleRequestList()" style="width:300px;height:28px;border:1px solid var(--line);padding:0 8px;font-size:12.5px;box-sizing:border-box;">
+          <button class="btn small secondary" style="width:auto;margin-left:-1px;" onclick="clearSaleSearch()">비우기</button>
+          <span id="sale-search-count" style="font-size:11.5px;color:var(--gray);margin-left:10px;"></span>
+        </div>
         <div id="sale-request-list"></div>
       </div>
     </div>
@@ -15294,12 +15299,23 @@
         }else{
           // 지금 묶여 있지 않으면, 예전에 취소된 판매요청을 찾아봅니다.
           //  (취소하면 재고의 연결이 끊어져서 그냥은 안 보입니다)
-          let past = [];
+          let past = [], pastErr = "";
           try{
             const ps = await getDocs(query(collection(db,"saleRequests"),
               where("matchedItemIds","array-contains", it.id)));
             ps.forEach(d=> past.push({ id:d.id, ...d.data() }));
-          }catch(e){}
+          }catch(e){ pastErr = (e && e.message) ? e.message : String(e); }
+          // 그래도 못 찾으면 전부 훑어봅니다. (취소하면서 연결이 지워진 경우)
+          if(past.length === 0){
+            try{
+              const all = await getDocs(collection(db,"saleRequests"));
+              all.forEach(d=>{
+                const v = d.data();
+                const ids = Array.isArray(v.matchedItemIds) ? v.matchedItemIds : [];
+                if(ids.includes(it.id)) past.push({ id:d.id, ...v });
+              });
+            }catch(e){ pastErr = pastErr || ((e && e.message) ? e.message : String(e)); }
+          }
           if(past.length){
             html += sec("예전 판매요청 (취소됨)",
               past.map(sr=>{
@@ -15316,7 +15332,12 @@
               }).join('<hr style="border:none;border-top:1px solid var(--line);margin:8px 0;">'),
               "var(--danger)");
           }else{
-            html += sec("판매요청", '<span style="color:var(--gray);">묶여 있는 판매요청이 없습니다.</span>');
+            html += sec("판매요청",
+              '<span style="color:var(--gray);">묶여 있는 판매요청이 없습니다.</span>'
+              + (pastErr ? '<br><span style="color:var(--danger);font-size:11.5px;">예전 기록을 찾다가 문제가 생겼습니다: '
+                  + comboEsc(pastErr) + '</span>' : '')
+              + '<div style="margin-top:6px;font-size:11.5px;color:var(--gray);">'
+              + '취소한 건을 되돌리시려면 <b>판매 관리 → 취소 탭</b>에서 찾아 <b>되돌리기</b>를 눌러주세요.</div>');
           }
         }
 
@@ -19468,6 +19489,10 @@
   }
 
   let saleListFilter = "ing";   // ing | done | cancel | all  (기본: 진행중만)
+  window.clearSaleSearch = function(){
+    const e = document.getElementById("sale-search"); if(e) e.value = "";
+    loadSaleRequestList();
+  };
   window.setSaleFilter = function(f){
     saleListFilter = f;
     ["ing","done","waiting","cancel","all"].forEach(k=>{
@@ -19615,8 +19640,40 @@
         (matchWait ? (waitRows.length ? ' · ' : '') + '<span style="color:#b8860b;font-weight:700;">매칭대기 ' + matchWait + '건</span>' : '');
     }
 
+    // 검색어 — 판매처·통신사·모델·금액·요청일, 그리고 일련번호로도 찾습니다.
+    const sq = String((document.getElementById("sale-search")||{}).value || "").trim().toLowerCase();
+    const sqNum = sq.replace(/[^0-9]/g, "");
+    let snIds = null;              // 일련번호로 찾은 재고 id
+    if(sqNum.length >= 4){
+      snIds = new Set();
+      try{
+        const ss = await getDocs(query(collection(db,"inventoryItems"),
+          where("serialNumber","==", sqNum)));
+        ss.forEach(d=> snIds.add(d.id));
+      }catch(e){}
+    }
+
     // 보기 필터 적용 — 최종완료는 기본으로 숨깁니다.
+    const beforeCnt = saleRows.length;
     const visibleSale = saleRows.filter(r=>{
+      // 검색어
+      if(sq){
+        const hay = [r.b.destination, r.b.carrier, r.b.requestDate, r.b.cancelReason]
+          .concat((r.lines||[]).map(l=> docModelLabel(l)))
+          .concat((r.lines||[]).map(l=> l.systemColor || l.manufacturerColor || ""))
+          .map(v=> String(v||"").toLowerCase()).join(" ");
+        let hit = hay.indexOf(sq) >= 0;
+        if(!hit && sqNum.length >= 3){
+          const amt = (r.lines||[]).reduce((n,l)=> n + (Number(l.salePrice)||0) * (Number(l.quantity)||0), 0);
+          if(String(amt).indexOf(sqNum) >= 0) hit = true;
+        }
+        // 일련번호로 찾은 재고가 이 요청에 묶여 있는지
+        if(!hit && snIds && snIds.size){
+          const ids = (r.lines||[]).flatMap(l=> l.matchedItemIds || []);
+          if(ids.some(id=> snIds.has(id))) hit = true;
+        }
+        if(!hit) return false;
+      }
       const cancelled = r.b.status === "취소";
       const fin = !cancelled && isSaleFinal(r.b, r.lines);
       if(saleListFilter === "ing")     return !cancelled && !fin;
@@ -19647,6 +19704,8 @@
         if(st.size !== "all") st.page = Math.floor(idx / st.size) + 1;
       }
     }
+    { const c = document.getElementById("sale-search-count");
+      if(c) c.textContent = sq ? (visibleSale.length + " / " + beforeCnt + "건") : ""; }
     const { pageItems: salePage } = paginateSlice(visibleSale, "saleRequests");
     const rows = salePage.map(r=>{
       const lines = r.lines || [];
