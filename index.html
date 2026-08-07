@@ -335,7 +335,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-07 v376</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-07 v377</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -22137,17 +22137,42 @@
         if(onClick) el.onclick = onClick;
         return el;
       };
+      // 그룹에 메뉴가 하나뿐이면, 그 메뉴를 상위 버튼처럼 크게 보여줍니다.
+      //  (공지사항·대시보드처럼 하위 없이 바로 여는 화면)
+      const only = (g.items||[]).filter(id=> document.getElementById(id));
+      if(only.length === 1){
+        const b = document.getElementById(only[0]);
+        if(b){
+          b.style.setProperty("font-size", "14px", "important");
+          b.style.setProperty("font-weight", "700", "important");
+          b.style.setProperty("color", "var(--navy)", "important");
+          b.style.setProperty("padding", "14px 16px 6px", "important");
+          if(barStyle) b.style.setProperty("border-top", "1px solid var(--line)", "important");
+          wrap.appendChild(b);
+        }
+        return;
+      }
       if(g.collapsible){
         const box = document.createElement("div");
         box.style.display = "none";
         const btn = mkTitle(g.name, ()=>{
           box.style.display = (box.style.display === "none") ? "block" : "none";
         }, "");
-        (g.items||[]).forEach(id=>{ const b = document.getElementById(id); if(b) box.appendChild(b); });
+        (g.items||[]).forEach(id=>{
+          const b = document.getElementById(id);
+          if(!b) return;
+          ["font-size","font-weight","color","padding","border-top"].forEach(k=> b.style.removeProperty(k));
+          box.appendChild(b);
+        });
         wrap.appendChild(btn); wrap.appendChild(box);
       }else{
         wrap.appendChild(mkTitle(g.name, null, ""));
-        (g.items||[]).forEach(id=>{ const b = document.getElementById(id); if(b) wrap.appendChild(b); });
+        (g.items||[]).forEach(id=>{
+          const b = document.getElementById(id);
+          if(!b) return;
+          ["font-size","font-weight","color","padding","border-top"].forEach(k=> b.style.removeProperty(k));
+          wrap.appendChild(b);
+        });
       }
     });
     const old = document.getElementById("menu-layout-wrap");
