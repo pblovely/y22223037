@@ -355,7 +355,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-08 v401</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-08 v402</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -20409,7 +20409,8 @@
     // 필터 버튼 안에 건수를 넣습니다.
     const sCancel = saleRows.filter(r=> r.b.status === "취소").length;
     const sDone   = saleRows.filter(r=> r.b.status !== "취소" && isSaleFinal(r.b, r.lines)).length;
-    const sIng    = saleRows.length - sCancel - sDone;
+    const sIng    = saleRows.filter(r=> r.b.status !== "취소" && !isSaleFinal(r.b, r.lines)
+                                        && !r.b.depositRequestId).length;
     const setSaleBtn = (id, label, n)=>{
       const el = document.getElementById(id);
       if(el) el.innerHTML = label + ' <span style="opacity:0.65;font-weight:400;">' + n + '</span>';
@@ -20465,7 +20466,8 @@
       }
       const cancelled = r.b.status === "취소";
       const fin = !cancelled && isSaleFinal(r.b, r.lines);
-      if(saleListFilter === "ing")     return !cancelled && !fin;
+      // 「진행」 — 입금요청을 이미 만든 건은 「입금확인중」에서만 봅니다.
+      if(saleListFilter === "ing")     return !cancelled && !fin && !r.b.depositRequestId;
       if(saleListFilter === "done")    return fin;
       if(saleListFilter === "waiting") return !cancelled && !!r.b.depositRequestId && r.b.depositReceived !== true;
       if(saleListFilter === "cancel")  return cancelled;
