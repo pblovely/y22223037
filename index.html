@@ -355,7 +355,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-08 v400</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-08 v401</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -11231,7 +11231,8 @@
       if(reqBoardFilter === "all") return true;
       if(reqBoardFilter === "hold") return r.onHold;
       if(reqBoardFilter === "done") return r.finished;
-      return !r.finished;
+      // 「해야 할 일」 — 보류로 빼둔 건은 「보류」에서만 봅니다.
+      return !r.finished && !r.onHold;
     };
     const condOk = (r)=>{
       if(coPick && String(r.who||"").trim() !== coPick) return false;
