@@ -320,7 +320,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-07 v358</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-07 v359</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -1064,6 +1064,15 @@
         <div id="issuer-msg" style="font-size:12px;color:var(--navy);display:none;margin-top:8px;">저장되었습니다.</div>
       </div>
       <div class="card">
+        <h3>메뉴 배치 <span class="info-tip" title="왼쪽 메뉴를 그룹으로 묶고 순서를 정합니다. 그룹은 직접 만들 수 있고, 접기 가능으로 두면 눌러서 펼치고 닫습니다. 저장하면 모두에게 같이 적용됩니다.">ⓘ</span></h3>
+        <p class="desc">왼쪽 메뉴를 <b>그룹으로 묶고 순서를 정합니다.</b> 그룹은 직접 만드실 수 있습니다.<br>
+          메뉴는 <b>끌어서 옮기거나</b> ⇈ ▲ ▼ ⇊ ◀ ▶ 로 옮깁니다. 저장하면 모두에게 같이 적용됩니다.</p>
+        <span class="btn-row">
+          <button class="btn small" style="width:auto;" onclick="openMenuLayout()">메뉴 배치 열기</button>
+          <button class="btn small secondary" style="width:auto;" onclick="resetMenuLayout()">처음 상태로</button>
+        </span>
+      </div>
+      <div class="card">
         <h3>입출금 계좌 <span class="info-tip" title="입출금 내역을 등록할 때 고를 수 있는 계좌 별칭입니다. 은행·계좌번호를 다 적을 필요 없이 알아보기 쉬운 이름이면 됩니다.">ⓘ</span></h3>
         <p class="desc">입출금 내역을 등록할 때 <b>어느 계좌로 들어오고 나갔는지</b> 고를 수 있습니다. 하나씩 추가하세요. (예: 우리은행 운영)</p>
         <div class="inline-form">
@@ -1665,6 +1674,25 @@
         <span class="btn-row">
           <button class="btn small" style="width:auto;" onclick="submitReconCorp()">저장</button>
           <button class="btn small secondary" style="width:auto;" onclick="closeReconCorp()">닫기</button>
+        </span>
+      </div>
+    </div>
+
+    <!-- 메뉴 배치 -->
+    <div id="menulayout-overlay" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.55);z-index:1120;align-items:center;justify-content:center;">
+      <div style="background:#fff;border:2px solid var(--navy);max-width:620px;width:96%;max-height:92vh;overflow-y:auto;padding:22px;position:relative;">
+        <button onclick="closeMenuLayout()" style="position:absolute;top:12px;right:12px;background:none;border:1px solid var(--navy);width:26px;height:26px;cursor:pointer;font-size:13px;">✕</button>
+        <h3 style="margin-top:0;margin-bottom:4px;">메뉴 배치</h3>
+        <p class="desc" style="margin-top:0;">메뉴를 <b>끌어서</b> 원하는 자리로 옮기실 수 있습니다.
+          <b>⇈ ⇊</b> 는 맨 위·맨 아래, <b>▲ ▼</b> 는 한 칸, <b>◀ ▶</b> 는 다른 그룹으로 옮깁니다.<br>
+          <b>접기 가능</b>을 켜면 눌러서 펼치고 닫는 그룹이 됩니다. 메뉴가 하나도 안 보이는 그룹은 화면에 나오지 않습니다.</p>
+        <span class="btn-row" style="margin-bottom:10px;">
+          <button class="btn small secondary" style="width:auto;" onclick="addMenuGroup()">+ 그룹 추가</button>
+        </span>
+        <div id="mlay-body"></div>
+        <span class="btn-row" style="margin-top:10px;">
+          <button class="btn small" style="width:auto;" onclick="saveMenuLayout()">저장</button>
+          <button class="btn small secondary" style="width:auto;" onclick="closeMenuLayout()">닫기</button>
         </span>
       </div>
     </div>
@@ -3140,6 +3168,7 @@
         // 저장해둔 메뉴 순서를 여기서도 적용합니다.
         // 설정 읽기가 메뉴 그리기보다 늦게 끝나면 순서가 반영되지 않아 원래대로 보였습니다.
         if(typeof applyMenuOrder === "function") applyMenuOrder();
+        if(typeof applyMenuLayout === "function") applyMenuLayout();
       }
     }catch(err){}
   }
@@ -21501,6 +21530,280 @@
     }catch(e){ alert("순서 저장에 실패했습니다."); }
   }
 
+  // ---------- 메뉴 배치 ----------
+  //  그룹을 직접 만들고, 메뉴를 그룹 사이로 옮기고, 순서를 정합니다.
+  //  저장한 배치는 모두에게 같이 적용됩니다.
+  //  menuLayout = { groups:[{ id, name, collapsible, items:[탭버튼 id...] }] }
+  let menuLayoutDraft = null;
+
+  // 화면에 있는 모든 메뉴 버튼을 모읍니다. (id → 이름)
+  function allMenuButtons(){
+    const out = [];
+    document.querySelectorAll("#app-sidebar .tab-btn[data-tab]").forEach(b=>{
+      const nm = (b.querySelector(".tab-label-text") || b).textContent.trim();
+      if(b.id && nm) out.push({ id:b.id, name:nm });
+    });
+    return out;
+  }
+  // 지금 화면 그대로를 배치로 읽어옵니다. (저장된 게 없을 때 씁니다)
+  function currentLayoutFromDom(){
+    const groups = [];
+    const top = { id:"g-work", name:"작업 메뉴", collapsible:false, items:[] };
+    document.querySelectorAll("#work-group .tab-btn[data-tab]").forEach(b=>{ if(b.id) top.items.push(b.id); });
+    groups.push(top);
+    const adm = { id:"g-admin", name:"관리자", collapsible:true, items:[] };
+    document.querySelectorAll("#admin-group .tab-btn[data-tab]").forEach(b=>{ if(b.id) adm.items.push(b.id); });
+    groups.push(adm);
+    return { groups };
+  }
+  function getMenuLayout(){
+    const L = currentSettings && currentSettings.menuLayout;
+    if(L && Array.isArray(L.groups) && L.groups.length) return JSON.parse(JSON.stringify(L));
+    return currentLayoutFromDom();
+  }
+
+  window.openMenuLayout = function(){
+    if(!hasPerm(currentUserPerms, "siteSettings")){ alert("권한이 없습니다."); return; }
+    menuLayoutDraft = getMenuLayout();
+    // 배치에 없는 새 메뉴는 마지막 그룹에 붙입니다.
+    const all = allMenuButtons();
+    const placed = new Set();
+    menuLayoutDraft.groups.forEach(g=> (g.items||[]).forEach(id=> placed.add(id)));
+    const missing = all.filter(x=> !placed.has(x.id)).map(x=> x.id);
+    if(missing.length){
+      const last = menuLayoutDraft.groups[menuLayoutDraft.groups.length-1];
+      last.items = (last.items||[]).concat(missing);
+    }
+    // 화면에 없는 옛 메뉴는 뺍니다.
+    const alive = new Set(all.map(x=> x.id));
+    menuLayoutDraft.groups.forEach(g=> g.items = (g.items||[]).filter(id=> alive.has(id)));
+    renderMenuLayout();
+    document.getElementById("menulayout-overlay").style.display = "flex";
+  };
+  window.closeMenuLayout = function(){
+    document.getElementById("menulayout-overlay").style.display = "none";
+    menuLayoutDraft = null;
+  };
+
+  window.renderMenuLayout = function(){
+    if(!menuLayoutDraft) return;
+    const box = document.getElementById("mlay-body");
+    const names = {};
+    allMenuButtons().forEach(x=> names[x.id] = x.name);
+    const G = menuLayoutDraft.groups;
+
+    box.innerHTML = G.map((g, gi)=>
+      '<div style="border:1px solid var(--navy);margin-bottom:10px;">'
+      + '<div style="background:#f4f7fb;padding:7px 10px;display:flex;align-items:center;gap:6px;flex-wrap:wrap;">'
+      + '<input type="text" value="'+comboEsc(g.name||"")+'" data-mg-name="'+gi+'" style="width:150px;height:26px;border:1px solid var(--line);padding:0 7px;font-size:12.5px;font-weight:700;">'
+      + '<label style="font-size:11.5px;"><input type="checkbox" data-mg-col="'+gi+'"'+(g.collapsible?' checked':'')+'> 접기 가능</label>'
+      + '<span style="margin-left:auto;">'
+      + '<button class="btn small secondary" style="width:auto;" data-mg-up="'+gi+'">▲</button>'
+      + '<button class="btn small secondary" style="width:auto;margin-left:3px;" data-mg-dn="'+gi+'">▼</button>'
+      + '<button class="btn small danger" style="width:auto;margin-left:6px;" data-mg-del="'+gi+'">그룹 삭제</button>'
+      + '</span></div>'
+      + '<div class="mlay-drop" data-mg-drop="'+gi+'" style="padding:6px;min-height:34px;">'
+      + ((g.items||[]).length === 0
+          ? '<div style="color:var(--gray);font-size:11.5px;padding:6px;">비어 있습니다. 다른 그룹에서 끌어오세요.</div>'
+          : (g.items||[]).map((id, ii)=>
+        '<div class="mlay-item" draggable="true" data-mi="'+gi+'|'+ii+'" '
+        + 'style="display:flex;align-items:center;gap:4px;border:1px solid var(--line);background:#fff;padding:5px 8px;margin-bottom:4px;font-size:12.5px;cursor:grab;">'
+        + '<span style="color:var(--gray);">⠿</span>'
+        + '<span style="flex:1;">'+comboEsc(names[id]||id)+'</span>'
+        + '<button class="btn small secondary" style="width:auto;padding:0 6px;" data-mi-top="'+gi+'|'+ii+'" title="맨 위로">⇈</button>'
+        + '<button class="btn small secondary" style="width:auto;padding:0 6px;" data-mi-up="'+gi+'|'+ii+'" title="한 칸 위">▲</button>'
+        + '<button class="btn small secondary" style="width:auto;padding:0 6px;" data-mi-dn="'+gi+'|'+ii+'" title="한 칸 아래">▼</button>'
+        + '<button class="btn small secondary" style="width:auto;padding:0 6px;" data-mi-bot="'+gi+'|'+ii+'" title="맨 아래로">⇊</button>'
+        + (gi > 0 ? '<button class="btn small secondary" style="width:auto;padding:0 6px;" data-mi-gu="'+gi+'|'+ii+'" title="위 그룹으로">◀</button>' : '')
+        + (gi < G.length-1 ? '<button class="btn small secondary" style="width:auto;padding:0 6px;" data-mi-gd="'+gi+'|'+ii+'" title="아래 그룹으로">▶</button>' : '')
+        + '</div>').join(""))
+      + '</div></div>').join("");
+
+    // 이름·접기
+    box.querySelectorAll("[data-mg-name]").forEach(el=>{
+      el.oninput = ()=>{ G[Number(el.dataset.mgName)].name = el.value; };
+    });
+    box.querySelectorAll("[data-mg-col]").forEach(el=>{
+      el.onchange = ()=>{ G[Number(el.dataset.mgCol)].collapsible = el.checked; };
+    });
+    // 그룹 순서·삭제
+    box.querySelectorAll("[data-mg-up]").forEach(b=> b.onclick = ()=> moveGroup(Number(b.dataset.mgUp), -1));
+    box.querySelectorAll("[data-mg-dn]").forEach(b=> b.onclick = ()=> moveGroup(Number(b.dataset.mgDn), +1));
+    box.querySelectorAll("[data-mg-del]").forEach(b=> b.onclick = ()=> delGroup(Number(b.dataset.mgDel)));
+    // 메뉴 옮기기
+    const pick = (v)=> v.split("|").map(Number);
+    box.querySelectorAll("[data-mi-top]").forEach(b=> b.onclick = ()=>{ const [g,i]=pick(b.dataset.miTop); moveItem(g,i,0); });
+    box.querySelectorAll("[data-mi-up]").forEach(b=> b.onclick = ()=>{ const [g,i]=pick(b.dataset.miUp); moveItem(g,i,i-1); });
+    box.querySelectorAll("[data-mi-dn]").forEach(b=> b.onclick = ()=>{ const [g,i]=pick(b.dataset.miDn); moveItem(g,i,i+1); });
+    box.querySelectorAll("[data-mi-bot]").forEach(b=> b.onclick = ()=>{ const [g,i]=pick(b.dataset.miBot); moveItem(g,i,999); });
+    box.querySelectorAll("[data-mi-gu]").forEach(b=> b.onclick = ()=>{ const [g,i]=pick(b.dataset.miGu); moveToGroup(g,i,g-1); });
+    box.querySelectorAll("[data-mi-gd]").forEach(b=> b.onclick = ()=>{ const [g,i]=pick(b.dataset.miGd); moveToGroup(g,i,g+1); });
+
+    // 끌어서 옮기기
+    let dragFrom = null;
+    box.querySelectorAll(".mlay-item").forEach(el=>{
+      el.ondragstart = (e)=>{ dragFrom = el.dataset.mi; el.style.opacity = "0.4";
+        try{ e.dataTransfer.setData("text/plain", el.dataset.mi); }catch(err){} };
+      el.ondragend = ()=>{ el.style.opacity = ""; };
+      el.ondragover = (e)=>{ e.preventDefault(); el.style.borderTop = "2px solid var(--navy)"; };
+      el.ondragleave = ()=>{ el.style.borderTop = "1px solid var(--line)"; };
+      el.ondrop = (e)=>{
+        e.preventDefault(); e.stopPropagation();
+        el.style.borderTop = "1px solid var(--line)";
+        if(!dragFrom) return;
+        const [fg, fi] = dragFrom.split("|").map(Number);
+        const [tg, ti] = el.dataset.mi.split("|").map(Number);
+        dropItem(fg, fi, tg, ti);
+      };
+    });
+    box.querySelectorAll(".mlay-drop").forEach(el=>{
+      el.ondragover = (e)=>{ e.preventDefault(); el.style.background = "#f4f7fb"; };
+      el.ondragleave = ()=>{ el.style.background = ""; };
+      el.ondrop = (e)=>{
+        e.preventDefault();
+        el.style.background = "";
+        if(!dragFrom) return;
+        const [fg, fi] = dragFrom.split("|").map(Number);
+        const tg = Number(el.dataset.mgDrop);
+        dropItem(fg, fi, tg, 999);
+      };
+    });
+  };
+
+  function moveGroup(gi, d){
+    const G = menuLayoutDraft.groups;
+    const to = gi + d;
+    if(to < 0 || to >= G.length) return;
+    const [x] = G.splice(gi, 1);
+    G.splice(to, 0, x);
+    renderMenuLayout();
+  }
+  function delGroup(gi){
+    const G = menuLayoutDraft.groups;
+    if(G.length <= 1){ alert("그룹이 하나뿐이라 지울 수 없습니다."); return; }
+    const g = G[gi];
+    if((g.items||[]).length > 0){
+      if(!confirm("이 그룹에 메뉴 " + g.items.length + "개가 있습니다.\n\n지우면 그 메뉴들은 앞 그룹으로 옮겨집니다.\n진행할까요?")) return;
+      const to = (gi > 0) ? gi-1 : 1;
+      G[to].items = (G[to].items||[]).concat(g.items);
+    }
+    G.splice(gi, 1);
+    renderMenuLayout();
+  }
+  function moveItem(gi, from, to){
+    const items = menuLayoutDraft.groups[gi].items;
+    if(to < 0) to = 0;
+    if(to >= items.length) to = items.length - 1;
+    if(from === to) return;
+    const [x] = items.splice(from, 1);
+    items.splice(to, 0, x);
+    renderMenuLayout();
+  }
+  function moveToGroup(gi, ii, tg){
+    const G = menuLayoutDraft.groups;
+    if(tg < 0 || tg >= G.length) return;
+    const [x] = G[gi].items.splice(ii, 1);
+    G[tg].items = (G[tg].items||[]).concat([x]);
+    renderMenuLayout();
+  }
+  function dropItem(fg, fi, tg, ti){
+    const G = menuLayoutDraft.groups;
+    const [x] = G[fg].items.splice(fi, 1);
+    if(!G[tg].items) G[tg].items = [];
+    let pos = (ti >= G[tg].items.length) ? G[tg].items.length : ti;
+    if(fg === tg && fi < pos) pos = Math.max(0, pos);
+    G[tg].items.splice(pos, 0, x);
+    renderMenuLayout();
+  }
+
+  window.addMenuGroup = function(){
+    if(!menuLayoutDraft) return;
+    const nm = prompt("새 그룹 이름을 넣어주세요.", "새 그룹");
+    if(nm === null) return;
+    menuLayoutDraft.groups.push({
+      id: "g-" + Date.now(), name: String(nm).trim() || "새 그룹",
+      collapsible: true, items: []
+    });
+    renderMenuLayout();
+  };
+
+  window.saveMenuLayout = async function(){
+    if(!menuLayoutDraft) return;
+    // 이름이 빈 그룹은 막습니다.
+    for(const g of menuLayoutDraft.groups){
+      if(!String(g.name||"").trim()){ alert("그룹 이름을 모두 넣어주세요."); return; }
+    }
+    try{
+      await setDoc(doc(db,"settings","general"), { menuLayout: menuLayoutDraft }, { merge:true });
+      currentSettings.menuLayout = JSON.parse(JSON.stringify(menuLayoutDraft));
+      logAction("메뉴 배치 변경",
+        menuLayoutDraft.groups.map(g=> g.name + "(" + (g.items||[]).length + ")").join(" / "));
+    }catch(e){ alert("저장에 실패했습니다."); return; }
+    closeMenuLayout();
+    alert("저장했습니다. 화면을 새로 불러옵니다.");
+    location.reload();
+  };
+
+  window.resetMenuLayout = async function(){
+    if(!confirm("메뉴 배치를 처음 상태로 되돌립니다.\n\n진행할까요?")) return;
+    try{
+      await setDoc(doc(db,"settings","general"), { menuLayout: null }, { merge:true });
+      currentSettings.menuLayout = null;
+      logAction("메뉴 배치 초기화", "-");
+    }catch(e){ alert("실패했습니다."); return; }
+    alert("되돌렸습니다. 화면을 새로 불러옵니다.");
+    location.reload();
+  };
+
+  // 저장된 배치를 화면에 그립니다. (로그인 뒤 한 번)
+  window.applyMenuLayout = function(){
+    const L = currentSettings && currentSettings.menuLayout;
+    if(!L || !Array.isArray(L.groups) || !L.groups.length) return;
+    const sidebar = document.getElementById("app-sidebar");
+    if(!sidebar) return;
+    const names = {};
+    allMenuButtons().forEach(x=> names[x.id] = x.name);
+
+    // 예전 그룹 껍데기는 감춥니다.
+    const oldWork = document.getElementById("work-group");
+    const oldAdminBtn = document.getElementById("admin-toggle-btn");
+    const oldAdminBox = document.getElementById("admin-group");
+    if(oldWork) oldWork.style.display = "none";
+    if(oldAdminBtn) oldAdminBtn.style.display = "none";
+    if(oldAdminBox) oldAdminBox.style.display = "none";
+
+    // 새 그룹을 만들어 붙입니다.
+    const wrap = document.createElement("div");
+    wrap.id = "menu-layout-wrap";
+    L.groups.forEach((g, gi)=>{
+      const hasAny = (g.items||[]).some(id=>{
+        const b = document.getElementById(id);
+        return b && b.dataset.permHidden !== "1";
+      });
+      if(!hasAny) return;                       // 볼 게 없으면 그룹도 안 보입니다
+      if(g.collapsible){
+        const btn = document.createElement("button");
+        btn.className = "menu-group-btn";
+        btn.textContent = g.name;
+        btn.style.cssText = "display:block;width:100%;text-align:left;padding:9px 16px;font-size:12.5px;font-weight:700;color:var(--navy);background:#eee;border:none;cursor:pointer;border-top:1px solid var(--line);margin-top:8px;";
+        const box = document.createElement("div");
+        box.style.display = "none";
+        btn.onclick = ()=>{ box.style.display = (box.style.display === "none") ? "block" : "none"; };
+        (g.items||[]).forEach(id=>{ const b = document.getElementById(id); if(b) box.appendChild(b); });
+        wrap.appendChild(btn); wrap.appendChild(box);
+      }else{
+        const ttl = document.createElement("div");
+        ttl.className = "sidebar-section-label";
+        ttl.textContent = g.name;
+        wrap.appendChild(ttl);
+        (g.items||[]).forEach(id=>{ const b = document.getElementById(id); if(b) wrap.appendChild(b); });
+      }
+    });
+    const old = document.getElementById("menu-layout-wrap");
+    if(old) old.remove();
+    sidebar.insertBefore(wrap, sidebar.firstChild);
+  };
+
   window.applyMenuOrder = function(){
     const order = (currentSettings && currentSettings.menuOrder) || null;
     if(!order) return;
@@ -24721,6 +25024,7 @@
       setMenu("tabbtn-company", showCompany || showAnyWorkMenu);
       // 저장된 메뉴 순서를 적용합니다.
       if(typeof applyMenuOrder === "function") applyMenuOrder();
+      if(typeof applyMenuLayout === "function") applyMenuLayout();
 
       const hasAnyAdmin = (showSite||showTeam||showInvAdmin||showUsers||showSettlement||showLogs);
       const admBtn = document.getElementById("admin-toggle-btn");
