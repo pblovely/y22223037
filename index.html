@@ -320,9 +320,9 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-05 v345</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-07 v348</span>
       <span id="topbar-username">-</span>
-      <span class="btn-row"><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
+      <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
   </div>
 
@@ -820,6 +820,24 @@
         <span class="btn-row">
           <button class="btn small" style="width:auto;" onclick="runInvPick()">찾기</button>
           <button class="btn small secondary" style="width:auto;" onclick="closeInvPick()">닫기</button>
+        </span>
+      </div>
+    </div>
+
+    <!-- 일련번호 찾기 -->
+    <div id="serialfind-overlay" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.55);z-index:1120;align-items:center;justify-content:center;">
+      <div style="background:#fff;border:2px solid var(--navy);max-width:660px;width:96%;max-height:92vh;overflow-y:auto;padding:22px;position:relative;">
+        <button onclick="closeSerialFind()" style="position:absolute;top:12px;right:12px;background:none;border:1px solid var(--navy);width:26px;height:26px;cursor:pointer;font-size:13px;">✕</button>
+        <h3 style="margin-top:0;margin-bottom:4px;">일련번호 찾기</h3>
+        <p class="desc" style="margin-top:0;">이 단말기가 지금 <b>어디에 묶여 있는지</b> 한 번에 보여드립니다.<br>
+          재고 · 주문 · 예약 배정 · 판매요청 · 단말 이력을 모두 찾습니다.</p>
+        <div class="tbar-row" style="display:flex;gap:0;align-items:center;margin-bottom:10px;">
+          <input type="text" id="sf-input" placeholder="일련번호" onkeydown="onSerialFindKey(event)" style="width:220px;height:30px;border:1px solid var(--line);padding:0 8px;font-size:13px;box-sizing:border-box;">
+          <button class="btn small" style="width:auto;margin-left:-1px;" onclick="runSerialFind()">찾기</button>
+        </div>
+        <div id="sf-result"></div>
+        <span class="btn-row" style="margin-top:10px;">
+          <button class="btn small secondary" style="width:auto;" onclick="closeSerialFind()">닫기</button>
         </span>
       </div>
     </div>
@@ -3685,6 +3703,9 @@
     bar.appendChild(prevBtn); bar.appendChild(info); bar.appendChild(nextBtn);
     return bar;
   }
+  // 「일련번호 찾기」에서 넘어온 대상 — 그 줄이 있는 페이지로 가서 노랗게 표시합니다.
+  let highlightSaleId = null;
+
   function paginateSlice(fullArray, key){
     const st = getPageState(key);
     if(st.size === "all"){ return { pageItems: fullArray, startIndex: 0 }; }
@@ -14596,6 +14617,148 @@
           + (miss.length>10 ? '<br>... 외 '+(miss.length-10)+'줄' : '') + '</div>' : '');
   }
 
+  // ---------- 일련번호 찾기 ----------
+  //  일련번호 하나로 지금 어디에 묶여 있는지 한 번에 보여줍니다.
+  //  재고 · 주문 · 예약 배정 · 판매요청 · 단말 이력을 모두 훑습니다.
+  window.openSerialFind = function(preset){
+    const inp = document.getElementById("sf-input");
+    if(inp) inp.value = preset || "";
+    document.getElementById("sf-result").innerHTML =
+      '<div class="list-empty">일련번호를 넣고 <b>찾기</b>를 눌러주세요.</div>';
+    document.getElementById("serialfind-overlay").style.display = "flex";
+    if(inp){ inp.focus(); if(preset) runSerialFind(); }
+  };
+  window.closeSerialFind = function(){
+    document.getElementById("serialfind-overlay").style.display = "none";
+  };
+  window.onSerialFindKey = function(ev){
+    if(ev && ev.key === "Enter") runSerialFind();
+  };
+
+  window.runSerialFind = async function(){
+    const box = document.getElementById("sf-result");
+    const sn = String((document.getElementById("sf-input")||{}).value || "").trim();
+    if(!sn){ box.innerHTML = '<div class="list-empty">일련번호를 넣어주세요.</div>'; return; }
+    box.innerHTML = '<div class="list-empty">찾는 중입니다...</div>';
+
+    const money = v => (Number(v)||0).toLocaleString();
+    const sec = (title, body, color)=>
+      '<div style="border:1px solid ' + (color || "var(--line)") + ';margin-bottom:8px;">'
+      + '<div style="background:' + (color ? "#f4f7fb" : "#fafafa") + ';padding:6px 10px;font-size:12.5px;font-weight:700;'
+      + (color ? 'color:' + color + ';' : '') + '">' + title + '</div>'
+      + '<div style="padding:8px 10px;font-size:12.5px;line-height:1.9;">' + body + '</div></div>';
+
+    let html = "";
+    try{
+      // ── 재고 ─────────────────────────────────────────
+      const invSnap = await getDocs(query(collection(db,"inventoryItems"), where("serialNumber","==",sn)));
+      const items = [];
+      invSnap.forEach(d=> items.push({ id:d.id, ...d.data() }));
+      if(items.length === 0){
+        box.innerHTML = sec("재고", '<span style="color:var(--danger);">재고에 없는 일련번호입니다.</span>', "var(--danger)");
+        return;
+      }
+      for(const it of items){
+        let body = '<b>' + comboEsc(docModelLabel(it)) + '</b> · '
+          + comboEsc(it.systemColor || it.manufacturerColor || "-") + ' · ' + comboEsc(it.carrier||"-")
+          + (it.deleted === true ? ' <span style="color:var(--danger);">[삭제함]</span>' : '')
+          + '<br>상태 <b>' + comboEsc(it.status||"-") + '</b>'
+          + ' · 위치 ' + comboEsc(it.location||"-")
+          + (it.destination ? ' · 판매처 <b>' + comboEsc(it.destination) + '</b>' : '')
+          + '<br>입고 ' + comboEsc(it.inDate||"-")
+          + (it.outDate ? ' · 출고 ' + comboEsc(it.outDate) : '')
+          + (it.salePrice ? ' · 판매가 ' + money(it.salePrice) : '');
+        html += sec("재고", body, "#1565c0");
+
+        // ── 주문 ───────────────────────────────────────
+        if(it.orderId){
+          try{
+            const os = await getDoc(doc(db,"orders", it.orderId));
+            if(os.exists()){
+              const o = os.data();
+              let ob = "";
+              if(o.batchId){
+                const bs = await getDoc(doc(db,"orderBatches", o.batchId));
+                if(bs.exists()){
+                  const b = bs.data();
+                  ob = comboEsc(b.orderDate||"-") + ' · <b>' + comboEsc(b.source||"-") + '</b>'
+                     + ' · ' + comboEsc(b.status||"-") + '<br>';
+                }
+              }
+              html += sec("주문", ob + comboEsc(docModelLabel(o)) + ' · '
+                + (Number(o.quantity)||0) + '개 · 도착 ' + (Number(o.arrivedCount)||0) + '개');
+            }
+          }catch(e){}
+        }
+
+        // ── 판매요청 ────────────────────────────────────
+        if(it.saleRequestId){
+          try{
+            const ss = await getDoc(doc(db,"saleRequests", it.saleRequestId));
+            if(ss.exists()){
+              const sr = ss.data();
+              let sb = '<b>' + comboEsc(sr.destination||"-") + '</b> · ' + comboEsc(sr.requestDate||"-")
+                + ' · ' + (Number(sr.quantity)||0) + '개 · 판매가 ' + money(sr.salePrice)
+                + ' · <b style="color:' + (sr.status === "취소" ? "var(--danger)" : "#2e7d32") + ';">'
+                + comboEsc(sr.status||"-") + '</b>'
+                + (sr.depositReceived ? ' · <span style="color:#2e7d32;">입금완료</span>' : '');
+              // 예약에서 나온 것이면 예약도 보여줍니다.
+              if(sr.fromReservationId){
+                try{
+                  const rs = await getDoc(doc(db,"reservations", sr.fromReservationId));
+                  if(rs.exists()){
+                    const rv = rs.data();
+                    sb += '<br><span style="color:var(--gray);">↳ 예약에서 배정됨 — '
+                      + comboEsc(rv.requestDate||"-") + ' · ' + comboEsc(rv.destination||"-")
+                      + ' · 예약 ' + (Number(rv.orderedQty)||0) + '개 · 배정 ' + (Number(rv.allocatedQty)||0) + '개</span>';
+                  }
+                }catch(e){}
+              }
+              const goId = sr.batchId || it.saleRequestId;
+              sb += '<div style="margin-top:6px;"><button class="btn small secondary" style="width:auto;" onclick="goSaleFromFind(\''
+                + comboEsc(goId) + '\')">판매 관리에서 보기</button></div>';
+              html += sec("판매요청", sb, "#2e7d32");
+            }
+          }catch(e){}
+        }else{
+          html += sec("판매요청", '<span style="color:var(--gray);">묶여 있는 판매요청이 없습니다.</span>');
+        }
+
+        // ── 단말 이력 ───────────────────────────────────
+        try{
+          const hs = await getDocs(query(collection(db,"itemHistory"), where("serialNumber","==",sn)));
+          const logs = [];
+          hs.forEach(d=> logs.push(d.data()));
+          logs.sort((a,b)=> String(b.date||"").localeCompare(String(a.date||"")));
+          if(logs.length){
+            html += sec("단말 이력 (" + logs.length + "건)",
+              logs.slice(0,10).map(l=>{
+                const t = IH_TYPES[l.type] || { label:l.type, color:"#6b6b6b" };
+                return '· ' + comboEsc(l.date||"-") + ' <b style="color:' + t.color + ';">' + comboEsc(t.label) + '</b> '
+                  + comboEsc(String(l.detail||"").slice(0,60)) + ' <span style="color:var(--gray);">' + comboEsc(l.by||"") + '</span>';
+              }).join("<br>")
+              + (logs.length > 10 ? '<br><span style="color:var(--gray);">... 외 ' + (logs.length-10) + '건</span>' : ''));
+          }
+        }catch(e){}
+      }
+    }catch(e){
+      box.innerHTML = '<div class="list-empty">찾는 중 문제가 생겼습니다.</div>'; return;
+    }
+    box.innerHTML = html;
+  };
+
+  window.goSaleFromFind = function(id){
+    closeSerialFind();
+    highlightSaleId = id || null;
+    // 취소된 건도 찾을 수 있게 「전체」로 바꿔둡니다.
+    switchTab("tab-sales");
+    // 취소된 건도 찾을 수 있게 「전체」로 바꿔둡니다. (setSaleFilter 가 목록도 다시 그립니다)
+    setTimeout(()=>{
+      if(typeof setSaleFilter === "function") setSaleFilter("all");
+      else if(typeof loadSaleRequestList === "function") loadSaleRequestList();
+    }, 60);
+  };
+
   // ---------- 판매 취소 — 일련번호 고르기 ----------
   //  매칭된 재고가 있으면 어떤 단말기를 되돌릴지 골라서 취소합니다.
   //  일부만 고르면 그 대수만 빠지고 판매요청은 남습니다. 전부 고르면 요청 자체가 취소됩니다.
@@ -18638,6 +18801,14 @@
         + '</div>';
       return;
     }
+    // 찾아갈 판매요청이 있으면 그 줄이 있는 페이지로 먼저 옮깁니다.
+    if(highlightSaleId){
+      const idx = visibleSale.findIndex(r=> r.id === highlightSaleId);
+      if(idx >= 0){
+        const st = getPageState("saleRequests");
+        if(st.size !== "all") st.page = Math.floor(idx / st.size) + 1;
+      }
+    }
     const { pageItems: salePage } = paginateSlice(visibleSale, "saleRequests");
     const rows = salePage.map(r=>{
       const lines = r.lines || [];
@@ -18669,6 +18840,19 @@
       const r = rows.find(x=>x.id === btn.dataset.delSr);
       btn.onclick = ()=> deleteCancelledBatch("sale", r.id, r.b, r.lines);
     });
+    // 찾아온 줄을 노랗게 표시하고 화면을 그쪽으로 옮깁니다.
+    if(highlightSaleId){
+      const btn = listEl.querySelector('[data-detail="' + highlightSaleId + '"]');
+      const tr = btn ? btn.closest("tr") : null;
+      if(tr){
+        tr.style.background = "#fff8e1";
+        tr.style.outline = "2px solid #e0c46c";
+        try{ tr.scrollIntoView({ block:"center", behavior:"smooth" }); }catch(e){}
+        // 8초 뒤에 표시를 지웁니다.
+        setTimeout(()=>{ tr.style.background = ""; tr.style.outline = ""; }, 8000);
+      }
+      highlightSaleId = null;
+    }
     listEl.querySelectorAll('[data-cancel-sr]').forEach(btn=>{
       const r = rows.find(x=>x.id === btn.dataset.cancelSr);
       btn.onclick = async ()=>{
