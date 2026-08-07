@@ -320,7 +320,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-07 v351</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-07 v353</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -854,7 +854,7 @@
         <div class="stack-row"><label>취소 사유</label><input type="text" id="scp-reason" placeholder="필수"></div>
         <div id="scp-msg" style="font-size:12.5px;margin:6px 0;"></div>
         <span class="btn-row" style="margin-top:6px;">
-          <button class="btn small danger" style="width:auto;" onclick="submitSaleCancelPick()">되돌리기</button>
+          <button class="btn small danger" style="width:auto;" onclick="submitSaleCancelPick()">취소</button>
           <button class="btn small secondary" style="width:auto;" onclick="closeSaleCancelPick()">닫기</button>
         </span>
       </div>
@@ -10457,6 +10457,67 @@
   };
 
   // 출금요청을 취소합니다. 주문 관리·정산 관리 어느 쪽에서든 부를 수 있습니다.
+  // 입출금리스트에서 요청을 취소합니다.
+  //  입금요청(in) → saleDepositRequests · 출금요청(out) → paymentRequests
+  //  묶여 있던 판매요청·주문은 다시 풀려서 새로 요청할 수 있게 됩니다.
+  window.cancelReqBoardItem = async function(kind, reqId){
+    if(!hasPerm(currentUserPerms, "paymentProcess")){ alert("권한이 없습니다."); return; }
+    const isIn = (kind === "in");
+    const col = isIn ? "saleDepositRequests" : "paymentRequests";
+    const snap = await getDoc(doc(db, col, reqId));
+    if(!snap.exists()){ alert("이미 삭제된 요청입니다."); return; }
+    const p = snap.data();
+    if(p.status === "취소"){ alert("이미 취소된 요청입니다."); return; }
+
+    const got = Number(isIn ? p.receivedAmount : p.paidAmount) || 0;
+    const total = Number(p.totalAmount) || 0;
+    const word = isIn ? "입금" : "출금";
+    if(!confirm("이 " + word + "요청을 취소합니다.\n\n"
+      + "  요청액 " + total.toLocaleString() + "\n"
+      + (got > 0 ? "  이미 " + word + "된 금액 " + got.toLocaleString() + "\n\n"
+                   + "※ " + word + " 기록도 함께 지워지고, 묶여 있던 건은 다시 미처리로 돌아갑니다.\n"
+                 : "\n묶여 있던 건은 다시 요청할 수 있게 됩니다.\n")
+      + "\n되돌릴 수 없습니다. 진행할까요?")) return;
+    const reason = prompt("취소 사유를 입력해주세요. (필수)", "");
+    if(reason === null) return;
+    if(!String(reason).trim()){ alert("취소 사유를 입력해주세요."); return; }
+
+    try{
+      if(isIn){
+        await updateDoc(doc(db,"saleDepositRequests", reqId), {
+          status:"취소", cancelReason:String(reason).trim(),
+          cancelledAt: serverTimestamp(), cancelledBy: currentUser.name,
+          depositCompleted:false, depositCompleteDate:"", receivedAmount:0, receipts:[]
+        });
+        // 묶여 있던 판매요청에서 연결을 끊습니다.
+        for(const b of (p.saleBatchRefs || [])){
+          const c2 = b.isLegacy ? "saleRequests" : "saleRequestBatches";
+          try{ await updateDoc(doc(db, c2, b.id), { depositRequestId: null, depositReceived:false, depositDate:"" }); }catch(e){}
+        }
+      }else{
+        await updateDoc(doc(db,"paymentRequests", reqId), {
+          status:"취소", cancelReason:String(reason).trim(),
+          cancelledAt: serverTimestamp(), cancelledBy: currentUser.name,
+          transferCompleted:false, transferCompleteDate:"", paidAmount:0, payments:[]
+        });
+        for(const bId of (p.orderBatchIds || [])){
+          try{ await updateDoc(doc(db,"orderBatches", bId), { paymentRequestId: null, depositPaid:false, depositPaidDate:"" }); }catch(e){}
+        }
+      }
+    }catch(e){
+      alert("취소에 실패했습니다.\n" + ((e && e.message) ? e.message : String(e)));
+      return;
+    }
+    logAction(isIn ? "입금요청 취소" : "출금요청 취소",
+      (p.destinations ? p.destinations.join(",") + " / " : "")
+      + total.toLocaleString() + (got ? " / 되돌린 " + word + " " + got.toLocaleString() : "")
+      + " / 사유: " + String(reason).trim());
+    alert("취소했습니다.");
+    loadReqBoard();
+    if(typeof loadSaleRequestList === "function") loadSaleRequestList();
+    if(typeof loadOrderList === "function") loadOrderList();
+  };
+
   window.cancelPaymentRequest = async function(reqId){
     const snap = await getDoc(doc(db,"paymentRequests", reqId));
     if(!snap.exists()){ alert("이미 삭제된 요청입니다."); return; }
@@ -10942,6 +11003,8 @@
                 + (r.onHold ? '보류 해제' : '보류') + '</button>' : '') +
             ((r.canEdit && canDo)
               ? '<button class="btn small secondary" style="width:auto;margin-left:4px;" data-rbd-edit="' + r.kind + '|' + r.id + '">수정</button>' : '') +
+            ((r.canEdit && canDo && !r.canceled)
+              ? '<button class="btn small danger" style="width:auto;margin-left:4px;" data-rbd-cancel="' + r.kind + '|' + r.id + '">취소</button>' : '') +
             ((!r.canProcess && !r.canEdit) ? '<span style="color:var(--gray);">-</span>' : '') +
           '</td></tr>';
         if(r.recs.length){
@@ -11026,6 +11089,10 @@
     document.querySelectorAll("#tab-reqboard [data-rbd-edit]").forEach(b=>{
       const [kind, id] = b.dataset.rbdEdit.split("|");
       b.onclick = ()=>{ const p = reqBoardCache[kind][id]; if(p) openReqEdit(kind, id, p); };
+    });
+    document.querySelectorAll("#tab-reqboard [data-rbd-cancel]").forEach(b=>{
+      const [kind, id] = b.dataset.rbdCancel.split("|");
+      b.onclick = ()=> cancelReqBoardItem(kind, id);
     });
     document.querySelectorAll("#tab-reqboard [data-appr]").forEach(b=>{
       const [k, id, i] = b.dataset.appr.split("|");
@@ -14832,7 +14899,7 @@
 
   window.submitSaleCancelPick = async function(){
     if(!saleCancelTarget) return;
-    const { r, items } = saleCancelTarget;
+    const { r, items, depReq } = saleCancelTarget;
     const msg = document.getElementById("scp-msg");
     const picked = Array.from(document.querySelectorAll(".scp-ck:checked")).map(c=> items[Number(c.value)]);
     if(picked.length === 0){ msg.innerHTML = '<span style="color:var(--danger);">되돌릴 일련번호를 골라주세요.</span>'; return; }
