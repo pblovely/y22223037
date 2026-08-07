@@ -355,7 +355,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-08 v415</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-08 v416</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -384,6 +384,7 @@
           <button class="tab-btn" data-tab="tab-itemhistory" data-label-key="tab-itemhistory" id="tabbtn-itemhistory" onclick="switchTab('tab-itemhistory')" style="display:none;"><span class="tab-label-text">단말 이력</span></button>
           <button class="tab-btn" data-tab="tab-orders" data-label-key="tab-orders" id="tabbtn-orders" onclick="switchTab('tab-orders')" style="display:none;"><span class="tab-label-text">주문 관리</span></button>
           <button class="tab-btn" data-tab="tab-salereq" data-label-key="tab-salereq" id="tabbtn-salereq" onclick="switchTab('tab-salereq')" style="display:none;"><span class="tab-label-text">판매 관리</span></button>
+          <button class="tab-btn" data-tab="tab-activation" data-label-key="tab-activation" id="tabbtn-activation" onclick="switchTab('tab-activation')" style="display:none;"><span class="tab-label-text">개통 관리</span></button>
           <button class="tab-btn" data-tab="tab-reservation" data-label-key="tab-reservation" id="tabbtn-reservation" onclick="switchTab('tab-reservation')" style="display:none;"><span class="tab-label-text">예약 관리</span></button>
           <button class="tab-btn" data-tab="tab-inv-company" data-label-key="tab-inv-company" id="tabbtn-company" onclick="switchTab('tab-inv-company')" style="display:none;"><span class="tab-label-text">업체정보</span></button>
           <button class="tab-btn" data-tab="tab-data-upload" data-label-key="tab-data-upload" id="tabbtn-data-upload" onclick="switchTab('tab-data-upload')" style="display:none;"><span class="tab-label-text">자료업로드</span></button>
@@ -570,6 +571,27 @@
         <div id="order-price-notice" style="display:none;font-size:12.5px;padding:9px 11px;margin-bottom:8px;border:1px solid var(--danger);background:#fdecea;line-height:1.7;"></div>
         <div id="pending-arrival-box" style="margin-bottom:10px;"></div>
         <div id="order-list"></div>
+      </div>
+    </div>
+
+    <div id="tab-activation" class="tab-panel">
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+          <h3 style="margin:0;">개통 관리 <span class="info-tip" title="포피플에서 직접 개통한 단말기입니다. 판매와 달리 거래처에서 받을 돈이 없어 입금 대조에서 빠집니다. 공시지원금을 함께 적어둘 수 있습니다.">ⓘ</span></h3>
+          <button class="btn small" style="width:auto;" onclick="openPasteActivateModal()">+ 개통 등록</button>
+        </div>
+        <p class="desc" style="margin-top:0;">포피플에서 <b>직접 개통</b>한 단말기입니다. 재고에서 상태가 <b>개통</b>인 것을 그대로 보여줍니다.<br>
+          거래처에 넘긴 것이 아니라 <b>받을 돈이 없으므로</b> 단말기 입금 대조에서는 빠집니다.</p>
+        <div id="act-cards" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px;"></div>
+        <div class="tbar-row" style="display:flex;gap:0;flex-wrap:wrap;align-items:center;margin-bottom:8px;">
+          <input type="text" id="act-q" placeholder="일련번호·모델·통신사로 찾기" onchange="loadActivationList()" style="width:230px;height:28px;border:1px solid var(--line);padding:0 8px;font-size:12.5px;box-sizing:border-box;">
+          <input type="text" id="act-from" placeholder="개통 시작일 20260701" onchange="loadActivationList()" style="width:150px;height:28px;border:1px solid var(--line);padding:0 8px;font-size:12.5px;margin-left:-1px;box-sizing:border-box;">
+          <input type="text" id="act-to" placeholder="개통 종료일 20260731" onchange="loadActivationList()" style="width:150px;height:28px;border:1px solid var(--line);padding:0 8px;font-size:12.5px;margin-left:-1px;box-sizing:border-box;">
+          <button class="btn small secondary" style="width:auto;margin-left:-1px;" onclick="clearActCond()">비우기</button>
+          <span id="dl-activation" style="margin-left:6px;"></span>
+        </div>
+        <div id="activation-pagination"></div>
+        <div id="activation-list"></div>
       </div>
     </div>
 
@@ -2372,6 +2394,25 @@
     </div>
 
     <!-- 텍스트 붙여넣기 판매처리 팝업 -->
+    <div id="paste-act-modal-overlay" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.55);z-index:1000;align-items:center;justify-content:center;">
+      <div style="background:#fff;border:2px solid var(--navy);max-width:840px;width:96%;max-height:92vh;overflow-y:auto;padding:22px;position:relative;">
+        <button onclick="closePasteActivateModal()" style="position:absolute;top:12px;right:12px;background:none;border:1px solid var(--navy);width:26px;height:26px;cursor:pointer;font-size:13px;">✕</button>
+        <h3 style="margin-top:0;margin-bottom:4px;">텍스트로 붙여넣기 개통처리</h3>
+        <p class="desc" style="margin-top:0;">보유중인 재고를 여러 대 한 번에 <b>개통 처리</b>합니다. 한 줄에 일련번호만 있어도 되고, 모델·금액이 섞여 있어도 골라냅니다.<br>
+          줄에 <b>쉼표 있는 금액</b>이 있으면 그 줄의 <b>공시지원금</b>으로 봅니다. 없으면 아래 값을 씁니다.</p>
+        <textarea id="paste-act-textarea" rows="8" style="width:100%;box-sizing:border-box;padding:8px;border:1px solid #c7c7c7;font-size:12.5px;font-family:monospace;" placeholder="예:&#10;5002471&#10;5004000&#10;&#10;또는&#10;SM-A166L	399,300	5002471"></textarea>
+        <div class="stack-form" style="margin-top:10px;">
+          <div class="stack-row"><label>개통일</label><input type="text" id="paste-act-date" maxlength="8" inputmode="numeric" placeholder="예: 20260617"></div>
+          <div class="stack-row"><label>공시지원금 (선택) <span class="info-tip" title="줄마다 금액이 없을 때 이 값을 씁니다. 비워두면 넣지 않습니다.">ⓘ</span></label><input type="number" id="paste-act-subsidy" placeholder="모든 줄에 같이 넣을 금액 (선택)"></div>
+        </div>
+        <span class="btn-row" style="margin-top:10px;">
+          <button class="btn small" style="width:auto;" onclick="analyzePasteActivate()">분석하기</button>
+          <button class="btn small secondary" style="width:auto;" onclick="closePasteActivateModal()">닫기</button>
+        </span>
+        <div id="paste-act-analysis" style="margin-top:12px;"></div>
+      </div>
+    </div>
+
     <div id="paste-sale-modal-overlay" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.55);z-index:1000;align-items:center;justify-content:center;">
       <div style="background:#fff;border:2px solid var(--navy);max-width:700px;width:96%;max-height:90vh;overflow-y:auto;padding:22px;position:relative;">
         <button onclick="closePasteSaleModal()" style="position:absolute;top:12px;right:12px;background:none;border:1px solid var(--navy);width:26px;height:26px;cursor:pointer;font-size:13px;">✕</button>
@@ -24518,7 +24559,9 @@
     let rows = items.filter(it=>{
       if(it.deleted === true) return false;
       if(it.entryType !== "imei") return false;
-      const gone = (it.status === "판매" || it.status === "개통") || !!it.outDate;
+      // 개통은 포피플 자체개통이라 거래처에서 받을 돈이 없습니다. 「개통 관리」에서 봅니다.
+      if(it.status === "개통") return false;
+      const gone = (it.status === "판매") || !!it.outDate;
       if(!gone) return false;
       if(destQ && String(it.destination||"").trim() !== destQ) return false;
       const od = String(it.outDate||"").replace(/\D/g,"");
@@ -25514,6 +25557,246 @@
     loadInventoryList();
   };
 
+  // ---------- 개통 관리 ----------
+  //  포피플에서 직접 개통한 단말기입니다. 거래처에 넘긴 것이 아니라 받을 돈이 없습니다.
+  window.clearActCond = function(){
+    ["act-q","act-from","act-to"].forEach(id=>{ const e=document.getElementById(id); if(e) e.value=""; });
+    loadActivationList();
+  };
+
+  window.loadActivationList = async function(force){
+    const listEl = document.getElementById("activation-list");
+    const cardEl = document.getElementById("act-cards");
+    if(!listEl) return;
+    listEl.innerHTML = '<div class="list-empty">불러오는 중...</div>';
+
+    let items = [];
+    try{
+      if(!force && cacheOn("inventory") && dataCache.inventory) items = dataCache.inventory;
+      else{
+        const snap = await getDocs(collection(db,"inventoryItems"));
+        items = []; snap.forEach(d=> items.push({ id:d.id, ...d.data() }));
+        if(cacheOn("inventory")) dataCache.inventory = items;
+      }
+    }catch(e){}
+
+    const q    = String((document.getElementById("act-q")||{}).value || "").trim().toLowerCase();
+    const from = String((document.getElementById("act-from")||{}).value || "").replace(/\D/g,"");
+    const to   = String((document.getElementById("act-to")||{}).value || "").replace(/\D/g,"");
+
+    let rows = items.filter(it=>{
+      if(it.deleted === true) return false;
+      if(it.status !== "개통") return false;
+      const d = String(it.activateDate||"").replace(/\D/g,"");
+      if(from && (!d || d < from)) return false;
+      if(to && (!d || d > to)) return false;
+      if(q){
+        const hay = [it.serialNumber, it.systemModel, it.petName, it.carrier,
+                     it.systemColor, it.manufacturerColor].map(v=> String(v||"").toLowerCase()).join(" ");
+        if(hay.indexOf(q) < 0) return false;
+      }
+      return true;
+    });
+    rows.sort((a,b)=> String(b.activateDate||"").localeCompare(String(a.activateDate||""))
+                    || String(a.serialNumber||"").localeCompare(String(b.serialNumber||"")));
+
+    // 요약 카드
+    if(cardEl){
+      const listSum = rows.reduce((n,it)=> n + (Number(it.listPrice)||0), 0);
+      const subSum  = rows.reduce((n,it)=> n + (Number(it.publicSubsidy)||0), 0);
+      const noSub   = rows.filter(it=> !(Number(it.publicSubsidy)>0)).length;
+      const card = (label, val, color, note)=>
+        '<div style="flex:1;min-width:150px;border:1px solid var(--line);background:#fff;padding:10px 14px;">'
+        + '<div style="font-size:11.5px;color:var(--gray);margin-bottom:4px;">'+label+'</div>'
+        + '<div style="font-size:19px;font-weight:800;color:'+(color||'var(--navy)')+';">'+val+'</div>'
+        + (note ? '<div style="font-size:10.5px;color:var(--gray);margin-top:3px;">'+note+'</div>' : '') + '</div>';
+      cardEl.innerHTML =
+        card("개통 대수", rows.length, "var(--navy)") +
+        card("출고가 합계", listSum.toLocaleString(), "#1565c0") +
+        card("공시지원금 합계", subSum.toLocaleString(), "#2e7d32") +
+        card("공시지원금 미입력", noSub, noSub ? "var(--danger)" : "var(--gray)");
+    }
+
+    const pgEl = document.getElementById("activation-pagination");
+    if(pgEl){
+      pgEl.innerHTML = "";
+      pgEl.appendChild(renderPaginationBar("activation", rows.length, loadActivationList));
+    }
+    const { pageItems } = paginateSlice(rows, "activation");
+
+    if(rows.length === 0){
+      listEl.innerHTML = '<div class="list-empty">개통 처리된 단말기가 없습니다.</div>';
+      addDownloadBtn("dl-activation", "activation-list", "개통목록");
+      return;
+    }
+    const canDo = hasPerm(currentUserPerms, "bulkEdit") || hasPerm(currentUserPerms, "menuInvWork");
+    let h = '<div style="overflow-x:auto;"><table class="data-table" style="min-width:1000px;"><thead><tr>'
+      + '<th>일련번호</th><th>전산모델명</th><th>색상</th><th>통신사</th><th>개통일</th>'
+      + '<th class="ta-right">출고가</th><th class="ta-right">공시지원금</th><th>위치</th><th class="ta-right">관리</th>'
+      + '</tr></thead><tbody>';
+    pageItems.forEach(it=>{
+      const sub = Number(it.publicSubsidy)||0;
+      h += '<tr>'
+        + '<td><b>'+comboEsc(it.serialNumber||"-")+'</b></td>'
+        + '<td>'+comboEsc(it.systemModel||"-")+'</td>'
+        + '<td>'+comboEsc(it.systemColor||it.manufacturerColor||"-")+'</td>'
+        + '<td>'+comboEsc(it.carrier||"-")+'</td>'
+        + '<td>'+comboEsc(it.activateDate||"-")+'</td>'
+        + '<td class="ta-right">'+(Number(it.listPrice)||0).toLocaleString()+'</td>'
+        + '<td class="ta-right"'+(sub ? '' : ' style="color:var(--danger);"')+'>'+(sub ? sub.toLocaleString() : "미입력")+'</td>'
+        + '<td>'+comboEsc(it.location||"-")+'</td>'
+        + '<td class="ta-right" style="white-space:nowrap;">'
+        + (canDo ? '<button class="btn small secondary" style="width:auto;" data-act-sub="'+it.id+'">공시지원금</button>' : '')
+        + '<button class="btn small secondary" style="width:auto;margin-left:4px;" data-act-hist="'+comboEsc(it.serialNumber||"")+'">이력</button>'
+        + '</td></tr>';
+    });
+    h += '</tbody></table></div>';
+    listEl.innerHTML = h;
+    listEl.querySelectorAll("[data-act-sub]").forEach(b=> b.onclick = ()=> setPublicSubsidy(b.dataset.actSub));
+    listEl.querySelectorAll("[data-act-hist]").forEach(b=> b.onclick = ()=> openItemHistory(b.dataset.actHist));
+    addDownloadBtn("dl-activation", "activation-list", "개통목록");
+    addViewCfgBtn("dl-activation", "activation-list");
+  };
+
+  // 공시지원금 한 건 고치기
+  window.setPublicSubsidy = async function(itemId){
+    const snap = await getDoc(doc(db,"inventoryItems", itemId));
+    if(!snap.exists()) return;
+    const it = snap.data();
+    const cur = Number(it.publicSubsidy)||0;
+    const v = prompt("공시지원금을 넣어주세요. (비우면 지웁니다)\n\n  " + (it.serialNumber||"-")
+      + "\n  " + (it.systemModel||"-"), cur ? String(cur) : "");
+    if(v === null) return;
+    const amt = Number(String(v).replace(/[^0-9]/g,"")) || 0;
+    if(amt === cur) return;
+    try{
+      await updateDoc(doc(db,"inventoryItems", itemId), { publicSubsidy: amt || null });
+      await logItem(itemId, it.serialNumber||"", "price",
+        "공시지원금 " + (cur ? cur.toLocaleString() : "없음") + " → " + (amt ? amt.toLocaleString() : "없음"),
+        { systemModel: it.systemModel||"" });
+      logAction("공시지원금 변경", (it.serialNumber||"-") + " / "
+        + (cur ? cur.toLocaleString() : "없음") + " → " + (amt ? amt.toLocaleString() : "없음"));
+    }catch(e){ alert("바꾸지 못했습니다."); return; }
+    clearCache("inventory");
+    loadActivationList(true);
+  };
+
+  // ---------- 텍스트 붙여넣기 개통처리 ----------
+  window.openPasteActivateModal = function(){
+    document.getElementById("paste-act-textarea").value = "";
+    document.getElementById("paste-act-date").value = todayStr();
+    document.getElementById("paste-act-subsidy").value = "";
+    document.getElementById("paste-act-analysis").innerHTML = "";
+    document.getElementById("paste-act-modal-overlay").style.display = "flex";
+  };
+  window.closePasteActivateModal = function(){
+    document.getElementById("paste-act-modal-overlay").style.display = "none";
+  };
+
+  window.analyzePasteActivate = async function(){
+    const el = document.getElementById("paste-act-analysis");
+    try{ await fetchModelsCache(); }catch(e){}
+    const { dataRows, contextLines } = parsePasteSaleText(document.getElementById("paste-act-textarea").value);
+    if(dataRows.length === 0){
+      el.innerHTML = '<div class="list-empty">일련번호를 찾지 못했습니다. 숫자 4자리 이상이어야 합니다.</div>';
+      return;
+    }
+    const date = String(document.getElementById("paste-act-date").value||"").replace(/\D/g,"");
+    if(date.length !== 8){ el.innerHTML = '<div class="list-empty">개통일을 20260617 형태로 넣어주세요.</div>'; return; }
+    const baseSub = Number(document.getElementById("paste-act-subsidy").value)||0;
+
+    // 재고에서 찾아옵니다.
+    const serials = dataRows.map(r=> r.serial);
+    const foundMap = {};
+    for(let i=0;i<serials.length;i+=30){
+      const chunk = serials.slice(i, i+30);
+      try{
+        const sn = await getDocs(query(collection(db,"inventoryItems"), where("serialNumber","in", chunk)));
+        sn.forEach(d=>{ foundMap[d.data().serialNumber] = { id:d.id, ...d.data() }; });
+      }catch(e){}
+    }
+    const ok = [], bad = [];
+    dataRows.forEach(r=>{
+      const it = foundMap[r.serial];
+      const sub = (r.price != null && r.price > 0) ? r.price : baseSub;
+      if(!it) bad.push({ serial:r.serial, why:"재고를 찾을 수 없음" });
+      else if(it.status === "개통") bad.push({ serial:r.serial, why:"이미 개통됨" });
+      else if(it.status === "판매") bad.push({ serial:r.serial, why:"이미 판매됨 — 판매 관리에서 취소 후 진행" });
+      else ok.push({ id:it.id, it, serial:r.serial, subsidy:sub });
+    });
+
+    let h = '<div style="background:#fff;border:1px solid var(--line);padding:10px;margin-bottom:10px;font-size:12.5px;">'
+      + '<b>분석 결과</b> — 개통 가능 <b>' + ok.length + '대</b>'
+      + (bad.length ? ' · <span style="color:var(--danger);">확인 필요 ' + bad.length + '대</span>' : '')
+      + '<br>개통일 <b>' + date + '</b>'
+      + (baseSub ? ' · 공시지원금 기본값 <b>' + baseSub.toLocaleString() + '</b>' : ' · 공시지원금 기본값 없음')
+      + (contextLines.length ? '<br><span style="color:var(--gray);">쓰지 않은 줄: ' + contextLines.map(x=>comboEsc(x)).join(", ") + '</span>' : '')
+      + '</div>';
+    if(bad.length){
+      h += '<div style="border:1px solid var(--danger);background:#fdecea;padding:8px 10px;margin-bottom:10px;font-size:12px;line-height:1.7;">'
+        + bad.map(b=> '<b>' + comboEsc(b.serial) + '</b> — ' + b.why).join("<br>") + '</div>';
+    }
+    if(ok.length){
+      h += '<div style="overflow-x:auto;border:1px solid var(--line);max-height:280px;overflow-y:auto;"><table class="data-table" style="min-width:720px;"><thead><tr>'
+        + '<th>일련번호</th><th>전산모델명</th><th>색상</th><th>통신사</th><th class="ta-right">출고가</th><th class="ta-right">공시지원금</th>'
+        + '</tr></thead><tbody>';
+      ok.forEach(r=>{
+        h += '<tr><td><b>'+comboEsc(r.serial)+'</b></td>'
+          + '<td>'+comboEsc(r.it.systemModel||"-")+'</td>'
+          + '<td>'+comboEsc(r.it.systemColor||r.it.manufacturerColor||"-")+'</td>'
+          + '<td>'+comboEsc(r.it.carrier||"-")+'</td>'
+          + '<td class="ta-right">'+(Number(r.it.listPrice)||0).toLocaleString()+'</td>'
+          + '<td class="ta-right">'+(r.subsidy ? r.subsidy.toLocaleString() : '<span style="color:var(--gray);">-</span>')+'</td></tr>';
+      });
+      h += '</tbody></table></div>';
+      h += '<button class="btn small" style="width:auto;margin-top:10px;" onclick="submitPasteActivate()">이 목록으로 개통 처리 ('+ok.length+'대)</button>';
+    }
+    h += '<div id="paste-act-result" style="font-size:12.5px;margin-top:10px;"></div>';
+    el.innerHTML = h;
+    el.dataset.rows = JSON.stringify(ok.map(r=> ({ id:r.id, serial:r.serial, subsidy:r.subsidy,
+                                                   systemModel:r.it.systemModel||"", carrier:r.it.carrier||"" })));
+    el.dataset.date = date;
+  };
+
+  window.submitPasteActivate = async function(){
+    const el = document.getElementById("paste-act-analysis");
+    const rows = JSON.parse(el.dataset.rows || "[]");
+    const date = el.dataset.date || todayStr();
+    if(rows.length === 0) return;
+    if(!confirm("개통 처리합니다.\n\n  " + rows.length + "대 · 개통일 " + date
+      + "\n\n재고 상태가 <개통>으로 바뀌고 단말 이력에 남습니다.\n\n진행할까요?")) return;
+
+    const resEl = document.getElementById("paste-act-result");
+    resEl.innerHTML = "처리 중...";
+    let done = 0;
+    try{
+      for(let i=0;i<rows.length;i+=300){
+        const bt = writeBatch(db);
+        rows.slice(i, i+300).forEach(r=>{
+          bt.update(doc(db,"inventoryItems", r.id), {
+            status:"개통", activateDate: date,
+            ...(r.subsidy ? { publicSubsidy: r.subsidy } : {})
+          });
+        });
+        await bt.commit();
+        done += rows.slice(i, i+300).length;
+      }
+      for(const r of rows){
+        await logItem(r.id, r.serial, "activate",
+          "개통일 " + date + (r.carrier ? " · " + r.carrier : "")
+          + (r.subsidy ? " · 공시지원금 " + Number(r.subsidy).toLocaleString() : ""),
+          { systemModel: r.systemModel||"" });
+      }
+    }catch(e){
+      resEl.innerHTML = '<span style="color:var(--danger);">처리 중 오류: ' + comboEsc((e&&e.message)?e.message:String(e)) + '</span>';
+      return;
+    }
+    logAction("개통 일괄처리", done + "대 / 개통일 " + date);
+    resEl.innerHTML = '<b>' + done + '대를 개통 처리했습니다.</b>';
+    clearCache("inventory"); clearDashCache();
+    if(typeof loadActivationList === "function") loadActivationList(true);
+  };
+
   // ---------- 텍스트 붙여넣기 판매처리 ----------
   window.openPasteSaleModal = function(){
     document.getElementById("paste-sale-textarea").value = "";
@@ -26330,6 +26613,7 @@
     if(tabId==="tab-lgrefund" && typeof loadLgRefund === "function") loadLgRefund();
     if(tabId==="tab-paycheck" && typeof loadPayCheck === "function") loadPayCheck();
     if(tabId==="tab-loan" && typeof loadLoanList === "function") loadLoanList();
+    if(tabId==="tab-activation" && typeof loadActivationList === "function") loadActivationList();
     if(tabId==="tab-site" && typeof renderHiddenList === "function") renderHiddenList();
     if(tabId==="tab-site" && typeof renderCacheTargets === "function") renderCacheTargets();
     if(tabId==="tab-site"){
@@ -26502,6 +26786,7 @@
       setMenu("tabbtn-recon", hasPerm(perms, "menuReqBoard") || showSettlement);
       setMenu("tabbtn-b2b", showSettlement);
       setMenu("tabbtn-loan", showSettlement);
+      setMenu("tabbtn-activation", showSaleReq || showSettlement || showAnyWorkMenu);
       setMenu("tabbtn-ledger", showLedger || showSettlement);
       setMenu("tabbtn-datacheck", showDataCheck || showSettlement);
       setMenu("tabbtn-itemhistory", showItemHist || showAnyWorkMenu);
