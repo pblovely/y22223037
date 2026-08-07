@@ -350,7 +350,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-08 v392</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-08 v393</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -1586,6 +1586,7 @@
             <button class="btn small secondary" id="rbd-k-out" style="width:auto;" onclick="setReqBoardKind('out')">출금</button>
             <button class="btn small secondary" id="rbd-k-in" style="width:auto;" onclick="setReqBoardKind('in')">입금</button>
             <button class="btn small secondary" id="rbd-k-credit" style="width:auto;" onclick="setReqBoardKind('credit')">여신·선입금</button>
+            <button class="btn small secondary" id="rbd-k-cb" style="width:auto;" onclick="setReqBoardKind('cb')">미배분 내역</button>
           </span>
         </div>
         <div id="reqboard-pagination"></div>
@@ -10816,12 +10817,10 @@
       + "남은 금액은 미지급으로 유지됩니다. 진행하시겠습니까?")) return;
 
     try{
-      const canApprove = hasPerm(currentUserPerms, "depositApprove");
+      // 승인 절차를 쓰지 않습니다. 처리하면 바로 반영됩니다.
       const payments = [...(p.payments||[]), {
         amount: amt, date, payer, by: currentUser.name,
-        approved: canApprove,
-        approvedBy: canApprove ? currentUser.name : "",
-        approvedAt: canApprove ? date : ""
+        approved: true, approvedBy: currentUser.name, approvedAt: date
       }];
       await updateDoc(doc(db,"paymentRequests", reqId), {
         paidAmount: newPaid, payments,
@@ -11008,7 +11007,7 @@
   };
   window.setReqBoardKind = function(k){
     reqBoardKind = k;
-    ["all","out","in","credit"].forEach(x=>{
+    ["all","out","in","credit","cb"].forEach(x=>{
       const b = document.getElementById("rbd-k-" + x);
       if(b) b.className = "btn small" + (x === k ? "" : " secondary");
     });
@@ -11125,6 +11124,37 @@
     });
     const creditLeft = creditIn + creditClub - creditUse;
 
+    // 아직 요청에 배분하지 않은 <입출금 내역>도 함께 보여줍니다.
+    //  요청에 처리하면 배분되어 이 줄에서 사라지고, 요청 줄의 처리액에 반영됩니다.
+    try{
+      const cbSnap = await getDocs(collection(db,"bankDeposits"));
+      cbSnap.forEach(d=>{
+        const v = d.data();
+        const amt = Number(v.amount)||0;
+        const used = Number(v.usedAmount)||0;
+        const left = amt - used;
+        if(left <= 0) return;
+        const isIn = (v.kind !== "out");
+        rows.push({
+          kind: isIn ? "cbin" : "cbout",
+          label: isIn ? "입금 내역" : "출금 내역",
+          color: isIn ? "#1565c0" : "var(--danger)",
+          id: d.id, p:null, cb:true,
+          who: (v.company || "").trim() || (v.payer || "-"),
+          noCompany: !String(v.company||"").trim(),
+          sub: "아직 요청에 안 붙임" + (v.account ? " · " + v.account : ""),
+          date: v.date || "",
+          owe: isIn ? 0 : left, recv: isIn ? left : 0,
+          done: 0, left: left,
+          payDate: v.date || "", payMemo: v.memo || "",
+          taxDate:"", taxAmount:0, status:"미배분",
+          finished:false, onHold:false, holdReason:"",
+          canceled:false, recs:[], inSum:false,
+          canProcess:false, canEdit:false
+        });
+      });
+    }catch(e){}
+
     // 업체 목록 채우기 (조회칸)
     const coSel = document.getElementById("rbd-company");
     if(coSel){
@@ -11140,6 +11170,9 @@
     const kindOk = (r)=>{
       if(reqBoardKind === "all") return true;
       if(reqBoardKind === "credit") return r.kind === "credit" || r.kind === "prepay";
+      if(reqBoardKind === "in")  return r.kind === "in"  || r.kind === "cbin";
+      if(reqBoardKind === "out") return r.kind === "out" || r.kind === "cbout";
+      if(reqBoardKind === "cb")  return r.kind === "cbin" || r.kind === "cbout";
       return r.kind === reqBoardKind;
     };
     const stateOk = (r)=>{
@@ -18907,6 +18940,51 @@
     runDataCheck();
   };
 
+  // 승인 대기로 남은 옛 기록을 전부 승인 처리합니다.
+  window.approveAllOld = async function(){
+    const rows = window.__dcNotAppr || [];
+    if(rows.length === 0) return;
+    if(!hasPerm(currentUserPerms, "paymentProcess")){ alert("권한이 없습니다."); return; }
+    const sum = rows.reduce((n,r)=> n + (Number(r.amt)||0), 0);
+    if(!confirm(rows.length + "건의 승인 대기 기록을 승인 처리합니다.\n\n"
+      + "  합계 " + sum.toLocaleString() + "\n\n"
+      + "승인 절차를 쓰지 않기로 하여 정리하는 것입니다.\n진행할까요?")) return;
+    let done = 0;
+    try{
+      for(const r of rows){
+        const s = await getDoc(doc(db, r.col, r.id));
+        if(!s.exists()) continue;
+        const v = s.data();
+        const list = (v[r.listKey] || []).map(x=> ({
+          ...x, approved:true,
+          approvedBy: x.approvedBy || currentUser.name,
+          approvedAt: x.approvedAt || x.date || todayStr()
+        }));
+        const total = Number(v.totalAmount)||0;
+        const sum2 = list.reduce((n,x)=> n + (Number(x.amount)||0), 0);
+        const full = total > 0 && sum2 >= total;
+        const last = list.map(x=> x.date).sort().slice(-1)[0] || "";
+        const patch = { [r.listKey]: list };
+        if(r.col === "saleDepositRequests"){
+          patch.receivedAmount = sum2;
+          patch.depositCompleted = full;
+          patch.depositCompleteDate = full ? last : "";
+        }else{
+          patch.paidAmount = sum2;
+          patch.transferCompleted = full;
+          patch.transferCompleteDate = full ? last : "";
+          patch.status = full ? "이체완료" : "부분이체";
+        }
+        await updateDoc(doc(db, r.col, r.id), patch);
+        done++;
+      }
+      logAction("데이터 점검 — 승인 대기 정리", done + "건 승인 처리");
+    }catch(e){ alert("처리하지 못했습니다.\n" + ((e&&e.message)?e.message:String(e))); return; }
+    alert(done + "건을 승인 처리했습니다.");
+    payStatusMap = null;
+    runDataCheck();
+  };
+
   window.runDataCheck = async function(){
     const el = document.getElementById("datacheck-result");
     if(!el) return;
@@ -19015,6 +19093,36 @@
       issues.push({ n:"입금요청 없는 입금 기록", cnt:ghostPay.length, unit:"건",
         why:"입금요청은 지워졌는데 받은 금액이 남아 있습니다. 입금 대사에서 <부분입금>으로 잘못 나옵니다.",
         fix: ghostPay.length ? "showDcGhostPay()" : null, fixLabel:"어떤 건지 보기" });
+
+      // ③-4 승인이 안 된 채로 남은 입금·이체 기록
+      //     (예전에는 승인 절차가 있었습니다. 지금은 쓰지 않으므로 정리합니다)
+      const notAppr = [];
+      try{
+        const [dsAll, psAll] = await Promise.all([
+          getDocs(collection(db,"saleDepositRequests")),
+          getDocs(collection(db,"paymentRequests"))
+        ]);
+        const scan = (snap, col, listKey)=>{
+          snap.forEach(d=>{
+            const v = d.data();
+            if(v.status === "취소") return;
+            const list = v[listKey] || [];
+            if(list.some(x=> x && x.approved !== true)){
+              notAppr.push({ id:d.id, col, listKey,
+                who: (v.destinations && v.destinations.join(",")) || v.company || "-",
+                date: v.requestDate || "-",
+                amt: list.filter(x=> x && x.approved !== true)
+                        .reduce((n,x)=> n + (Number(x.amount)||0), 0) });
+            }
+          });
+        };
+        scan(dsAll, "saleDepositRequests", "receipts");
+        scan(psAll, "paymentRequests", "payments");
+      }catch(e){}
+      window.__dcNotAppr = notAppr;
+      issues.push({ n:"승인 안 된 입금·이체 기록", cnt:notAppr.length, unit:"건",
+        why:"승인 절차를 쓰지 않는데 예전 기록이 승인 대기로 남아 있습니다. 입금완료로 안 바뀝니다.",
+        fix: notAppr.length ? "approveAllOld()" : null, fixLabel:"전부 승인 처리" });
 
       // ④ 출고가가 비어 있는 주문 품목
       let noPrice = 0;
