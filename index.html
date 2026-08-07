@@ -355,7 +355,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-08 v408</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-08 v410</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -1013,10 +1013,11 @@
           <div class="stack-row"><label>월 이자 (자동)</label><input type="number" id="loan-monthly" disabled style="background:#fff;"></div>
           <div class="stack-row"><label>MP수수료율(%)</label><input type="number" step="0.01" id="loan-mprate" placeholder="예: 0.5" oninput="calcLoanInterest()"></div>
           <div class="stack-row"><label>MP수수료 (자동)</label><input type="number" id="loan-mpfee" disabled style="background:#fff;"></div>
-          <div class="stack-row"><label>여신 충전</label>
+          <div class="stack-row"><label>대출금 처리 <span class="info-tip" title="삼성전자스타는 여신으로 쌓입니다. 그 외 거래처는 상대 사업자통장으로 입금되므로 출금 내역으로 기록합니다.">ⓘ</span></label>
             <select id="loan-charge">
-              <option value="yes">예 — 여신에 바로 충전합니다</option>
-              <option value="no">아니오 — 대출만 기록합니다</option>
+              <option value="yes">여신 충전 — 삼성전자스타처럼 여신으로 쌓이는 경우</option>
+              <option value="out">상대 통장 입금 — 출금 내역으로 기록</option>
+              <option value="no">기록 안 함 — 대출만 남깁니다</option>
             </select>
           </div>
           <div class="stack-row"><label>메모</label><input type="text" id="loan-memo" placeholder="선택"></div>
@@ -7185,7 +7186,7 @@
   };
 
   let orderCarrierNames = [];
-  // 삼성여신을 고르면 잔여 여신을 보여줍니다.
+  // B2B 여신을 고르면 그 매입처의 잔여 여신을 보여줍니다.
   window.showB2BBalanceHint = async function(){
     const row = document.getElementById("order-b2b-hint-row");
     const el = document.getElementById("order-b2b-hint");
@@ -7485,7 +7486,7 @@
       createdAt: serverTimestamp()
     });
 
-    // 삼성여신으로 결제한 주문은 B2B 여신 거래내역에 "주문사용"으로 자동 기록 (출금요청 불필요)
+    // B2B 여신으로 결제한 주문은 여신 거래내역에 "주문사용"으로 자동 기록 (출금요청 불필요)
     if(useB2BCredit && depositRequired>0){
       try{
         const bal = await getB2BBalance();
@@ -7506,6 +7507,7 @@
     if(useB2BCredit && creditUse>0){
       await addDoc(collection(db,"b2bLedger"), {
         date: orderDate, category:"order_use", amount: creditUse,
+        partner: source, source,
         memo: "주문 여신결제: "+source+" ("+lines.length+"개 품목, 선할인 기준)",
         fromOrderBatchId: batchRef.id,
         createdBy: currentUser.name, createdByUsername: currentUser.username, createdAt: serverTimestamp()
@@ -10237,6 +10239,7 @@
     if(Number(amount) > 0){
       await addDoc(collection(db,"b2bLedger"), {
         date: date || todayStr(), category:"order_use", amount: Number(amount),
+        partner: sourceName || "", source: sourceName || "",
         memo: "주문 여신결제: " + (sourceName||"-"),
         fromOrderBatchId: orderBatchId,
         createdBy: currentUser.name, createdByUsername: currentUser.username, createdAt: serverTimestamp()
@@ -10311,7 +10314,7 @@
     const monthly = Number(document.getElementById("loan-monthly").value)||0;
     const mpRate = Number(document.getElementById("loan-mprate").value)||0;
     const mpFee = Number(document.getElementById("loan-mpfee").value)||0;
-    const charge = document.getElementById("loan-charge").value === "yes";
+    const charge = document.getElementById("loan-charge").value;   // yes | out | no
     const memo = document.getElementById("loan-memo").value.trim();
 
     if(!name){ msg("대출명을 입력해주세요.", true); return; }
@@ -10323,22 +10326,38 @@
       const bank    = document.getElementById("loan-bank").value;
       const partner = document.getElementById("loan-partner").value;
       const code = document.getElementById("loan-code").value.trim();
-      if(!document.getElementById("loan-partner").value){ msg("대상을 골라주세요.", true); return; }
+      if(!partner){ msg("대상을 골라주세요.", true); return; }
+      if(!confirm("B2B 대출을 등록합니다.\n\n  " + bank + " · 대상 " + partner
+        + "\n  원금 " + principal.toLocaleString() + " · 만기 " + due
+        + "\n\n" + (charge === "yes" ? "→ 여신이 " + principal.toLocaleString() + " 충전됩니다."
+            : (charge === "out" ? "→ 입출금 내역에 출금 " + principal.toLocaleString() + " 이 함께 등록됩니다."
+                                : "→ 대출만 기록하고 자금 기록은 만들지 않습니다."))
+        + "\n\n진행할까요?")) return;
       const ref = await addDoc(collection(db,"b2bLoans"), {
         bank, partner, code,
         name, startDate:start, termMonths:term, dueDate:due,
         principal, rateAnnual:rate, monthlyInterest:monthly,
         mpFeeRate:mpRate, mpFeeAmount:mpFee,
         repaidPrincipal:0, status:"진행중", extensions:[], payments:[],
-        memo, chargedToCredit: charge,
+        memo, chargedToCredit: (charge === "yes"), fundFlow: charge,
         createdBy: currentUser.name, createdByUsername: currentUser.username, createdAt: serverTimestamp()
       });
-      if(charge){
+      if(charge === "yes"){
         await addDoc(collection(db,"b2bLedger"), {
           date: start, category:"loan_deposit", amount: principal,
           partner, bank,
           memo: "대출 실행: " + bank + " · " + name,
           fromLoanId: ref.id,
+          createdBy: currentUser.name, createdByUsername: currentUser.username, createdAt: serverTimestamp()
+        });
+      }else if(charge === "out"){
+        // 상대 사업자통장으로 나간 돈 — 입출금 내역에 출금으로 남깁니다.
+        //  나중에 그 업체 물건을 받을 때 「가져오기」로 끌어다 상계하시면 됩니다.
+        await addDoc(collection(db,"bankDeposits"), {
+          kind:"out", date: start, amount: principal,
+          payer: partner, company: partner, account:"",
+          memo: "B2B 대출 실행: " + bank + (code ? " · " + code : "") + " · " + name,
+          usedAmount:0, uses:[], fromLoanId: ref.id,
           createdBy: currentUser.name, createdByUsername: currentUser.username, createdAt: serverTimestamp()
         });
       }
@@ -10348,8 +10367,11 @@
     }
     logAction("B2B 대출 등록",
       document.getElementById("loan-bank").value + " / 대상 " + document.getElementById("loan-partner").value
-      + " / " + name + " / " + principal.toLocaleString() + " / 만기 " + due);
-    msg("등록되었습니다." + (charge ? " 여신도 충전했습니다." : ""), false);
+      + " / " + name + " / " + principal.toLocaleString() + " / 만기 " + due
+      + " / " + (charge === "yes" ? "여신충전" : (charge === "out" ? "상대통장 출금기록" : "기록없음")));
+    msg("등록되었습니다."
+      + (charge === "yes" ? " 여신도 충전했습니다."
+        : (charge === "out" ? " 입출금 내역에 출금으로 함께 등록했습니다." : "")), false);
     loadLoanList();
     if(typeof loadB2BTab === "function") loadB2BTab();
     setTimeout(closeLoanModal, 800);
@@ -10933,6 +10955,7 @@
   };
 
   // 잔여 여신 = 충전·클럽인센티브 − 주문사용
+  //  여신은 삼성전자스타 한 곳에만 있으므로 전체를 셉니다.
   window.getB2BBalance = async function(){
     const snap = await getDocs(collection(db,"b2bLedger"));
     let plus = 0, use = 0;
