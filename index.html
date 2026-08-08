@@ -379,7 +379,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v486</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v487</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -2421,6 +2421,33 @@
         <span class="btn-row">
           <button class="btn small" style="width:auto;" onclick="submitPayReqMake()">만들기</button>
           <button class="btn small secondary" style="width:auto;" onclick="closePayReqMake()">닫기</button>
+        </span>
+      </div>
+    </div>
+
+    <!-- 여신 기록에 통장 잇기 -->
+    <div id="ledbank-overlay" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.55);z-index:1110;align-items:center;justify-content:center;">
+      <div style="background:#fff;border:2px solid var(--navy);max-width:720px;width:96%;max-height:90vh;overflow-y:auto;padding:22px;position:relative;">
+        <button onclick="closeLedgerBankLink()" style="position:absolute;top:12px;right:12px;background:none;border:1px solid var(--navy);width:26px;height:26px;cursor:pointer;font-size:13px;">✕</button>
+        <h3 style="margin-top:0;margin-bottom:4px;">통장 잇기</h3>
+        <p class="desc" style="margin-top:0;">이 여신 기록이 <b>통장에서 어떻게 나갔는지</b> 이어둡니다.
+          이미 넣어둔 출금 내역이 있으면 골라 잇고, 없으면 새로 만들어 잇습니다.</p>
+        <div id="ledbank-head" style="font-size:12.5px;border:1px solid var(--line);background:#fafafa;padding:8px 10px;margin-bottom:10px;line-height:1.7;"></div>
+
+        <div style="font-weight:700;font-size:12.5px;margin-bottom:4px;">① 이미 있는 출금 내역에서 고르기</div>
+        <div id="ledbank-list"></div>
+
+        <div style="font-weight:700;font-size:12.5px;margin:12px 0 4px;">② 없으면 새로 만들어 잇기</div>
+        <div class="stack-form">
+          <div class="stack-row"><label>계좌</label><select id="ledbank-account"><option value="">(선택 안 함)</option></select></div>
+          <div class="stack-row"><label>받는 곳</label><input type="text" id="ledbank-payer" placeholder="예: 삼성전자(주)"></div>
+          <div class="stack-row"><label>메모 (선택)</label><input type="text" id="ledbank-memo" placeholder="선택"></div>
+        </div>
+        <div id="ledbank-msg" style="font-size:12.5px;margin:8px 0;line-height:1.7;"></div>
+        <span class="btn-row">
+          <button class="btn small" style="width:auto;" onclick="submitLedgerBankLink('pick')">고른 내역과 잇기</button>
+          <button class="btn small secondary" style="width:auto;" onclick="submitLedgerBankLink('new')">새로 만들어 잇기</button>
+          <button class="btn small secondary" style="width:auto;" onclick="closeLedgerBankLink()">닫기</button>
         </span>
       </div>
     </div>
@@ -24159,6 +24186,151 @@
       + (v.taxDate ? "  계산서   " + v.taxDate + " · " + won(v.taxAmount) + "\n" : ""));
   };
 
+  // ---------- 여신 기록에 통장 잇기 ----------
+  //  여신 장부에 직접 넣은 선입금·현금담보는 통장 기록이 없습니다.
+  //  실제로 통장에서 나간 돈이면 여기서 이어두면 통장 대사도 맞습니다.
+  let ledBankCtx = null;   // { id, e, cands: [...] }
+
+  window.openLedgerBankLink = async function(id){
+    if(!hasPerm(currentUserPerms, "paymentProcess")){ alert("권한이 없습니다."); return; }
+    let e = null;
+    try{ const snap = await getDoc(doc(db,"b2bLedger", id)); if(snap.exists()) e = snap.data(); }catch(err){}
+    if(!e){ alert("찾을 수 없습니다."); return; }
+    if(e.fromBankDepositId){ alert("이미 통장 기록이 이어져 있습니다."); return; }
+
+    const amt = Math.abs(Number(e.amount)||0);
+    document.getElementById("ledbank-head").innerHTML =
+      '<b>' + comboEsc(B2B_CATEGORY_LABELS[e.category] || e.category) + '</b>'
+      + ' · ' + comboEsc(e.date||"-") + ' · <b>' + amt.toLocaleString() + '</b>'
+      + ' · 대상 ' + comboEsc(e.partner || "미지정")
+      + (e.memo ? '<br><span style="color:var(--gray);">' + comboEsc(e.memo) + '</span>' : '');
+
+    // 새로 만들 때 쓸 칸을 미리 채웁니다.
+    document.getElementById("ledbank-payer").value = e.partner || "";
+    document.getElementById("ledbank-memo").value = e.memo || "";
+    try{
+      const names = await fetchNamesList("bankAccounts");
+      const sel = document.getElementById("ledbank-account");
+      if(sel) sel.innerHTML = '<option value="">(선택 안 함)</option>'
+        + names.map(n=>'<option value="'+comboEsc(n)+'">'+comboEsc(n)+'</option>').join("");
+    }catch(err){}
+
+    const listEl = document.getElementById("ledbank-list");
+    listEl.innerHTML = '<div class="list-empty">출금 내역을 읽는 중입니다...</div>';
+    document.getElementById("ledbank-msg").innerHTML = "";
+    document.getElementById("ledbank-overlay").style.display = "flex";
+
+    // 아직 여신에 안 붙은 출금 내역만 고를 수 있게 보여줍니다. 금액이 같은 것을 위로 올립니다.
+    const cands = [];
+    try{
+      const snap = await getDocs(collection(db,"bankDeposits"));
+      snap.forEach(d=>{
+        const v = d.data();
+        if(v.kind !== "out") return;          // 나간 돈만
+        if(v.creditPartner) return;           // 이미 다른 여신에 붙은 것
+        cands.push({ id:d.id, v });
+      });
+    }catch(err){}
+    cands.sort((a,b)=>{
+      const sa = (Math.abs(Number(a.v.amount)||0) === amt) ? 0 : 1;
+      const sb = (Math.abs(Number(b.v.amount)||0) === amt) ? 0 : 1;
+      if(sa !== sb) return sa - sb;
+      return String(b.v.date||"").localeCompare(String(a.v.date||""));
+    });
+    ledBankCtx = { id, e, cands };
+
+    if(cands.length === 0){
+      listEl.innerHTML = '<div style="border:1px solid var(--line);background:#fafafa;padding:9px 11px;font-size:12.5px;color:var(--gray);">'
+        + '이을 수 있는 출금 내역이 없습니다. 아래 <b>②</b>에서 새로 만들어 이어주세요.</div>';
+      return;
+    }
+    let h = '<div style="max-height:220px;overflow-y:auto;border:1px solid var(--line);">'
+      + '<table class="data-table" style="width:100%;"><thead><tr>'
+      + '<th style="width:34px;"></th><th>날짜</th><th class="ta-right">금액</th><th>계좌</th><th>상대</th><th>메모</th>'
+      + '</tr></thead><tbody>';
+    cands.slice(0,60).forEach((c,i)=>{
+      const same = (Math.abs(Number(c.v.amount)||0) === amt);
+      h += '<tr'+(same ? ' style="background:#f4faf4;"' : '')+'>'
+        + '<td><input type="radio" name="ledbank-pick" value="'+i+'"></td>'
+        + '<td>'+comboEsc(c.v.date||"-")+'</td>'
+        + '<td class="ta-right"'+(same?' style="font-weight:700;color:#2e7d32;"':'')+'>'+(Number(c.v.amount)||0).toLocaleString()+'</td>'
+        + '<td>'+comboEsc(c.v.account||"-")+'</td>'
+        + '<td>'+comboEsc(c.v.payer||"-")+'</td>'
+        + '<td style="font-size:11.5px;">'+comboEsc(c.v.memo||"-")+'</td></tr>';
+    });
+    h += '</tbody></table></div>';
+    if(cands.length > 60) h += '<div style="font-size:11.5px;color:var(--gray);margin-top:4px;">최근 60건만 보여드립니다.</div>';
+    listEl.innerHTML = h;
+    document.getElementById("ledbank-msg").innerHTML =
+      '<span style="color:var(--gray);">초록색 줄은 <b>금액이 똑같은</b> 내역입니다.</span>';
+  };
+
+  window.closeLedgerBankLink = function(){
+    document.getElementById("ledbank-overlay").style.display = "none";
+    ledBankCtx = null;
+  };
+
+  window.submitLedgerBankLink = async function(mode){
+    if(!ledBankCtx) return;
+    const { id, e, cands } = ledBankCtx;
+    const msgEl = document.getElementById("ledbank-msg");
+    const bad = t => { msgEl.innerHTML = '<span style="color:var(--danger);">'+t+'</span>'; };
+    const amt = Math.abs(Number(e.amount)||0);
+    const partner = String(e.partner||"").trim();
+    if(!partner) return bad("이 여신 기록에 대상이 없습니다. 먼저 <b>매입처</b>로 대상을 넣어주세요.");
+
+    let bankId = null;
+    if(mode === "pick"){
+      const r = document.querySelector('input[name="ledbank-pick"]:checked');
+      if(!r) return bad("이을 출금 내역을 골라주세요.");
+      const c = cands[Number(r.value)];
+      if(!c) return bad("고른 내역을 찾지 못했습니다.");
+      const cAmt = Number(c.v.amount)||0;
+      if(!confirm(
+        "이 여신 기록과 출금 내역을 잇습니다.\n\n"
+        + "  여신   " + (e.date||"-") + " · " + amt.toLocaleString() + "\n"
+        + "  통장   " + (c.v.date||"-") + " · " + cAmt.toLocaleString() + "\n"
+        + (cAmt !== amt ? "\n※ 금액이 다릅니다. 그래도 이으시겠습니까?\n" : "")
+        + "\n이 작업은 이력에 남습니다. 진행하시겠습니까?")) return;
+      try{
+        await updateDoc(doc(db,"bankDeposits", c.id), { creditPartner: partner });
+        bankId = c.id;
+      }catch(err){ return bad("잇지 못했습니다. " + comboEsc((err&&err.message)||String(err))); }
+    }else{
+      const account = (document.getElementById("ledbank-account")||{}).value || "";
+      const payer = String((document.getElementById("ledbank-payer")||{}).value||"").trim();
+      const memo  = String((document.getElementById("ledbank-memo")||{}).value||"").trim();
+      if(!payer) return bad("받는 곳을 넣어주세요.");
+      if(!confirm(
+        "통장 출금 내역을 새로 만들어 잇습니다.\n\n"
+        + "  날짜   " + (e.date||"-") + "\n"
+        + "  금액   " + amt.toLocaleString() + "\n"
+        + "  계좌   " + (account || "(선택 안 함)") + "\n"
+        + "  받는 곳 " + payer + "\n\n"
+        + "실제로 통장에서 나간 돈일 때만 만들어주세요. 이력에 남습니다.")) return;
+      try{
+        const ref = await addDoc(collection(db,"bankDeposits"), {
+          kind:"out", date: e.date||todayStr(), amount: amt,
+          payer, company: partner, memo, account,
+          usedAmount: 0, uses: [], creditPartner: partner,
+          createdBy: currentUser.name, createdByUsername: currentUser.username, createdAt: serverTimestamp()
+        });
+        bankId = ref.id;
+      }catch(err){ return bad("만들지 못했습니다. " + comboEsc((err&&err.message)||String(err))); }
+    }
+
+    try{
+      await updateDoc(doc(db,"b2bLedger", id), { fromBankDepositId: bankId });
+    }catch(err){ return bad("여신 기록에 잇지 못했습니다. " + comboEsc((err&&err.message)||String(err))); }
+
+    logAction("여신 기록에 통장 잇기",
+      partner + " / " + (e.date||"-") + " / " + amt.toLocaleString()
+      + " / " + (mode === "pick" ? "기존 내역과 연결" : "출금 내역 새로 만듦"));
+    alert("통장 기록을 이었습니다.");
+    closeLedgerBankLink();
+    loadB2BTab();
+  };
+
   // ---------- 여신잔액 맞추기 ----------
   //  삼성에서 알려준 공식 잔액을 거래처별로 적어두고 우리 장부와 견줍니다.
   //  저장만으로는 잔액이 바뀌지 않습니다. 「조정으로 맞추기」로 사람이 확인해야 반영됩니다.
@@ -24530,8 +24702,8 @@
           // 통장에서 나간 기록과 이어져 있으면 여기서 바로 볼 수 있습니다.
           '<td>' + (e.fromBankDepositId
               ? '<button class="btn small secondary" style="width:auto;" title="이 여신 충전이 통장에서 어떻게 나갔는지 봅니다" onclick="showLedgerBankInfo(\''+e.fromBankDepositId+'\')">통장 보기</button>'
-              : (e.category === "deposit"
-                  ? '<span style="color:#b8860b;font-size:11.5px;">기록 없음</span>'
+              : ((e.category === "deposit" || e.category === "collateral_cash")
+                  ? '<button class="btn small secondary" style="width:auto;color:#8a6d0b;" title="통장에서 나간 기록을 이어둡니다" onclick="openLedgerBankLink(\''+e.id+'\')">통장 잇기</button>'
                   : '<span style="color:var(--gray);">-</span>')) + '</td>' +
           '<td>'+(e.memo||'-')+'</td>' +
           '<td class="ta-right">'
@@ -25881,7 +26053,7 @@
     if(bar) bar.style.display = "none";
   };
 
-  // 파일에 박힌 버전 글자를 읽습니다. (예: "파일 2026-08-09 v486")
+  // 파일에 박힌 버전 글자를 읽습니다. (예: "파일 2026-08-09 v487")
   function readBuildTag(text){
     const m = String(text||"").match(/파일\s*[\d-]+\s*v(\d+)/);
     return m ? m[0].trim() : "";
