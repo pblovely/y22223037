@@ -379,7 +379,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v489</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v491</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -3638,6 +3638,9 @@
     try{ await logAction("[자동 정리] " + label, detail); }catch(e){}
   }
   async function logAction(action, detail){
+    // 자료가 바뀔 때마다 이 함수를 지나갑니다.
+    //  담아둔 자료를 비워, 다음에 화면을 열 때 새 값을 읽게 합니다. (옛 값이 남지 않게)
+    try{ if(typeof clearDocCache === "function") clearDocCache(); }catch(e){}
     try{
       await addDoc(collection(db, "activityLogs"), {
         actorName: currentUser.name, actorUsername: currentUser.username,
@@ -5511,7 +5514,7 @@
   }
 
   async function fetchModelsCache(){
-    const snap = await getDocs(collection(db, "inventoryModels"));
+    const snap = asSnap(await readColCached("models","inventoryModels"));
     modelsCache = [];
     snap.forEach(d=> modelsCache.push({ id:d.id, ...d.data() }));
     // 지정 순서가 먼저, 없으면 전산모델명 순 — 드롭다운에도 이 순서로 나옵니다.
@@ -7173,7 +7176,7 @@
   let editingCompanyId = null;
 
   async function fetchCompanies(){
-    const snap = await getDocs(collection(db,"companies"));
+    const snap = asSnap(await readColCached("companies","companies"));
     const arr = [];
     snap.forEach(d=> arr.push({ id:d.id, ...d.data() }));
     // 지정한 표시 순서가 먼저, 같으면 최근 등록·수정 순
@@ -9020,10 +9023,11 @@
     renderOrderPriceNotice();
     const listEl = document.getElementById("order-list");
     listEl.innerHTML = '<div class="list-empty">불러오는 중...</div>';
-    const batchSnap = await getDocs(query(collection(db,"orderBatches"), orderBy("createdAt","desc")));
+    const batchSnap = asSnap(await readColCached("orders","orderBatches",
+      query(collection(db,"orderBatches"), orderBy("createdAt","desc"))));
     if(batchSnap.empty){ listEl.innerHTML = '<div class="list-empty">등록된 주문이 없습니다.</div>'; return; }
 
-    const ordersSnap = await getDocs(collection(db,"orders"));
+    const ordersSnap = asSnap(await readColCached("orders","orders"));
     const ordersByBatch = {};
     ordersSnap.forEach(d=>{
       const o = d.data();
@@ -12676,7 +12680,11 @@
         + '<td>'+comboEsc(r.col ? (r.col.issueDate||"-") : "-")+'</td>'
         + '<td class="ta-right"><b>'+(r.colAmt ? r.colAmt.toLocaleString() : "-")+'</b>'
           + (diff ? '<br><span style="color:var(--danger);font-size:10.5px;">여신차감과 '
-              + (diff>0?"+":"") + diff.toLocaleString() + '</span>' : '') + '</td>'
+              + (diff>0?"+":"") + diff.toLocaleString() + '</span>'
+              + (canDo ? '<br><button class="btn small secondary" style="width:auto;font-size:10.5px;padding:2px 6px;height:auto;"'
+                  + ' title="계산서 금액과 여신차감액의 차이만큼 여신을 조정합니다"'
+                  + ' data-col-adj="'+comboEsc(r.company)+'|'+diff+'">여신 조정</button>' : '')
+            : '') + '</td>'
         + '<td class="ta-right">'+(r.used ? r.used.toLocaleString() : "-")+'</td>'
         + '<td class="ta-right" style="color:'+(r.left > 0 ? "#2e7d32" : "var(--gray)")+';font-weight:700;">'
           + (r.col ? r.left.toLocaleString() : "-") + '</td>'
@@ -12696,6 +12704,10 @@
       + (canDo ? '<td></td>' : '') + '</tr>';
     h += '</tbody></table></div>';
     listEl.innerHTML = h;
+    listEl.querySelectorAll("[data-col-adj]").forEach(b=> b.onclick = ()=>{
+      const p = String(b.dataset.colAdj).split("|");
+      openAdjustFromCollateral(p[0], Number(p[1])||0);
+    });
     listEl.querySelectorAll("[data-col-edit]").forEach(b=> b.onclick = ()=> openCollateralModal(b.dataset.colEdit));
     listEl.querySelectorAll("[data-col-del]").forEach(b=> b.onclick = ()=> deleteCollateral(b.dataset.colDel));
     listEl.querySelectorAll("[data-col-new]").forEach(b=> b.onclick = ()=>{
@@ -23009,7 +23021,8 @@
     if(!el) return;
     el.innerHTML = '<div class="list-empty">불러오는 중...</div>';
 
-    const snap = await getDocs(query(collection(db,"reservations"), orderBy("createdAt","desc")));
+    const snap = asSnap(await readColCached("reservation","reservations",
+      query(collection(db,"reservations"), orderBy("createdAt","desc"))));
     if(snap.empty){ el.innerHTML = '<div class="list-empty">등록된 예약이 없습니다.</div>'; return; }
 
     let rows = []; snap.forEach(d=> rows.push({ id:d.id, ...d.data() }));
@@ -23322,8 +23335,9 @@
       console.error("판매요청 자동정리 오류", e);
     }
 
-    const batchSnap = await getDocs(query(collection(db,"saleRequestBatches"), orderBy("createdAt","desc")));
-    const linesSnap = await getDocs(collection(db,"saleRequests"));
+    const batchSnap = asSnap(await readColCached("sales","saleRequestBatches",
+      query(collection(db,"saleRequestBatches"), orderBy("createdAt","desc"))));
+    const linesSnap = asSnap(await readColCached("sales","saleRequests"));
 
     const linesByBatch = {};
     const legacyLines = [];
@@ -24517,6 +24531,28 @@
     logAction("여신 공식잔액 저장", who + " / " + val.toLocaleString());
     closeB2BBalanceCheck();
     loadB2BTab();
+  };
+
+  // 담보 계산서에서 「여신 조정」을 누르면, 계산서와 여신차감액의 차이만큼 조정창을 채워 엽니다.
+  //  diff = 계산서 금액 − 여신차감액.
+  //   (+) 면 삼성이 그만큼 더 차감했으므로 우리 여신을 줄여야 맞습니다.
+  window.openAdjustFromCollateral = async function(company, diff){
+    if(!diff){ alert("차이가 없습니다."); return; }
+    await openB2BLedgerAdd();
+    document.getElementById("b2b-category-select").value = "adjust";
+    onB2BCategoryChange();
+    document.getElementById("b2b-adjust-sign").value = (diff > 0) ? "minus" : "plus";
+    document.getElementById("b2b-amount-input").value = Math.abs(diff);
+    { const rs = document.getElementById("b2b-adjust-reason");
+      if(rs && Array.from(rs.options).some(o=> o.value === "현금할인 반올림")) rs.value = "현금할인 반올림"; }
+    { const pa = document.getElementById("b2b-partner-select");
+      if(pa && Array.from(pa.options).some(o=> o.value === company)) pa.value = company; }
+    { const so = document.getElementById("b2b-source-select");
+      if(so && Array.from(so.options).some(o=> o.value === company)) so.value = company; }
+    document.getElementById("b2b-memo-input").value = "담보 계산서와 여신차감액 차이";
+    document.getElementById("b2badd-msg").innerHTML =
+      '<span style="color:#8a6d0b;">계산서 금액과 여신차감액의 차이 ' + (diff>0?"+":"") + diff.toLocaleString()
+      + ' 만큼 미리 채웠습니다. <b>사유를 확인하고 저장</b>해주세요.</span>';
   };
 
   // 차액만큼 조정 등록창을 미리 채워 엽니다. 저장은 사람이 확인해야 됩니다.
@@ -26192,7 +26228,7 @@
     if(bar) bar.style.display = "none";
   };
 
-  // 파일에 박힌 버전 글자를 읽습니다. (예: "파일 2026-08-09 v489")
+  // 파일에 박힌 버전 글자를 읽습니다. (예: "파일 2026-08-09 v491")
   function readBuildTag(text){
     const m = String(text||"").match(/파일\s*[\d-]+\s*v(\d+)/);
     return m ? m[0].trim() : "";
@@ -26257,6 +26293,29 @@
     return m[key] === true;
   }
   window.clearCache = function(key){ delete dataCache[key]; };
+
+  // 저장소 하나를 화면키로 담아둡니다. 「읽기 절약」이 켜져 있으면 다시 읽지 않습니다.
+  //  자료가 바뀌면 logAction 에서 통째로 비우므로 옛 값이 남지 않습니다.
+  const docCache = {};   // "화면키|저장소" → rows
+  async function readColCached(screenKey, colName, qRef){
+    const k = screenKey + "|" + colName;
+    if(cacheOn(screenKey) && docCache[k]) return docCache[k];
+    const snap = await getDocs(qRef || collection(db, colName));
+    const rows = [];
+    snap.forEach(d=> rows.push({ id:d.id, ...d.data() }));
+    if(cacheOn(screenKey)) docCache[k] = rows;
+    return rows;
+  }
+  // 담아둔 줄들을 getDocs 결과처럼 쓰게 감쌉니다. (기존 코드를 그대로 두려고)
+  function asSnap(rows){
+    const docs = (rows||[]).map(r=> ({ id:r.id, data:()=> r }));
+    return { docs, empty: docs.length === 0, size: docs.length,
+             forEach: fn=> docs.forEach(fn) };
+  }
+  window.clearDocCache = function(screenKey){
+    if(!screenKey){ Object.keys(docCache).forEach(k=> delete docCache[k]); return; }
+    Object.keys(docCache).forEach(k=>{ if(k.indexOf(screenKey + "|") === 0) delete docCache[k]; });
+  };
   // 캐시가 켜져 있으면 저장된 값을, 아니면 새로 읽습니다.
   async function readCached(key, colName){
     if(cacheOn(key) && dataCache[key]) return dataCache[key];
