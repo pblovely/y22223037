@@ -379,7 +379,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-08 v471</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-08 v472</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -8422,9 +8422,18 @@
   function listDensity(kind){
     try{
       const v = localStorage.getItem(kind + "Density");
-      if(v) return JSON.parse(v);
+      if(v){
+        const o = JSON.parse(v);
+        // 예전에 저장된 「화면에 꽉 채우기」는 한 번만 「내용에 맞게」로 되돌립니다.
+        //  (목록 여백을 줄이기로 정했고, 필요하면 보기 설정에서 다시 고르시면 됩니다)
+        if(o && o.width === "fit" && !o.widthFixed){
+          o.width = "auto"; o.widthFixed = true;
+          try{ localStorage.setItem(kind + "Density", JSON.stringify(o)); }catch(e){}
+        }
+        return o;
+      }
     }catch(e){}
-    return { density:"normal", width:"auto" };
+    return { density:"normal", width:"auto", widthFixed:true };
   }
   function saveListDensity(kind, obj){
     try{ localStorage.setItem(kind + "Density", JSON.stringify(obj)); }catch(e){}
@@ -25587,7 +25596,7 @@
     if(bar) bar.style.display = "none";
   };
 
-  // 파일에 박힌 버전 글자를 읽습니다. (예: "파일 2026-08-08 v471")
+  // 파일에 박힌 버전 글자를 읽습니다. (예: "파일 2026-08-08 v472")
   function readBuildTag(text){
     const m = String(text||"").match(/파일\s*[\d-]+\s*v(\d+)/);
     return m ? m[0].trim() : "";
