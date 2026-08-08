@@ -366,7 +366,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-08 v427</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-08 v429</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -6336,7 +6336,8 @@
     if(checked.length===0){ alert("최소 1개는 선택해주세요."); return; }
     currentViewSettings = checked;
     const user = auth.currentUser;
-    if(user){ await setDoc(doc(db,"users",user.uid), { viewSettings: checked }, { merge:true }); }
+    if(user){ await setDoc(doc(db,"users",user.uid),
+      { viewSettings: checked, viewKnownKeys: INV_COLUMNS.map(c=>c.key) }, { merge:true }); }
     loadInventoryList();
     alert("보기 설정이 저장되었습니다.");
   };
@@ -20344,7 +20345,8 @@
     }
 
     const fmt = v => (v==null || v==="") ? '<span style="color:var(--danger);">미입력</span>' : Number(v).toLocaleString();
-    let html = '<div style="overflow-x:auto;"><table class="data-table" data-label-key="resv-list-table" style="min-width:1180px;"><thead><tr>' +
+    // 내용에 맞춰 붙입니다. (min-width 로 늘리면 열마다 빈칸이 크게 벌어집니다)
+    let html = '<div style="overflow-x:auto;"><table class="data-table resv-dest-fit" data-label-key="resv-list-table" style="width:auto;"><thead><tr>' +
       '<th><input type="checkbox" id="resv-check-all" onclick="toggleAllResvRows(this)" title="전체 선택"></th>' +
       '<th>#</th><th>구분</th><th>통신사</th><th>요청일</th><th>거래처</th><th>모델 (전산모델명/펫네임)</th><th>색상</th>' +
       '<th class="ta-right">예약</th><th class="ta-right">배정</th><th class="ta-right">잔여</th>' +
@@ -20706,8 +20708,9 @@
     applyCustomTabLabels();   // 저장해 둔 글씨 크기·색상을 표에 다시 적용
     loadReservationList();
   
-    addDownloadBtn("dl-reservation", "reservation-table-area", "예약목록");
-    addViewCfgBtn("dl-reservation", "reservation-table-area");
+    // 예약 목록은 reservation-list-area 에 그려집니다. (reservation-table-area 는 예약 지표용)
+    addDownloadBtn("dl-reservation", "reservation-list-area", "예약목록");
+    addViewCfgBtn("dl-reservation", "reservation-list-area");
   }
 
   let saleListFilter = "ing";   // ing | done | cancel | all  (기본: 진행중만)
@@ -25005,7 +25008,7 @@
   // 어느 목록이 어떤 페이지 설정을 쓰는지 짝지어 둡니다. (현재 페이지만 내려가는 것을 알리려고)
   const DL_PAGE_KEY = {
     "company-list-wrap":"companies", "order-list":"orders", "sale-request-list":"saleRequests",
-    "reservation-table-area":"reservations", "log-list":"logs", "b2b-ledger-list":"b2bLedger"
+    "reservation-list-area":"reservations", "log-list":"logs", "b2b-ledger-list":"b2bLedger"
   };
   window.downloadVisibleTable = function(containerId, fileLabel){
     if(!hasPerm(currentUserPerms, "excelExport")){ alert("엑셀 다운로드 권한이 없습니다."); return; }
@@ -26968,7 +26971,16 @@
       pendingView.style.display="none"; mainView.style.display="block";
       document.getElementById("welcome-name").textContent = data.name;
       currentUser = { name:data.name, username:data.username, uid:user.uid };
-      currentViewSettings = data.viewSettings && data.viewSettings.length ? data.viewSettings : DEFAULT_VIEW_SETTINGS.slice();
+      // 나중에 새로 생긴 열은 저장된 설정에 없어 안 보입니다. 새 열만 골라 켜줍니다.
+      //  (사용자가 일부러 끈 열은 그대로 꺼둡니다)
+      if(data.viewSettings && data.viewSettings.length){
+        const saved = data.viewSettings;
+        const known = (data.viewKnownKeys && data.viewKnownKeys.length) ? data.viewKnownKeys : saved;
+        const added = INV_COLUMNS.map(c=>c.key).filter(k=> !known.includes(k));
+        currentViewSettings = INV_COLUMNS.map(c=>c.key).filter(k=> saved.includes(k) || added.includes(k));
+      }else{
+        currentViewSettings = DEFAULT_VIEW_SETTINGS.slice();
+      }
       // 나중에 새로 생긴 열은 저장된 설정에 없어 안 보입니다. 새 열만 골라 켜줍니다.
       //  (사용자가 일부러 끈 열은 그대로 꺼둡니다)
       if(data.reqViewSettings && data.reqViewSettings.length){
