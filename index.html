@@ -366,7 +366,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-08 v425</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-08 v427</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -11342,6 +11342,7 @@
     { key:"status",    label:"상태" },
     { key:"kind",      label:"구분" },
     { key:"company",   label:"업체", left:true },
+    { key:"companyNote", label:"내용", left:true },
     { key:"bizName",   label:"사업자명" },
     { key:"bizNumber", label:"사업자번호" },
     { key:"reqDate",   label:"요청일" },
@@ -11381,7 +11382,8 @@
     reqViewSettings = checked;
     try{
       const u = auth.currentUser;
-      if(u) await setDoc(doc(db,"users",u.uid), { reqViewSettings: checked }, { merge:true });
+      if(u) await setDoc(doc(db,"users",u.uid),
+        { reqViewSettings: checked, reqViewKnownKeys: RB_COLUMNS.map(c=>c.key) }, { merge:true });
     }catch(e){}
     document.getElementById("rbd-view-panel").style.display = "none";
     loadReqBoard();
@@ -11390,7 +11392,8 @@
     reqViewSettings = RB_DEFAULT_VIEW.slice();
     try{
       const u = auth.currentUser;
-      if(u) await setDoc(doc(db,"users",u.uid), { reqViewSettings: reqViewSettings }, { merge:true });
+      if(u) await setDoc(doc(db,"users",u.uid),
+        { reqViewSettings: reqViewSettings, reqViewKnownKeys: RB_COLUMNS.map(c=>c.key) }, { merge:true });
     }catch(e){}
     document.getElementById("rbd-view-panel").style.display = "none";
     loadReqBoard();
@@ -11629,8 +11632,8 @@
       const money = (v)=> v ? Number(v).toLocaleString() : "-";
       switch(key){
         case "kind":      return '<b style="color:' + r.color + ';">' + r.label + '</b>';
-        case "company":   return (r.who ? '<b>' + comboEsc(r.who) + '</b>' : '<span style="color:var(--danger);">연결 끊김</span>')
-                                 + (r.sub ? ' <span style="color:var(--gray);font-size:11px;">' + comboEsc(r.sub) + '</span>' : '');
+        case "company":   return (r.who ? '<b>' + comboEsc(r.who) + '</b>' : '<span style="color:var(--danger);">연결 끊김</span>');
+        case "companyNote": return r.sub ? '<span style="color:var(--gray);font-size:11.5px;">' + comboEsc(r.sub) + '</span>' : '-';
         case "bizName":   return co && co.bizName ? comboEsc(co.bizName) : '<span style="color:var(--gray);">-</span>';
         case "bizNumber": return co && co.bizNumber ? comboEsc(co.bizNumber) : '<span style="color:var(--gray);">-</span>';
         case "reqDate":   return comboEsc(r.date || "-");
@@ -11644,9 +11647,10 @@
         case "taxAmount": return money(r.taxAmount);
         case "status": {
           const c = r.canceled ? "var(--gray)" : (r.finished ? "#2e7d32" : "var(--danger)");
-          return '<span style="color:' + c + ';">' + comboEsc(r.status) + '</span>'
-            + (r.onHold ? ' <span style="background:#fff8e1;border:1px solid #e0c46c;color:#8a6d0b;font-size:11px;padding:0 5px;" title="'
-                        + comboEsc(r.holdReason || "보류") + '">보류</span>' : '');
+          // 보류로 빼둔 건은 상태를 따로 붙이지 않고 「요청보류」 한 낱말로 보여줍니다.
+          if(r.onHold) return '<span style="background:#fff8e1;border:1px solid #e0c46c;color:#8a6d0b;font-size:11px;padding:0 5px;" title="'
+            + comboEsc(r.holdReason || "보류") + '">요청보류</span>';
+          return '<span style="color:' + c + ';">' + comboEsc(r.status) + '</span>';
         }
       }
       return "-";
@@ -26965,7 +26969,16 @@
       document.getElementById("welcome-name").textContent = data.name;
       currentUser = { name:data.name, username:data.username, uid:user.uid };
       currentViewSettings = data.viewSettings && data.viewSettings.length ? data.viewSettings : DEFAULT_VIEW_SETTINGS.slice();
-      reqViewSettings = data.reqViewSettings && data.reqViewSettings.length ? data.reqViewSettings : RB_DEFAULT_VIEW.slice();
+      // 나중에 새로 생긴 열은 저장된 설정에 없어 안 보입니다. 새 열만 골라 켜줍니다.
+      //  (사용자가 일부러 끈 열은 그대로 꺼둡니다)
+      if(data.reqViewSettings && data.reqViewSettings.length){
+        const saved = data.reqViewSettings;
+        const known = (data.reqViewKnownKeys && data.reqViewKnownKeys.length) ? data.reqViewKnownKeys : saved;
+        const added = RB_COLUMNS.map(c=>c.key).filter(k=> !known.includes(k));
+        reqViewSettings = RB_COLUMNS.map(c=>c.key).filter(k=> saved.includes(k) || added.includes(k));
+      }else{
+        reqViewSettings = RB_DEFAULT_VIEW.slice();
+      }
       if(data.dashCrossOpen){
         dashCrossOpen.model = data.dashCrossOpen.model !== false;   // 저장된 값이 없으면 펼침
         dashCrossOpen.dest  = data.dashCrossOpen.dest  !== false;
