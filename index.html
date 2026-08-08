@@ -378,7 +378,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-08 v462</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-08 v464</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -1447,7 +1447,7 @@
         </div>
         <div id="company-pagination"></div>
         <div id="company-list-wrap" style="overflow-x:auto;">
-        <table class="data-table" style="min-width:1400px;">
+        <table class="data-table resv-dest-fit" style="width:auto;">
           <thead>
             <tr>
               <th>#</th>
@@ -23882,9 +23882,17 @@
     const snap = await getDocs(query(collection(db,"b2bLedger"), orderBy("date","desc")));
     const allEntries = []; snap.forEach(d=> allEntries.push({ id:d.id, ...d.data() }));
 
-    // 거래처 고르는 버튼 — 기록에 있는 대상을 그대로 씁니다. (새 거래처가 생기면 저절로 늘어납니다)
+    // 거래처 고르는 버튼
+    //  ① 업체정보에서 「여신 대상」으로 체크한 곳 — 거래가 없어도 나옵니다
+    //  ② 기록에 남아 있는 대상 — 예전 것도 빠지지 않게
     const pName = e => String(e.partner||"").trim() || "(대상 미지정)";
-    const pList = [...new Set(allEntries.map(pName))].sort();
+    let creditCos = [];
+    try{
+      if(!companiesCache.length) await fetchCompanies();
+      creditCos = companiesCache.filter(c=> c.isCreditTarget === true)
+        .map(c=> String(c.name||"").trim()).filter(Boolean);
+    }catch(e){}
+    const pList = [...new Set(creditCos.concat(allEntries.map(pName)))].sort();
     const tabEl = document.getElementById("b2b-partner-tabs");
     if(tabEl){
       const btn = (label, val, cnt)=>
@@ -23942,6 +23950,8 @@
     }
     // 대상(거래처)별 잔여여신 — 대상을 안 적은 기록은 「대상 미지정」으로 따로 모읍니다.
     const byPartner = {};
+    // 여신 대상으로 체크한 거래처는 거래가 없어도 0으로 보여줍니다.
+    creditCos.forEach(pn=>{ byPartner[pn] = { inAmt:0, useAmt:0 }; });
     entries.forEach(e=>{
       const pn = String(e.partner||"").trim() || "(대상 미지정)";
       if(!byPartner[pn]) byPartner[pn] = { inAmt:0, useAmt:0 };
@@ -25353,7 +25363,7 @@
     if(bar) bar.style.display = "none";
   };
 
-  // 파일에 박힌 버전 글자를 읽습니다. (예: "파일 2026-08-08 v462")
+  // 파일에 박힌 버전 글자를 읽습니다. (예: "파일 2026-08-08 v464")
   function readBuildTag(text){
     const m = String(text||"").match(/파일\s*[\d-]+\s*v(\d+)/);
     return m ? m[0].trim() : "";
