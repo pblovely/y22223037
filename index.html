@@ -379,7 +379,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v491</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v492</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -1523,6 +1523,14 @@
           </div>
           <div class="stack-row"><label>삼성여신 <span class="info-tip" title="삼성전자 계열이라 여신을 따로 관리하는 거래처면 체크하세요. 체크한 업체만 입출금 등록의 「삼성여신」 목록에 나옵니다. 삼성에스엘처럼 이름에 삼성이 들어가도 삼성전자가 아니면 체크하지 마세요.">ⓘ</span></label>
             <label style="font-size:12.5px;"><input type="checkbox" id="co-is-credit"> 여신 대상 (삼성전자 계열)</label>
+          </div>
+          <div class="stack-row"><label>현금할인율 <span class="info-tip" title="이 매입처에서 늘 붙는 선할인율입니다. 주문 등록에서 매입처를 고르면 각 줄에 자동으로 채워집니다. 비워두면 채우지 않습니다.">ⓘ</span></label>
+            <input type="number" id="co-cashrate-input" step="0.01" placeholder="예: 0.3  (비우면 자동으로 안 채움)"></div>
+          <div class="stack-row"><label>할인 계산 기준 <span class="info-tip" title="대당 = 단말기 한 대의 출고가에 할인율을 걸고 원 단위로 반올림합니다. 합계 = 주문 전체 출고가 합계에 할인율을 한 번 겁니다. 삼성전자유통은 합계 기준으로 확인됐습니다.">ⓘ</span></label>
+            <select id="co-discbase-input">
+              <option value="unit">대당 (한 대씩 계산 후 반올림)</option>
+              <option value="total">합계 (주문 전체 합계에 한 번)</option>
+            </select>
           </div>
         </div>
         <div style="font-size:11px;font-weight:700;color:var(--gray);margin:12px 0 4px 0;">사업자정보</div>
@@ -2948,7 +2956,8 @@
           <div class="stack-row"><label>주문일</label><input type="text" id="order-date-input" placeholder="예: 20260724" maxlength="8" inputmode="numeric"></div>
           <div class="stack-row"><label>도착예정일 (선택)</label><input type="text" id="order-expected-date-input" placeholder="예: 20260731" maxlength="8" inputmode="numeric"></div>
           <div class="stack-row"><label>입금예정일 <span class="info-tip" title="이 주문 대금을 언제까지 보내기로 했는지 적어주세요. 출금요청에 그대로 따라갑니다.">ⓘ</span></label><input type="text" id="order-paydue-input" placeholder="예: 20260731" maxlength="8" inputmode="numeric"></div>
-          <div class="stack-row"><label>입고처</label><select id="order-source-select"><option value="">선택</option></select></div>
+          <div class="stack-row"><label>입고처</label><select id="order-source-select" onchange="onOrderSourceChange()"><option value="">선택</option></select></div>
+          <div id="order-source-note" style="display:none;font-size:12px;padding:7px 10px;margin:0 0 6px 0;border:1px solid var(--navy);background:#f4f7fb;line-height:1.7;"></div>
           <div class="stack-row"><label>통신사</label><select id="order-carrier-select"></select></div>
           <div class="stack-row"><label>결제방식</label>
             <select id="order-payment-method-select" onchange="showB2BBalanceHint()">
@@ -7305,7 +7314,8 @@
     ["co-name-input","name"], ["co-bizname-input","bizName"], ["co-biznum-input","bizNumber"], ["co-ceo-input","ceoName"],
     ["co-biztype-input","bizType"], ["co-bizitem-input","bizItem"], ["co-address-input","address"],
     ["co-contact-input","contact"], ["co-bank-input","bankName"], ["co-account-input","accountNumber"],
-    ["co-holder-input","accountHolder"], ["co-note-input","note"]
+    ["co-holder-input","accountHolder"], ["co-note-input","note"],
+    ["co-cashrate-input","cashRate"]
   ];
 
   window.openCompanyModal = function(companyId, readOnly){
@@ -7321,6 +7331,8 @@
     document.getElementById("co-is-source").checked = c.isSource === true;
     document.getElementById("co-is-dest").checked = c.isDest === true;
     { const e = document.getElementById("co-is-credit"); if(e) e.checked = c.isCreditTarget === true; }
+    { const e = document.getElementById("co-discbase-input");
+      if(e){ e.value = (c.discountBase === "total") ? "total" : "unit"; e.disabled = !!readOnly; } }
     document.getElementById("company-modal-title").textContent = readOnly ? "업체 보기" : (companyId ? "업체 수정" : "업체 등록");
     // 읽기 전용이면 저장 버튼을 감춥니다.
     const saveBtn = document.querySelector('#company-modal-overlay button[onclick="submitCompany()"]');
@@ -7420,6 +7432,7 @@
     payload.isSource = document.getElementById("co-is-source").checked;
     payload.isDest = document.getElementById("co-is-dest").checked;
     payload.isCreditTarget = !!(document.getElementById("co-is-credit")||{}).checked;
+    payload.discountBase = ((document.getElementById("co-discbase-input")||{}).value === "total") ? "total" : "unit";
 
     if(!payload.name){
       showModelMsg("co-result-msg", "업체명은 반드시 입력해주세요.", true);
@@ -7756,6 +7769,41 @@
     if(col === "outboundDestinations") return await fetchCompanyNames("isDest");
     return await fetchNamesOrdered(col);
   }
+
+  // 매입처를 고르면 업체정보에 적어둔 현금할인율·계산 기준을 보여주고, 줄에 채웁니다.
+  //  프로그램이 몰래 바꾸지 않습니다. 화면에 알려주고 비어 있는 칸만 채웁니다.
+  window.currentOrderSourceInfo = null;
+
+  window.onOrderSourceChange = function(){
+    const name = String((document.getElementById("order-source-select")||{}).value||"").trim();
+    const c = (companiesCache||[]).find(x=> String(x.name||"").trim() === name) || null;
+    const rate = c && c.cashRate !== "" && c.cashRate != null ? Number(c.cashRate) : null;
+    const base = (c && c.discountBase === "total") ? "total" : "unit";
+    currentOrderSourceInfo = c ? { name, rate, base } : null;
+
+    const el = document.getElementById("order-source-note");
+    if(el){
+      if(!c || rate == null || !(rate > 0)){
+        el.style.display = "none"; el.innerHTML = "";
+      }else{
+        el.style.display = "block";
+        el.innerHTML = '<b>' + comboEsc(name) + '</b> 현금할인 <b>' + rate + '%</b> · 계산 기준 <b>'
+          + (base === "total" ? "합계 (주문 전체에 한 번)" : "대당 (한 대씩 반올림)") + '</b>'
+          + '<br><span style="color:var(--gray);">비어 있는 선할인% 칸에 채워드립니다. 기준을 바꾸려면 업체정보에서 고쳐주세요.</span>';
+      }
+    }
+    // 비어 있는 줄에만 채웁니다. 이미 넣은 값은 건드리지 않습니다.
+    if(rate != null && rate > 0){
+      document.querySelectorAll("#order-lines-body tr").forEach(tr=>{
+        const p = tr.querySelector(".ol-prediscountpct");
+        if(p && String(p.value||"").trim() === ""){
+          p.value = rate;
+          if(typeof onOrderLinePrePctInput === "function") onOrderLinePrePctInput(tr);
+        }
+      });
+    }
+    if(typeof recalcOrderTotal === "function") recalcOrderTotal();
+  };
 
   async function populateOrderTopSelects(){
     const sel = document.getElementById("order-source-select");
@@ -8222,6 +8270,7 @@
     updateOrderLineTotalDiscount(tr);
     updateOrderLineSubtotal(tr);
   }
+  window.onOrderLinePrePctInput = onOrderLinePrePctInput;
   function onOrderLinePrePctInput(tr){
     const listPrice = Number(tr.querySelector(".ol-listprice").value) || 0;
     tr.querySelector(".ol-prediscountamt").value =
@@ -8353,13 +8402,8 @@
           "\n\n그래도 등록하시겠습니까?")) return;
       }catch(e){}
     }
-    // 여신 차감액 = 출고가 − 선할인 (타할인은 아직 안 받았으므로 차감 대상 아님)
-    const creditUse = lines.reduce((n,l)=>{
-      const L = Number(l.listPrice)||0;
-      const unit = L ? (L - (Number(l.preDiscountAmt)||0))
-        : ((Number(l.purchasePrice)||0) + (Number(l.otherDiscountAmt)||0));
-      return n + unit * (Number(l.quantity)||0);
-    }, 0);
+    // 여신 차감액 — 매입처의 「할인 계산 기준」을 따릅니다.
+    const creditUse = creditFromLines(source, lines);
     if(useB2BCredit && creditUse>0){
       await addDoc(collection(db,"b2bLedger"), {
         date: orderDate, category:"order_use", amount: creditUse,
@@ -9079,12 +9123,7 @@
         const sum = recs.reduce((n,r)=> n + (Number(r.amount)||0), 0);
         // 선할인까지만 반영한 금액이 여신 차감액입니다.
         const lines = (ordersByBatch[bd.id]||[]).filter(o=> o.status !== "취소");
-        const want = isCredit ? lines.reduce((n,o)=>{
-          const L = Number(o.listPrice)||0;
-          const unit = L ? (L - (Number(o.preDiscountAmt)||0))
-            : ((Number(o.purchasePrice)||0) + (Number(o.otherDiscountAmt)||0));
-          return n + unit * (Number(o.quantity)||0);
-        }, 0) : 0;
+        const want = isCredit ? creditFromLines(b.source, lines) : 0;
         if(sum !== want || recs.length > 1){
           await replaceB2BOrderUse(bd.id, want, b.depositPaidDate || b.orderDate || todayStr(), b.source || "-");
           afFixed++;
@@ -11586,22 +11625,39 @@
     loadSettlementTab();
   };
 
-  // 여신 차감액 = (출고가 − 선할인) × 수량
-  // 타할인(2.23%)은 나중에 클럽장려금으로 받는 후정산이라 여신에서 빼지 않습니다.
+  // ===== 여신 차감액 계산 =====
+  //  기본(대당)  = Σ (출고가 − 선할인) × 수량
+  //  합계 기준   = 출고가 합계 − 반올림(출고가 합계 × 현금할인율)
+  //   업체정보의 「할인 계산 기준」이 「합계」인 매입처에만 합계 방식을 씁니다.
+  //   삼성전자유통 계산서를 역산해 보니 합계 기준이었습니다. (대당 계산은 몇 원씩 어긋납니다)
+  //  타할인은 나중에 클럽장려금으로 받는 후정산이라 어느 방식이든 빼지 않습니다.
+  function creditFromLines(source, lines){
+    const unitSum = (lines||[]).reduce((n,l)=>{
+      const L = Number(l.listPrice)||0;
+      const unit = L ? (L - (Number(l.preDiscountAmt)||0))
+        : ((Number(l.purchasePrice)||0) + (Number(l.otherDiscountAmt)||0));
+      return n + unit * (Number(l.quantity)||0);
+    }, 0);
+    const c = (companiesCache||[]).find(x=> String(x.name||"").trim() === String(source||"").trim());
+    if(!c || c.discountBase !== "total") return unitSum;
+    const rate = (c.cashRate === "" || c.cashRate == null) ? null : Number(c.cashRate);
+    if(!(rate > 0)) return unitSum;
+    const listSum = (lines||[]).reduce((n,l)=> n + (Number(l.listPrice)||0) * (Number(l.quantity)||0), 0);
+    if(!(listSum > 0)) return unitSum;
+    return listSum - Math.round(listSum * rate / 100);
+  }
+  window.creditFromLines = creditFromLines;
+
   async function creditAmountOfBatch(orderBatchId){
     const snap = await getDocs(query(collection(db,"orders"), where("batchId","==",orderBatchId)));
-    let sum = 0;
-    snap.forEach(d=>{
-      const o = d.data();
-      if(o.status === "취소") return;
-      const qty = Number(o.quantity)||0;
-      const list = Number(o.listPrice)||0;
-      const pre = Number(o.preDiscountAmt)||0;
-      const unit = list ? (list - pre)
-        : ((Number(o.purchasePrice)||0) + (Number(o.otherDiscountAmt)||0));
-      sum += unit * qty;
-    });
-    return sum;
+    const lines = [];
+    snap.forEach(d=>{ const o = d.data(); if(o.status !== "취소") lines.push(o); });
+    let src = "";
+    try{
+      const bs = await getDoc(doc(db,"orderBatches", orderBatchId));
+      if(bs.exists()) src = String(bs.data().source||"").trim();
+    }catch(e){}
+    return creditFromLines(src, lines);
   }
 
   // 이 주문의 여신 차감 기록을 지우고 새 금액으로 다시 넣습니다. (중복 방지)
@@ -26228,7 +26284,7 @@
     if(bar) bar.style.display = "none";
   };
 
-  // 파일에 박힌 버전 글자를 읽습니다. (예: "파일 2026-08-09 v491")
+  // 파일에 박힌 버전 글자를 읽습니다. (예: "파일 2026-08-09 v492")
   function readBuildTag(text){
     const m = String(text||"").match(/파일\s*[\d-]+\s*v(\d+)/);
     return m ? m[0].trim() : "";
