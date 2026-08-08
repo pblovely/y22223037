@@ -379,7 +379,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v499</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v500</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -11811,7 +11811,7 @@
       if(charge === "yes"){
         await addDoc(collection(db,"b2bLedger"), {
           date: start, category:"loan_deposit", amount: principal,
-          partner, bank,
+          partner, source: partner, bank,
           memo: "대출 실행: " + bank + " · " + name,
           fromLoanId: ref.id,
           createdBy: currentUser.name, createdByUsername: currentUser.username, createdAt: serverTimestamp()
@@ -13942,15 +13942,21 @@
         // 통장 출금 기록과 이어져 있는지 표시합니다.
         //  입출금 내역에서 「삼성여신」을 골라 넣으면 이어집니다. 여신 화면에서 직접 넣으면 안 이어집니다.
         const hasBank = !!e.fromBankDepositId;
-        rows.push({ kind:"prepay", label:PRE[e.category], color:"var(--gray)", id:x.id, p:null,
-          who: (e.source || "").trim() || "(매입처 미지정)",
+        // 대출금 충전·이자 수령은 「여신에 들어온 돈」입니다. 줘야 할 돈이 아닙니다.
+        //  선입금만 우리가 삼성에 보낸 돈으로 「줘야 할 돈」 자리에 둡니다.
+        const isInflow = (e.category === "loan_deposit" || e.category === "interest_received");
+        rows.push({ kind:"prepay", label:PRE[e.category],
+          color: isInflow ? "#2e7d32" : "var(--gray)", id:x.id, p:null,
+          who: (e.source || e.partner || "").trim() || "(매입처 미지정)",
           sub: (e.category === "deposit"
                  ? (hasBank ? "통장 출금 기록 있음" : "통장 출금 기록 없음")
                    + (e.memo ? " · " + e.memo : "")
                  : (e.memo||"")),
           date:e.date||"",
-          owe:amt, recv:0, done:0, left:0, payDate:e.date||"", payMemo:e.memo||"",
-          taxDate:"", taxAmount:0, status:"미반영", finished:true, onHold:false, holdReason:"",
+          owe: isInflow ? 0 : amt, recv:0, done: isInflow ? amt : 0, left:0,
+          payDate:e.date||"", payMemo:e.memo||"",
+          taxDate:"", taxAmount:0, status: isInflow ? "여신충전" : "미반영",
+          finished:true, onHold:false, holdReason:"",
           canceled:false, recs:[], inSum:false, canProcess:false, canEdit:false });
       }else if(e.category === "order_use") creditUse += amt;
       else if(e.category === "club_incentive") creditClub += amt;
@@ -26334,7 +26340,7 @@
     if(bar) bar.style.display = "none";
   };
 
-  // 파일에 박힌 버전 글자를 읽습니다. (예: "파일 2026-08-09 v499")
+  // 파일에 박힌 버전 글자를 읽습니다. (예: "파일 2026-08-09 v500")
   function readBuildTag(text){
     const m = String(text||"").match(/파일\s*[\d-]+\s*v(\d+)/);
     return m ? m[0].trim() : "";
