@@ -379,7 +379,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v513</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v514</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -8517,6 +8517,19 @@
     { key:"source",     label:"매입처",   get:r=> comboEsc(r.b.source||"-"), sort:r=> r.b.source||"" },
     { key:"carrier",    label:"통신사",   get:r=> comboEsc(r.b.carrier || [...new Set((r.lines||[]).map(l=>l.carrier).filter(Boolean))].join(",") || "-") },
     { key:"lineCount",  label:"품목",     get:r=> (r.lines||[]).length, num:true, sort:r=> (r.lines||[]).length },
+    // 어떤 모델을 주문했는지 목록에서 바로 보이게 합니다. (상세를 안 열어도 되게)
+    { key:"models",     label:"모델",     get:r=>{
+        const c = {};
+        (r.lines||[]).filter(o=> o.status !== "취소").forEach(o=>{
+          const nm = String(o.systemModel || o.baseModel || o.petName || "-").trim();
+          c[nm] = (c[nm]||0) + (Number(o.quantity)||0);
+        });
+        const ks = Object.keys(c);
+        if(ks.length === 0) return "-";
+        const txt = ks.slice(0,3).map(k=> comboEsc(k) + " " + c[k]).join(" · ");
+        return txt + (ks.length > 3 ? ' <span style="color:var(--gray);">외 ' + (ks.length-3) + '</span>' : "");
+      },
+      sort:r=> String(((r.lines||[])[0]||{}).systemModel||"") },
     { key:"qty",        label:"수량",     get:r=> r.qty, num:true, sort:r=> r.qty },
     { key:"arrive",     label:"도착",     get:r=> (r.done)+"/"+r.qty, num:true,
       cls:r=> r.done>=r.qty ? "color:#2e7d32;font-weight:700;" : (r.done>0 ? "color:#b8860b;" : "color:var(--danger);") },
@@ -8565,6 +8578,19 @@
     { key:"destination", label:"판매처",  get:r=> comboEsc(r.b.destination||"-"), sort:r=> r.b.destination||"" },
     { key:"carrier",     label:"통신사",  get:r=> comboEsc([...new Set((r.lines||[]).map(l=>l.carrier).filter(Boolean))].join(",") || "-") },
     { key:"lineCount",   label:"품목",    get:r=> (r.lines||[]).length, num:true, sort:r=> (r.lines||[]).length },
+    // 어떤 모델을 넘겼는지 목록에서 바로 보이게 합니다.
+    { key:"models",      label:"모델",    get:r=>{
+        const c = {};
+        (r.lines||[]).filter(o=> o.status !== "취소").forEach(o=>{
+          const nm = String(o.systemModel || o.baseModel || o.petName || "-").trim();
+          c[nm] = (c[nm]||0) + (Number(o.quantity)||0);
+        });
+        const ks = Object.keys(c);
+        if(ks.length === 0) return "-";
+        const txt = ks.slice(0,3).map(k=> comboEsc(k) + " " + c[k]).join(" · ");
+        return txt + (ks.length > 3 ? ' <span style="color:var(--gray);">외 ' + (ks.length-3) + '</span>' : "");
+      },
+      sort:r=> String(((r.lines||[])[0]||{}).systemModel||"") },
     { key:"qty",         label:"수량",    get:r=> r.qty, num:true, sort:r=> r.qty },
     { key:"match",       label:"매칭",    get:r=> r.done+"/"+r.qty, num:true,
       cls:r=> r.done>=r.qty ? "color:#2e7d32;font-weight:700;" : (r.done>0 ? "color:#b8860b;" : "color:var(--danger);") },
@@ -26856,7 +26882,7 @@
     if(bar) bar.style.display = "none";
   };
 
-  // 파일에 박힌 버전 글자를 읽습니다. (예: "파일 2026-08-09 v513")
+  // 파일에 박힌 버전 글자를 읽습니다. (예: "파일 2026-08-09 v514")
   function readBuildTag(text){
     const m = String(text||"").match(/파일\s*[\d-]+\s*v(\d+)/);
     return m ? m[0].trim() : "";
