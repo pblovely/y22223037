@@ -378,7 +378,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-08 v460</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-08 v461</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -1929,6 +1929,9 @@
             <datalist id="cb-company-datalist"></datalist>
           </div>
           <div class="stack-row"><label>메모</label><input type="text" id="cb-memo" placeholder="선택"></div>
+          <div class="stack-row"><label>삼성여신 <span class="info-tip" title="삼성전자에 보낸 선입금이면 여기서 고르세요. 출금 내역과 여신 충전이 한 번에 기록됩니다. 삼성전자 거래처마다 여신이 따로 쌓입니다.">ⓘ</span></label>
+            <select id="cb-credit"><option value="">(여신과 무관)</option></select>
+          </div>
           <div id="cb-msg" style="font-size:12.5px;margin:6px 0;"></div>
           <button class="btn small" style="width:auto;" onclick="submitCashbook()">등록</button>
         
@@ -13643,13 +13646,15 @@
         const isOpen = left > 0;
         rows.push({
           kind: isIn ? "cbin" : "cbout",
-          label: (v.fromLoanId ? "B2B" : (isIn ? "입금내역" : "출금내역")),
-          color: (v.fromLoanId ? "#6a1b9a" : (isIn ? "#1565c0" : "var(--danger)")),
+          label: (v.creditPartner ? "여신충전" : (v.fromLoanId ? "B2B" : (isIn ? "입금내역" : "출금내역"))),
+          color: (v.creditPartner ? "#2e7d32" : (v.fromLoanId ? "#6a1b9a" : (isIn ? "#1565c0" : "var(--danger)"))),
           isLoan: !!v.fromLoanId,
           id: d.id, p:null, cb:true, cbUsed: used,
           who: (v.company || "").trim() || (v.payer || "-"),
           noCompany: !String(v.company||"").trim(),
-          sub: (v.fromLoanId
+          sub: (v.creditPartner
+                 ? (v.creditPartner + " 여신으로 충전됨" + (v.memo ? " · " + v.memo : ""))
+                 : v.fromLoanId
                  ? String(v.memo||"B2B 대출 실행").replace(/^B2B 대출 실행:\s*/, "")
                    + (isOpen ? "" : " · 배분 " + used.toLocaleString())
                  : ((isOpen ? "아직 요청에 안 붙임" : "배분 " + used.toLocaleString())
@@ -16269,14 +16274,22 @@
       const e = document.getElementById(id); if(e) e.value = "";
     });
     document.getElementById("cb-msg").innerHTML = "";
+    { const cr = document.getElementById("cb-credit"); if(cr) cr.value = ""; }
     document.getElementById("cbadd-overlay").style.display = "flex";
-    // 입출금리스트에서 열었을 때도 계좌·업체 목록이 비어 있지 않게 채웁니다.
+    // 입출금리스트에서 열었을 때도 계좌·업체·여신 목록이 비어 있지 않게 채웁니다.
     (async ()=>{
       try{
         if(!companiesCache.length) await fetchCompanies();
         const dl = document.getElementById("cb-company-datalist");
         if(dl) dl.innerHTML = companiesCache.map(c=>'<option value="'+comboEsc(c.name||"")+'"></option>').join("");
         await refreshBankAccounts();
+      }catch(e){}
+      // 여신 충전 대상 — 업체정보의 매입처를 그대로 씁니다.
+      try{
+        const names = await fetchNamesList("inboundSources");
+        const cr = document.getElementById("cb-credit");
+        if(cr) cr.innerHTML = '<option value="">(여신과 무관)</option>'
+          + names.map(n=>'<option value="'+comboEsc(n)+'">'+comboEsc(n)+' 여신 충전</option>').join("");
       }catch(e){}
     })();
   };
@@ -16296,22 +16309,51 @@
     const company= document.getElementById("cb-company").value.trim();
     const account= (document.getElementById("cb-account")||{}).value || "";
     const memo   = document.getElementById("cb-memo").value.trim();
+    const credit = (document.getElementById("cb-credit")||{}).value || "";
 
     if(date.length !== 8){ show("날짜를 20260727 형태로 넣어주세요."); return; }
     if(!(amount > 0)){ show("금액을 숫자로 넣어주세요."); return; }
     if(!payer){ show("통장에 찍힌 <b>입금자명</b>을 넣어주세요. 업체명은 비워두셔도 됩니다."); return; }
+    // 여신 충전은 삼성에 보낸 돈이므로 출금이어야 합니다.
+    if(credit && kind !== "out"){
+      show("여신 충전은 <b>출금(보낸 돈)</b>일 때만 됩니다. 구분을 바꿔주세요."); return;
+    }
+    if(credit && !confirm("이 출금을 " + credit + " 여신 충전으로도 기록합니다.\n\n"
+      + "  " + amount.toLocaleString() + " · " + date + "\n\n"
+      + "출금 내역과 여신 충전이 함께 남습니다. 진행할까요?")) return;
 
+    let cbId = null;
     try{
-      await addDoc(collection(db,"bankDeposits"), {
+      const ref = await addDoc(collection(db,"bankDeposits"), {
         kind, date, amount, payer, company, memo, account,
         usedAmount: 0, uses: [],
+        creditPartner: credit || null,
         createdBy: currentUser.name, createdByUsername: currentUser.username, createdAt: serverTimestamp()
       });
+      cbId = ref.id;
       logAction(kind === "out" ? "입출금 내역 등록 (출금)" : "입출금 내역 등록 (입금)",
         amount.toLocaleString() + " / " + date + " / " + payer + (company ? " / " + company : " / 업체 미연결")
         + (account ? " / " + account : "")
+        + (credit ? " / 여신충전 " + credit : "")
         + (memo ? " / " + memo : ""));
     }catch(e){ show("저장에 실패했습니다."); return; }
+
+    // 여신 장부에도 충전으로 남깁니다. (삼성전자 거래처마다 따로 쌓입니다)
+    if(credit){
+      try{
+        await addDoc(collection(db,"b2bLedger"), {
+          date, category:"deposit", amount,
+          partner: credit, source: credit,
+          memo: "선입금: " + payer + (memo ? " · " + memo : ""),
+          fromBankDepositId: cbId,
+          createdBy: currentUser.name, createdByUsername: currentUser.username, createdAt: serverTimestamp()
+        });
+        logAction("삼성여신 충전", credit + " / " + amount.toLocaleString() + " / " + date + " (입출금 내역에서)");
+      }catch(e){
+        show("출금은 저장됐지만 <b>여신 충전 기록에 실패</b>했습니다. 삼성여신 화면에서 직접 넣어주세요.");
+        return;
+      }
+    }
 
     closeCashbookAdd();
     refreshCashViews();
@@ -16464,11 +16506,21 @@
       return;
     }
     if(!confirm("이 내역을 지웁니다.\n\n" + (x.date||"-") + " · " + (Number(x.amount)||0).toLocaleString()
-      + " · " + (x.payer||"-") + "\n\n지울까요?")) return;
+      + " · " + (x.payer||"-")
+      + (x.creditPartner ? "\n\n※ " + x.creditPartner + " 여신 충전 기록도 함께 지워집니다." : "")
+      + "\n\n지울까요?")) return;
     try{
+      // 여신 충전으로 함께 넣은 기록이 있으면 같이 지웁니다. (한쪽만 남으면 잔액이 어긋납니다)
+      if(x.creditPartner){
+        try{
+          const led = await getDocs(query(collection(db,"b2bLedger"), where("fromBankDepositId","==",id)));
+          for(const dd of led.docs) await deleteDoc(doc(db,"b2bLedger", dd.id));
+        }catch(e){}
+      }
       await deleteDoc(doc(db,"bankDeposits", id));
       logAction("입출금 내역 지움",
-        (Number(x.amount)||0).toLocaleString() + " / " + (x.date||"-") + " / " + (x.payer||"-"));
+        (Number(x.amount)||0).toLocaleString() + " / " + (x.date||"-") + " / " + (x.payer||"-")
+        + (x.creditPartner ? " / 여신충전 " + x.creditPartner + " 함께 지움" : ""));
     }catch(e){ alert("지우지 못했습니다."); return; }
     refreshCashViews();
   };
@@ -25290,7 +25342,7 @@
     if(bar) bar.style.display = "none";
   };
 
-  // 파일에 박힌 버전 글자를 읽습니다. (예: "파일 2026-08-08 v460")
+  // 파일에 박힌 버전 글자를 읽습니다. (예: "파일 2026-08-08 v461")
   function readBuildTag(text){
     const m = String(text||"").match(/파일\s*[\d-]+\s*v(\d+)/);
     return m ? m[0].trim() : "";
