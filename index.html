@@ -379,7 +379,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v477</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v478</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -10893,10 +10893,56 @@
     (modelsCache||[]).forEach(m=> (m.colors||[]).forEach(c=>{
       [c.manufacturerColor, c.systemColor].forEach(v=>{ if(v) colorNames.add(String(v).trim().toLowerCase()); });
     }));
+    // ★ 다른 모델 이름이 적힌 줄은 넣지 않습니다. ★
+    //  이 창은 「이 주문」의 도착을 넣는 곳입니다. 예전에는 적어준 모델을 보지 않고
+    //  일련번호만 가져와서, 엉뚱한 모델의 일련번호가 이 주문에 들어가는 일이 있었습니다.
+    const mkey = v => String(v||"").toUpperCase().replace(/[^A-Z0-9\uAC00-\uD7A3]/g,"");
+    const modelKeysOf = o => {
+      const out = [];
+      [o && o.systemModel, o && o.baseModel, o && o.petName].forEach(v=>{
+        const k = mkey(v); if(k.length >= 3) out.push(k);
+      });
+      ((o && o.colors) || []).forEach(c=>{ const k = mkey(c.sku); if(k.length >= 3) out.push(k); });
+      return out;
+    };
+    const curOrder = currentArrivalOrderData || {};
+    const curModel = modelsCache.find(x=> x.id === curOrder.modelId);
+    const curKeys = [...new Set(modelKeysOf(curOrder).concat(modelKeysOf(curModel)))];
+    const hit = (keys, hk)=> keys.some(k=> k === hk || k.includes(hk) || hk.includes(k));
+
+    // 이 줄에 「이 주문이 아닌 다른 모델」 이름이 있으면 그 글자를 돌려줍니다.
+    function wrongModelHint(hints){
+      for(const h of (hints||[])){
+        const hk = mkey(h);
+        if(hk.length < 3) continue;
+        if(/^[0-9]+$/.test(hk)) continue;                                    // 숫자만 = 일련번호·기가수
+        if(colorNames.has(String(h).trim().toLowerCase())) continue;          // 색상 이름
+        if(hit(curKeys, hk)) continue;                                        // 이 주문의 모델
+        const other = modelsCache.find(x=> x.id !== curOrder.modelId && hit(modelKeysOf(x), hk));
+        if(other) return { text:h, model:(other.systemModel || other.baseModel || other.petName || "-") };
+      }
+      return null;
+    }
+
+    const blocked = [];
     const parsed = parseSerialPaste(raw).map(e=>{
+      const bad = wrongModelHint(e.hints);
+      if(bad){ blocked.push({ line:e.line, sn:e.sn, text:bad.text, model:bad.model }); return null; }
       const col = (e.hints||[]).find(t=> colorNames.has(String(t).trim().toLowerCase())) || "";
       return { serial: e.sn, color: col || preColor };
-    }).filter(x=>x.serial);
+    }).filter(x=> x && x.serial);
+
+    const curLabel = (curOrder.systemModel || curOrder.baseModel || curOrder.petName || "-");
+    if(blocked.length){
+      msg.innerHTML = '<span style="color:var(--danger);font-weight:700;">다른 모델이 적힌 줄 ' + blocked.length + '개는 넣지 않았습니다.</span>'
+        + '<div style="margin-top:6px;font-size:11.5px;line-height:1.8;">'
+        + '이 창은 <b>' + comboEsc(curLabel) + '</b> 주문의 도착을 넣는 곳입니다.<br>'
+        + blocked.slice(0,8).map(x=> '· <span style="color:#999;">' + comboEsc(x.line) + '</span> — 「'
+            + comboEsc(x.text) + '」는 <b>' + comboEsc(x.model) + '</b> 입니다').join('<br>')
+        + (blocked.length>8 ? '<br>... 외 ' + (blocked.length-8) + '줄' : '')
+        + '<br><span style="color:var(--gray);">해당 모델의 주문에서 도착 등록을 해주세요. 모델을 빼고 일련번호만 붙여넣으면 이 주문으로 들어갑니다.</span></div>';
+      if(parsed.length === 0) return;
+    }
 
     if(parsed.length === 0){ msg.innerHTML = '<span style="color:var(--danger);">일련번호를 찾지 못했습니다.</span>'; return; }
 
@@ -10925,6 +10971,7 @@
     const all = Array.from(tbody.querySelectorAll(".arr-serial")).map(x=>x.value.trim()).filter(Boolean);
     const dup = all.filter((v,i)=> all.indexOf(v) !== i);
     msg.innerHTML = '<span style="color:#2e7d32;">' + parsed.length + '개를 넣었습니다.</span>'
+      + (blocked.length ? ' <span style="color:var(--danger);">다른 모델 ' + blocked.length + '줄은 넣지 않았습니다.</span>' : '')
       + (dup.length ? ' <span style="color:var(--danger);">중복 ' + [...new Set(dup)].length + '개: ' + comboEsc([...new Set(dup)].slice(0,5).join(", ")) + '</span>' : '');
   };
 
@@ -25334,7 +25381,7 @@
     if(bar) bar.style.display = "none";
   };
 
-  // 파일에 박힌 버전 글자를 읽습니다. (예: "파일 2026-08-09 v477")
+  // 파일에 박힌 버전 글자를 읽습니다. (예: "파일 2026-08-09 v478")
   function readBuildTag(text){
     const m = String(text||"").match(/파일\s*[\d-]+\s*v(\d+)/);
     return m ? m[0].trim() : "";
