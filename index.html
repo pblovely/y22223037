@@ -366,7 +366,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-08 v431</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-08 v432</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -6481,7 +6481,8 @@
       }
       const newItemRef = await addDoc(collection(db,"inventoryItems"), { ...base, entryType:"imei", quantity:1, serialNumber });
       clearDashCache(); clearCache("inventory"); logAction("재고 입고(일련번호)", docModelLabel(m)+" "+colorLabel+" / "+carrier+" / 일련번호 "+serialNumber);
-      logItem(ref.id, serialNumber, "inbound", "포피플 입고 · " + (source||"-") + (location ? " · " + location : ""), { systemModel: m.systemModel||"" });
+      logItem(ref.id, serialNumber, "inbound", "포피플 입고 · " + (source||"-") + (location ? " · " + location : ""),
+        { systemModel: m.systemModel||"", eventDate: inDate || todayStr(), location: location || "" });
 
       if(currentOrderLinkId){
         await advanceOrderFulfillment(currentOrderLinkId, newItemRef.id);
@@ -9974,7 +9975,8 @@
           linkedItemIds: [...(o.linkedItemIds||[]), ...ids.map(x=>x.id)],
           status: nf >= (Number(o.quantity)||0) ? "도착완료" : "부분도착"
         });
-        await logItems(ids.map(x=>({...x, systemModel:o.systemModel||""})), "inbound", "포피플 입고 · " + (o.source||"-") + (location ? " · " + location : ""));
+        await logItems(ids.map(x=>({...x, systemModel:o.systemModel||""})), "inbound", "포피플 입고 · " + (o.source||"-") + (location ? " · " + location : ""),
+          { eventDate: inDate || todayStr(), location: location || "" });
 
         // 판매처리한 경우 연결된 판매요청도 매칭
         if(sell){
@@ -18935,14 +18937,16 @@
       el.innerHTML = '<div style="color:var(--danger);">조회에 실패했습니다.</div>'; return;
     }
 
-    if(from) rows = rows.filter(r=> String(r.date||"") >= from);
-    if(to)   rows = rows.filter(r=> String(r.date||"") <= to);
+    if(from) rows = rows.filter(r=> String(ihEventDate(r)||"") >= from);
+    if(to)   rows = rows.filter(r=> String(ihEventDate(r)||"") <= to);
     if(type) rows = rows.filter(r=> r.type === type);
     if(user) rows = rows.filter(r=> r.by === user);
     // 전산모델명으로도 좁힙니다. (같은 일련번호가 여러 모델에 있을 때)
     if(modelQ) rows = rows.filter(r=> String(r.systemModel||"").toLowerCase().includes(modelQ));
     rows.sort((a,b)=>{
-      // 예전 것이 위로 옵니다. (실제 일어난 순서대로 보시라고)
+      // 실제로 일어난 날짜순으로 세웁니다. (기록한 시각이 아니라)
+      const dA = ihEventDate(a), dB = ihEventDate(b);
+      if(dA !== dB) return String(dA).localeCompare(String(dB));
       const ta = (a.at && a.at.seconds) || 0, tb = (b.at && b.at.seconds) || 0;
       if(ta !== tb) return ta - tb;
       // 같은 초에 저장된 것은 나노초까지 봅니다.
@@ -18987,22 +18991,36 @@
     }
   };
 
+  // 이력에 적힌 「실제로 일어난 날」을 찾습니다.
+  //  eventDate 가 있으면 그것을, 예전 기록은 내용에 적힌 8자리 날짜를 씁니다.
+  //  둘 다 없으면 기록한 날을 씁니다.
+  function ihEventDate(r){
+    if(r && r.eventDate && String(r.eventDate).replace(/\D/g,"").length === 8) return String(r.eventDate);
+    const m = String((r && r.detail) || "").match(/(20\d{6})/);
+    if(m) return m[1];
+    return (r && r.date) || "";
+  }
+
   function renderItemHistoryTable(rows, hideSerial){
     const ts = v => (v && v.seconds)
       ? new Date(v.seconds*1000).toLocaleString("ko-KR", { year:"2-digit", month:"2-digit", day:"2-digit", hour:"2-digit", minute:"2-digit" })
       : "-";
-    let h = '<div style="overflow-x:auto;"><table class="data-table" style="min-width:'+(hideSerial?860:1000)+'px;"><thead><tr>' +
-      '<th>일시</th>' + (hideSerial ? '' : '<th>일련번호</th>') +
+    const ymd = v => { const t = String(v||"").replace(/\D/g,"");
+      return t.length === 8 ? t.slice(0,4)+"-"+t.slice(4,6)+"-"+t.slice(6,8) : "-"; };
+    let h = '<div style="overflow-x:auto;"><table class="data-table resv-dest-fit" style="width:auto;"><thead><tr>' +
+      '<th>일자</th>' + (hideSerial ? '' : '<th>일련번호</th>') +
       '<th>전산모델명</th>' +
-      '<th>종류</th><th class="ta-left">내용</th><th>처리자</th></tr></thead><tbody>';
+      '<th>종류</th><th class="ta-left">내용</th><th>위치</th><th>처리자</th><th>작업시각</th></tr></thead><tbody>';
     rows.forEach(r=>{
       const t = IH_TYPES[r.type] || { label:r.type, color:"var(--navy)" };
-      h += '<tr><td>'+ts(r.at)+'</td>' +
+      h += '<tr><td>'+ymd(ihEventDate(r))+'</td>' +
         (hideSerial ? '' : '<td><b>'+comboEsc(r.serialNumber||"-")+'</b></td>') +
         '<td>'+comboEsc(r.systemModel||"-")+'</td>' +
         '<td><span style="color:'+t.color+';font-weight:700;">'+comboEsc(t.label)+'</span></td>' +
         '<td class="ta-left">'+comboEsc(r.detail||"-")+'</td>' +
-        '<td>'+comboEsc(r.by||"-")+'</td></tr>';
+        '<td>'+comboEsc(r.location || "-")+'</td>' +
+        '<td>'+comboEsc(r.by||"-")+'</td>' +
+        '<td style="color:var(--gray);font-size:11.5px;">'+ts(r.at)+'</td></tr>';
     });
     h += '</tbody></table></div>';
     return h;
@@ -19146,7 +19164,9 @@
       snap.forEach(d=> rows.push({ id:d.id, ...d.data() }));
     }catch(e){}
     rows.sort((a,b)=>{
-      // 예전 것이 위로 옵니다. (실제 일어난 순서대로 보시라고)
+      // 실제로 일어난 날짜순으로 세웁니다. (기록한 시각이 아니라)
+      const dA = ihEventDate(a), dB = ihEventDate(b);
+      if(dA !== dB) return String(dA).localeCompare(String(dB));
       const ta = (a.at && a.at.seconds) || 0, tb = (b.at && b.at.seconds) || 0;
       if(ta !== tb) return ta - tb;
       // 같은 초에 저장된 것은 나노초까지 봅니다.
@@ -26068,7 +26088,8 @@
     h += '<div id="paste-act-result" style="font-size:12.5px;margin-top:10px;"></div>';
     el.innerHTML = h;
     el.dataset.rows = JSON.stringify(ok.map(r=> ({ id:r.id, serial:r.serial, subsidy:r.subsidy, date:r.date,
-                                                   systemModel:r.it.systemModel||"", carrier:r.it.carrier||"" })));
+                                                   systemModel:r.it.systemModel||"", carrier:r.it.carrier||"",
+                                                   location:r.it.location||"" })));
     el.dataset.date = date;
   };
 
@@ -26099,7 +26120,7 @@
         await logItem(r.id, r.serial, "activate",
           "개통일 " + (r.date || date) + (r.carrier ? " · " + r.carrier : "")
           + (r.subsidy ? " · 공시지원금 " + Number(r.subsidy).toLocaleString() : ""),
-          { systemModel: r.systemModel||"" });
+          { systemModel: r.systemModel||"", eventDate: (r.date || date), location: r.location || "" });
       }
     }catch(e){
       resEl.innerHTML = '<span style="color:var(--danger);">처리 중 오류: ' + comboEsc((e&&e.message)?e.message:String(e)) + '</span>';
