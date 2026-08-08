@@ -379,7 +379,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v518</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v519</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -22918,25 +22918,28 @@
 
       const issues = [];
 
-      // ⓪ 같은 일련번호가 여러 건 등록된 재고
-      //  일련번호는 단말기 한 대를 가리키는 값이라 겹치면 안 됩니다.
+      // ⓪ 같은 모델·일련번호가 여러 건 등록된 재고
+      //  모델과 일련번호가 둘 다 같으면 같은 단말기입니다.
       //  겹치면 재고 대수·매입액·판매 매칭이 모두 부풀려집니다.
       {
-        const bySn = {};
+        // ★ 모델과 일련번호가 둘 다 같아야 겹친 것으로 봅니다. ★
+        //  같은 일련번호라도 모델이 다르면 다른 단말기입니다. (예: 79798 이 512 와 256 에 각각 있음)
+        const byKey = {};
         Object.keys(items).forEach(id=>{
           const it = items[id];
           if(it.deleted === true) return;
           const sn = String(it.serialNumber||"").trim();
           if(!sn) return;
-          (bySn[sn] = bySn[sn] || []).push(id);
+          const key = modelDupKey(it.systemModel || it.baseModel || "") + "|" + sn;
+          (byKey[key] = byKey[key] || []).push(id);
         });
-        const dupSns = Object.keys(bySn).filter(sn=> bySn[sn].length > 1);
-        const dupExtra = dupSns.reduce((n,sn)=> n + (bySn[sn].length - 1), 0);
+        const dupKeys = Object.keys(byKey).filter(k=> byKey[k].length > 1);
+        const dupExtra = dupKeys.reduce((n,k)=> n + (byKey[k].length - 1), 0);
         dupSerialCache = {};
-        dupSns.forEach(sn=> dupSerialCache[sn] = bySn[sn].map(id=> ({ id, ...items[id] })));
-        issues.push({ n:"같은 일련번호가 여러 건", cnt:dupSns.length, unit:"남는 " + dupExtra + "건",
-          why:"일련번호는 단말기 한 대를 가리키는 값입니다. 겹치면 재고 대수·매입액·판매 매칭이 부풀려집니다.",
-          fix: dupSns.length ? "showDupSerialList()" : null, fixLabel:"확인하고 정리" });
+        dupKeys.forEach(k=> dupSerialCache[k] = byKey[k].map(id=> ({ id, ...items[id] })));
+        issues.push({ n:"같은 모델·일련번호가 여러 건", cnt:dupKeys.length, unit:"남는 " + dupExtra + "건",
+          why:"모델과 일련번호가 둘 다 같으면 같은 단말기입니다. 모델이 다르면 다른 단말기라 세지 않습니다.",
+          fix: dupKeys.length ? "showDupSerialList()" : null, fixLabel:"확인하고 정리" });
       }
 
       // ① 주문이 지워졌는데 남은 판매요청
@@ -27042,7 +27045,7 @@
     if(bar) bar.style.display = "none";
   };
 
-  // 파일에 박힌 버전 글자를 읽습니다. (예: "파일 2026-08-09 v518")
+  // 파일에 박힌 버전 글자를 읽습니다. (예: "파일 2026-08-09 v519")
   function readBuildTag(text){
     const m = String(text||"").match(/파일\s*[\d-]+\s*v(\d+)/);
     return m ? m[0].trim() : "";
