@@ -379,7 +379,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v498</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v499</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -2505,7 +2505,8 @@
         </div>
         <p class="desc" style="margin-top:0;">은행에서 빌린 돈을 건별로 관리합니다. 실행하면 <b>고른 대상의 여신이 충전</b>됩니다.<br>
           <b>이자·수수료는 은행에 내는 돈</b>이라 여신 잔액에는 영향이 없고, 비용으로만 잡힙니다.
-          이자일은 <b>기업은행 매월 말일 · 대구은행 매월 실행일</b> 기준이며 첫 회차는 한 달 뒤입니다.</p>
+          이자일은 <b>기업은행 매월 말일 · 대구은행 매월 실행일</b> 기준입니다.
+          기업은행은 <b>실행한 그 달 말일</b>이 첫 회차이고, 대구은행은 <b>한 달 뒤</b>가 첫 회차입니다.</p>
         <div id="loan-list"></div>
       </div>
 
@@ -12928,9 +12929,9 @@
 
   // ---------- B2B 대출 이자표 ----------
   //  은행마다 이자 내는 날이 다릅니다.
-  //   · 기업은행 — 매월 말일
-  //   · 대구은행 — 매월 실행일과 같은 날
-  //  첫 회차는 실행일 한 달 뒤부터입니다.
+  //   · 기업은행 — 매월 말일. 첫 회차는 「실행한 그 달 말일」입니다.
+  //       (예: 20220503 실행 → 1회차 20220531)
+  //   · 대구은행 — 매월 실행일과 같은 날. 첫 회차는 한 달 뒤입니다.
   let loanSchedTarget = null;
 
   function lastDayOf(y, m){ return new Date(y, m, 0).getDate(); }   // m 은 1~12
@@ -12940,7 +12941,9 @@
     const st = String(startStr||"").replace(/\D/g,"");
     if(st.length !== 8) return "";
     const y0 = Number(st.slice(0,4)), m0 = Number(st.slice(4,6)), d0 = Number(st.slice(6,8));
-    let y = y0, m = m0 + n;
+    // 기업은행은 실행한 그 달 말일이 1회차라 한 달씩 당깁니다. (n=1 → 실행월)
+    const step = (bank === "기업은행") ? (n - 1) : n;
+    let y = y0, m = m0 + step;
     y += Math.floor((m - 1) / 12); m = ((m - 1) % 12) + 1;
     const last = lastDayOf(y, m);
     const d = (bank === "기업은행") ? last : Math.min(d0, last);
@@ -12976,7 +12979,8 @@
       + "<div>월이자 <b>" + monthly.toLocaleString() + "</b> · " + total + "회 · 예정 합계 "
       + (monthly * total).toLocaleString() + "</div>"
       + "<div style='color:var(--gray);'>이자일 — "
-      + (bank === "기업은행" ? "매월 말일" : "매월 실행일과 같은 날") + " (첫 회차는 한 달 뒤)</div>";
+      + (bank === "기업은행" ? "매월 말일 (첫 회차는 실행한 그 달 말일)"
+                            : "매월 실행일과 같은 날 (첫 회차는 한 달 뒤)") + "</div>";
 
     const today = todayStr();
     let h = '<div style="overflow-x:auto;"><table class="data-table" style="min-width:640px;"><thead><tr>'
@@ -26330,7 +26334,7 @@
     if(bar) bar.style.display = "none";
   };
 
-  // 파일에 박힌 버전 글자를 읽습니다. (예: "파일 2026-08-09 v498")
+  // 파일에 박힌 버전 글자를 읽습니다. (예: "파일 2026-08-09 v499")
   function readBuildTag(text){
     const m = String(text||"").match(/파일\s*[\d-]+\s*v(\d+)/);
     return m ? m[0].trim() : "";
