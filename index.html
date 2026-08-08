@@ -378,7 +378,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-08 v459</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-08 v460</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -7116,9 +7116,12 @@
   ];
 
   // 옛 이름이 쓰인 곳을 세어봅니다. (바꾸기 전에 보여드리려고)
-  async function countCompanyNameUses(oldName){
+  async function countCompanyNameUses(oldName, onStep){
     const out = [];
+    let step = 0;
     for(const spec of CO_NAME_FIELDS){
+      step++;
+      if(onStep) onStep(step, CO_NAME_FIELDS.length, spec.label);
       let n = 0, docsFound = [];
       try{
         const snap = await getDocs(collection(db, spec.col));
@@ -7138,10 +7141,12 @@
   }
 
   // 옛 이름을 새 이름으로 바꿉니다. 확인을 거치고 이력에 남깁니다.
-  async function renameCompanyEverywhere(oldName, newName, uses){
-    let total = 0;
+  async function renameCompanyEverywhere(oldName, newName, uses, onStep){
+    let total = 0, doneAll = 0;
+    const grand = uses.reduce((n,u)=> n + u.count, 0);
     for(const u of uses){
       for(let i=0;i<u.docs.length;i+=200){
+        if(onStep) onStep(doneAll, grand, u.label);
         const bt = writeBatch(db);
         u.docs.slice(i, i+200).forEach(({ id, data })=>{
           const patch = {};
@@ -7156,9 +7161,11 @@
           if(Object.keys(patch).length) bt.update(doc(db, u.col, id), patch);
         });
         await bt.commit();
+        doneAll += Math.min(200, u.docs.length - i);
       }
       total += u.count;
     }
+    if(onStep) onStep(grand, grand, "");
     return total;
   }
 
@@ -7193,7 +7200,9 @@
     let renameUses = null;
     if(renameFrom){
       showModelMsg("co-result-msg", "옛 이름이 쓰인 곳을 찾는 중입니다...", false);
-      renameUses = await countCompanyNameUses(renameFrom);
+      renameUses = await countCompanyNameUses(renameFrom, (i, n, label)=>{
+        showModelMsg("co-result-msg", "찾는 중... " + i + " / " + n + " · " + label, false);
+      });
       const total = renameUses.reduce((n,u)=> n + u.count, 0);
       if(total > 0){
         const lines = renameUses.map(u=> "  " + u.label + " " + u.count.toLocaleString() + "건").join("\n");
@@ -7212,11 +7221,16 @@
       showModelMsg("co-result-msg", "저장 중...", false);
       if(editingCompanyId){
         payload.updatedAt = serverTimestamp();
-        await withTimeout(updateDoc(doc(db,"companies", editingCompanyId), payload), 12000, "업체 저장");
+        await updateDoc(doc(db,"companies", editingCompanyId), payload);   // 시간 제한 없이 기다립니다
         logAction("업체 수정", payload.name + (renameFrom ? " (이전 이름 " + renameFrom + ")" : ""));
         if(renameUses){
           showModelMsg("co-result-msg", "옛 기록의 이름을 바꾸는 중입니다...", false);
-          const moved = await renameCompanyEverywhere(renameFrom, payload.name, renameUses);
+          const moved = await renameCompanyEverywhere(renameFrom, payload.name, renameUses, (d, g, label)=>{
+            showModelMsg("co-result-msg",
+              "바꾸는 중... <b>" + d.toLocaleString() + " / " + g.toLocaleString() + "</b>"
+              + (label ? " · " + label : "")
+              + '<br><span style="color:var(--gray);">창을 닫지 마세요. 다 끝나면 알려드립니다.</span>', false);
+          });
           logAction("업체명 일괄 변경",
             renameFrom + " → " + payload.name + " / " + moved.toLocaleString() + "건 / "
             + renameUses.map(u=> u.label + " " + u.count).join(", "));
@@ -25276,7 +25290,7 @@
     if(bar) bar.style.display = "none";
   };
 
-  // 파일에 박힌 버전 글자를 읽습니다. (예: "파일 2026-08-08 v459")
+  // 파일에 박힌 버전 글자를 읽습니다. (예: "파일 2026-08-08 v460")
   function readBuildTag(text){
     const m = String(text||"").match(/파일\s*[\d-]+\s*v(\d+)/);
     return m ? m[0].trim() : "";
