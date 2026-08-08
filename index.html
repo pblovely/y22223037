@@ -379,7 +379,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v524</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v529</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -1125,6 +1125,49 @@
         <span class="btn-row">
           <button class="btn small" style="width:auto;" onclick="submitCollateral()">저장</button>
           <button class="btn small secondary" style="width:auto;" onclick="closeCollateralModal()">닫기</button>
+        </span>
+      </div>
+    </div>
+
+    <!-- 만기 연장 -->
+    <div id="ext-overlay" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.55);z-index:1090;align-items:center;justify-content:center;">
+      <div style="background:#fff;border:2px solid var(--navy);max-width:460px;width:96%;padding:22px;position:relative;">
+        <button onclick="closeExtend()" style="position:absolute;top:12px;right:12px;background:none;border:1px solid var(--navy);width:26px;height:26px;cursor:pointer;font-size:13px;">✕</button>
+        <h3 style="margin-top:0;margin-bottom:4px;">만기 연장</h3>
+        <p class="desc" style="margin-top:0;">연장하면 <b>이자표도 이 구간에 맞춰</b> 다시 계산됩니다.</p>
+        <div class="stack-form">
+          <div class="stack-row"><label>대출</label><input type="text" id="ext-loan" readonly style="background:#f7f7f7;"></div>
+          <div class="stack-row"><label>지금 만기</label><input type="text" id="ext-now" readonly style="background:#f7f7f7;"></div>
+          <div class="stack-row"><label id="ext-len-label">연장 기간</label><input type="number" id="ext-len" placeholder="숫자만" oninput="renderExtendDue()"></div>
+          <div class="stack-row"><label>연장 후 만기</label><input type="text" id="ext-due" readonly style="background:#f7f7f7;"></div>
+        </div>
+        <div id="ext-msg" style="font-size:12.5px;margin:8px 0;line-height:1.7;"></div>
+        <span class="btn-row">
+          <button class="btn small" style="width:auto;" onclick="submitExtend()">연장</button>
+          <button class="btn small secondary" style="width:auto;" onclick="closeExtend()">닫기</button>
+        </span>
+      </div>
+    </div>
+
+    <!-- 원금 상환 -->
+    <div id="repay-overlay" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.55);z-index:1090;align-items:center;justify-content:center;">
+      <div style="background:#fff;border:2px solid var(--navy);max-width:460px;width:96%;padding:22px;position:relative;">
+        <button onclick="closeRepay()" style="position:absolute;top:12px;right:12px;background:none;border:1px solid var(--navy);width:26px;height:26px;cursor:pointer;font-size:13px;">✕</button>
+        <h3 style="margin-top:0;margin-bottom:4px;">원금 상환</h3>
+        <p class="desc" style="margin-top:0;">만기 전에 갚는 <b>선상환</b>도 되고, <b>나눠 갚으셔도</b> 됩니다.<br>
+          <span style="color:var(--gray);">원금 상환은 은행에 갚는 돈이라 <b>여신 잔액에는 영향이 없습니다.</b></span></p>
+        <div class="stack-form">
+          <div class="stack-row"><label>대출</label><input type="text" id="repay-loan" readonly style="background:#f7f7f7;"></div>
+          <div class="stack-row"><label>원금</label><input type="text" id="repay-principal" readonly style="background:#f7f7f7;"></div>
+          <div class="stack-row"><label>기상환</label><input type="text" id="repay-already" readonly style="background:#f7f7f7;"></div>
+          <div class="stack-row"><label>잔액</label><input type="text" id="repay-remain" readonly style="background:#f7f7f7;"></div>
+          <div class="stack-row"><label>상환 금액</label><input type="number" id="repay-amount" placeholder="숫자만"></div>
+          <div class="stack-row"><label>상환일</label><input type="text" id="repay-date" maxlength="8" inputmode="numeric" placeholder="예: 20260809"></div>
+        </div>
+        <div id="repay-msg" style="font-size:12.5px;margin:8px 0;line-height:1.7;"></div>
+        <span class="btn-row">
+          <button class="btn small" style="width:auto;" onclick="submitRepay()">상환 기록</button>
+          <button class="btn small secondary" style="width:auto;" onclick="closeRepay()">닫기</button>
         </span>
       </div>
     </div>
@@ -2297,7 +2340,10 @@
         <div id="b2b-orderuse-detail" style="display:none;margin-top:10px;"></div>
         <div id="b2b-warn" style="display:none;font-size:12.5px;margin-top:6px;"></div>
         <div id="b2b-repaywarn" style="display:none;font-size:12.5px;margin-top:6px;"></div>
-        <p class="desc" style="margin-top:6px;">주문사용 기록은 <b>주문 관리를 열 때 자동으로 맞춰집니다.</b> 수기로 넣은 기록은 건드리지 않습니다.</p>
+        <div id="b2b-adjsum" style="display:none;font-size:12.5px;margin-top:6px;line-height:1.7;"></div>
+        <p class="desc" style="margin-top:6px;">주문사용 기록은 <b>주문 관리를 열 때 자동으로 맞춰집니다.</b> 수기로 넣은 기록은 건드리지 않습니다.<br>
+          이 화면의 수익은 <b>매입 기준</b>입니다 — 할인으로 남기고 대출비용을 뺍니다.
+          판매까지 포함한 <b>포피플 전체 손익</b>은 <b>대시보드</b>에서 보세요.</p>
       </div>
 
       <div class="card">
@@ -8547,8 +8593,9 @@
       sort:r=> Number(r.b.creditUsed!=null?r.b.creditUsed:r.b.depositRequired)||0 },
     { key:"amount",     label:"입고가",   get:r=> (Number(r.b.depositRequired)||0).toLocaleString(), num:true, sort:r=> Number(r.b.depositRequired)||0 },
     { key:"collateral", label:"계산서",   get:r=> r.b.collateralId
-        ? '<span style="color:#2e7d32;font-weight:700;">' + comboEsc(r.b.collateralDate || "발행") + '</span>'
-          + (r.b.collateralNo ? '<br><span style="font-size:10.5px;color:var(--gray);">' + comboEsc(r.b.collateralNo) + '</span>' : '')
+        ? '<span style="color:#2e7d32;font-weight:700;white-space:nowrap;"'
+          + (r.b.collateralNo ? ' title="계산서번호 ' + comboEsc(r.b.collateralNo) + '"' : '')
+          + '>' + comboEsc(r.b.collateralDate || "발행") + '</span>'
         : (r.b.paymentMethod === "b2b_credit" ? '<span style="color:var(--danger);">미발행</span>' : '-') },
     // 후정산 = 나중에 클럽장려금으로 받을 금액 = 타할인 합계입니다.
     //  예전에는 「여신차감 − 입고가」로 냈는데, 할인 계산 기준이 다르면 반올림 차이가 섞여 들어갔습니다.
@@ -13205,6 +13252,9 @@
       const diff = r.col && r.qty > 0 ? (r.colAmt - r.credit) : 0;
       const colAdj = (r.col && adjByCol[r.col.id]) ? adjByCol[r.col.id] : 0;
       const freeAdj = adjFreeByCo[String(r.company||"").trim()] || 0;
+      // 아직 안 맞춘 차이 = 계산서와 여신차감의 차이 + 이미 넣은 조정
+      //  (조정은 부호가 반대로 들어가므로 더하면 남은 양이 됩니다)
+      const needAdj = diff + colAdj + freeAdj;
       h += '<tr' + (done ? ' class="row-done"' : '') + '>'
         + '<td><b>'+comboEsc(r.month||"-")+'</b></td>'
         + '<td>'+comboEsc(r.company||"-")+'</td>'
@@ -13219,13 +13269,12 @@
         + '<td class="ta-right" style="white-space:nowrap;">'
           + (diff
               ? '<span style="color:var(--danger);font-weight:700;">' + (diff>0?"+":"") + diff.toLocaleString() + '</span>'
-                + (colAdj !== 0
+                + ((colAdj || freeAdj)
                     ? ' <span style="color:#2e7d32;font-size:10.5px;font-weight:700;">✓ 조정 '
-                      + (colAdj>0?"+":"") + colAdj.toLocaleString() + '</span>'
-                    : (freeAdj !== 0
-                        ? ' <span style="color:#8a6d0b;font-size:10.5px;">조정 '
-                          + (freeAdj>0?"+":"") + freeAdj.toLocaleString() + ' 있음</span>'
-                        : ''))
+                      + ((colAdj+freeAdj)>0?"+":"") + (colAdj+freeAdj).toLocaleString() + '</span>'
+                      + (needAdj ? ' <span style="color:var(--danger);font-size:10.5px;font-weight:700;">남음 '
+                          + (needAdj>0?"+":"") + needAdj.toLocaleString() + '</span>' : '')
+                    : '')
               : '<span style="color:var(--gray);">-</span>') + '</td>' 
         + '<td class="ta-right">'+(r.used ? r.used.toLocaleString() : "-")+'</td>'
         + '<td class="ta-right" style="color:'+(r.left > 0 ? "#2e7d32" : "var(--gray)")+';font-weight:700;">'
@@ -13233,10 +13282,12 @@
         + (canDo ? '<td class="ta-right" style="white-space:nowrap;">'
             + (r.col
                 ? '<button class="btn small secondary" style="width:auto;" data-col-edit="'+r.col.id+'">수정</button>'
-                  + (diff ? '<button class="btn small secondary" style="width:auto;margin-left:4px;"'
-                      + ' title="계산서 금액과 여신차감액의 차이만큼 여신을 조정합니다"'
-                      + ' data-col-adj="'+comboEsc(r.company)+'|'+(diff + colAdj)+'|'+r.col.id+'">'
-                      + (colAdj !== 0 ? '조정 더하기' : '여신 조정') + '</button>' : '')
+                  // 아직 안 맞춘 만큼만 채웁니다. 계산서에 안 이어진 조정도 함께 셉니다.
+                  //  (안 그러면 이미 넣은 조정을 못 보고 또 채워 두 번 빠집니다)
+                  + (needAdj ? '<button class="btn small secondary" style="width:auto;margin-left:4px;"'
+                      + ' title="아직 안 맞춘 차이 ' + needAdj.toLocaleString() + ' 만큼 여신을 조정합니다"'
+                      + ' data-col-adj="'+comboEsc(r.company)+'|'+needAdj+'|'+r.col.id+'">'
+                      + ((colAdj || freeAdj) ? '조정 더하기' : '여신 조정') + '</button>' : '')
                   + '<button class="btn small secondary" style="width:auto;margin-left:4px;"'
                       + ' title="이 계산서를 담보로 실행한 B2B 대출을 이어둡니다"'
                       + ' data-col-loan="'+r.col.id+'">대출 잇기</button>'
@@ -13398,11 +13449,11 @@
     rows.forEach(e=>{
       const amt = Number(e.amount)||0; total += amt;
       const p = splitLoanCostMemo(e);
-      h += '<tr' + (canDo ? ' class="rbd-clickable" data-row-act="lc|'+e.id+'"' : '') + '><td>'+comboEsc(e.date||"-")+'</td>'
-        + '<td><b>'+CATS[e.category]+'</b></td>'
-        + '<td>'+comboEsc(e.bank||"-")+'</td>'
-        + '<td>'+comboEsc(e.partner||"-")+'</td>'
-        + '<td><b>'+comboEsc(p.code||"-")+'</b></td>'
+      h += '<tr' + (canDo ? ' class="rbd-clickable" data-row-act="lc|'+e.id+'"' : '') + '><td style="white-space:nowrap;">'+comboEsc(e.date||"-")+'</td>'
+        + '<td style="white-space:nowrap;"><b>'+CATS[e.category]+'</b></td>'
+        + '<td style="white-space:nowrap;">'+comboEsc(e.bank||"-")+'</td>'
+        + '<td style="white-space:nowrap;">'+comboEsc(e.partner||"-")+'</td>'
+        + '<td style="white-space:nowrap;"><b>'+comboEsc(p.code||"-")+'</b></td>'
         + '<td>'+comboEsc(p.name||"-")+'</td>'
         + '<td class="ta-right">'+(p.no ? p.no+"회차" : '<span style="color:var(--gray);">-</span>')+'</td>'
         + '<td class="ta-right">'+amt.toLocaleString()+'</td>'
@@ -13431,6 +13482,8 @@
   //       (예: 20220503 실행 → 1회차 20220531)
   //   · 대구은행 — 매월 실행일과 같은 날. 첫 회차는 한 달 뒤입니다.
   let loanSchedTarget = null;
+  let repayTarget = null;
+  let extTarget = null;
 
   function lastDayOf(y, m){ return new Date(y, m, 0).getDate(); }   // m 은 1~12
 
@@ -13719,42 +13772,66 @@
 
   // 3개월 연장
   window.extendLoan = async function(loanId){
+    if(!hasPerm(currentUserPerms, "paymentProcess")){ alert("권한이 없습니다."); return; }
     const snap = await getDoc(doc(db,"b2bLoans", loanId));
     if(!snap.exists()) return;
     const L = snap.data();
-    // 기업은행은 날짜 기준(기본 120일), 그 외는 달 기준입니다.
-    const isIbk = (L.bank === "기업은행");
-    let months = 0, days = 0, newDue = "";
-    if(isIbk){
-      const dIn = prompt("며칠 연장하시나요?\n\n  기업은행 기본 120일", "120");
-      if(dIn === null) return;
-      days = Number(dIn)||0;
-      if(days <= 0){ alert("일수를 확인해주세요."); return; }
-      newDue = addDaysStr(L.dueDate, days);
-    }else{
-      const defMonths = (L.bank === "대구은행") ? "6" : "3";
-      const mIn = prompt("몇 개월 연장하시나요?\n\n  " + (L.bank || "은행 미지정")
-        + " 기본 " + defMonths + "개월", defMonths);
-      if(mIn === null) return;
-      months = Number(mIn)||0;
-      if(months <= 0){ alert("개월 수를 확인해주세요."); return; }
-      newDue = addMonthsStr(L.dueDate, months);
-    }
+    extTarget = { id: loanId, L, isIbk: (L.bank === "기업은행") };
+    const set = (k,v)=>{ const e = document.getElementById(k); if(e) e.value = v; };
+    set("ext-loan", (L.code ? "[" + L.code + "] " : "") + (L.name||"-") + " · " + (L.bank||"-"));
+    set("ext-now", L.dueDate || "-");
+    // 기업은행은 날짜(기본 120일), 그 외는 달 기준입니다.
+    const lab = document.getElementById("ext-len-label");
+    if(lab) lab.textContent = extTarget.isIbk ? "연장 일수" : "연장 개월";
+    set("ext-len", extTarget.isIbk ? 120 : (L.bank === "대구은행" ? 6 : 3));
+    document.getElementById("ext-msg").innerHTML = extTarget.isIbk
+      ? '<span style="color:var(--gray);">기업은행 B2B는 <b>120일</b>이 기본입니다.</span>'
+      : '<span style="color:var(--gray);">달 기준으로 연장합니다.</span>';
+    renderExtendDue();
+    document.getElementById("ext-overlay").style.display = "flex";
+  };
+
+  window.closeExtend = function(){
+    document.getElementById("ext-overlay").style.display = "none";
+    extTarget = null;
+  };
+
+  window.renderExtendDue = function(){
+    if(!extTarget) return;
+    const n = Number((document.getElementById("ext-len")||{}).value) || 0;
+    const due = n > 0
+      ? (extTarget.isIbk ? addDaysStr(extTarget.L.dueDate, n) : addMonthsStr(extTarget.L.dueDate, n))
+      : "";
+    const e = document.getElementById("ext-due"); if(e) e.value = due || "-";
+  };
+
+  window.submitExtend = async function(){
+    if(!extTarget) return;
+    const { id: loanId, L, isIbk } = extTarget;
+    const msgEl = document.getElementById("ext-msg");
+    const bad = t => { msgEl.innerHTML = '<span style="color:var(--danger);">'+t+'</span>'; };
+    const n = Number((document.getElementById("ext-len")||{}).value) || 0;
+    if(n <= 0) return bad(isIbk ? "연장 일수를 넣어주세요." : "연장 개월을 넣어주세요.");
+    const newDue = isIbk ? addDaysStr(L.dueDate, n) : addMonthsStr(L.dueDate, n);
+    if(!newDue) return bad("지금 만기일이 없어 연장할 수 없습니다. 대출 수정에서 만기일을 넣어주세요.");
     if(!confirm("만기를 연장합니다.\n\n  현재 만기 " + (L.dueDate||"-") + "\n  연장 후   " + newDue
-      + "\n  기간     " + (isIbk ? days + "일" : months + "개월")
+      + "\n  기간     " + (isIbk ? n + "일" : n + "개월")
       + "\n\n이자표도 이 구간에 맞춰 다시 계산됩니다. 진행하시겠습니까?")) return;
     try{
       await updateDoc(doc(db,"b2bLoans", loanId), {
         dueDate: newDue,
         extensions: [...(L.extensions||[]),
-          { date: todayStr(), months, days, from: L.dueDate, to: newDue, by: currentUser.name }]
+          { date: todayStr(), months: (isIbk ? 0 : n), days: (isIbk ? n : 0),
+            from: L.dueDate, to: newDue, by: currentUser.name }]
       });
-    }catch(e){ alert("실패했습니다."); return; }
-    logAction("B2B 대출 연장", (L.name||"-") + " / " + (isIbk ? days + "일" : months + "개월")
+    }catch(e){ return bad("실패했습니다. " + comboEsc((e&&e.message)||String(e))); }
+    logAction("B2B 대출 연장", (L.name||"-") + " / " + (isIbk ? n + "일" : n + "개월")
       + " / " + L.dueDate + " → " + newDue);
     alert("연장했습니다. 새 만기 " + newDue);
+    closeExtend();
     refreshLoanScreens();
   };
+;
 
   // 원금 상환 (여신과는 무관 — 은행에 갚는 돈입니다)
   // 마지막으로 원금을 갚은 날을 냅니다. (나눠 갚았으면 가장 최근 날)
@@ -13765,31 +13842,44 @@
   }
 
   window.repayLoan = async function(loanId){
+    if(!hasPerm(currentUserPerms, "paymentProcess")){ alert("권한이 없습니다."); return; }
     const snap = await getDoc(doc(db,"b2bLoans", loanId));
     if(!snap.exists()) return;
     const L = snap.data();
     const remain = (Number(L.principal)||0) - (Number(L.repaidPrincipal)||0);
-    // 금액과 날짜를 한 번에 받습니다. "금액 / 날짜" 또는 "금액 날짜" 로 적으시면 됩니다.
-    const inRaw = prompt(
-      "상환 금액과 상환일을 함께 넣어주세요.\n"
-      + "  적는 법 —  금액 / 상환일     예)  " + remain + " / " + todayStr() + "\n\n"
-      + "  원금   " + (Number(L.principal)||0).toLocaleString() + "\n"
-      + "  기상환 " + (Number(L.repaidPrincipal)||0).toLocaleString() + "\n"
-      + "  잔액   " + remain.toLocaleString() + "\n\n"
-      + "  ※ 만기 전에 갚는 선상환도 됩니다. 나눠 갚으셔도 됩니다.",
-      String(remain) + " / " + todayStr());
-    if(inRaw === null) return;
-    // 쉼표·하이픈이 있어도 되게 합니다. (21,966,901 / 2022-10-28)
-    const parts = String(inRaw).split(/[\/·]|\s+/).map(x=> x.replace(/[^0-9]/g,"")).filter(Boolean);
-    const amt = Number(parts[0]) || 0;
-    let date = parts[1] || todayStr();
-    if(amt <= 0){ alert("금액을 확인해주세요.\n\n적는 법: 금액 / 상환일"); return; }
-    if(String(date).length !== 8){ alert("상환일을 20270123 형태로 넣어주세요.\n\n적는 법: 금액 / 상환일"); return; }
+    repayTarget = { id: loanId, L, remain };
+    const set = (k,v)=>{ const e = document.getElementById(k); if(e) e.value = v; };
+    set("repay-loan", (L.code ? "[" + L.code + "] " : "") + (L.name||"-") + " · " + (L.bank||"-"));
+    set("repay-principal", (Number(L.principal)||0).toLocaleString());
+    set("repay-already", (Number(L.repaidPrincipal)||0).toLocaleString());
+    set("repay-remain", remain.toLocaleString());
+    set("repay-amount", remain > 0 ? remain : "");
+    set("repay-date", todayStr());
+    document.getElementById("repay-msg").innerHTML = "";
+    document.getElementById("repay-overlay").style.display = "flex";
+  };
+
+  window.closeRepay = function(){
+    document.getElementById("repay-overlay").style.display = "none";
+    repayTarget = null;
+  };
+
+  window.submitRepay = async function(){
+    if(!repayTarget) return;
+    const { id: loanId, L, remain } = repayTarget;
+    const msgEl = document.getElementById("repay-msg");
+    const bad = t => { msgEl.innerHTML = '<span style="color:var(--danger);">'+t+'</span>'; };
+    const amt = Number((document.getElementById("repay-amount")||{}).value) || 0;
+    const date = String((document.getElementById("repay-date")||{}).value||"").replace(/\D/g,"");
+    if(amt <= 0) return bad("상환 금액을 넣어주세요.");
+    if(date.length !== 8) return bad("상환일을 20260809 형태로 넣어주세요.");
+    if(amt > remain && !confirm("잔액보다 많습니다.\n\n  잔액 " + remain.toLocaleString()
+      + "\n  넣은 금액 " + amt.toLocaleString() + "\n\n그대로 기록할까요?")) return;
 
     const newRepaid = (Number(L.repaidPrincipal)||0) + amt;
     const done = newRepaid >= (Number(L.principal)||0);
-    if(!confirm("원금을 상환합니다.\n\n  상환일 " + date
-      + ((L.dueDate && date < String(L.dueDate).replace(/\D/g,"")) ? "  (만기 전 · 선상환)" : "")
+    const early = !!(L.dueDate && date < String(L.dueDate).replace(/\D/g,""));
+    if(!confirm("원금을 상환합니다.\n\n  상환일 " + date + (early ? "  (만기 전 · 선상환)" : "")
       + "\n  이번 " + amt.toLocaleString()
       + "\n  누적 " + newRepaid.toLocaleString() + " / " + (Number(L.principal)||0).toLocaleString()
       + (done ? "\n\n전액 상환되어 상환완료로 바뀝니다." : "\n  남은 금액 " + ((Number(L.principal)||0) - newRepaid).toLocaleString())
@@ -13803,14 +13893,16 @@
         lastRepayDate: date,                     // 나눠 갚는 중에도 마지막 날을 남깁니다.
         payments: [...(L.payments||[]), { type:"principal", amount:amt, date, by: currentUser.name }]
       });
-      // 원금 상환은 은행에 갚는 돈이라 여신 잔액과 무관합니다.
-      //  여신 장부에 남기면 「대상 미지정」으로 섞여 보이기만 해서 넣지 않습니다.
+      // 원금 상환은 은행에 갚는 돈이라 여신 잔액과 무관합니다. 여신 장부에는 남기지 않습니다.
       //  상환 기록은 대출의 「내역」에 그대로 남습니다.
-    }catch(e){ alert("실패했습니다."); return; }
-    logAction("B2B 대출 원금상환", (L.name||"-") + " / " + amt.toLocaleString() + " / " + date);
+    }catch(e){ return bad("실패했습니다. " + comboEsc((e&&e.message)||String(e))); }
+    logAction("B2B 대출 원금상환", (L.name||"-") + " / " + amt.toLocaleString() + " / " + date
+      + (early ? " (선상환)" : ""));
     alert("상환을 기록했습니다." + (done ? "\n전액 상환 완료입니다." : ""));
+    closeRepay();
     refreshLoanScreens(); if(typeof loadB2BTab === "function") loadB2BTab();
   };
+;
 
   // 대출 상세 내역
   window.showLoanDetail = async function(loanId){
@@ -25525,6 +25617,28 @@
       tabEl.innerHTML = btn("전체", "", allEntries.length)
         + pList.map(n=> btn(n, n, allEntries.filter(e=> pName(e) === n).length)).join("");
     }
+    // 조정이 들어간 게 있으면 몇 건 얼마인지 알려줍니다. (두 번 넣은 것을 바로 알아채게)
+    {
+      const el = document.getElementById("b2b-adjsum");
+      const adjs = entries.filter(e=> e.category === "adjust");
+      if(el){
+        if(adjs.length){
+          const sum = adjs.reduce((n,e)=> n + (Number(e.amount)||0), 0);
+          const byReason = {};
+          adjs.forEach(e=>{ const k = e.adjustReason || "(사유 없음)"; byReason[k] = (byReason[k]||0) + (Number(e.amount)||0); });
+          el.style.display = "block";
+          el.innerHTML = '<b>여신 조정 ' + adjs.length + '건 · 합계 '
+            + '<span style="color:' + (sum<0 ? "var(--danger)" : "#1565c0") + ';">'
+            + (sum>0?"+":"") + sum.toLocaleString() + '</span></b> '
+            + '<span style="color:var(--gray);">— '
+            + Object.keys(byReason).map(k=> comboEsc(k) + " " + (byReason[k]>0?"+":"") + byReason[k].toLocaleString()).join(" · ")
+            + ' · 같은 사유가 여러 번이면 두 번 넣었을 수 있습니다. 아래 목록에서 확인해주세요.</span>';
+        }else{
+          el.style.display = "none"; el.innerHTML = "";
+        }
+      }
+    }
+
     // 여신과 무관한 원금 상환이 여신 장부에 남아 있으면 알려줍니다. (예전 버전에서 만들어진 것)
     {
       const el = document.getElementById("b2b-repaywarn");
@@ -25594,20 +25708,9 @@
       return n + Math.max(0, (Number(c.amount)||0) - (usedByCol[c.id]||0));
     }, 0);
 
-    // 기존 매입-매출 차액(수익) 합계
-    const invSnap = await getDocs(collection(db,"inventoryItems"));
-    let baseProfitSum = 0;
-    invSnap.forEach(d=>{
-      const it = d.data();
-      // 거래처를 고르면 그 거래처에서 들여온 재고만 셉니다.
-      if(b2bPartnerPick === "(대상 미지정)") return;           // 대상이 없는 탭에는 매입분이 없습니다
-      if(b2bPartnerPick && String(it.source||"").trim() !== b2bPartnerPick) return;
-      if(it.profit!=null){
-        const qty = it.entryType==="imei" ? 1 : (Number(it.quantity)||0);
-        baseProfitSum += Number(it.profit)*qty;
-      }
-    });
-
+    // 판매 손익(매입-매출 차액)은 이 화면에서 빼고 대시보드에서 봅니다.
+    //  삼성전자 거래의 수익은 「매입 기준」이라 할인과 대출비용으로만 셉니다.
+    //  덕분에 재고 전체를 읽지 않아도 되어 조회 부담이 크게 줄었습니다.
     const interestReceivedTotal = entries.filter(e=>e.category==="interest_received").reduce((s,e)=>s+(Number(e.amount)||0),0);
     // 대출비용은 별도 장부에 있습니다. 여신 장부에 남은 예전 것도 함께 셉니다.
     let loanCostAll = loanCostTotal;
@@ -25620,8 +25723,6 @@
         }
       });
     }catch(e){}
-    const finalProfit = baseProfitSum - loanCostAll + interestReceivedTotal;
-
     function statCard(label, value, color, note){
       const k = cardKeyOf("b2b", label);
       return '<div class="stat-card" data-label-key="'+k+'-card" style="flex:1;min-width:170px;border:1px solid var(--line);background:#fff;padding:10px 14px;">' +
@@ -25682,6 +25783,9 @@
     // 타할인 = 3개월 뒤 클럽장려금으로 받을 금액 (주문 품목의 타할인 합계)
     //  거래처를 고르면 그 거래처 주문만 셉니다. (주문 묶음의 매입처로 가립니다)
     let pendingRebate = 0;
+    // 여신 매입의 수익은 「출고가 − 입고가」, 곧 할인금액입니다.
+    //  선할인(바로 깎임) + 타할인(3개월 뒤 클럽장려금)으로 나눠 셉니다.
+    let listSumAll = 0, preSumAll = 0, otherSumAll = 0, qtySumAll = 0;
     try{
       const os = await getDocs(collection(db,"orders"));
       let okBatch = null;
@@ -25689,6 +25793,7 @@
         okBatch = new Set();
         const obs = await getDocs(collection(db,"orderBatches"));
         obs.forEach(dd=>{ const b = dd.data();
+          if(b.status === "취소") return;
           if(String(b.source||"").trim() === b2bPartnerPick) okBatch.add(dd.id);
         });
       }
@@ -25696,9 +25801,16 @@
         const o = dd.data();
         if(o.status === "취소") return;
         if(okBatch && !okBatch.has(o.batchId)) return;
-        pendingRebate += (Number(o.otherDiscountAmt)||0) * (Number(o.quantity)||0);
+        const q = Number(o.quantity)||0;
+        pendingRebate += (Number(o.otherDiscountAmt)||0) * q;
+        listSumAll  += (Number(o.listPrice)||0) * q;
+        preSumAll   += (Number(o.preDiscountAmt)||0) * q;
+        otherSumAll += (Number(o.otherDiscountAmt)||0) * q;
+        qtySumAll   += q;
       });
     }catch(e){}
+    const discountAll = preSumAll + otherSumAll;          // 할인금액 = 출고가 − 입고가
+    const costSumAll  = listSumAll - discountAll;         // 입고가 합계
     const notYet = pendingRebate - clubIncentiveTotal;
     // 거래처마다 타할인을 넣은 곳과 안 넣은 곳이 섞여 있습니다.
     //  타할인이 0인데 장려금을 받았다면 「받을 금액」을 셀 기준이 없습니다. 0으로 두지 않고 그 사실을 알려줍니다.
@@ -25713,9 +25825,20 @@
            + (notYet < 0 ? " · 받은 금액이 " + Math.abs(notYet).toLocaleString() + " 더 많습니다" : "")
            + (b2bPartnerPick ? " · " + comboEsc(b2bPartnerPick) : "")));
     html += statCard("이자지급 수령 합계", interestReceivedTotal.toLocaleString(), "#2e7d32");
-    html += statCard("기존 매입-매출 차액 (수익)", baseProfitSum.toLocaleString(), null,
-      b2bPartnerPick ? comboEsc(b2bPartnerPick) + " 매입분" : "전체");
-    html += statCard("최종 실제수익 (수익-대출비용+이자수령)", finalProfit.toLocaleString(), "#2e7d32");
+    // ── 여신 매입의 수익 구조 ──
+    html += statCard("④ 출고가 합계", listSumAll.toLocaleString(), null,
+      qtySumAll.toLocaleString() + "대" + (b2bPartnerPick ? " · " + comboEsc(b2bPartnerPick) : ""));
+    html += statCard("⑤ 입고가 합계", costSumAll.toLocaleString(), null, "출고가 − 할인");
+    html += statCard("⑥ 할인금액 (④−⑤)", discountAll.toLocaleString(), "#2e7d32",
+      "선할인 " + preSumAll.toLocaleString() + " · 타할인 " + otherSumAll.toLocaleString());
+    html += statCard("⑦ 대출비용 (이자·수수료)", loanCostAll.toLocaleString(), "var(--danger)",
+      "은행에 내는 돈");
+    // 삼성전자 거래의 수익은 「매입 기준」입니다. 할인으로 남기고 대출비용을 뺍니다.
+    //  판매까지 포함한 포피플 전체 손익은 대시보드에서 봅니다. (여기서 섞으면 헷갈립니다)
+    const b2bProfit = discountAll - loanCostAll + interestReceivedTotal;
+    html += statCard("삼성전자 거래 수익 (매입 기준)", b2bProfit.toLocaleString(),
+      b2bProfit < 0 ? "var(--danger)" : "#2e7d32",
+      "⑥ 할인 − ⑦ 대출비용 + 이자수령 · 타할인은 3개월 뒤 들어옵니다");
     statEl.innerHTML = html;
     applyCustomTabLabels();
 
@@ -25771,12 +25894,12 @@
       const { pageItems: b2bPage } = paginateSlice(ledgerRows, "b2bLedger");
       let tbl = '<div style="overflow-x:auto;"><table class="data-table"><thead><tr><th>거래일자</th><th>구분</th><th>매입처</th><th class="ta-right">금액</th><th>통장</th><th>메모</th><th class="ta-right">관리</th></tr></thead><tbody>';
       b2bPage.forEach(e=>{
-        tbl += '<tr><td>'+e.date+'</td><td>'+(B2B_CATEGORY_LABELS[e.category]||e.category)
-          + (e.adjustReason ? '<br><span style="font-size:10.5px;color:var(--gray);">'+comboEsc(e.adjustReason)+'</span>' : '')
-          + (e.fromCollateralId ? '<br><span style="font-size:10.5px;color:#2e7d32;">담보 계산서에서</span>' : '') + '</td>' +
-          '<td>'+((e.source || e.partner)
+        tbl += '<tr><td style="white-space:nowrap;">'+e.date+'</td><td style="white-space:nowrap;">'+(B2B_CATEGORY_LABELS[e.category]||e.category)
+          + (e.adjustReason ? ' <span style="font-size:10.5px;color:var(--gray);">'+comboEsc(e.adjustReason)+'</span>' : '')
+          + (e.fromCollateralId ? ' <span style="font-size:10.5px;color:#2e7d32;" title="담보 계산서에서 넣은 조정입니다">·계산서</span>' : '') + '</td>' +
+          '<td style="white-space:nowrap;">'+((e.source || e.partner)
               ? comboEsc(e.source || e.partner)
-                + (!e.source && e.partner ? ' <span style="font-size:10.5px;color:var(--gray);">(대상)</span>' : '')
+                + (!e.source && e.partner ? ' <span style="font-size:10.5px;color:var(--gray);" title="매입처 칸이 비어 대상 값을 대신 보여줍니다">(대상)</span>' : '')
               : '<span style="color:#b8860b;">미지정</span>')+'</td>' +
           '<td class="ta-right"'+(e.category==="adjust" ? ' style="font-weight:700;color:'+((Number(e.amount)||0)<0?"var(--danger)":"#1565c0")+';"' : '')+'>'
             +((e.category==="adjust" && (Number(e.amount)||0)>0) ? "+" : "")+Number(e.amount).toLocaleString()+'</td>' +
@@ -27146,7 +27269,7 @@
     if(bar) bar.style.display = "none";
   };
 
-  // 파일에 박힌 버전 글자를 읽습니다. (예: "파일 2026-08-09 v524")
+  // 파일에 박힌 버전 글자를 읽습니다. (예: "파일 2026-08-09 v529")
   function readBuildTag(text){
     const m = String(text||"").match(/파일\s*[\d-]+\s*v(\d+)/);
     return m ? m[0].trim() : "";
