@@ -379,7 +379,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v476</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v477</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -2283,10 +2283,12 @@
           <h3 style="margin:0;">여신 거래 내역 <span class="info-tip" title="여신 충전·주문사용·클럽장려금이 시간순으로 쌓입니다. 오른쪽 「+ 거래 등록」으로 직접 넣을 수 있습니다.">ⓘ</span></h3>
           <span class="btn-row">
             <span id="dl-b2b"></span>
+            <button class="btn small secondary" style="width:auto;" onclick="openB2BBalanceCheck()">여신잔액 맞추기</button>
             <button class="btn small secondary" style="width:auto;" onclick="openB2BPostSettle()">후정산 대조</button>
             <button class="btn small" style="width:auto;" onclick="openB2BLedgerAdd()">+ 거래 등록</button>
           </span>
         </div>
+        <div id="b2b-balance-check" style="font-size:12.5px;margin-bottom:8px;"></div>
         <div id="b2b-post-settlement-check" style="font-size:12.5px;margin-bottom:8px;"></div>
         <div id="b2b-ledger-list"></div>
       </div>
@@ -2301,14 +2303,24 @@
         <div class="stack-form">
           <div class="stack-row"><label>거래일자</label><input type="text" id="b2b-date-input" placeholder="예: 20260724" maxlength="8" inputmode="numeric"></div>
           <div class="stack-row"><label>구분</label>
-            <select id="b2b-category-select">
+            <select id="b2b-category-select" onchange="onB2BCategoryChange()">
               <option value="deposit">입금 (직접, 여신충전)</option>
               <option value="loan_deposit">입금 (B2B대출, 여신충전)</option>
               <option value="order_use">주문사용 (여신차감)</option>
               <option value="interest_received">이자지급 수령 (여신충전, 수익반영)</option>
               <option value="club_incentive">클럽장려금 (후정산, 별도집계)</option>
-              <option value="other">기타 (비용)</option>
+              <option value="adjust">조정 (여신잔액을 직접 맞춤)</option>
+              <option value="other">기타 (비용, 잔액에 반영 안 됨)</option>
             </select>
+          </div>
+          <div class="stack-row" id="b2b-adjust-sign-row" style="display:none;"><label>조정 방향</label>
+            <select id="b2b-adjust-sign">
+              <option value="plus">＋ 여신을 늘림 (우리 장부가 적을 때)</option>
+              <option value="minus">− 여신을 줄임 (우리 장부가 많을 때)</option>
+            </select>
+          </div>
+          <div class="stack-row" id="b2b-adjust-reason-row" style="display:none;"><label>조정 사유</label>
+            <select id="b2b-adjust-reason"></select>
           </div>
           <div class="stack-row"><label>대상 <span class="info-tip" title="어느 거래처 여신에 반영할지 고릅니다. 목록은 업체정보의 매입처를 그대로 씁니다. 새 거래처가 생기면 업체에 먼저 등록하세요.">ⓘ</span></label>
             <select id="b2b-partner-select"><option value="">(미지정)</option></select>
@@ -2340,6 +2352,51 @@
         <span class="btn-row">
           <button class="btn small" style="width:auto;" onclick="saveB2BPostSettlementRef()">저장</button>
           <button class="btn small secondary" style="width:auto;" onclick="closeB2BPostSettle()">닫기</button>
+        </span>
+      </div>
+    </div>
+
+    <!-- 출금요청 만들기 -->
+    <div id="prmake-overlay" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.55);z-index:1090;align-items:center;justify-content:center;">
+      <div style="background:#fff;border:2px solid var(--navy);max-width:460px;width:96%;padding:22px;position:relative;">
+        <button onclick="closePayReqMake()" style="position:absolute;top:12px;right:12px;background:none;border:1px solid var(--navy);width:26px;height:26px;cursor:pointer;font-size:13px;">✕</button>
+        <h3 style="margin-top:0;margin-bottom:4px;">출금요청 만들기</h3>
+        <p class="desc" style="margin-top:0;">실제로 보낼 금액이 주문 합계와 다르면 <b>실제 이체금액</b>만 고치세요.
+          차액은 사유와 함께 기록됩니다. <b>주문 금액·재고는 바뀌지 않습니다.</b></p>
+        <div class="stack-form">
+          <div class="stack-row"><label>체크한 주문</label><input type="text" id="prm-count" readonly style="background:#f7f7f7;"></div>
+          <div class="stack-row"><label>주문 합계</label><input type="text" id="prm-base" readonly style="background:#f7f7f7;"></div>
+          <div class="stack-row"><label>실제 이체금액</label><input type="number" id="prm-actual" placeholder="숫자만"></div>
+          <div class="stack-row" id="prm-reason-row" style="display:none;"><label>차액 사유</label>
+            <select id="prm-reason"></select>
+          </div>
+          <div class="stack-row"><label>메모 (선택)</label><input type="text" id="prm-memo" placeholder="예: 삼성유통주문내역 4763090"></div>
+        </div>
+        <div id="prm-msg" style="font-size:12.5px;margin:8px 0;line-height:1.7;"></div>
+        <span class="btn-row">
+          <button class="btn small" style="width:auto;" onclick="submitPayReqMake()">만들기</button>
+          <button class="btn small secondary" style="width:auto;" onclick="closePayReqMake()">닫기</button>
+        </span>
+      </div>
+    </div>
+
+    <!-- 여신잔액 맞추기 -->
+    <div id="b2bbal-overlay" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.55);z-index:1090;align-items:center;justify-content:center;">
+      <div style="background:#fff;border:2px solid var(--navy);max-width:460px;width:96%;padding:22px;position:relative;">
+        <button onclick="closeB2BBalanceCheck()" style="position:absolute;top:12px;right:12px;background:none;border:1px solid var(--navy);width:26px;height:26px;cursor:pointer;font-size:13px;">✕</button>
+        <h3 style="margin-top:0;margin-bottom:4px;">여신잔액 맞추기</h3>
+        <p class="desc" style="margin-top:0;">삼성에서 알려준 <b>공식 여신잔액</b>을 적으면 우리 장부와 비교합니다.
+          거래처마다 따로 저장됩니다. <b>저장해도 잔액은 바뀌지 않습니다.</b> 맞추려면 아래 버튼으로 조정을 등록하세요.</p>
+        <div class="stack-form">
+          <div class="stack-row"><label>거래처</label><input type="text" id="b2bbal-partner" readonly style="background:#f7f7f7;"></div>
+          <div class="stack-row"><label>공식 여신잔액</label><input type="number" id="b2bbal-input" placeholder="숫자만"></div>
+          <div class="stack-row"><label>우리 장부 잔액</label><input type="text" id="b2bbal-ours" readonly style="background:#f7f7f7;"></div>
+        </div>
+        <div id="b2bbal-msg" style="font-size:12.5px;margin:8px 0;line-height:1.7;"></div>
+        <span class="btn-row">
+          <button class="btn small" style="width:auto;" onclick="saveB2BBalanceRef()">저장</button>
+          <button class="btn small secondary" style="width:auto;" onclick="openAdjustFromBalance()">조정으로 맞추기</button>
+          <button class="btn small secondary" style="width:auto;" onclick="closeB2BBalanceCheck()">닫기</button>
         </span>
       </div>
     </div>
@@ -11014,15 +11071,71 @@
   }
 
   // ---------- 출금요청 (구매주문 여러 건을 한 번에 이체하기 위한 묶음) ----------
-  window.createPaymentRequestFromSelected = async function(){
+  // 체크한 주문을 담아두고, 실제 이체금액을 확인받는 창을 엽니다.
+  let payReqDraft = null;
+
+  window.createPaymentRequestFromSelected = function(){
     const checked = Array.from(document.querySelectorAll(".order-pay-cb:checked"));
     const otherAmount = Number(document.getElementById("payment-other-amount-input").value) || 0;
     if(checked.length===0 && otherAmount===0){ alert("출금요청으로 묶을 주문을 체크하거나, 기타 금액을 입력해주세요."); return; }
     const batchIds = checked.map(cb=>cb.dataset.batchId);
-    let total = otherAmount;
-    checked.forEach(cb=> total += Number(cb.dataset.amount)||0);
-    const confirmMsg = batchIds.length+"건"+(otherAmount>0?" + 기타 "+otherAmount.toLocaleString():"")+" / 총 "+total.toLocaleString()+" — 출금요청을 만드시겠습니까?"+(otherAmount>0?"\n(기타 금액분은 재고를 따로 등록해주셔야 합니다)":"");
-    if(!confirm(confirmMsg)) return;
+    let base = otherAmount;
+    checked.forEach(cb=> base += Number(cb.dataset.amount)||0);
+    payReqDraft = { batchIds, otherAmount, base };
+    document.getElementById("prm-count").value = batchIds.length + "건"
+      + (otherAmount>0 ? " + 기타 " + otherAmount.toLocaleString() : "");
+    document.getElementById("prm-base").value = base.toLocaleString();
+    document.getElementById("prm-actual").value = base;
+    document.getElementById("prm-memo").value = "";
+    fillAdjustReasonSelect("prm-reason");
+    document.getElementById("prm-msg").innerHTML = "";
+    const act = document.getElementById("prm-actual");
+    act.oninput = renderPayReqDiff;
+    renderPayReqDiff();
+    document.getElementById("prmake-overlay").style.display = "flex";
+  };
+  window.closePayReqMake = function(){
+    document.getElementById("prmake-overlay").style.display = "none";
+  };
+  function payReqDiff(){
+    if(!payReqDraft) return { actual:0, diff:0 };
+    const actual = Number((document.getElementById("prm-actual")||{}).value) || 0;
+    return { actual, diff: actual - payReqDraft.base };
+  }
+  function renderPayReqDiff(){
+    const m = document.getElementById("prm-msg");
+    const row = document.getElementById("prm-reason-row");
+    if(!m || !payReqDraft) return;
+    const { diff } = payReqDiff();
+    if(row) row.style.display = (diff !== 0) ? "" : "none";
+    m.innerHTML = (diff === 0)
+      ? '<span style="color:#2e7d32;">주문 합계 그대로입니다. 차액 없음.</span>'
+      : '<span style="color:var(--danger);font-weight:700;">차액 ' + (diff>0?"+":"") + diff.toLocaleString() + '</span>'
+        + '<span style="color:var(--gray);"> — 주문 합계보다 ' + Math.abs(diff).toLocaleString()
+        + (diff > 0 ? ' 더 보냅니다.' : ' 덜 보냅니다.') + ' 사유를 골라주세요.</span>';
+  }
+
+  window.submitPayReqMake = async function(){
+    if(!payReqDraft){ alert("체크한 주문이 없습니다."); return; }
+    const { batchIds, otherAmount, base } = payReqDraft;
+    const { actual, diff } = payReqDiff();
+    if(actual <= 0){ document.getElementById("prm-msg").innerHTML = '<span style="color:var(--danger);">실제 이체금액을 넣어주세요.</span>'; return; }
+    const memo = (document.getElementById("prm-memo").value||"").trim();
+    let adjustReason = "";
+    if(diff !== 0){
+      adjustReason = (document.getElementById("prm-reason")||{}).value || "";
+      if(!adjustReason){ document.getElementById("prm-msg").innerHTML = '<span style="color:var(--danger);">차액 사유를 골라주세요.</span>'; return; }
+      if(adjustReason === "기타" && !memo){ document.getElementById("prm-msg").innerHTML = '<span style="color:var(--danger);">사유가 「기타」이면 메모를 적어주세요.</span>'; return; }
+    }
+    const total = actual;
+    if(!confirm(batchIds.length + "건"
+      + (otherAmount>0 ? " + 기타 " + otherAmount.toLocaleString() : "")
+      + "\n\n  주문 합계   " + base.toLocaleString()
+      + "\n  실제 이체   " + total.toLocaleString()
+      + (diff !== 0 ? "\n  차액        " + (diff>0?"+":"") + diff.toLocaleString() + " (" + adjustReason + ")" : "")
+      + "\n\n출금요청을 만드시겠습니까?"
+      + (otherAmount>0 ? "\n(기타 금액분은 재고를 따로 등록해주셔야 합니다)" : ""))) return;
+    closePayReqMake();
 
     // 어느 매입처에 얼마를 보내는지, 계좌는 어디인지 함께 저장합니다.
     await fetchCompanies();
@@ -11048,6 +11161,8 @@
 
     const reqRef = await addDoc(collection(db,"paymentRequests"), {
       orderBatchIds: batchIds, otherAmount, totalAmount: total,
+      baseAmount: base,                                   // 주문 합계 (조정 전)
+      adjustAmount: diff, adjustReason, adjustMemo: memo, // 차액과 사유
       sources, accounts,
       payDueDate: dueDates.length ? dueDates.sort()[0] : "",   // 가장 빠른 예정일
       paidAmount: 0, payments: [],                              // 부분이체 누적
@@ -11058,8 +11173,10 @@
     for(const bId of batchIds){
       await updateDoc(doc(db,"orderBatches", bId), { paymentRequestId: reqRef.id });
     }
-    logAction("출금요청 생성", batchIds.length+"건 / 기타 "+otherAmount.toLocaleString()+" / 총 "+total.toLocaleString());
+    logAction("출금요청 생성", batchIds.length+"건 / 기타 "+otherAmount.toLocaleString()+" / 총 "+total.toLocaleString()
+      + (diff !== 0 ? " / 조정 " + (diff>0?"+":"") + diff.toLocaleString() + " (" + adjustReason + ")" : ""));
     document.getElementById("payment-other-amount-input").value = "";
+    payReqDraft = null;
     loadOrderList();
     loadSettlementTab();
   };
@@ -12878,7 +12995,11 @@
       row.style.alignItems = "flex-start"; row.style.flexWrap = "wrap";
       row.innerHTML =
         '<span style="font-size:12.5px;">' +
-        '<b>'+(p.totalAmount||0).toLocaleString()+'</b> · 주문 '+p.orderBatchIds.length+'건'+(p.otherAmount?' + 기타 '+p.otherAmount.toLocaleString():'')+' · 요청일 '+p.requestDate+' · 상태 <b>'+p.status+'</b><br>' +
+        '<b>'+(p.totalAmount||0).toLocaleString()+'</b> · 주문 '+p.orderBatchIds.length+'건'+(p.otherAmount?' + 기타 '+p.otherAmount.toLocaleString():'')+' · 요청일 '+p.requestDate+' · 상태 <b>'+p.status+'</b>' +
+        // 주문 합계와 다르게 보낸 건은 차액과 사유를 같이 보여줍니다.
+        (Number(p.adjustAmount) ? '<br><span style="color:var(--danger);">조정 '+(Number(p.adjustAmount)>0?'+':'')+Number(p.adjustAmount).toLocaleString()
+          +'</span> <span style="color:var(--gray);">(주문 합계 '+(Number(p.baseAmount)||0).toLocaleString()
+          +(p.adjustReason?' · '+comboEsc(p.adjustReason):'')+(p.adjustMemo?' · '+comboEsc(p.adjustMemo):'')+')</span>' : '') + '<br>' +
         '<label style="margin-right:12px;"><input type="checkbox" class="pr-transfer-cb" data-id="'+d.id+'" '+(p.transferCompleted?'checked':'')+' '+(p.status==='취소'?'disabled':'')+'> 이체완료</label>' +
         // 송금할 계좌와 처리 날짜를 함께 보여줍니다.
         ((p.accounts && p.accounts.length)
@@ -23386,7 +23507,22 @@
   const B2B_CATEGORY_LABELS = {
     deposit:"입금 (직접)", loan_deposit:"입금 (B2B대출)", order_use:"주문사용",
     interest_received:"이자지급 수령", b2b_fee_payment:"B2B결제수수료", b2b_fee_mp:"B2BMP수수료",
-    b2b_interest:"B2B이자", club_incentive:"클럽장려금", other:"기타"
+    b2b_interest:"B2B이자", club_incentive:"클럽장려금", adjust:"조정", other:"기타"
+  };
+  // 조정 사유 — 사이트 설정에서 고칠 수 있게 될 때까지의 기본 목록입니다.
+  const ADJUST_REASONS = ["현금할인 반올림","후정산 차이","단가 착오","반품·취소 정산","기타"];
+  function fillAdjustReasonSelect(elId){
+    const el = document.getElementById(elId);
+    if(!el) return;
+    el.innerHTML = ADJUST_REASONS.map(r=>'<option value="'+comboEsc(r)+'">'+comboEsc(r)+'</option>').join("");
+  }
+  // 「조정」을 고르면 방향·사유 칸을 보여줍니다.
+  window.onB2BCategoryChange = function(){
+    const isAdj = (document.getElementById("b2b-category-select")||{}).value === "adjust";
+    const a = document.getElementById("b2b-adjust-sign-row");
+    const b = document.getElementById("b2b-adjust-reason-row");
+    if(a) a.style.display = isAdj ? "" : "none";
+    if(b) b.style.display = isAdj ? "" : "none";
   };
   // 여신 거래 등록 — 목록만 보이게 하고 입력은 팝업으로 옮겼습니다.
   window.openB2BLedgerAdd = async function(){
@@ -23396,6 +23532,9 @@
     document.getElementById("b2b-amount-input").value = "";
     document.getElementById("b2b-memo-input").value = "";
     document.getElementById("b2badd-msg").innerHTML = "";
+    fillAdjustReasonSelect("b2b-adjust-reason");
+    { const sg = document.getElementById("b2b-adjust-sign"); if(sg) sg.value = "plus"; }
+    onB2BCategoryChange();
     // 대상·매입처 목록은 업체정보의 매입처를 씁니다.
     try{
       const names = await fetchNamesList("inboundSources");
@@ -23436,15 +23575,36 @@
     const msgEl = document.getElementById("b2badd-msg");
     const bad = t => { if(msgEl) msgEl.innerHTML = '<span style="color:var(--danger);">'+t+'</span>'; };
     if(String(dateVal).replace(/\D/g,"").length !== 8) return bad("거래일자를 20260724 형태로 넣어주세요.");
-    if(!amount || amount <= 0) return bad("금액을 넣어주세요.");
+    if(!amount || amount <= 0) return bad("금액을 넣어주세요. (방향은 아래 「조정 방향」에서 고릅니다)");
 
     const ledSource = (document.getElementById("b2b-source-select")||{}).value || "";
     const ledPartner = (document.getElementById("b2b-partner-select")||{}).value || "";
+
+    // 조정은 잔액을 직접 움직이므로, 방향과 사유를 반드시 받습니다.
+    let saveAmount = amount, adjustReason = "";
+    if(category === "adjust"){
+      const sign = (document.getElementById("b2b-adjust-sign")||{}).value;
+      adjustReason = (document.getElementById("b2b-adjust-reason")||{}).value || "";
+      if(!adjustReason) return bad("조정 사유를 골라주세요.");
+      if(adjustReason === "기타" && !memo) return bad("사유가 「기타」이면 메모를 적어주세요.");
+      if(!ledPartner) return bad("조정은 어느 거래처 여신인지 정해야 합니다. 대상을 골라주세요.");
+      saveAmount = (sign === "minus") ? -amount : amount;
+      if(!confirm(
+        "여신 잔액을 직접 바꿉니다.\n\n"
+        + "  대상   " + ledPartner + "\n"
+        + "  방향   " + (sign === "minus" ? "− 여신을 줄임" : "＋ 여신을 늘림") + "\n"
+        + "  금액   " + amount.toLocaleString() + "\n"
+        + "  사유   " + adjustReason + (memo ? " (" + memo + ")" : "") + "\n\n"
+        + "이 기록은 이력에 남습니다. 진행하시겠습니까?")) return;
+    }
+
     await addDoc(collection(db,"b2bLedger"), {
-      date: dateVal, category, amount, memo, source: ledSource, partner: ledPartner,
+      date: dateVal, category, amount: saveAmount, memo, source: ledSource, partner: ledPartner,
+      ...(category === "adjust" ? { adjustReason } : {}),
       createdBy: currentUser.name, createdByUsername: currentUser.username, createdAt: serverTimestamp()
     });
-    logAction("B2B 여신 거래 추가", "대상 " + ledPartner + " / " + B2B_CATEGORY_LABELS[category]+" "+amount.toLocaleString()
+    logAction("B2B 여신 거래 추가", "대상 " + ledPartner + " / " + B2B_CATEGORY_LABELS[category]+" "+saveAmount.toLocaleString()
+      + (adjustReason ? " / 사유: " + adjustReason : "")
       + (ledSource ? " / " + ledSource : " / 매입처 미지정"));
     closeB2BLedgerAdd();
     loadB2BTab();
@@ -23476,6 +23636,83 @@
     // 지금 열려 있는 화면을 새로 읽습니다. (삼성여신 · B2B 대출)
     if(document.getElementById("tab-b2b") && document.getElementById("tab-b2b").classList.contains("active")) loadB2BTab();
     if(document.getElementById("tab-loan") && document.getElementById("tab-loan").classList.contains("active")) loadLoanCostList();
+  };
+
+  // ---------- 여신잔액 맞추기 ----------
+  //  삼성에서 알려준 공식 잔액을 거래처별로 적어두고 우리 장부와 견줍니다.
+  //  저장만으로는 잔액이 바뀌지 않습니다. 「조정으로 맞추기」로 사람이 확인해야 반영됩니다.
+  let b2bLastBalance = 0;        // 지금 화면에 보이는 우리 장부 잔액
+  let b2bBalanceRefs = {};       // 거래처 → 공식 잔액
+
+  function b2bBalKey(p){ return String(p||"(전체)").trim(); }
+
+  window.openB2BBalanceCheck = async function(){
+    const who = b2bPartnerPick || "";
+    const el = document.getElementById("b2bbal-partner");
+    if(el) el.value = who || "(전체)";
+    const oursEl = document.getElementById("b2bbal-ours");
+    if(oursEl) oursEl.value = b2bLastBalance.toLocaleString();
+    const inp = document.getElementById("b2bbal-input");
+    const cur = Number(b2bBalanceRefs[b2bBalKey(who)]) || 0;
+    if(inp) inp.value = cur ? cur : "";
+    renderB2BBalanceMsg();
+    if(inp) inp.oninput = renderB2BBalanceMsg;
+    document.getElementById("b2bbal-overlay").style.display = "flex";
+  };
+  window.closeB2BBalanceCheck = function(){
+    document.getElementById("b2bbal-overlay").style.display = "none";
+  };
+
+  // 차이 = 우리 장부 − 삼성 공식.  (+) 면 우리가 많이 남은 것 → 줄여야 합니다.
+  function b2bBalanceDiff(){
+    const ref = Number((document.getElementById("b2bbal-input")||{}).value) || 0;
+    return { ref, diff: ref ? (b2bLastBalance - ref) : 0 };
+  }
+  function renderB2BBalanceMsg(){
+    const m = document.getElementById("b2bbal-msg");
+    if(!m) return;
+    const { ref, diff } = b2bBalanceDiff();
+    if(!ref){ m.innerHTML = '<span style="color:var(--gray);">공식 잔액을 넣으면 차이를 보여드립니다.</span>'; return; }
+    if(diff === 0){ m.innerHTML = '<span style="color:#2e7d32;font-weight:700;">✓ 삼성 잔액과 정확히 일치합니다.</span>'; return; }
+    m.innerHTML = '<span style="color:var(--danger);font-weight:700;">차이 ' + (diff>0?"+":"") + diff.toLocaleString() + '</span>'
+      + '<br><span style="color:var(--gray);">우리 장부가 ' + Math.abs(diff).toLocaleString()
+      + (diff > 0 ? ' 많습니다. 조정으로 <b>줄여야</b> 맞습니다.' : ' 적습니다. 조정으로 <b>늘려야</b> 맞습니다.') + '</span>';
+  }
+
+  window.saveB2BBalanceRef = async function(){
+    const who = b2bBalKey(b2bPartnerPick || "");
+    const val = Number((document.getElementById("b2bbal-input")||{}).value) || 0;
+    const refs = Object.assign({}, b2bBalanceRefs); refs[who] = val;
+    try{
+      await setDoc(doc(db,"settings","b2b"), { balanceRefs: refs }, { merge:true });
+    }catch(e){
+      const m = document.getElementById("b2bbal-msg");
+      if(m) m.innerHTML = '<span style="color:var(--danger);">저장에 실패했습니다.</span>';
+      return;
+    }
+    b2bBalanceRefs = refs;
+    logAction("여신 공식잔액 저장", who + " / " + val.toLocaleString());
+    closeB2BBalanceCheck();
+    loadB2BTab();
+  };
+
+  // 차액만큼 조정 등록창을 미리 채워 엽니다. 저장은 사람이 확인해야 됩니다.
+  window.openAdjustFromBalance = async function(){
+    const { ref, diff } = b2bBalanceDiff();
+    if(!ref){ alert("먼저 삼성 공식 여신잔액을 넣어주세요."); return; }
+    if(diff === 0){ alert("차이가 없습니다. 조정할 것이 없습니다."); return; }
+    if(!b2bPartnerPick){ alert("거래처를 먼저 고른 뒤 맞춰주세요.\n(위 「삼성전자스타」 같은 버튼을 눌러주세요)"); return; }
+    closeB2BBalanceCheck();
+    await openB2BLedgerAdd();
+    document.getElementById("b2b-category-select").value = "adjust";
+    onB2BCategoryChange();
+    document.getElementById("b2b-adjust-sign").value = (diff > 0) ? "minus" : "plus";
+    document.getElementById("b2b-amount-input").value = Math.abs(diff);
+    const pa = document.getElementById("b2b-partner-select");
+    if(pa && Array.from(pa.options).some(o=> o.value === b2bPartnerPick)) pa.value = b2bPartnerPick;
+    document.getElementById("b2badd-msg").innerHTML =
+      '<span style="color:#8a6d0b;">삼성 공식 잔액과의 차이 ' + (diff>0?"+":"") + diff.toLocaleString()
+      + ' 만큼 미리 채웠습니다. <b>사유를 고르고 저장</b>해주세요.</span>';
   };
 
   window.saveB2BPostSettlementRef = async function(){
@@ -23581,16 +23818,19 @@
     // 고른 거래처만 남깁니다.
     const entries = b2bPartnerPick ? allEntries.filter(e=> pName(e) === b2bPartnerPick) : allEntries;
 
-    let depositTotal = 0, orderUseTotal = 0, loanCostTotal = 0, clubIncentiveTotal = 0, otherTotal = 0;
+    let depositTotal = 0, orderUseTotal = 0, loanCostTotal = 0, clubIncentiveTotal = 0, otherTotal = 0, adjustTotal = 0;
     entries.forEach(e=>{
       const amt = Number(e.amount)||0;
       if(e.category==="deposit" || e.category==="loan_deposit" || e.category==="interest_received") depositTotal += amt;
       else if(e.category==="order_use") orderUseTotal += amt;
       else if(e.category==="b2b_fee_payment" || e.category==="b2b_fee_mp" || e.category==="b2b_interest") loanCostTotal += amt;
       else if(e.category==="club_incentive") clubIncentiveTotal += amt;
+      else if(e.category==="adjust") adjustTotal += amt;     // 조정은 부호 있는 금액입니다 (＋/−)
       else otherTotal += amt;
     });
-    const remainingCredit = depositTotal + clubIncentiveTotal - orderUseTotal;
+    // 조정을 뺀 잔액도 같이 둡니다. 「원래 얼마였는지」를 알 수 있게 화면에 함께 보여줍니다.
+    const creditBeforeAdjust = depositTotal + clubIncentiveTotal - orderUseTotal;
+    const remainingCredit = creditBeforeAdjust + adjustTotal;
 
     // 기존 매입-매출 차액(수익) 합계
     const invSnap = await getDocs(collection(db,"inventoryItems"));
@@ -23638,20 +23878,27 @@
       if(e.category==="deposit" || e.category==="loan_deposit"
          || e.category==="interest_received" || e.category==="club_incentive") byPartner[pn].inAmt += amt;
       else if(e.category==="order_use") byPartner[pn].useAmt += amt;
+      else if(e.category==="adjust") byPartner[pn].adjAmt = (byPartner[pn].adjAmt||0) + amt;
     });
 
     // 계산 근거를 그대로 보여줘서 숫자가 왜 그런지 바로 알 수 있게 합니다.
     let html = statCard("실시간 잔여여신", remainingCredit.toLocaleString(),
       remainingCredit < 0 ? "var(--danger)" : "#1565c0",
-      b2bPartnerPick ? comboEsc(b2bPartnerPick) + " 기준" : "①+②−③ · 전체 합계");
+      (b2bPartnerPick ? comboEsc(b2bPartnerPick) + " 기준" : "①+②−③ · 전체 합계")
+      + (adjustTotal !== 0
+          ? " · 조정 " + (adjustTotal > 0 ? "+" : "") + adjustTotal.toLocaleString()
+            + " 포함 (조정 전 " + creditBeforeAdjust.toLocaleString() + ")"
+          : ""));
     // 전체를 볼 때만 거래처별 카드를 늘어놓습니다. (한 거래처만 보면 위 카드가 그 값입니다)
     if(!b2bPartnerPick){
       Object.keys(byPartner).sort().forEach(pn=>{
         const v = byPartner[pn];
-        const left = v.inAmt - v.useAmt;
+        const adj = Number(v.adjAmt)||0;
+        const left = v.inAmt - v.useAmt + adj;
         html += statCard("잔여여신 · " + pn, left.toLocaleString(),
           left < 0 ? "var(--danger)" : "#1565c0",
-          "충전 " + v.inAmt.toLocaleString() + " − 사용 " + v.useAmt.toLocaleString());
+          "충전 " + v.inAmt.toLocaleString() + " − 사용 " + v.useAmt.toLocaleString()
+          + (adj !== 0 ? " · 조정 " + (adj > 0 ? "+" : "") + adj.toLocaleString() : ""));
       });
     }
     html += statCard("① 여신 입금 (충전)", depositTotal.toLocaleString(), "#2e7d32");
@@ -23688,8 +23935,31 @@
     statEl.innerHTML = html;
     applyCustomTabLabels();
 
-    // 후정산 참고 비교
+    // 여신잔액 맞추기 — 거래처별 공식잔액과 견줍니다.
+    b2bLastBalance = remainingCredit;
     const settleSnap = await getDoc(doc(db,"settings","b2b"));
+    b2bBalanceRefs = (settleSnap.exists() && settleSnap.data().balanceRefs) ? settleSnap.data().balanceRefs : {};
+    {
+      const bcEl = document.getElementById("b2b-balance-check");
+      const ref = Number(b2bBalanceRefs[b2bBalKey(b2bPartnerPick || "")]) || 0;
+      if(bcEl){
+        if(!ref){
+          bcEl.innerHTML = '<span style="color:var(--gray);">삼성 공식 여신잔액을 아직 넣지 않았습니다. '
+            + '<b>여신잔액 맞추기</b>에서 넣으면 차이를 알려드립니다.</span>';
+        }else{
+          const d = remainingCredit - ref;
+          bcEl.innerHTML = (d === 0)
+            ? '<span style="color:#2e7d32;font-weight:700;">✓ 삼성 공식 여신잔액과 정확히 일치합니다. ('
+              + ref.toLocaleString() + ')</span>'
+            : '<span style="color:var(--danger);font-weight:700;">여신잔액 차이 ' + (d>0?"+":"") + d.toLocaleString()
+              + '</span> <span style="color:var(--gray);">— 공식 ' + ref.toLocaleString()
+              + ' · 우리 장부 ' + remainingCredit.toLocaleString()
+              + ' · <b>여신잔액 맞추기</b>에서 조정할 수 있습니다.</span>';
+        }
+      }
+    }
+
+    // 후정산 참고 비교
     const postSettlementRef = settleSnap.exists() ? (settleSnap.data().postSettlementRef || 0) : 0;
     document.getElementById("b2b-post-settlement-input").value = postSettlementRef || "";
     const diff = postSettlementRef - clubIncentiveTotal;
@@ -23719,7 +23989,8 @@
       b2bPage.forEach(e=>{
         tbl += '<tr><td>'+e.date+'</td><td>'+(B2B_CATEGORY_LABELS[e.category]||e.category)+'</td>' +
           '<td>'+(e.source ? comboEsc(e.source) : '<span style="color:#b8860b;">미지정</span>')+'</td>' +
-          '<td class="ta-right">'+Number(e.amount).toLocaleString()+'</td><td>'+(e.memo||'-')+'</td>' +
+          '<td class="ta-right"'+(e.category==="adjust" ? ' style="font-weight:700;color:'+((Number(e.amount)||0)<0?"var(--danger)":"#1565c0")+';"' : '')+'>'
+            +((e.category==="adjust" && (Number(e.amount)||0)>0) ? "+" : "")+Number(e.amount).toLocaleString()+'</td><td>'+(e.memo||'-')+'</td>' +
           '<td class="ta-right"><button class="btn small secondary" style="width:auto;" onclick="setLedgerSource(\''+e.id+'\')">매입처</button>' +
           '<button class="btn small danger" style="width:auto;margin-left:4px;" onclick="deleteB2BLedgerEntry(\''+e.id+'\')">삭제</button></td></tr>';
       });
@@ -25063,7 +25334,7 @@
     if(bar) bar.style.display = "none";
   };
 
-  // 파일에 박힌 버전 글자를 읽습니다. (예: "파일 2026-08-09 v476")
+  // 파일에 박힌 버전 글자를 읽습니다. (예: "파일 2026-08-09 v477")
   function readBuildTag(text){
     const m = String(text||"").match(/파일\s*[\d-]+\s*v(\d+)/);
     return m ? m[0].trim() : "";
