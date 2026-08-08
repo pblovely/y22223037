@@ -121,7 +121,6 @@
   .vc-tiny .data-table th, .vc-tiny .data-table td{ padding:0 3px !important; height:19px !important; font-size:11.5px !important; line-height:1.15 !important; }
   .vc-tight .data-table th, .vc-tight .data-table td{ padding:1px 4px !important; height:22px !important; line-height:1.2 !important; }
   /* 화면에 꽉 채우기 */
-  .vc-full .data-table{ min-width:100% !important; width:100% !important; }
   .tab-panel.active{ display:block; }
   .card{ background:#fff; border:1px solid var(--navy); padding:12px 12px; margin-bottom:9px; max-width:1900px; }
   .card h3{ margin:0 0 6px 0; font-size:14px; color:var(--navy); }
@@ -293,6 +292,8 @@
   .data-table.dash-agg th, .data-table.dash-agg td{ padding:3px 7px; white-space:nowrap; }
   /* 업체별 지표 표 — 좌우로 늘리지 않고 내용 너비만 차지하며 왼쪽에 붙입니다. */
   .data-table.resv-dest-fit{ width:auto !important; min-width:0 !important; margin:0 !important; table-layout:auto; }
+  /* 보기 설정에서 「화면에 꽉 채우기」를 고르면 내용맞춤보다 우선합니다. */
+  .vc-full .data-table, .vc-full .data-table.resv-dest-fit{ min-width:100% !important; width:100% !important; }
   .data-table.resv-dest-fit th, .data-table.resv-dest-fit td{ white-space:nowrap; padding-left:6px; padding-right:6px; }
   .data-table.resv-dest-fit th:first-child, .data-table.resv-dest-fit td:first-child{ padding-left:0; }
   /* 순서 옮기기 화살표 — 자리를 적게 차지하도록 작게 만듭니다. */
@@ -378,7 +379,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-08 v466</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-08 v468</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -8360,7 +8361,8 @@
     const dens = listDensity(kind);
     const wrapCls = (dens.density==="tight" ? "tbl-tight " : (dens.density==="xtight" ? "tbl-xtight " : ""))
       + (dens.width==="fit" ? "tbl-fit" : "");
-    let h = '<div class="'+wrapCls+'" style="overflow-x:auto;"><table class="data-table" style="min-width:'+(dens.width==="fit" ? 0 : (220+cols.length*95))+'px;"><thead><tr>' +
+    let h = '<div class="'+wrapCls+'" style="overflow-x:auto;"><table class="data-table'
+      + (dens.width==="fit" ? '' : ' resv-dest-fit') + '" style="' + (dens.width==="fit" ? '' : 'width:auto;') + '"><thead><tr>' +
       '<th style="width:34px;"><input type="checkbox" onclick="toggleAllListRows(\''+kind+'\', this)"></th>' +
       cols.map(c=>'<th'+(c.num?' class="ta-right"':'')+' style="cursor:pointer;white-space:nowrap;" onclick="setListSort(\''+kind+'\',\''+c.key+'\')">'
         + comboEsc(c.label) + (st.key===c.key ? (st.dir>0?' ▲':' ▼') : '') + '</th>').join("") +
@@ -9747,7 +9749,7 @@
     // 예약에 색상이 없으면 모델의 색상 목록을 고를 수 있게 합니다.
     // 예약에 색상이 없으면 그 모델의 색상마다 줄을 만들어 각각 수량을 받습니다.
     let h = '<div style="overflow-x:auto;border:1px solid var(--line);max-height:400px;overflow-y:auto;">'
-      + '<table class="data-table" style="min-width:860px;"><thead><tr>'
+      + '<table class="data-table resv-dest-fit" style="width:auto;"><thead><tr>'
       + '<th>요청일</th><th>모델</th><th>색상</th><th>통신사</th>'
       + '<th class="ta-right">예약</th><th class="ta-right">배정</th><th class="ta-right">남음</th>'
       + '<th class="ta-right">판매가</th><th class="ta-right" style="width:90px;">넘길 수량</th>'
@@ -10143,7 +10145,7 @@
     if(ok.length){
       let totQ = 0, totAmt = 0;
       h += '<div style="border:1px solid var(--line);max-height:280px;overflow-y:auto;margin-bottom:10px;">'
-        + '<table class="data-table" style="min-width:720px;"><thead><tr><th>거래처</th><th>모델</th><th>색상</th><th>통신사</th><th class="ta-right">수량</th><th class="ta-right">판매가</th><th class="ta-right">금액</th></tr></thead><tbody>'
+        + '<table class="data-table resv-dest-fit" style="width:auto;"><thead><tr><th>거래처</th><th>모델</th><th>색상</th><th>통신사</th><th class="ta-right">수량</th><th class="ta-right">판매가</th><th class="ta-right">금액</th></tr></thead><tbody>'
         + ok.map(x=>{
             const amt = (Number(x.resv.salePrice)||0) * x.qty;
             totQ += x.qty; totAmt += amt;
@@ -11153,7 +11155,7 @@
       cs.forEach(d=>{ const c = d.data(); colLabel[d.id] = (c.month||"-") + " " + (c.company||""); });
     }catch(e){}
 
-    let h = '<div style="overflow-x:auto;"><table class="data-table" style="min-width:1220px;"><thead><tr>' +
+    let h = '<div style="overflow-x:auto;"><table class="data-table resv-dest-fit" style="width:auto;"><thead><tr>' +
       '<th>적요</th><th>은행</th><th>대상</th><th>담보</th><th>대출명</th><th>실행일</th><th>만기일</th><th>남은일수</th>' +
       '<th class="ta-right">원금</th><th class="ta-right">상환</th><th class="ta-right">잔액</th>' +
       '<th class="ta-right">월이자</th><th class="ta-right">누적 이자·수수료</th><th>상태</th>' +
@@ -13036,7 +13038,7 @@
 
     recs.sort((a,b)=> String(b.date||"").localeCompare(String(a.date||"")));
     let total = 0;
-    let h = '<div style="overflow-x:auto;border:1px solid var(--line);"><table class="data-table" style="min-width:760px;"><thead><tr>' +
+    let h = '<div style="overflow-x:auto;border:1px solid var(--line);"><table class="data-table resv-dest-fit" style="width:auto;"><thead><tr>' +
       '<th>일자</th><th>매입처</th><th class="ta-right">기록 금액</th><th class="ta-right">주문 금액</th><th>상태</th><th>메모</th>' +
       '</tr></thead><tbody>';
     recs.forEach(r=>{
@@ -17059,7 +17061,7 @@
       return;
     }
     let totAmt = 0, totUsed = 0;
-    let h = '<div style="overflow-x:auto;"><table class="data-table" style="min-width:900px;"><thead><tr>'
+    let h = '<div style="overflow-x:auto;"><table class="data-table resv-dest-fit" style="width:auto;"><thead><tr>'
       + '<th>입금일</th><th>입금자명</th><th>거래처</th>'
       + '<th class="ta-right">금액</th><th class="ta-right">사용</th><th class="ta-right">잔액</th>'
       + '<th>상태</th><th class="ta-left">메모</th><th class="ta-right">관리</th></tr></thead><tbody>';
@@ -19569,7 +19571,7 @@
     el.innerHTML = '<div class="list-empty">불러오는 중...</div>';
     const snap = await getDocs(query(collection(db,"quotations"), orderBy("createdAt","desc")));
     if(snap.empty){ el.innerHTML = '<div class="list-empty">발행한 견적서가 없습니다.</div>'; return; }
-    let h = '<div style="overflow-x:auto;"><table class="data-table" style="min-width:820px;"><thead><tr>' +
+    let h = '<div style="overflow-x:auto;"><table class="data-table resv-dest-fit" style="width:auto;"><thead><tr>' +
       '<th>견적번호</th><th>발행일</th><th>거래처</th><th class="ta-right">수량</th><th class="ta-right">금액</th>' +
       '<th>유효기간</th><th>상태</th><th class="ta-right">관리</th></tr></thead><tbody>';
     snap.forEach(d=>{
@@ -20592,7 +20594,7 @@
         + Array.from(notFound).slice(0,10).map(comboEsc).join(", ") + (notFound.size>10 ? " 외" : "") + '</div>';
     }
     h += '<div style="overflow-x:auto;max-height:380px;overflow-y:auto;border:1px solid var(--line);">' +
-      '<table class="data-table" style="min-width:820px;"><thead><tr>' +
+      '<table class="data-table resv-dest-fit" style="width:auto;"><thead><tr>' +
       '<th style="width:34px;"><input type="checkbox" onclick="toggleI2sAll(this)"></th>' +
       '<th>모델</th><th>색상</th><th>통신사</th><th>일련번호</th><th>입고일</th><th>출고일</th>' +
       '<th>저장된 판매처</th><th>상태</th><th class="ta-right">판매가</th>' +
@@ -20845,7 +20847,7 @@
     if(months.length === 0){
       tblEl.innerHTML = '<div class="list-empty">자체개통 건이 없습니다.<br><span style="color:var(--gray);">일련번호를 눌러 <b>개통</b> 처리하면 여기 집계됩니다.</span></div>';
     }else{
-      let h = '<div style="overflow-x:auto;"><table class="data-table" style="min-width:960px;"><thead><tr>'
+      let h = '<div style="overflow-x:auto;"><table class="data-table resv-dest-fit" style="width:auto;"><thead><tr>'
         + '<th>귀속월</th><th class="ta-right">개통</th><th class="ta-right">출고가 합계</th>'
         + '<th class="ta-right">환불받음</th><th class="ta-right">환불잔액</th>'
         + '<th class="ta-right">공시예정</th><th class="ta-right">공시받음</th><th class="ta-right">공시잔액</th>'
@@ -20876,7 +20878,7 @@
     if(receipts.length === 0){
       recEl.innerHTML = '<div class="list-empty">등록된 입금이 없습니다.</div>';
     }else{
-      let h2 = '<div style="overflow-x:auto;"><table class="data-table" style="min-width:720px;"><thead><tr>'
+      let h2 = '<div style="overflow-x:auto;"><table class="data-table resv-dest-fit" style="width:auto;"><thead><tr>'
         + '<th>입금일</th><th>구분</th><th>귀속월</th><th class="ta-right">금액</th><th class="ta-left">메모</th><th class="ta-right">관리</th>'
         + '</tr></thead><tbody>';
       receipts.forEach(r=>{
@@ -22024,7 +22026,7 @@
           ? '<b style="color:var(--danger);">정리가 필요한 항목 ' + bad.length + '가지</b><br><span style="color:var(--gray);font-size:12px;">아래 순서대로 처리하시면 안전합니다. 재고 → 판매요청 → 주문 순입니다.</span>'
           : '<b style="color:#2e7d32;">모든 데이터가 정상입니다.</b>')
         + '</div>';
-      h += '<div style="overflow-x:auto;"><table class="data-table" style="min-width:860px;"><thead><tr>' +
+      h += '<div style="overflow-x:auto;"><table class="data-table resv-dest-fit" style="width:auto;"><thead><tr>' +
         '<th style="width:40px;">순서</th><th>점검 항목</th><th class="ta-right">건수</th><th>설명</th><th class="ta-right">정리</th>' +
         '</tr></thead><tbody>';
       issues.forEach((x,i)=>{
@@ -22195,7 +22197,7 @@
     el.innerHTML = '<div class="list-empty">불러오는 중...</div>';
     const snap = await getDocs(query(collection(db,"offsetVouchers"), orderBy("createdAt","desc")));
     if(snap.empty){ el.innerHTML = '<div class="list-empty">발행한 상계 전표가 없습니다.</div>'; return; }
-    let h = '<div style="overflow-x:auto;"><table class="data-table" style="min-width:760px;"><thead><tr>' +
+    let h = '<div style="overflow-x:auto;"><table class="data-table resv-dest-fit" style="width:auto;"><thead><tr>' +
       '<th>전표번호</th><th>일자</th><th>거래처</th><th class="ta-right">상계액</th><th class="ta-right">차액</th><th>비고</th><th class="ta-right">관리</th>' +
       '</tr></thead><tbody>';
     snap.forEach(d=>{
@@ -25438,7 +25440,7 @@
     if(bar) bar.style.display = "none";
   };
 
-  // 파일에 박힌 버전 글자를 읽습니다. (예: "파일 2026-08-08 v466")
+  // 파일에 박힌 버전 글자를 읽습니다. (예: "파일 2026-08-08 v468")
   function readBuildTag(text){
     const m = String(text||"").match(/파일\s*[\d-]+\s*v(\d+)/);
     return m ? m[0].trim() : "";
@@ -25620,7 +25622,10 @@
   // 화면에 있는 모든 메뉴 버튼을 모읍니다. (id → 이름)
   function allMenuButtons(){
     const out = [];
-    document.querySelectorAll("#app-sidebar .tab-btn[data-tab]").forEach(b=>{
+    // data-tab 이 없는 버튼(재고 기초설정처럼 하위 메뉴를 여는 것)도 함께 담습니다.
+    //  다만 그 하위 메뉴(모델 등록·색상 등록 …)는 배치 대상이 아니라 제외합니다.
+    document.querySelectorAll("#app-sidebar .tab-btn").forEach(b=>{
+      if(b.closest("#inv-admin-submenu")) return;
       // id 가 없는 버튼에는 화면 이름으로 id 를 붙여줍니다. (배치에 담으려면 id 가 있어야 합니다)
       if(!b.id && b.dataset.tab) b.id = "tabbtn-" + b.dataset.tab.replace(/^tab-/, "");
       const nm = (b.querySelector(".tab-label-text") || b).textContent.trim();
@@ -25870,8 +25875,20 @@
     document.body.classList.add("menu-layout-on");
     const sidebar = document.getElementById("app-sidebar");
     if(!sidebar) return;
+    const all = allMenuButtons();
     const names = {};
-    allMenuButtons().forEach(x=> names[x.id] = x.name);
+    all.forEach(x=> names[x.id] = x.name);
+    // 배치에 아직 없는 메뉴는 마지막 그룹에 붙여 보이게 합니다.
+    //  (새 메뉴를 만들었는데 배치를 다시 저장하지 않으면 안 보이던 문제를 막습니다)
+    {
+      const placed = new Set();
+      L.groups.forEach(g=> (g.items||[]).forEach(id=> placed.add(id)));
+      const missing = all.map(x=> x.id).filter(id=> !placed.has(id));
+      if(missing.length){
+        const last = L.groups[L.groups.length-1];
+        last.items = (last.items||[]).concat(missing);
+      }
+    }
 
     // 예전 껍데기(제목·그룹 상자)를 먼저 감춥니다.
     //  버튼을 새 그룹으로 옮기면 껍데기는 비지만, 안에 있던 제목 글씨가 남아 두 벌로 보입니다.
@@ -27287,7 +27304,7 @@
     });
     const dkeys = Object.keys(byDest).sort();
     sumEl.innerHTML = dkeys.length
-      ? '<div style="overflow-x:auto;"><table class="data-table" style="min-width:640px;"><thead><tr>'
+      ? '<div style="overflow-x:auto;"><table class="data-table resv-dest-fit" style="width:auto;"><thead><tr>'
         + '<th>거래처</th><th class="ta-right">나간 대수</th><th class="ta-right">판매금액</th>'
         + '<th class="ta-right">미입금 대수</th><th class="ta-right">미입금 금액</th></tr></thead><tbody>'
         + dkeys.map(d=>'<tr><td><b>'+comboEsc(d)+'</b></td>'
@@ -27318,7 +27335,7 @@
       listEl.innerHTML = '<div class="list-empty">해당하는 단말기가 없습니다.</div>';
       return;
     }
-    let h = '<div style="overflow-x:auto;"><table class="data-table" style="min-width:1200px;"><thead><tr>'
+    let h = '<div style="overflow-x:auto;"><table class="data-table resv-dest-fit" style="width:auto;"><thead><tr>'
       + '<th>일련번호</th><th>전산모델명</th><th>색상</th><th>통신사</th><th>판매처</th>'
       + '<th>출고일</th><th class="ta-right">판매가</th><th>상태</th><th>입금</th><th>입금일</th><th>세금계산서</th>'
       + '</tr></thead><tbody>';
@@ -28311,7 +28328,7 @@
       return;
     }
     const canDo = hasPerm(currentUserPerms, "bulkEdit") || hasPerm(currentUserPerms, "menuInvWork");
-    let h = '<div style="overflow-x:auto;"><table class="data-table" style="min-width:1000px;"><thead><tr>'
+    let h = '<div style="overflow-x:auto;"><table class="data-table resv-dest-fit" style="width:auto;"><thead><tr>'
       + '<th>일련번호</th><th>전산모델명</th><th>색상</th><th>통신사</th><th>개통일</th>'
       + '<th class="ta-right">출고가</th><th class="ta-right">공시지원금</th><th>위치</th>'
       + '</tr></thead><tbody>';
@@ -28481,7 +28498,7 @@
         + bad.map(b=> '<b>' + comboEsc(b.serial) + '</b> — ' + b.why).join("<br>") + '</div>';
     }
     if(ok.length){
-      h += '<div style="overflow-x:auto;border:1px solid var(--line);max-height:280px;overflow-y:auto;"><table class="data-table" style="min-width:720px;"><thead><tr>'
+      h += '<div style="overflow-x:auto;border:1px solid var(--line);max-height:280px;overflow-y:auto;"><table class="data-table resv-dest-fit" style="width:auto;"><thead><tr>'
         + '<th>일련번호</th><th>전산모델명</th><th>색상</th><th>통신사</th><th>개통일</th><th class="ta-right">출고가</th><th class="ta-right">공시지원금</th>'
         + '</tr></thead><tbody>';
       ok.forEach(r=>{
