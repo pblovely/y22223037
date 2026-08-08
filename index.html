@@ -379,7 +379,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v514</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v516</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -850,6 +850,7 @@
         </div>
         <p class="desc" style="margin-top:0;">데이터가 서로 어긋난 곳을 찾습니다. 정리는 <b>뒤에서부터</b> — 재고 매칭 → 판매요청 → 주문 순서로 푸는 것이 안전합니다.</p>
         <div id="datacheck-result"><div class="list-empty">위 <b>전체 점검</b>을 눌러주세요.</div></div>
+        <div id="datacheck-detail"></div>
       </div>
     </div>
 
@@ -2294,6 +2295,7 @@
         <div id="b2b-stat-cards" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px;"></div>
         <div id="b2b-orderuse-detail" style="display:none;margin-top:10px;"></div>
         <div id="b2b-warn" style="display:none;font-size:12.5px;margin-top:6px;"></div>
+        <div id="b2b-repaywarn" style="display:none;font-size:12.5px;margin-top:6px;"></div>
         <p class="desc" style="margin-top:6px;">주문사용 기록은 <b>주문 관리를 열 때 자동으로 맞춰집니다.</b> 수기로 넣은 기록은 건드리지 않습니다.</p>
       </div>
 
@@ -13673,12 +13675,9 @@
         lastRepayDate: date,                     // 나눠 갚는 중에도 마지막 날을 남깁니다.
         payments: [...(L.payments||[]), { type:"principal", amount:amt, date, by: currentUser.name }]
       });
-      await addDoc(collection(db,"b2bLedger"), {
-        date, category:"loan_repay", amount: amt,
-        memo: "원금 상환: " + (L.name||"-"),
-        fromLoanId: loanId,
-        createdBy: currentUser.name, createdByUsername: currentUser.username, createdAt: serverTimestamp()
-      });
+      // 원금 상환은 은행에 갚는 돈이라 여신 잔액과 무관합니다.
+      //  여신 장부에 남기면 「대상 미지정」으로 섞여 보이기만 해서 넣지 않습니다.
+      //  상환 기록은 대출의 「내역」에 그대로 남습니다.
     }catch(e){ alert("실패했습니다."); return; }
     logAction("B2B 대출 원금상환", (L.name||"-") + " / " + amt.toLocaleString() + " / " + date);
     alert("상환을 기록했습니다." + (done ? "\n전액 상환 완료입니다." : ""));
@@ -22775,6 +22774,78 @@
     runDataCheck();
   };
 
+  // 같은 일련번호로 등록된 재고를 모아 보여주고, 골라서 지웁니다.
+  //  프로그램이 스스로 고르지 않습니다. 어느 것을 남길지 사람이 정합니다.
+  let dupSerialCache = {};
+
+  window.showDupSerialList = function(){
+    const el = document.getElementById("datacheck-detail");
+    if(!el) return;
+    const sns = Object.keys(dupSerialCache).sort();
+    if(sns.length === 0){ el.innerHTML = '<div class="list-empty">겹치는 일련번호가 없습니다.</div>'; return; }
+    let h = '<div style="border:1px solid var(--navy);padding:10px 12px;margin-top:10px;">'
+      + '<div style="font-weight:700;margin-bottom:4px;">같은 일련번호가 여러 건 — ' + sns.length + '개</div>'
+      + '<div style="font-size:11.5px;color:var(--gray);line-height:1.7;margin-bottom:8px;">'
+      + '<b>남길 것 하나만 체크를 풀고</b> 나머지를 지우세요. 판매·개통된 건은 지우지 마시고, '
+      + '입고일·출고일·상태를 보고 정하시면 됩니다.<br>'
+      + '지운 기록은 되돌릴 수 없습니다. 주문의 도착 수는 줄지 않으니, 필요하면 주문 상세의 <b>도착 취소</b>를 쓰세요.</div>'
+      + '<div style="max-height:340px;overflow-y:auto;border:1px solid var(--line);">'
+      + '<table class="data-table" style="width:100%;"><thead><tr>'
+      + '<th style="width:34px;"></th><th>일련번호</th><th>모델</th><th>색상</th><th>통신사</th>'
+      + '<th>입고일</th><th>출고일</th><th>상태</th><th>판매처</th><th>위치</th>'
+      + '</tr></thead><tbody>';
+    sns.forEach(sn=>{
+      const list = dupSerialCache[sn];
+      list.forEach((it, idx)=>{
+        const first = (idx === 0);
+        h += '<tr' + (first ? ' style="background:#f4faf4;"' : '') + '>'
+          + '<td><input type="checkbox" class="dupsn-ck" value="' + it.id + '"' + (first ? '' : ' checked') + '></td>'
+          + '<td><b>' + comboEsc(sn) + '</b>' + (first ? ' <span style="font-size:10.5px;color:#2e7d32;">남김</span>' : '') + '</td>'
+          + '<td>' + comboEsc(docModelLabel(it)) + '</td>'
+          + '<td>' + comboEsc(it.systemColor || it.manufacturerColor || "-") + '</td>'
+          + '<td>' + comboEsc(it.carrier||"-") + '</td>'
+          + '<td>' + comboEsc(it.inDate||"-") + '</td>'
+          + '<td>' + comboEsc(it.outDate||"-") + '</td>'
+          + '<td' + (it.status === "판매" || it.status === "개통" ? ' style="color:var(--danger);font-weight:700;"' : '') + '>'
+            + comboEsc(it.status||"-") + '</td>'
+          + '<td>' + comboEsc(it.destination||"-") + '</td>'
+          + '<td>' + comboEsc(it.location||"-") + '</td></tr>';
+      });
+    });
+    h += '</tbody></table></div>'
+      + '<div style="margin-top:8px;"><button class="btn small danger" style="width:auto;" onclick="deleteDupSerials()">체크한 건 지우기</button>'
+      + '<span style="margin-left:8px;font-size:11.5px;color:var(--gray);">초록 줄은 기본으로 남기게 해뒀습니다. 바꾸셔도 됩니다.</span></div>'
+      + '</div>';
+    el.innerHTML = h;
+  };
+
+  window.deleteDupSerials = async function(){
+    if(!hasPerm(currentUserPerms, "cancelDelete")){ alert("삭제 권한이 없습니다."); return; }
+    const ids = Array.from(document.querySelectorAll(".dupsn-ck:checked")).map(c=> c.value);
+    if(ids.length === 0){ alert("지울 건을 골라주세요."); return; }
+    // 무엇을 지우는지 먼저 보여드립니다.
+    const rows = [];
+    Object.keys(dupSerialCache).forEach(sn=> dupSerialCache[sn].forEach(it=>{ if(ids.indexOf(it.id) >= 0) rows.push(it); }));
+    const sold = rows.filter(it=> it.status === "판매" || it.status === "개통");
+    if(!confirm("재고 " + ids.length + "건을 지웁니다.\n\n"
+      + rows.slice(0,10).map(it=> "  " + (it.serialNumber||"-") + "  " + docModelLabel(it) + "  " + (it.status||"-")).join("\n")
+      + (rows.length > 10 ? "\n  ... 외 " + (rows.length-10) + "건" : "")
+      + (sold.length ? "\n\n※ 판매·개통된 건이 " + sold.length + "건 들어 있습니다. 정말 지우시겠습니까?" : "")
+      + "\n\n되돌릴 수 없습니다. 진행할까요?")) return;
+    try{
+      for(let i=0; i<ids.length; i+=300){
+        const bt = writeBatch(db);
+        ids.slice(i, i+300).forEach(id=> bt.delete(doc(db,"inventoryItems", id)));
+        await bt.commit();
+      }
+    }catch(e){ alert("지우지 못했습니다.\n" + ((e&&e.message)?e.message:String(e))); return; }
+    logAction("중복 일련번호 재고 삭제", ids.length + "건 / "
+      + [...new Set(rows.map(it=> it.serialNumber||"-"))].slice(0,10).join(","));
+    alert(ids.length + "건을 지웠습니다.");
+    document.getElementById("datacheck-detail").innerHTML = "";
+    runDataCheck();
+  };
+
   window.runDataCheck = async function(){
     const el = document.getElementById("datacheck-result");
     if(!el) return;
@@ -22797,6 +22868,27 @@
       invSnap.forEach(d=> items[d.id] = d.data());
 
       const issues = [];
+
+      // ⓪ 같은 일련번호가 여러 건 등록된 재고
+      //  일련번호는 단말기 한 대를 가리키는 값이라 겹치면 안 됩니다.
+      //  겹치면 재고 대수·매입액·판매 매칭이 모두 부풀려집니다.
+      {
+        const bySn = {};
+        Object.keys(items).forEach(id=>{
+          const it = items[id];
+          if(it.deleted === true) return;
+          const sn = String(it.serialNumber||"").trim();
+          if(!sn) return;
+          (bySn[sn] = bySn[sn] || []).push(id);
+        });
+        const dupSns = Object.keys(bySn).filter(sn=> bySn[sn].length > 1);
+        const dupExtra = dupSns.reduce((n,sn)=> n + (bySn[sn].length - 1), 0);
+        dupSerialCache = {};
+        dupSns.forEach(sn=> dupSerialCache[sn] = bySn[sn].map(id=> ({ id, ...items[id] })));
+        issues.push({ n:"같은 일련번호가 여러 건", cnt:dupSns.length, unit:"남는 " + dupExtra + "건",
+          why:"일련번호는 단말기 한 대를 가리키는 값입니다. 겹치면 재고 대수·매입액·판매 매칭이 부풀려집니다.",
+          fix: dupSns.length ? "showDupSerialList()" : null, fixLabel:"확인하고 정리" });
+      }
 
       // ① 주문이 지워졌는데 남은 판매요청
       let orphanSR = 0, orphanQty = 0;
@@ -24717,6 +24809,7 @@
     interest_received:"이자지급 수령", b2b_fee_payment:"B2B결제수수료", b2b_fee_mp:"B2BMP수수료",
     b2b_interest:"B2B이자", club_incentive:"클럽장려금",
     collateral_cash:"현금담보 예치", collateral_return:"현금담보 반환",
+    loan_repay:"원금 상환 (여신 무관)",
     adjust:"조정", other:"기타"
   };
   // 조정 사유 — 사이트 설정에서 고칠 수 있게 될 때까지의 기본 목록입니다.
@@ -25291,6 +25384,23 @@
       tabEl.innerHTML = btn("전체", "", allEntries.length)
         + pList.map(n=> btn(n, n, allEntries.filter(e=> pName(e) === n).length)).join("");
     }
+    // 여신과 무관한 원금 상환이 여신 장부에 남아 있으면 알려줍니다. (예전 버전에서 만들어진 것)
+    {
+      const el = document.getElementById("b2b-repaywarn");
+      const bad = allEntries.filter(e=> e.category === "loan_repay");
+      if(el){
+        if(bad.length){
+          el.style.display = "block";
+          el.innerHTML = '<span style="color:var(--danger);font-weight:700;">여신 장부에 남아 있는 원금 상환 '
+            + bad.length + '건</span> <span style="color:var(--gray);">— 원금 상환은 은행에 갚는 돈이라 '
+            + '여신 잔액과 무관합니다. 잔액에는 안 들어가지만 목록에 섞여 보입니다. '
+            + '아래 목록에서 그 줄을 눌러 <b>삭제</b>하시면 깔끔해집니다. (상환 기록은 대출 「내역」에 그대로 있습니다)</span>';
+        }else{
+          el.style.display = "none"; el.innerHTML = "";
+        }
+      }
+    }
+
     // 대상·매입처 중 한쪽만 적힌 기록 — 서로 채워 넣으면 거래처별로 갈리고 목록도 비지 않습니다.
     {
       const el = document.getElementById("b2b-fillpartner");
@@ -25338,7 +25448,8 @@
     // 담보 계산서로 아직 안 빌린 금액 (고른 거래처 기준)
     const colLeft = colRows.reduce((n,c)=>{
       const co = String(c.company||"").trim();
-      if(b2bPartnerPick && b2bPartnerPick !== "(대상 미지정)" && co !== b2bPartnerPick) return n;
+      if(b2bPartnerPick === "(대상 미지정)") return n;          // 대상이 없는 탭에는 담보가 없습니다
+      if(b2bPartnerPick && co !== b2bPartnerPick) return n;
       return n + Math.max(0, (Number(c.amount)||0) - (usedByCol[c.id]||0));
     }, 0);
 
@@ -25348,8 +25459,8 @@
     invSnap.forEach(d=>{
       const it = d.data();
       // 거래처를 고르면 그 거래처에서 들여온 재고만 셉니다.
-      if(b2bPartnerPick && b2bPartnerPick !== "(대상 미지정)"
-         && String(it.source||"").trim() !== b2bPartnerPick) return;
+      if(b2bPartnerPick === "(대상 미지정)") return;           // 대상이 없는 탭에는 매입분이 없습니다
+      if(b2bPartnerPick && String(it.source||"").trim() !== b2bPartnerPick) return;
       if(it.profit!=null){
         const qty = it.entryType==="imei" ? 1 : (Number(it.quantity)||0);
         baseProfitSum += Number(it.profit)*qty;
@@ -26882,7 +26993,7 @@
     if(bar) bar.style.display = "none";
   };
 
-  // 파일에 박힌 버전 글자를 읽습니다. (예: "파일 2026-08-09 v514")
+  // 파일에 박힌 버전 글자를 읽습니다. (예: "파일 2026-08-09 v516")
   function readBuildTag(text){
     const m = String(text||"").match(/파일\s*[\d-]+\s*v(\d+)/);
     return m ? m[0].trim() : "";
