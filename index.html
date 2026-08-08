@@ -379,7 +379,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v503</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v504</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -12865,6 +12865,32 @@
   };
 
   // 대출비용(수수료·이자) 목록 — 여신과 별개로 「B2B 대출」 화면에서 봅니다.
+  // 대출비용 메모는 "이자 6회차: [00055] B2B" 처럼 한 줄이었습니다.
+  //  적요(대출 코드)·대출명·회차를 갈라 각각 칸으로 보여줍니다. 기록은 그대로 두고 화면에서만 나눕니다.
+  function splitLoanCostMemo(e){
+    let code = String(e.loanCode||"").trim();
+    let name = String(e.loanName||"").trim();
+    let no = "";
+    let rest = String(e.memo||"").trim();
+    const mNo = rest.match(/(\d+)\s*회차/);
+    if(mNo) no = mNo[1];
+    const mCode = rest.match(/\[([^\]]+)\]/);
+    if(!code && mCode) code = mCode[1];
+    const mName = rest.match(/\[[^\]]+\]\s*(.+)$/);
+    if(!name && mName) name = mName[1].trim();
+    if(!name){
+      const mPlain = rest.match(/:\s*(.+)$/);
+      if(mPlain && !/\[/.test(mPlain[1])) name = mPlain[1].trim();
+    }
+    rest = rest.replace(/\[[^\]]+\]/g, " ")
+               .replace(/\d+\s*회차/g, " ")
+               .replace(/^\s*(이자|MP수수료|B2B결제수수료)\s*/,"")
+               .replace(/\s*:\s*/g, " ")
+               .replace(/\s+/g, " ").trim();
+    if(name && rest === name) rest = "";
+    return { code, name, no, rest };
+  }
+
   window.loadLoanCostList = async function(){
     const listEl = document.getElementById("loancost-list");
     const cardEl = document.getElementById("loancost-cards");
@@ -12916,24 +12942,28 @@
     }
     const canDo = hasPerm(currentUserPerms, "paymentProcess");
     let h = '<div style="overflow-x:auto;"><table class="data-table resv-dest-fit" style="width:auto;"><thead><tr>'
-      + '<th>거래일자</th><th>구분</th><th>은행</th><th>대상</th><th class="ta-right">금액</th><th>메모</th>'
+      + '<th>거래일자</th><th>구분</th><th>은행</th><th>대상</th><th>적요</th><th>대출명</th><th class="ta-right">회차</th><th class="ta-right">금액</th><th>메모</th>'
       + '</tr></thead><tbody>';
     let total = 0;
     rows.forEach(e=>{
       const amt = Number(e.amount)||0; total += amt;
+      const p = splitLoanCostMemo(e);
       h += '<tr' + (canDo ? ' class="rbd-clickable" data-row-act="lc|'+e.id+'"' : '') + '><td>'+comboEsc(e.date||"-")+'</td>'
         + '<td><b>'+CATS[e.category]+'</b></td>'
         + '<td>'+comboEsc(e.bank||"-")+'</td>'
         + '<td>'+comboEsc(e.partner||"-")+'</td>'
+        + '<td><b>'+comboEsc(p.code||"-")+'</b></td>'
+        + '<td>'+comboEsc(p.name||"-")+'</td>'
+        + '<td class="ta-right">'+(p.no ? p.no+"회차" : '<span style="color:var(--gray);">-</span>')+'</td>'
         + '<td class="ta-right">'+amt.toLocaleString()+'</td>'
-        + '<td style="font-size:11.5px;color:var(--gray);">'+comboEsc(e.memo||"-")+'</td>'
+        + '<td style="font-size:11.5px;color:var(--gray);">'+comboEsc(p.rest||"-")+'</td>'
         + '</tr>'
         + (canDo ? '<tr class="row-actions" data-row-actions="lc|'+e.id+'" style="display:none;">'
-            + '<td colspan="6" style="background:#fafafa;padding:6px 8px;text-align:left;">'
+            + '<td colspan="9" style="background:#fafafa;padding:6px 8px;text-align:left;">'
             + '<button class="btn small danger" style="width:auto;" data-lc-del="'+e.id+'" data-lc-legacy="'+(e.legacy?"1":"0")+'">삭제</button></td></tr>' : '');
     });
     h += '<tr style="background:#fff;font-weight:700;border-top:2px solid var(--navy);">'
-      + '<td colspan="4">합계</td><td class="ta-right">'+total.toLocaleString()+'</td>'
+      + '<td colspan="7">합계</td><td class="ta-right">'+total.toLocaleString()+'</td>'
       + '<td></td></tr>';
     h += '</tbody></table></div>';
     listEl.innerHTML = h;
@@ -26448,7 +26478,7 @@
     if(bar) bar.style.display = "none";
   };
 
-  // 파일에 박힌 버전 글자를 읽습니다. (예: "파일 2026-08-09 v503")
+  // 파일에 박힌 버전 글자를 읽습니다. (예: "파일 2026-08-09 v504")
   function readBuildTag(text){
     const m = String(text||"").match(/파일\s*[\d-]+\s*v(\d+)/);
     return m ? m[0].trim() : "";
