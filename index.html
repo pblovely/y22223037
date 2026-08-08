@@ -379,7 +379,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v501</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v503</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -11878,7 +11878,7 @@
     msg("등록되었습니다."
       + (charge === "yes" ? " 여신도 충전했습니다."
         : (charge === "out" ? " 입출금 내역에 출금으로 함께 등록했습니다." : "")), false);
-    loadLoanList();
+    refreshLoanScreens();
     if(typeof loadB2BTab === "function") loadB2BTab();
     setTimeout(closeLoanModal, 800);
   };
@@ -12604,9 +12604,7 @@
       if(data.orderBatchIds.length || removed.length) await bt.commit();
     }catch(e){ return bad("저장에 실패했습니다. " + ((e&&e.message)?e.message:String(e))); }
     closeCollateralModal();
-    clearScreenCache("loan");
-    loadCollateralList();
-    loadLoanList();
+    refreshLoanScreens();
   };
 
   // 이 계산서를 담보로 쓴 대출 금액의 합계
@@ -12644,8 +12642,7 @@
     }
     logAction("담보 계산서 삭제", (c.month||"-") + " / " + (c.company||"-") + " / " + (Number(c.amount)||0).toLocaleString()
       + (linked.length ? " / 주문 " + linked.length + "건 표시 해제" : ""));
-    clearScreenCache("loan");
-    loadCollateralList();
+    refreshLoanScreens();
     if(typeof loadOrderList === "function" && document.getElementById("tab-orders")
        && document.getElementById("tab-orders").classList.contains("active")) loadOrderList();
   };
@@ -12831,7 +12828,7 @@
       await deleteDoc(doc(db, isLegacy ? "b2bLedger" : "b2bLoanCost", id));
     }catch(e){ alert("지우지 못했습니다."); return; }
     logAction("대출비용 삭제", (isLegacy ? "여신장부 " : "") + id);
-    loadLoanCostList();
+    refreshLoanScreens();
     if(document.getElementById("tab-b2b") && document.getElementById("tab-b2b").classList.contains("active")) loadB2BTab();
   };
 
@@ -12863,7 +12860,7 @@
     }catch(e){ alert("옮기지 못했습니다.\n" + ((e&&e.message)?e.message:String(e))); return; }
     logAction("대출비용 옮기기", legacy.length + "건 / " + sum.toLocaleString() + " (여신장부 → 대출비용)");
     alert(legacy.length + "건을 옮겼습니다.");
-    loadLoanCostList();
+    refreshLoanScreens();
     if(document.getElementById("tab-b2b") && document.getElementById("tab-b2b").classList.contains("active")) loadB2BTab();
   };
 
@@ -12971,17 +12968,78 @@
     return String(y) + String(m).padStart(2,"0") + String(d).padStart(2,"0");
   }
 
+  // ===== 기업은행 이자일 =====
+  //  구간(1차 180일 · 연장 120일)마다 이렇게 나갑니다.
+  //   · 구간이 시작한 달의 말일에 한 번
+  //   · 그 뒤 매월 말일
+  //   · 마지막은 그 구간이 끝나는 날 (말일보다 앞이면 그날로 끝냅니다)
+  //  예) 20220503 실행 · 180일 → 0531 · 0630 · 0731 · 0831 · 0930 · 1030(만기)
+  //      1030에 120일 연장 → 1031 · 1130 · 1231 · 0131 · 0227(120일 되는 날)
+  function loanPeriods(L){
+    const bank = L.bank || "기업은행";
+    const start = String(L.startDate||"").replace(/\D/g,"");
+    if(start.length !== 8) return [];
+    const out = [];
+    if(bank === "기업은행"){
+      const days = (Number(L.termMonths)||6) * 30;          // 6개월 = 180일
+      let from = start, to = addDaysStr(start, days);
+      out.push({ from, to });
+      (L.extensions||[]).forEach(x=>{
+        const d = Number(x.days) || ((Number(x.months)||4) * 30);   // 연장 기본 120일
+        from = to; to = addDaysStr(from, d);
+        out.push({ from, to });
+      });
+    }else{
+      const m = Number(L.termMonths)||6;
+      let from = start, to = addMonthsStr(start, m);
+      out.push({ from, to });
+      (L.extensions||[]).forEach(x=>{
+        const mm = Number(x.months)||3;
+        from = to; to = addMonthsStr(from, mm);
+        out.push({ from, to });
+      });
+    }
+    return out;
+  }
+
+  // 이자 나가는 날들을 순서대로 냅니다.
+  function loanInterestDates(L){
+    const bank = L.bank || "기업은행";
+    const periods = loanPeriods(L);
+    if(periods.length === 0) return [];
+    if(bank !== "기업은행"){
+      // 대구은행 등 — 실행일과 같은 날, 한 달 뒤부터
+      const term = Number(L.termMonths)||6;
+      const extra = (L.extensions||[]).reduce((n,x)=> n + (Number(x.months)||3), 0);
+      const out = [];
+      for(let i=1; i<=term+extra; i++) out.push(interestDateOf(L.startDate, i, bank));
+      return out.filter(Boolean);
+    }
+    const out = [];
+    periods.forEach(pd=>{
+      const y0 = Number(pd.from.slice(0,4)), m0 = Number(pd.from.slice(4,6));
+      let y = y0, m = m0;
+      for(let guard=0; guard<120; guard++){
+        const last = String(y) + String(m).padStart(2,"0") + String(lastDayOf(y,m)).padStart(2,"0");
+        if(last > pd.to) break;                      // 구간 끝을 넘으면 멈춥니다
+        if(last >= pd.from && last !== out[out.length-1]) out.push(last);
+        m += 1; if(m > 12){ m = 1; y += 1; }
+      }
+      if(pd.to !== out[out.length-1]) out.push(pd.to);   // 마지막은 구간이 끝나는 날
+    });
+    return out;
+  }
+
   window.openLoanSchedule = async function(loanId){
     const snap = await getDoc(doc(db,"b2bLoans", loanId));
     if(!snap.exists()){ alert("대출을 찾을 수 없습니다."); return; }
     const L = { id:loanId, ...snap.data() };
     loanSchedTarget = L;
 
-    const term    = Number(L.termMonths)||6;
-    const extra   = (L.extensions||[]).reduce((n,x)=> n + (Number(x.months)||3), 0);
-    const total   = term + extra;
     const monthly = Number(L.monthlyInterest)||0;
     const bank    = L.bank || "기업은행";
+    const schedDates = loanInterestDates(L);        // 이자 나가는 날들
+    const total   = schedDates.length;
 
     // 이미 기록한 이자 — 회차별로 찾아 채워둡니다.
     const paidByNo = {};
@@ -13000,15 +13058,20 @@
       + "<div>월이자 <b>" + monthly.toLocaleString() + "</b> · " + total + "회 · 예정 합계 "
       + (monthly * total).toLocaleString() + "</div>"
       + "<div style='color:var(--gray);'>이자일 — "
-      + (bank === "기업은행" ? "매월 말일 (첫 회차는 실행한 그 달 말일)"
-                            : "매월 실행일과 같은 날 (첫 회차는 한 달 뒤)") + "</div>";
+      + (bank === "기업은행"
+          ? "구간이 시작한 달의 말일부터 <b>매월 말일</b>, 마지막은 <b>그 구간이 끝나는 날</b>"
+            + "<br>1차 " + ((Number(L.termMonths)||6) * 30) + "일"
+            + ((L.extensions||[]).length
+                ? " · 연장 " + (L.extensions||[]).map(x=> (Number(x.days) || ((Number(x.months)||4)*30)) + "일").join(" · ")
+                : "")
+          : "매월 실행일과 같은 날 (첫 회차는 한 달 뒤)") + "</div>";
 
     const today = todayStr();
     let h = '<div style="overflow-x:auto;"><table class="data-table" style="min-width:640px;"><thead><tr>'
       + '<th>회차</th><th>예정일</th><th class="ta-right">예정이자</th>'
       + '<th class="ta-right">실제 납입</th><th>납입일</th><th>상태</th></tr></thead><tbody>';
     for(let i=1; i<=total; i++){
-      const due  = interestDateOf(L.startDate, i, bank);
+      const due  = schedDates[i-1] || "";
       const paid = paidByNo[i];
       const locked = !!(repayDate && due && due > repayDate);
       let state, color;
@@ -13044,6 +13107,15 @@
     loanSchedTarget = null;
   };
 
+  // 대출 화면 세 목록(담보 계산서·B2B 대출·대출비용)을 함께 새로 그립니다.
+  //  담아둔 자료를 먼저 비워야 방금 넣은 이자·상환이 바로 보입니다.
+  window.refreshLoanScreens = function(){
+    clearScreenCache("loan");
+    if(typeof loadCollateralList === "function") loadCollateralList();
+    if(typeof loadLoanList === "function") loadLoanList();
+    if(typeof loadLoanCostList === "function") loadLoanCostList();
+  };
+
   // 채워 넣은 회차만 저장합니다. 빈 칸은 건드리지 않습니다.
   window.submitLoanSchedule = async function(){
     if(!loanSchedTarget) return;
@@ -13055,8 +13127,9 @@
       if(amt <= 0) return;
       const no = Number(inp.dataset.no);
       const dEl = document.querySelector('#ls-table .ls-date[data-no="' + no + '"]');
+      const sched = loanInterestDates(L);
       const date = String((dEl && dEl.value) || "").replace(/\D/g,"")
-        || interestDateOf(L.startDate, no, L.bank || "기업은행");
+        || sched[no-1] || "";
       if(date.length !== 8){ rows.push({ no, bad:true }); return; }
       rows.push({ no, amount:amt, date });
     });
@@ -13096,7 +13169,7 @@
       + " / " + rows.length + "건 / " + sum.toLocaleString()
       + " / 회차 " + rows.map(r=>r.no).join(","));
     closeLoanSchedule();
-    loadLoanList();
+    refreshLoanScreens();
     if(typeof loadB2BTab === "function") loadB2BTab();
   };
 
@@ -13141,7 +13214,7 @@
     }catch(e){ alert("저장에 실패했습니다.\n" + ((e && e.message) ? e.message : String(e))); return; }
     logAction("B2B 대출 " + label + " 납부", (L.name||"-") + " / " + amt.toLocaleString() + " / " + date);
     alert(label + " " + amt.toLocaleString() + " 을 기록했습니다.");
-    loadLoanList(); if(typeof loadB2BTab === "function") loadB2BTab();
+    refreshLoanScreens(); if(typeof loadB2BTab === "function") loadB2BTab();
   };
 
   // 3개월 연장
@@ -13149,24 +13222,38 @@
     const snap = await getDoc(doc(db,"b2bLoans", loanId));
     if(!snap.exists()) return;
     const L = snap.data();
-    // 은행마다 연장 기간이 다릅니다. 대구은행 6개월 · 기업은행 3개월이 기본이고, 고치셔도 됩니다.
-    const defMonths = (L.bank === "대구은행") ? "6" : "3";
-    const mIn = prompt("몇 개월 연장하시나요?\n\n  " + (L.bank || "은행 미지정")
-      + " 기본 " + defMonths + "개월", defMonths);
-    if(mIn === null) return;
-    const months = Number(mIn)||0;
-    if(months <= 0){ alert("개월 수를 확인해주세요."); return; }
-    const newDue = addMonthsStr(L.dueDate, months);
-    if(!confirm("만기를 연장합니다.\n\n  현재 만기 " + (L.dueDate||"-") + "\n  연장 후   " + newDue + "\n\n진행하시겠습니까?")) return;
+    // 기업은행은 날짜 기준(기본 120일), 그 외는 달 기준입니다.
+    const isIbk = (L.bank === "기업은행");
+    let months = 0, days = 0, newDue = "";
+    if(isIbk){
+      const dIn = prompt("며칠 연장하시나요?\n\n  기업은행 기본 120일", "120");
+      if(dIn === null) return;
+      days = Number(dIn)||0;
+      if(days <= 0){ alert("일수를 확인해주세요."); return; }
+      newDue = addDaysStr(L.dueDate, days);
+    }else{
+      const defMonths = (L.bank === "대구은행") ? "6" : "3";
+      const mIn = prompt("몇 개월 연장하시나요?\n\n  " + (L.bank || "은행 미지정")
+        + " 기본 " + defMonths + "개월", defMonths);
+      if(mIn === null) return;
+      months = Number(mIn)||0;
+      if(months <= 0){ alert("개월 수를 확인해주세요."); return; }
+      newDue = addMonthsStr(L.dueDate, months);
+    }
+    if(!confirm("만기를 연장합니다.\n\n  현재 만기 " + (L.dueDate||"-") + "\n  연장 후   " + newDue
+      + "\n  기간     " + (isIbk ? days + "일" : months + "개월")
+      + "\n\n이자표도 이 구간에 맞춰 다시 계산됩니다. 진행하시겠습니까?")) return;
     try{
       await updateDoc(doc(db,"b2bLoans", loanId), {
         dueDate: newDue,
-        extensions: [...(L.extensions||[]), { date: todayStr(), months, from: L.dueDate, to: newDue, by: currentUser.name }]
+        extensions: [...(L.extensions||[]),
+          { date: todayStr(), months, days, from: L.dueDate, to: newDue, by: currentUser.name }]
       });
     }catch(e){ alert("실패했습니다."); return; }
-    logAction("B2B 대출 연장", (L.name||"-") + " / " + months + "개월 / " + L.dueDate + " → " + newDue);
+    logAction("B2B 대출 연장", (L.name||"-") + " / " + (isIbk ? days + "일" : months + "개월")
+      + " / " + L.dueDate + " → " + newDue);
     alert("연장했습니다. 새 만기 " + newDue);
-    loadLoanList();
+    refreshLoanScreens();
   };
 
   // 원금 상환 (여신과는 무관 — 은행에 갚는 돈입니다)
@@ -13209,7 +13296,7 @@
     }catch(e){ alert("실패했습니다."); return; }
     logAction("B2B 대출 원금상환", (L.name||"-") + " / " + amt.toLocaleString() + " / " + date);
     alert("상환을 기록했습니다." + (done ? "\n전액 상환 완료입니다." : ""));
-    loadLoanList(); if(typeof loadB2BTab === "function") loadB2BTab();
+    refreshLoanScreens(); if(typeof loadB2BTab === "function") loadB2BTab();
   };
 
   // 대출 상세 내역
@@ -24434,7 +24521,7 @@
     logAction("B2B 여신 거래 삭제", id);
     // 지금 열려 있는 화면을 새로 읽습니다. (삼성여신 · B2B 대출)
     if(document.getElementById("tab-b2b") && document.getElementById("tab-b2b").classList.contains("active")) loadB2BTab();
-    if(document.getElementById("tab-loan") && document.getElementById("tab-loan").classList.contains("active")) loadLoanCostList();
+    if(document.getElementById("tab-loan") && document.getElementById("tab-loan").classList.contains("active")) refreshLoanScreens();
   };
 
   // 여신 충전이 통장에서 어떻게 나갔는지 보여줍니다.
@@ -26361,7 +26448,7 @@
     if(bar) bar.style.display = "none";
   };
 
-  // 파일에 박힌 버전 글자를 읽습니다. (예: "파일 2026-08-09 v501")
+  // 파일에 박힌 버전 글자를 읽습니다. (예: "파일 2026-08-09 v503")
   function readBuildTag(text){
     const m = String(text||"").match(/파일\s*[\d-]+\s*v(\d+)/);
     return m ? m[0].trim() : "";
@@ -30378,7 +30465,7 @@
     if(tabId==="tab-itemhistory" && typeof initItemHistoryTab === "function") initItemHistoryTab();
     if(tabId==="tab-lgrefund" && typeof loadLgRefund === "function") loadLgRefund();
     if(tabId==="tab-paycheck" && typeof loadPayCheck === "function") loadPayCheck();
-    if(tabId==="tab-loan" && typeof loadLoanList === "function"){ loadCollateralList(); loadLoanList(); loadLoanCostList(); }
+    if(tabId==="tab-loan" && typeof loadLoanList === "function"){ loadCollateralList(); loadLoanList(); loadLoanCostList(); }   // 화면을 열 때는 담아둔 자료를 그대로 씁니다 (읽기 절약)
     if(tabId==="tab-accounts" && typeof loadAccountList === "function"){ loadAccountList(); loadCardList(); }
     if(tabId==="tab-activation" && typeof loadActivationList === "function") loadActivationList();
     if(tabId==="tab-site" && typeof renderHiddenList === "function") renderHiddenList();
