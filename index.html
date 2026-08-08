@@ -378,7 +378,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-08 v461</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-08 v462</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -1483,6 +1483,9 @@
               <label style="display:flex;align-items:center;gap:5px;"><input type="checkbox" id="co-is-source"> 매입처 (입고처)</label>
               <label style="display:flex;align-items:center;gap:5px;"><input type="checkbox" id="co-is-dest"> 판매처 (출고처)</label>
             </span>
+          </div>
+          <div class="stack-row"><label>삼성여신 <span class="info-tip" title="삼성전자 계열이라 여신을 따로 관리하는 거래처면 체크하세요. 체크한 업체만 입출금 등록의 「삼성여신」 목록에 나옵니다. 삼성에스엘처럼 이름에 삼성이 들어가도 삼성전자가 아니면 체크하지 마세요.">ⓘ</span></label>
+            <label style="font-size:12.5px;"><input type="checkbox" id="co-is-credit"> 여신 대상 (삼성전자 계열)</label>
           </div>
         </div>
         <div style="font-size:11px;font-weight:700;color:var(--gray);margin:12px 0 4px 0;">사업자정보</div>
@@ -7006,6 +7009,7 @@
       const roles = [];
       if(c.isSource) roles.push('<span style="background:var(--navy);color:#fff;font-size:10.5px;padding:1px 6px;">매입처</span>');
       if(c.isDest)   roles.push('<span style="background:#1565c0;color:#fff;font-size:10.5px;padding:1px 6px;">판매처</span>');
+      if(c.isCreditTarget) roles.push('<span style="background:#2e7d32;color:#fff;font-size:10.5px;padding:1px 6px;">여신</span>');
       const tr = document.createElement("tr");
       tr.innerHTML =
         '<td style="color:var(--gray);">'+(startIndex+i+1)+'</td>' +
@@ -7079,9 +7083,10 @@
       el.disabled = !!readOnly;
       el.style.background = readOnly ? "#f2f2f2" : "";
     });
-    ["co-is-source","co-is-dest"].forEach(id=>{ document.getElementById(id).disabled = !!readOnly; });
+    ["co-is-source","co-is-dest","co-is-credit"].forEach(id=>{ const e=document.getElementById(id); if(e) e.disabled = !!readOnly; });
     document.getElementById("co-is-source").checked = c.isSource === true;
     document.getElementById("co-is-dest").checked = c.isDest === true;
+    { const e = document.getElementById("co-is-credit"); if(e) e.checked = c.isCreditTarget === true; }
     document.getElementById("company-modal-title").textContent = readOnly ? "업체 보기" : (companyId ? "업체 수정" : "업체 등록");
     // 읽기 전용이면 저장 버튼을 감춥니다.
     const saveBtn = document.querySelector('#company-modal-overlay button[onclick="submitCompany()"]');
@@ -7180,6 +7185,7 @@
     CO_FIELDS.forEach(([elId, key])=>{ payload[key] = document.getElementById(elId).value.trim(); });
     payload.isSource = document.getElementById("co-is-source").checked;
     payload.isDest = document.getElementById("co-is-dest").checked;
+    payload.isCreditTarget = !!(document.getElementById("co-is-credit")||{}).checked;
 
     if(!payload.name){
       showModelMsg("co-result-msg", "업체명은 반드시 입력해주세요.", true);
@@ -16284,12 +16290,17 @@
         if(dl) dl.innerHTML = companiesCache.map(c=>'<option value="'+comboEsc(c.name||"")+'"></option>').join("");
         await refreshBankAccounts();
       }catch(e){}
-      // 여신 충전 대상 — 업체정보의 매입처를 그대로 씁니다.
+      // 여신 충전 대상 — 업체정보에서 「여신 대상」으로 체크한 곳만 나옵니다.
+      //  삼성에스엘처럼 이름에 삼성이 들어가도 체크 안 하면 안 나옵니다.
       try{
-        const names = await fetchNamesList("inboundSources");
+        if(!companiesCache.length) await fetchCompanies();
+        const list = companiesCache.filter(c=> c.isCreditTarget === true)
+          .map(c=> String(c.name||"").trim()).filter(Boolean).sort();
         const cr = document.getElementById("cb-credit");
         if(cr) cr.innerHTML = '<option value="">(여신과 무관)</option>'
-          + names.map(n=>'<option value="'+comboEsc(n)+'">'+comboEsc(n)+' 여신 충전</option>').join("");
+          + (list.length
+              ? list.map(n=>'<option value="'+comboEsc(n)+'">'+comboEsc(n)+' 여신 충전</option>').join("")
+              : '<option value="" disabled>업체정보에서 「여신 대상」을 체크해주세요</option>');
       }catch(e){}
     })();
   };
@@ -25342,7 +25353,7 @@
     if(bar) bar.style.display = "none";
   };
 
-  // 파일에 박힌 버전 글자를 읽습니다. (예: "파일 2026-08-08 v461")
+  // 파일에 박힌 버전 글자를 읽습니다. (예: "파일 2026-08-08 v462")
   function readBuildTag(text){
     const m = String(text||"").match(/파일\s*[\d-]+\s*v(\d+)/);
     return m ? m[0].trim() : "";
