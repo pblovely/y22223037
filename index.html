@@ -379,7 +379,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v492</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v495</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -12636,7 +12636,13 @@
 
     // ① 여신으로 결제한 주문 중 도착까지 끝난 건을 매입처·주문월로 묶습니다.
     const months = {};   // "202607|삼성전자스타" → { qty, cost, credit }
-    const LC = await readCachedMany("loan", ["orderBatches","orders","b2bCollaterals","b2bLoans"]);
+    const LC = await readCachedMany("loan", ["orderBatches","orders","b2bCollaterals","b2bLoans","b2bLedger"]);
+    // 이 계산서 때문에 넣은 여신 조정 (계산서 id 로 이어져 있습니다)
+    const adjByCol = {};
+    (LC["b2bLedger"]||[]).forEach(e=>{
+      if(e.category !== "adjust" || !e.fromCollateralId) return;
+      adjByCol[e.fromCollateralId] = (adjByCol[e.fromCollateralId]||0) + (Number(e.amount)||0);
+    });
     try{
       const batches = LC["orderBatches"];
       const byBatch = {};
@@ -12724,6 +12730,7 @@
       tC += r.colAmt; tU += r.used;
       const done = !!r.col && r.left <= 0;
       const diff = r.col && r.qty > 0 ? (r.colAmt - r.credit) : 0;
+      const colAdj = (r.col && adjByCol[r.col.id]) ? adjByCol[r.col.id] : 0;
       h += '<tr' + (done ? ' class="row-done"' : '') + '>'
         + '<td><b>'+comboEsc(r.month||"-")+'</b></td>'
         + '<td>'+comboEsc(r.company||"-")+'</td>'
@@ -12737,9 +12744,14 @@
         + '<td class="ta-right"><b>'+(r.colAmt ? r.colAmt.toLocaleString() : "-")+'</b>'
           + (diff ? '<br><span style="color:var(--danger);font-size:10.5px;">여신차감과 '
               + (diff>0?"+":"") + diff.toLocaleString() + '</span>'
+              + (colAdj !== 0
+                  ? '<br><span style="color:#2e7d32;font-size:10.5px;font-weight:700;">✓ 여신 조정 '
+                    + (colAdj>0?"+":"") + colAdj.toLocaleString() + ' 반영됨</span>'
+                  : '')
               + (canDo ? '<br><button class="btn small secondary" style="width:auto;font-size:10.5px;padding:2px 6px;height:auto;"'
                   + ' title="계산서 금액과 여신차감액의 차이만큼 여신을 조정합니다"'
-                  + ' data-col-adj="'+comboEsc(r.company)+'|'+diff+'">여신 조정</button>' : '')
+                  + ' data-col-adj="'+comboEsc(r.company)+'|'+(diff + colAdj)+'|'+(r.col?r.col.id:"")+'">'
+                  + (colAdj !== 0 ? '조정 더하기' : '여신 조정') + '</button>' : '')
             : '') + '</td>'
         + '<td class="ta-right">'+(r.used ? r.used.toLocaleString() : "-")+'</td>'
         + '<td class="ta-right" style="color:'+(r.left > 0 ? "#2e7d32" : "var(--gray)")+';font-weight:700;">'
@@ -12762,7 +12774,7 @@
     listEl.innerHTML = h;
     listEl.querySelectorAll("[data-col-adj]").forEach(b=> b.onclick = ()=>{
       const p = String(b.dataset.colAdj).split("|");
-      openAdjustFromCollateral(p[0], Number(p[1])||0);
+      openAdjustFromCollateral(p[0], Number(p[1])||0, p[2]||"");
     });
     listEl.querySelectorAll("[data-col-edit]").forEach(b=> b.onclick = ()=> openCollateralModal(b.dataset.colEdit));
     listEl.querySelectorAll("[data-col-del]").forEach(b=> b.onclick = ()=> deleteCollateral(b.dataset.colDel));
@@ -24193,7 +24205,7 @@
     document.getElementById("b2b-amount-input").value = "";
     document.getElementById("b2b-memo-input").value = "";
     document.getElementById("b2badd-msg").innerHTML = "";
-    editingLedgerId = null;
+    editingLedgerId = null; pendingAdjustColId = "";
     { const t = document.getElementById("b2badd-title"); if(t) t.textContent = "여신 거래 등록"; }
     fillAdjustReasonSelect("b2b-adjust-reason");
     { const sg = document.getElementById("b2b-adjust-sign"); if(sg) sg.value = "plus"; }
@@ -24300,7 +24312,8 @@
 
     const payload = {
       date: dateVal, category, amount: saveAmount, memo, source: ledSource, partner: ledPartner,
-      adjustReason: (category === "adjust") ? adjustReason : ""
+      adjustReason: (category === "adjust") ? adjustReason : "",
+      fromCollateralId: (category === "adjust" && pendingAdjustColId) ? pendingAdjustColId : ""
     };
     if(editingLedgerId){
       // 고치기 — 무엇이 어떻게 바뀌는지 먼저 보여드립니다.
@@ -24333,7 +24346,18 @@
         + (ledSource ? " / " + ledSource : " / 매입처 미지정"));
     }
     closeB2BLedgerAdd();
+    // 무엇이 저장됐는지 알려드립니다. (조정은 잔액이 바뀌므로 특히 확인이 필요합니다)
+    alert((editingLedgerId ? "고쳤습니다." : "저장했습니다.") + "\n\n"
+      + "  구분   " + (B2B_CATEGORY_LABELS[category] || category) + "\n"
+      + "  금액   " + saveAmount.toLocaleString() + "\n"
+      + "  대상   " + (ledPartner || "미지정")
+      + (category === "adjust" ? "\n\n삼성여신 화면에서 잔액이 바뀐 것을 확인하실 수 있습니다." : ""));
     loadB2BTab();
+    // B2B 대출 화면에서 눌렀으면 그 화면도 새로 그립니다.
+    if(document.getElementById("tab-loan") && document.getElementById("tab-loan").classList.contains("active")){
+      clearScreenCache("loan");
+      if(typeof loadCollateralList === "function") loadCollateralList();
+    }
   };
 
   // 여신 장부의 매입처를 나중에 채우거나 고칩니다.
@@ -24592,9 +24616,11 @@
   // 담보 계산서에서 「여신 조정」을 누르면, 계산서와 여신차감액의 차이만큼 조정창을 채워 엽니다.
   //  diff = 계산서 금액 − 여신차감액.
   //   (+) 면 삼성이 그만큼 더 차감했으므로 우리 여신을 줄여야 맞습니다.
-  window.openAdjustFromCollateral = async function(company, diff){
+  let pendingAdjustColId = "";     // 담보 계산서에서 넘어온 조정이면 그 계산서 id
+  window.openAdjustFromCollateral = async function(company, diff, colId){
     if(!diff){ alert("차이가 없습니다."); return; }
     await openB2BLedgerAdd();
+    pendingAdjustColId = String(colId||"");
     document.getElementById("b2b-category-select").value = "adjust";
     onB2BCategoryChange();
     document.getElementById("b2b-adjust-sign").value = (diff > 0) ? "minus" : "plus";
@@ -24926,7 +24952,9 @@
       const { pageItems: b2bPage } = paginateSlice(ledgerRows, "b2bLedger");
       let tbl = '<div style="overflow-x:auto;"><table class="data-table"><thead><tr><th>거래일자</th><th>구분</th><th>매입처</th><th class="ta-right">금액</th><th>통장</th><th>메모</th><th class="ta-right">관리</th></tr></thead><tbody>';
       b2bPage.forEach(e=>{
-        tbl += '<tr><td>'+e.date+'</td><td>'+(B2B_CATEGORY_LABELS[e.category]||e.category)+'</td>' +
+        tbl += '<tr><td>'+e.date+'</td><td>'+(B2B_CATEGORY_LABELS[e.category]||e.category)
+          + (e.adjustReason ? '<br><span style="font-size:10.5px;color:var(--gray);">'+comboEsc(e.adjustReason)+'</span>' : '')
+          + (e.fromCollateralId ? '<br><span style="font-size:10.5px;color:#2e7d32;">담보 계산서에서</span>' : '') + '</td>' +
           '<td>'+(e.source ? comboEsc(e.source) : '<span style="color:#b8860b;">미지정</span>')+'</td>' +
           '<td class="ta-right"'+(e.category==="adjust" ? ' style="font-weight:700;color:'+((Number(e.amount)||0)<0?"var(--danger)":"#1565c0")+';"' : '')+'>'
             +((e.category==="adjust" && (Number(e.amount)||0)>0) ? "+" : "")+Number(e.amount).toLocaleString()+'</td>' +
@@ -26284,7 +26312,7 @@
     if(bar) bar.style.display = "none";
   };
 
-  // 파일에 박힌 버전 글자를 읽습니다. (예: "파일 2026-08-09 v492")
+  // 파일에 박힌 버전 글자를 읽습니다. (예: "파일 2026-08-09 v495")
   function readBuildTag(text){
     const m = String(text||"").match(/파일\s*[\d-]+\s*v(\d+)/);
     return m ? m[0].trim() : "";
@@ -30213,10 +30241,9 @@
   };
   window.openInvAdminSection = function(){
     document.getElementById("admin-group").style.display = "block";
-    // 메뉴 배치를 쓰는 중이면 하위 메뉴가 이미 새 자리에 있으므로 이 판을 열지 않습니다.
-    if(!document.body.classList.contains("menu-layout-on")){
-      document.getElementById("inv-admin-submenu").style.display = "block";
-    }
+    // 하위 버튼이 이 판에 남아 있을 때만 펼칩니다. (배치로 옮겼으면 그 자리에 이미 있습니다)
+    const sub = document.getElementById("inv-admin-submenu");
+    if(sub && sub.querySelector('.tab-btn[data-tab]')) sub.style.display = "block";
     switchTab("tab-inv-model");
   };
   // 새로고침해도 보던 화면이 유지되도록 마지막 탭을 기억합니다.
@@ -30266,14 +30293,16 @@
     {
       const sub = document.getElementById("inv-admin-submenu");
       const invBtn = document.getElementById("tabbtn-inv-admin");
-      const layoutOn = document.body.classList.contains("menu-layout-on");
       const isInvAdmin = INV_ADMIN_TAB_IDS.includes(tabId);
-      if(isInvAdmin && !layoutOn && invBtn && invBtn.style.display !== "none"){
+      // 메뉴 배치로 하위 버튼을 다른 자리로 옮겼으면 이 판에 버튼이 남아 있지 않습니다.
+      //  남아 있으면(=안 옮겼으면) 재고 기초설정 화면에서 펼쳐 보여줍니다.
+      const subHasBtn = !!(sub && sub.querySelector('.tab-btn[data-tab]'));
+      if(isInvAdmin && subHasBtn && invBtn && invBtn.style.display !== "none"){
         document.getElementById("admin-group").style.display = "block";
         if(sub) sub.style.display = "block";
         invBtn.classList.add("active");
       }else{
-        if(sub) sub.style.display = "none";           // 배치를 켜든 안 켜든 닫습니다
+        if(sub) sub.style.display = "none";           // 다른 화면으로 가면 언제나 닫습니다
         if(invBtn) invBtn.classList.remove("active");
       }
     }
