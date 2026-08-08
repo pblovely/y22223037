@@ -378,7 +378,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-08 v465</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-08 v466</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -23972,6 +23972,9 @@
     let baseProfitSum = 0;
     invSnap.forEach(d=>{
       const it = d.data();
+      // 거래처를 고르면 그 거래처에서 들여온 재고만 셉니다.
+      if(b2bPartnerPick && b2bPartnerPick !== "(대상 미지정)"
+         && String(it.source||"").trim() !== b2bPartnerPick) return;
       if(it.profit!=null){
         const qty = it.entryType==="imei" ? 1 : (Number(it.quantity)||0);
         baseProfitSum += Number(it.profit)*qty;
@@ -24030,19 +24033,32 @@
     html += statCard("② 클럽장려금 수령", clubIncentiveTotal.toLocaleString(), "#6a1b9a");
     html += statCard("③ 주문사용 (차감)", orderUseTotal.toLocaleString(), "var(--danger)");
     // 타할인 = 3개월 뒤 클럽장려금으로 받을 금액 (주문 품목의 타할인 합계)
+    //  거래처를 고르면 그 거래처 주문만 셉니다. (주문 묶음의 매입처로 가립니다)
     let pendingRebate = 0;
     try{
       const os = await getDocs(collection(db,"orders"));
+      let okBatch = null;
+      if(b2bPartnerPick && b2bPartnerPick !== "(대상 미지정)"){
+        okBatch = new Set();
+        const obs = await getDocs(collection(db,"orderBatches"));
+        obs.forEach(dd=>{ const b = dd.data();
+          if(String(b.source||"").trim() === b2bPartnerPick) okBatch.add(dd.id);
+        });
+      }
       os.forEach(dd=>{
         const o = dd.data();
-        if(o.status !== "취소") pendingRebate += (Number(o.otherDiscountAmt)||0) * (Number(o.quantity)||0);
+        if(o.status === "취소") return;
+        if(okBatch && !okBatch.has(o.batchId)) return;
+        pendingRebate += (Number(o.otherDiscountAmt)||0) * (Number(o.quantity)||0);
       });
     }catch(e){}
     const notYet = pendingRebate - clubIncentiveTotal;
     html += statCard("클럽장려금 받을 금액 (3개월 뒤)", (notYet > 0 ? notYet : 0).toLocaleString(), "#b8860b",
-      "누적 " + pendingRebate.toLocaleString() + " · 수령 " + clubIncentiveTotal.toLocaleString());
+      "누적 " + pendingRebate.toLocaleString() + " · 수령 " + clubIncentiveTotal.toLocaleString()
+      + (b2bPartnerPick ? " · " + comboEsc(b2bPartnerPick) : ""));
     html += statCard("이자지급 수령 합계", interestReceivedTotal.toLocaleString(), "#2e7d32");
-    html += statCard("기존 매입-매출 차액 (수익)", baseProfitSum.toLocaleString());
+    html += statCard("기존 매입-매출 차액 (수익)", baseProfitSum.toLocaleString(), null,
+      b2bPartnerPick ? comboEsc(b2bPartnerPick) + " 매입분" : "전체");
     html += statCard("최종 실제수익 (수익-대출비용+이자수령)", finalProfit.toLocaleString(), "#2e7d32");
     statEl.innerHTML = html;
     applyCustomTabLabels();
@@ -24062,6 +24078,14 @@
     // 거래 내역 표 — 대출 수수료·이자는 여신과 무관하므로 「B2B 대출」 화면에서 봅니다.
     const LOAN_COST_CATS = ["b2b_fee_payment","b2b_fee_mp","b2b_interest"];
     const ledgerRows = entries.filter(e=> !LOAN_COST_CATS.includes(e.category));
+    // 같은 날이면 입금(충전)을 먼저, 주문사용을 뒤에 놓습니다. (돈이 들어와야 쓸 수 있으니)
+    const CAT_ORDER = { deposit:1, loan_deposit:1, interest_received:2, club_incentive:3, order_use:4, other:5 };
+    ledgerRows.sort((a,b)=>{
+      const d = String(b.date||"").localeCompare(String(a.date||""));
+      if(d !== 0) return d;                                   // 최근 날짜가 위
+      const oa = CAT_ORDER[a.category] || 9, ob = CAT_ORDER[b.category] || 9;
+      return oa - ob;                                          // 같은 날은 입금 → 주문사용
+    });
     if(ledgerRows.length===0){
       listEl.innerHTML = '<div class="list-empty">등록된 거래가 없습니다.</div>';
     }else{
@@ -25414,7 +25438,7 @@
     if(bar) bar.style.display = "none";
   };
 
-  // 파일에 박힌 버전 글자를 읽습니다. (예: "파일 2026-08-08 v465")
+  // 파일에 박힌 버전 글자를 읽습니다. (예: "파일 2026-08-08 v466")
   function readBuildTag(text){
     const m = String(text||"").match(/파일\s*[\d-]+\s*v(\d+)/);
     return m ? m[0].trim() : "";
