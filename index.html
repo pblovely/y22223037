@@ -379,7 +379,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v509</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v511</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -11840,6 +11840,37 @@
 
     if(!name){ msg("대출명을 입력해주세요.", true); return; }
 
+    // ── 기업은행인데 기간이 6개월(180일)을 넘으면 1차 + 연장으로 나눠 저장합니다 ──
+    //  기업은행 B2B는 1차가 180일 고정이라, 그보다 길게 넣으신 것은 연장이 섞인 값입니다.
+    //  프로그램이 임의로 나누지 않고, 나눌지 물어보고 연장 일수도 직접 받습니다.
+    let splitTerm = term, splitExts = null, splitDue = due;
+    {
+      const bankNow = String((document.getElementById("loan-bank")||{}).value||"").trim();
+      if(bankNow === "기업은행" && term > 6){
+        const restDays = (term - 6) * 30;
+        const ans = prompt(
+          "기업은행 B2B는 1차가 180일(6개월) 고정입니다.\n"
+          + "지금 넣으신 " + term + "개월은 연장이 섞인 값으로 보입니다.\n\n"
+          + "1차 180일로 두고 나머지를 연장으로 나눕니다.\n"
+          + "연장 일수를 넣어주세요. (기업은행 기본 120일 · 그냥 나눈 값은 " + restDays + "일)\n\n"
+          + "취소를 누르면 나누지 않고 " + term + "개월 그대로 저장합니다.",
+          "120");
+        if(ans !== null){
+          const extDays = Number(String(ans).replace(/\D/g,"")) || 0;
+          if(extDays <= 0){ msg("연장 일수를 확인해주세요.", true); return; }
+          splitTerm = 6;
+          splitExts = [{ date: todayStr(), months: 0, days: extDays,
+                         from: addDaysStr(start, 180), to: addDaysStr(start, 180 + extDays),
+                         by: currentUser.name }];
+          splitDue = addDaysStr(start, 180 + extDays);
+          if(!confirm("이렇게 나눠 저장합니다.\n\n"
+            + "  1차   " + start + " ~ " + addDaysStr(start, 180) + "  (180일)\n"
+            + "  연장  " + addDaysStr(start, 180) + " ~ " + splitDue + "  (" + extDays + "일)\n\n"
+            + "  만기  " + splitDue + "\n\n이자표도 이 구간에 맞춰 계산됩니다. 진행할까요?")) return;
+        }
+      }
+    }
+
     // ── 수정 모드 ──
     if(editingLoanId){
       const bankE = String((document.getElementById("loan-bank")||{}).value||"").trim();
@@ -11847,22 +11878,25 @@
       const codeE = String((document.getElementById("loan-code")||{}).value||"").trim();
       const colE = String((document.getElementById("loan-collateral")||{}).value||"");
       if(!confirm("대출 내용을 고칩니다.\n\n"
-        + "  기간   " + term + "개월" + (bankE === "기업은행" ? " (" + (term*30) + "일)" : "") + "\n"
-        + "  만기   " + (due||"-") + "\n"
+        + "  기간   " + splitTerm + "개월" + (bankE === "기업은행" ? " (" + (splitTerm*30) + "일)" : "")
+        + (splitExts ? " + 연장 " + splitExts[0].days + "일" : "") + "\n"
+        + "  만기   " + (splitDue||"-") + "\n"
         + "  원금   " + principal.toLocaleString() + "\n\n"
         + "만기·이자표가 다시 계산됩니다.\n"
         + "이미 넣어둔 이자·수수료 기록과 여신 충전 금액은 그대로 둡니다.\n\n진행할까요?")) return;
       try{
         await updateDoc(doc(db,"b2bLoans", editingLoanId), {
           bank: bankE, partner: partnerE, code: codeE, collateralId: colE || null,
-          name, startDate:start, termMonths:term, dueDate:due,
+          name, startDate:start, termMonths:splitTerm, dueDate:splitDue,
+          ...(splitExts ? { extensions: splitExts } : {}),
           principal, rateAnnual:rate, monthlyInterest:monthly,
           mpFeeRate:mpRate, mpFeeAmount:mpFee, payFeeAmount:payFee, memo,
           updatedBy: currentUser.name, updatedAt: serverTimestamp()
         });
       }catch(e){ msg("저장에 실패했습니다. " + comboEsc((e&&e.message)||String(e)), true); return; }
       logAction("B2B 대출 수정", (codeE ? "[" + codeE + "] " : "") + name
-        + " / " + term + "개월 / 만기 " + (due||"-") + " / 원금 " + principal.toLocaleString());
+        + " / " + splitTerm + "개월" + (splitExts ? " + 연장 " + splitExts[0].days + "일" : "")
+        + " / 만기 " + (splitDue||"-") + " / 원금 " + principal.toLocaleString());
       editingLoanId = null;
       closeLoanModal();
       refreshLoanScreens();
@@ -11903,10 +11937,10 @@
         + "\n\n진행할까요?")) return;
       const ref = await addDoc(collection(db,"b2bLoans"), {
         bank, partner, code, collateralId: colId || null,
-        name, startDate:start, termMonths:term, dueDate:due,
+        name, startDate:start, termMonths:splitTerm, dueDate:splitDue,
         principal, rateAnnual:rate, monthlyInterest:monthly,
         mpFeeRate:mpRate, mpFeeAmount:mpFee, payFeeAmount:payFee,
-        repaidPrincipal:0, status:"진행중", extensions:[], payments:[],
+        repaidPrincipal:0, status:"진행중", extensions: (splitExts || []), payments:[],
         memo, chargedToCredit: (charge === "yes"), fundFlow: charge,
         createdBy: currentUser.name, createdByUsername: currentUser.username, createdAt: serverTimestamp()
       });
@@ -11979,6 +12013,7 @@
 
     let h = '<div style="overflow-x:auto;"><table class="data-table resv-dest-fit" style="width:auto;"><thead><tr>' +
       '<th>적요</th><th>은행</th><th>대상</th><th>담보</th><th>대출명</th><th>실행일</th><th>만기일</th><th>남은일수</th>' +
+      '<th>상환일</th>' +
       '<th class="ta-right">원금</th><th class="ta-right">상환</th><th class="ta-right">잔액</th>' +
       '<th class="ta-right">월이자</th><th class="ta-right">누적 이자·수수료</th><th>상태</th>' +
       '</tr></thead><tbody>';
@@ -12013,6 +12048,8 @@
         '<td>'+comboEsc(L.startDate||"-")+'</td>' +
         '<td>'+comboEsc(L.dueDate||"-")+'</td>' +
         '<td>'+dday+'</td>' +
+        // 마지막으로 갚은 날 — 전액 상환이면 그날, 나눠 갚는 중이면 가장 최근 날
+        '<td>'+comboEsc(lastRepayOf(L) || "-")+'</td>' +
         '<td class="ta-right">'+(Number(L.principal)||0).toLocaleString()+'</td>' +
         '<td class="ta-right">'+(Number(L.repaidPrincipal)||0).toLocaleString()+'</td>' +
         '<td class="ta-right"><b>'+remain.toLocaleString()+'</b></td>' +
@@ -12021,7 +12058,7 @@
         '<td>'+badge+'</td>' +
         '</tr>' +
         '<tr class="row-actions" data-row-actions="loan|'+d.id+'" style="display:none;">' +
-        '<td colspan="14" style="background:#fafafa;padding:6px 8px;text-align:left;">' + btns + '</td></tr>';
+        '<td colspan="15" style="background:#fafafa;padding:6px 8px;text-align:left;">' + btns + '</td></tr>';
     });
     h += '</tbody></table></div><div id="loan-detail-area" style="margin-top:10px;"></div>';
     el.innerHTML = h;
@@ -13390,25 +13427,40 @@
   };
 
   // 원금 상환 (여신과는 무관 — 은행에 갚는 돈입니다)
+  // 마지막으로 원금을 갚은 날을 냅니다. (나눠 갚았으면 가장 최근 날)
+  function lastRepayOf(L){
+    const ds = (L && L.payments || []).filter(x=> x.type === "principal")
+      .map(x=> String(x.date||"").replace(/\D/g,"")).filter(d=> d.length === 8).sort();
+    return ds.length ? ds[ds.length-1] : String((L && (L.repaidDate||L.lastRepayDate))||"").replace(/\D/g,"");
+  }
+
   window.repayLoan = async function(loanId){
     const snap = await getDoc(doc(db,"b2bLoans", loanId));
     if(!snap.exists()) return;
     const L = snap.data();
     const remain = (Number(L.principal)||0) - (Number(L.repaidPrincipal)||0);
-    const amtIn = prompt("상환 금액을 입력하세요.\n\n  원금 " + (Number(L.principal)||0).toLocaleString()
-      + "\n  기상환 " + (Number(L.repaidPrincipal)||0).toLocaleString()
-      + "\n  잔액 " + remain.toLocaleString(), String(remain));
-    if(amtIn === null) return;
-    const amt = Number(String(amtIn).replace(/[^0-9]/g,"")) || 0;
-    if(amt <= 0){ alert("금액을 확인해주세요."); return; }
-
-    const dateIn = prompt("상환일 (예: 20270123)", todayStr());
-    if(dateIn === null) return;
-    const date = String(dateIn).replace(/\D/g,"") || todayStr();
+    // 금액과 날짜를 한 번에 받습니다. "금액 / 날짜" 또는 "금액 날짜" 로 적으시면 됩니다.
+    const inRaw = prompt(
+      "상환 금액과 상환일을 함께 넣어주세요.\n"
+      + "  적는 법 —  금액 / 상환일     예)  " + remain + " / " + todayStr() + "\n\n"
+      + "  원금   " + (Number(L.principal)||0).toLocaleString() + "\n"
+      + "  기상환 " + (Number(L.repaidPrincipal)||0).toLocaleString() + "\n"
+      + "  잔액   " + remain.toLocaleString() + "\n\n"
+      + "  ※ 만기 전에 갚는 선상환도 됩니다. 나눠 갚으셔도 됩니다.",
+      String(remain) + " / " + todayStr());
+    if(inRaw === null) return;
+    // 쉼표·하이픈이 있어도 되게 합니다. (21,966,901 / 2022-10-28)
+    const parts = String(inRaw).split(/[\/·]|\s+/).map(x=> x.replace(/[^0-9]/g,"")).filter(Boolean);
+    const amt = Number(parts[0]) || 0;
+    let date = parts[1] || todayStr();
+    if(amt <= 0){ alert("금액을 확인해주세요.\n\n적는 법: 금액 / 상환일"); return; }
+    if(String(date).length !== 8){ alert("상환일을 20270123 형태로 넣어주세요.\n\n적는 법: 금액 / 상환일"); return; }
 
     const newRepaid = (Number(L.repaidPrincipal)||0) + amt;
     const done = newRepaid >= (Number(L.principal)||0);
-    if(!confirm("원금을 상환합니다.\n\n  이번 " + amt.toLocaleString()
+    if(!confirm("원금을 상환합니다.\n\n  상환일 " + date
+      + ((L.dueDate && date < String(L.dueDate).replace(/\D/g,"")) ? "  (만기 전 · 선상환)" : "")
+      + "\n  이번 " + amt.toLocaleString()
       + "\n  누적 " + newRepaid.toLocaleString() + " / " + (Number(L.principal)||0).toLocaleString()
       + (done ? "\n\n전액 상환되어 상환완료로 바뀝니다." : "\n  남은 금액 " + ((Number(L.principal)||0) - newRepaid).toLocaleString())
       + "\n\n※ 상환은 은행에 갚는 돈이라 여신 잔액에는 영향이 없습니다.\n\n진행하시겠습니까?")) return;
@@ -13418,6 +13470,7 @@
         repaidPrincipal: newRepaid,
         status: done ? "상환완료" : "진행중",
         ...(done ? { repaidDate: date } : {}),   // 이자표에서 이후 회차를 잠글 때 씁니다.
+        lastRepayDate: date,                     // 나눠 갚는 중에도 마지막 날을 남깁니다.
         payments: [...(L.payments||[]), { type:"principal", amount:amt, date, by: currentUser.name }]
       });
       await addDoc(collection(db,"b2bLedger"), {
@@ -26610,7 +26663,7 @@
     if(bar) bar.style.display = "none";
   };
 
-  // 파일에 박힌 버전 글자를 읽습니다. (예: "파일 2026-08-09 v509")
+  // 파일에 박힌 버전 글자를 읽습니다. (예: "파일 2026-08-09 v511")
   function readBuildTag(text){
     const m = String(text||"").match(/파일\s*[\d-]+\s*v(\d+)/);
     return m ? m[0].trim() : "";
