@@ -379,7 +379,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v480</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v483</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -605,6 +605,7 @@
           <button class="btn small secondary" id="order-filter-all" style="width:auto;border:1px solid var(--navy);margin-left:-1px;" onclick="setOrderListFilter('all')">전체</button>
           <button class="btn small secondary" style="width:auto;margin-left:-1px;" onclick="toggleColPicker('order')">보기 설정</button>
           <button class="btn small secondary" style="width:auto;margin-left:-1px;" onclick="openDiscountCalc()">할인율 계산기</button>
+          <button class="btn small secondary" style="width:auto;margin-left:-1px;" title="주문의 통신사와 품목 줄의 통신사가 다른 건을 찾아 맞춥니다." onclick="openCarrierFix()">통신사 맞추기</button>
           <span id="dl-orders"></span>
           <span id="order-wait-summary" style="margin-left:12px;font-size:12.5px;"></span>
         </div>
@@ -2352,6 +2353,26 @@
         <span class="btn-row">
           <button class="btn small" style="width:auto;" onclick="saveB2BPostSettlementRef()">저장</button>
           <button class="btn small secondary" style="width:auto;" onclick="closeB2BPostSettle()">닫기</button>
+        </span>
+      </div>
+    </div>
+
+    <!-- 통신사 맞추기 -->
+    <div id="carfix-overlay" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.55);z-index:1100;align-items:center;justify-content:center;">
+      <div style="background:#fff;border:2px solid var(--navy);max-width:820px;width:96%;max-height:90vh;overflow-y:auto;padding:22px;position:relative;">
+        <button onclick="closeCarrierFix()" style="position:absolute;top:12px;right:12px;background:none;border:1px solid var(--navy);width:26px;height:26px;cursor:pointer;font-size:13px;">✕</button>
+        <h3 style="margin-top:0;margin-bottom:4px;">통신사 맞추기</h3>
+        <p class="desc" style="margin-top:0;">주문의 통신사와 <b>품목 줄의 통신사가 다른</b> 건을 찾았습니다.
+          품목 줄을 <b>주문의 통신사</b>로 맞춥니다. <b>체크한 줄만</b> 바뀌고 이력에 남습니다.</p>
+        <div id="carfix-list"></div>
+        <label style="display:block;font-size:12.5px;margin-top:8px;">
+          <input type="checkbox" id="carfix-withitem"> <b>도착 등록된 재고의 통신사도 함께 바꾸기</b>
+          <span style="color:var(--gray);">— 이 주문으로 들어온 재고만 바꿉니다</span>
+        </label>
+        <div id="carfix-msg" style="font-size:12.5px;margin:8px 0;line-height:1.7;"></div>
+        <span class="btn-row">
+          <button class="btn small" style="width:auto;" onclick="submitCarrierFix()">체크한 줄 맞추기</button>
+          <button class="btn small secondary" style="width:auto;" onclick="closeCarrierFix()">닫기</button>
         </span>
       </div>
     </div>
@@ -7704,10 +7725,13 @@
     names.forEach(n=>{ const opt=document.createElement("option"); opt.value=n; opt.textContent=n; sel.appendChild(opt); });
     initSearchableSelect("order-source-select", "매입처를 입력하면 목록이 나옵니다");
     syncSearchableSelect("order-source-select");
+    // 빈 항목을 맨 앞에 둡니다. 예전에는 이게 없어서 목록 첫 번째 통신사가
+    //  저절로 골라진 채로 저장되는 일이 있었습니다. (KT가 먼저면 KT로 저장됨)
     const carrierSel = document.getElementById("order-carrier-select");
-    carrierSel.innerHTML = "";
+    carrierSel.innerHTML = '<option value="">선택</option>';
     const carrierNames = await fetchNamesList("carriers");
     carrierNames.forEach(n=>{ const opt=document.createElement("option"); opt.value=n; opt.textContent=n; carrierSel.appendChild(opt); });
+    carrierSel.value = "";
   }
 
   window.openOrderModal = async function(){
@@ -8224,6 +8248,7 @@
     const source = document.getElementById("order-source-select").value;
     if(!source){ alert("입고처를 선택해주세요."); return; }
     const carrier = document.getElementById("order-carrier-select").value;
+    if(!carrier){ alert("통신사를 선택해주세요.\n\n품목 줄에 통신사를 따로 넣지 않으면 여기서 고른 통신사로 저장됩니다."); return; }
     const lineRows = Array.from(document.querySelectorAll("#order-lines-body tr"));
     if(lineRows.length===0){ alert("품목을 1개 이상 추가해주세요."); return; }
 
@@ -8674,6 +8699,7 @@
   };
 
   let orderBatchLinesCache = {}; // batchId -> lines[]
+  let orderBatchCache = {};      // batchId -> 묶음 정보 (통신사 맞추기에서 씁니다. 읽기 0회)
   // 주문은 완료·취소되어도 지워지지 않고 목록에 남습니다. 그래서 보기 필터를 둡니다.
   let orderListFilter = "ing";   // all | ing | done | cancel  (기본: 진행중만 — 완료건은 숨김)
   window.setOrderListFilter = function(f){
@@ -8974,6 +9000,8 @@
     };
     Object.keys(ordersByBatch).forEach(k=> ordersByBatch[k].sort(byLineNo));
     orderBatchLinesCache = ordersByBatch;
+    orderBatchCache = {};
+    batchSnap.forEach(bd=>{ orderBatchCache[bd.id] = bd.data(); });
 
     // 미입고 현황 — 취소된 주문 묶음의 품목은 뺍니다.
     {
@@ -9448,6 +9476,125 @@
 
   // 도착 등록은 했지만 판매처리가 안 된 재고를, 연결된 판매요청에 한 번에 매칭합니다.
   // (v22 이전에 도착 등록한 건이나, 자동 판매처리 체크를 끄고 등록한 건 정리용)
+  // ================= 통신사 맞추기 =================
+  //  주문의 통신사와 품목 줄의 통신사가 다른 건을 찾아, 품목을 주문 기준으로 맞춥니다.
+  //  프로그램이 스스로 바꾸지 않습니다. 목록을 보여주고 체크한 줄만 바꿉니다.
+  //  이미 읽어둔 주문 자료를 씁니다. (Firestore 읽기 0회)
+  let carFixRows = [];
+
+  window.openCarrierFix = function(){
+    if(Object.keys(orderBatchCache).length === 0){
+      alert("주문 목록을 먼저 불러온 뒤 눌러주세요."); return;
+    }
+    carFixRows = [];
+    Object.keys(orderBatchCache).forEach(bid=>{
+      const b = orderBatchCache[bid];
+      if(!b || b.status === "취소") return;
+      const bc = String(b.carrier||"").trim();
+      if(!bc) return;                                   // 주문에 통신사가 없으면 기준이 없습니다
+      (orderBatchLinesCache[bid]||[]).forEach(o=>{
+        if(o.status === "취소") return;
+        const lc = String(o.carrier||"").trim();
+        if(!lc || lc === bc) return;                    // 같거나 비어 있으면 그대로 둡니다
+        carFixRows.push({ id:o.id, batchId:bid, b, o, from:lc, to:bc,
+          itemIds: (o.linkedItemIds||[]) });
+      });
+    });
+
+    const listEl = document.getElementById("carfix-list");
+    if(carFixRows.length === 0){
+      listEl.innerHTML = '<div style="border:1px solid var(--line);background:#f4faf4;color:#2e7d32;padding:10px 12px;font-size:12.5px;">'
+        + '다른 통신사로 잡힌 품목이 없습니다. 모두 주문의 통신사와 같습니다.</div>';
+      document.getElementById("carfix-msg").innerHTML = "";
+    }else{
+      let h = '<div style="max-height:340px;overflow-y:auto;border:1px solid var(--line);">'
+        + '<table class="data-table" style="width:100%;"><thead><tr>'
+        + '<th style="width:34px;"><input type="checkbox" id="carfix-all" checked></th>'
+        + '<th>주문일</th><th>매입처</th><th>모델</th><th>색상</th>'
+        + '<th class="ta-right">수량</th><th>지금</th><th>바뀔 값</th><th class="ta-right">재고</th>'
+        + '</tr></thead><tbody>';
+      carFixRows.forEach((r,i)=>{
+        h += '<tr>'
+          + '<td><input type="checkbox" class="carfix-ck" value="'+i+'" checked></td>'
+          + '<td>'+comboEsc(r.b.orderDate||"-")+'</td>'
+          + '<td>'+comboEsc(r.b.source||"-")+'</td>'
+          + '<td>'+comboEsc(docModelLabel(r.o))+'</td>'
+          + '<td>'+comboEsc(r.o.systemColor||r.o.manufacturerColor||"-")+'</td>'
+          + '<td class="ta-right">'+(Number(r.o.quantity)||0)+'</td>'
+          + '<td style="color:var(--danger);font-weight:700;">'+comboEsc(r.from)+'</td>'
+          + '<td style="color:#2e7d32;font-weight:700;">'+comboEsc(r.to)+'</td>'
+          + '<td class="ta-right">'+(r.itemIds.length ? r.itemIds.length+'건' : '-')+'</td></tr>';
+      });
+      h += '</tbody></table></div>';
+      listEl.innerHTML = h;
+      const all = document.getElementById("carfix-all");
+      if(all) all.onchange = ()=> listEl.querySelectorAll(".carfix-ck").forEach(c=> c.checked = all.checked);
+      const itemTotal = carFixRows.reduce((n,r)=> n + r.itemIds.length, 0);
+      document.getElementById("carfix-msg").innerHTML =
+        '<span style="color:var(--gray);">품목 ' + carFixRows.length + '줄 · 도착된 재고 ' + itemTotal + '건이 걸려 있습니다.<br>'
+        + '재고까지 바꾸시려면 아래 칸을 체크해주세요. 체크하지 않으면 <b>주문 품목만</b> 바뀝니다.</span>';
+    }
+    const wi = document.getElementById("carfix-withitem"); if(wi) wi.checked = false;
+    document.getElementById("carfix-overlay").style.display = "flex";
+  };
+
+  window.closeCarrierFix = function(){
+    document.getElementById("carfix-overlay").style.display = "none";
+    carFixRows = [];
+  };
+
+  window.submitCarrierFix = async function(){
+    const msgEl = document.getElementById("carfix-msg");
+    const picked = Array.from(document.querySelectorAll(".carfix-ck:checked")).map(c=> carFixRows[Number(c.value)]).filter(Boolean);
+    if(picked.length === 0){ msgEl.innerHTML = '<span style="color:var(--danger);">바꿀 줄을 골라주세요.</span>'; return; }
+    const withItem = !!(document.getElementById("carfix-withitem")||{}).checked;
+    const itemIds = withItem ? picked.reduce((a,r)=> a.concat(r.itemIds), []) : [];
+
+    // 무엇이 어떻게 바뀌는지 먼저 보여드립니다.
+    const byPair = {};
+    picked.forEach(r=>{ const k = r.from + " → " + r.to; byPair[k] = (byPair[k]||0) + 1; });
+    if(!confirm(
+      "품목 통신사를 주문 기준으로 맞춥니다.\n\n"
+      + Object.keys(byPair).map(k=> "  " + k + "   " + byPair[k] + "줄").join("\n")
+      + "\n\n  주문 품목  " + picked.length + "줄"
+      + (withItem ? "\n  재고       " + itemIds.length + "건 (함께 바꿈)" : "\n  재고       바꾸지 않음")
+      + "\n\n이 작업은 이력에 남습니다. 진행하시겠습니까?")) return;
+
+    msgEl.innerHTML = '<span style="color:var(--gray);">바꾸는 중입니다...</span>';
+    try{
+      for(let i=0; i<picked.length; i+=300){
+        const bt = writeBatch(db);
+        picked.slice(i, i+300).forEach(r=> bt.update(doc(db,"orders", r.id), { carrier: r.to }));
+        await bt.commit();
+      }
+      if(withItem){
+        // 재고는 그 줄의 바뀔 값으로 각각 맞춥니다.
+        const pairs = [];
+        picked.forEach(r=> r.itemIds.forEach(id=> pairs.push({ id, to:r.to })));
+        for(let i=0; i<pairs.length; i+=300){
+          const bt = writeBatch(db);
+          pairs.slice(i, i+300).forEach(x=> bt.update(doc(db,"inventoryItems", x.id), { carrier: x.to }));
+          await bt.commit();
+        }
+      }
+    }catch(e){
+      msgEl.innerHTML = '<span style="color:var(--danger);">바꾸는 중 문제가 생겼습니다.<br>'
+        + comboEsc((e && e.message) ? e.message : String(e)) + '</span>';
+      return;
+    }
+
+    logAction("주문 통신사 맞추기",
+      Object.keys(byPair).map(k=> k + " " + byPair[k] + "줄").join(" / ")
+      + " / 품목 " + picked.length + "줄"
+      + (withItem ? " / 재고 " + itemIds.length + "건" : " / 재고 제외"));
+
+    alert("품목 " + picked.length + "줄을 맞췄습니다."
+      + (withItem ? "\n재고 " + itemIds.length + "건도 함께 바꿨습니다." : ""));
+    closeCarrierFix();
+    loadOrderList();
+    if(typeof loadInventoryList === "function") loadInventoryList();
+  };
+
   // ================= 도착 취소 =================
   //  잘못 등록한 도착을 되돌립니다. 고른 건만 처리하고, 무엇을 되돌렸는지 이력에 남깁니다.
   //  프로그램이 스스로 고르지 않습니다. 사람이 체크한 것만 처리합니다.
@@ -9876,7 +10023,11 @@
           ? comboEsc(o.systemColor || o.manufacturerColor)
           : '<span style="color:var(--danger);">미입력</span>')+'</td>' +
         '<td>'+comboEsc(o.capacity||"-")+'</td>' +
-        '<td>'+comboEsc(o.carrier||"-")+'</td>' +
+        // 주문 묶음의 통신사와 다른 줄은 빨갛게 표시합니다. (SK·KT는 개통이 안 되므로 특히 중요합니다)
+        '<td'+((b.carrier && o.carrier && o.carrier !== b.carrier)
+            ? ' style="color:var(--danger);font-weight:700;" title="주문 통신사(' + comboEsc(b.carrier) + ')와 다릅니다"' : '')
+          +'>'+comboEsc(o.carrier||"-")
+          +((b.carrier && o.carrier && o.carrier !== b.carrier) ? ' ⚠' : '')+'</td>' +
         '<td class="ta-right">'+qty+'</td>' +
         '<td class="ta-right">'+discFmt(o.listPrice)+'</td>' +
         '<td class="ta-right">'+discFmt(o.preDiscountAmt)+'</td>' +
@@ -23860,6 +24011,28 @@
     if(document.getElementById("tab-loan") && document.getElementById("tab-loan").classList.contains("active")) loadLoanCostList();
   };
 
+  // 여신 충전이 통장에서 어떻게 나갔는지 보여줍니다.
+  //  「입출금 내역」 화면을 거치지 않고 여신 화면에서 바로 확인할 수 있게 한 것입니다.
+  window.showLedgerBankInfo = async function(bankId){
+    let v = null;
+    try{
+      const snap = await getDoc(doc(db,"bankDeposits", bankId));
+      if(snap.exists()) v = snap.data();
+    }catch(e){}
+    if(!v){ alert("이어진 통장 기록을 찾지 못했습니다.\n(기록이 지워졌을 수 있습니다)"); return; }
+    const won = n => (Number(n)||0).toLocaleString();
+    alert(
+      "통장에서 나간 기록입니다.\n\n"
+      + "  구분     " + (v.kind === "out" ? "출금" : "입금") + "\n"
+      + "  날짜     " + (v.date || "-") + "\n"
+      + "  금액     " + won(v.amount) + "\n"
+      + "  계좌     " + (v.account || "-") + "\n"
+      + "  상대     " + (v.payer || "-") + "\n"
+      + "  업체     " + (v.company || "-") + "\n"
+      + (v.memo ? "  메모     " + v.memo + "\n" : "")
+      + (v.taxDate ? "  계산서   " + v.taxDate + " · " + won(v.taxAmount) + "\n" : ""));
+  };
+
   // ---------- 여신잔액 맞추기 ----------
   //  삼성에서 알려준 공식 잔액을 거래처별로 적어두고 우리 장부와 견줍니다.
   //  저장만으로는 잔액이 바뀌지 않습니다. 「조정으로 맞추기」로 사람이 확인해야 반영됩니다.
@@ -24207,12 +24380,19 @@
       listEl.innerHTML = '<div class="list-empty">등록된 거래가 없습니다.</div>';
     }else{
       const { pageItems: b2bPage } = paginateSlice(ledgerRows, "b2bLedger");
-      let tbl = '<div style="overflow-x:auto;"><table class="data-table"><thead><tr><th>거래일자</th><th>구분</th><th>매입처</th><th class="ta-right">금액</th><th>메모</th><th class="ta-right">관리</th></tr></thead><tbody>';
+      let tbl = '<div style="overflow-x:auto;"><table class="data-table"><thead><tr><th>거래일자</th><th>구분</th><th>매입처</th><th class="ta-right">금액</th><th>통장</th><th>메모</th><th class="ta-right">관리</th></tr></thead><tbody>';
       b2bPage.forEach(e=>{
         tbl += '<tr><td>'+e.date+'</td><td>'+(B2B_CATEGORY_LABELS[e.category]||e.category)+'</td>' +
           '<td>'+(e.source ? comboEsc(e.source) : '<span style="color:#b8860b;">미지정</span>')+'</td>' +
           '<td class="ta-right"'+(e.category==="adjust" ? ' style="font-weight:700;color:'+((Number(e.amount)||0)<0?"var(--danger)":"#1565c0")+';"' : '')+'>'
-            +((e.category==="adjust" && (Number(e.amount)||0)>0) ? "+" : "")+Number(e.amount).toLocaleString()+'</td><td>'+(e.memo||'-')+'</td>' +
+            +((e.category==="adjust" && (Number(e.amount)||0)>0) ? "+" : "")+Number(e.amount).toLocaleString()+'</td>' +
+          // 통장에서 나간 기록과 이어져 있으면 여기서 바로 볼 수 있습니다.
+          '<td>' + (e.fromBankDepositId
+              ? '<button class="btn small secondary" style="width:auto;" title="이 여신 충전이 통장에서 어떻게 나갔는지 봅니다" onclick="showLedgerBankInfo(\''+e.fromBankDepositId+'\')">통장 보기</button>'
+              : (e.category === "deposit"
+                  ? '<span style="color:#b8860b;font-size:11.5px;">기록 없음</span>'
+                  : '<span style="color:var(--gray);">-</span>')) + '</td>' +
+          '<td>'+(e.memo||'-')+'</td>' +
           '<td class="ta-right"><button class="btn small secondary" style="width:auto;" onclick="setLedgerSource(\''+e.id+'\')">매입처</button>' +
           '<button class="btn small danger" style="width:auto;margin-left:4px;" onclick="deleteB2BLedgerEntry(\''+e.id+'\')">삭제</button></td></tr>';
       });
@@ -25556,7 +25736,7 @@
     if(bar) bar.style.display = "none";
   };
 
-  // 파일에 박힌 버전 글자를 읽습니다. (예: "파일 2026-08-09 v480")
+  // 파일에 박힌 버전 글자를 읽습니다. (예: "파일 2026-08-09 v483")
   function readBuildTag(text){
     const m = String(text||"").match(/파일\s*[\d-]+\s*v(\d+)/);
     return m ? m[0].trim() : "";
