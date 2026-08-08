@@ -379,7 +379,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v504</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v505</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -24882,6 +24882,17 @@
     const snap = await getDocs(query(collection(db,"b2bLedger"), orderBy("date","desc")));
     const allEntries = []; snap.forEach(d=> allEntries.push({ id:d.id, ...d.data() }));
 
+    // 담보 계산서로 아직 안 빌린 금액 — 세금계산서로도 B2B 대출을 실행할 수 있습니다.
+    const colRows = [], loanRows = [];
+    try{
+      const cs = await getDocs(collection(db,"b2bCollaterals"));
+      cs.forEach(d=> colRows.push({ id:d.id, ...d.data() }));
+      const ls = await getDocs(collection(db,"b2bLoans"));
+      ls.forEach(d=> loanRows.push({ id:d.id, ...d.data() }));
+    }catch(e){}
+    const usedByCol = {};
+    loanRows.forEach(L=>{ if(L.collateralId) usedByCol[L.collateralId] = (usedByCol[L.collateralId]||0) + (Number(L.principal)||0); });
+
     // 거래처 고르는 버튼
     //  ① 업체정보에서 「여신 대상」으로 체크한 곳 — 거래가 없어도 나옵니다
     //  ② 기록에 남아 있는 대상 — 예전 것도 빠지지 않게
@@ -24943,6 +24954,12 @@
     const remainingCredit = creditBeforeAdjust + adjustTotal;
     // 현금담보는 거래가 끝나야 돌려받는 돈이라, 지금 주문에 쓸 수 없습니다.
     const usableCredit = remainingCredit - collateralCash;
+    // 담보 계산서로 아직 안 빌린 금액 (고른 거래처 기준)
+    const colLeft = colRows.reduce((n,c)=>{
+      const co = String(c.company||"").trim();
+      if(b2bPartnerPick && b2bPartnerPick !== "(대상 미지정)" && co !== b2bPartnerPick) return n;
+      return n + Math.max(0, (Number(c.amount)||0) - (usedByCol[c.id]||0));
+    }, 0);
 
     // 기존 매입-매출 차액(수익) 합계
     const invSnap = await getDocs(collection(db,"inventoryItems"));
@@ -24996,13 +25013,14 @@
     });
 
     // 계산 근거를 그대로 보여줘서 숫자가 왜 그런지 바로 알 수 있게 합니다.
-    let html = statCard("실시간 잔여여신", remainingCredit.toLocaleString(),
-      remainingCredit < 0 ? "var(--danger)" : "#1565c0",
-      (b2bPartnerPick ? comboEsc(b2bPartnerPick) + " 기준" : "①+②−③ · 전체 합계")
+    // 「쓸 수 있는 여신」 하나로 보여줍니다. 잔여여신·조정은 아래 설명에 담습니다.
+    let html = statCard("쓸 수 있는 여신", usableCredit.toLocaleString(),
+      usableCredit < 0 ? "var(--danger)" : "#1565c0",
+      (b2bPartnerPick ? comboEsc(b2bPartnerPick) + " 기준 · " : "전체 합계 · ")
+      + "잔여여신 " + remainingCredit.toLocaleString()
+      + (collateralCash ? " − 현금담보 " + collateralCash.toLocaleString() : "")
       + (adjustTotal !== 0
-          ? " · 조정 " + (adjustTotal > 0 ? "+" : "") + adjustTotal.toLocaleString()
-            + " 포함 (조정 전 " + creditBeforeAdjust.toLocaleString() + ")"
-          : ""));
+          ? " · 조정 " + (adjustTotal > 0 ? "+" : "") + adjustTotal.toLocaleString() + " 포함" : ""));
     // 전체를 볼 때만 거래처별 카드를 늘어놓습니다. (한 거래처만 보면 위 카드가 그 값입니다)
     if(!b2bPartnerPick){
       Object.keys(byPartner).sort().forEach(pn=>{
@@ -25020,9 +25038,11 @@
     if(collateralCash !== 0){
       html += statCard("현금담보 (묶인 돈)", collateralCash.toLocaleString(), "#8a6d0b",
         "거래가 끝나면 돌려받습니다");
-      html += statCard("쓸 수 있는 여신", usableCredit.toLocaleString(),
-        usableCredit < 0 ? "var(--danger)" : "#1565c0", "잔여여신 − 현금담보");
     }
+    // 세금계산서로도 B2B 대출을 실행할 수 있습니다. 아직 안 빌린 금액입니다.
+    html += statCard("B2B 대출 가능액 (계산서)", colLeft.toLocaleString(),
+      colLeft > 0 ? "#2e7d32" : "var(--gray)",
+      "담보 계산서 남은 한도 · 대출하면 여신이 충전됩니다");
     html += statCard("① 여신 입금 (충전)", depositTotal.toLocaleString(), "#2e7d32");
     html += statCard("② 클럽장려금 수령", clubIncentiveTotal.toLocaleString(), "#6a1b9a");
     html += statCard("③ 주문사용 (차감)", orderUseTotal.toLocaleString(), "var(--danger)");
@@ -26478,7 +26498,7 @@
     if(bar) bar.style.display = "none";
   };
 
-  // 파일에 박힌 버전 글자를 읽습니다. (예: "파일 2026-08-09 v504")
+  // 파일에 박힌 버전 글자를 읽습니다. (예: "파일 2026-08-09 v505")
   function readBuildTag(text){
     const m = String(text||"").match(/파일\s*[\d-]+\s*v(\d+)/);
     return m ? m[0].trim() : "";
