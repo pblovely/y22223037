@@ -366,7 +366,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-08 v429</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-08 v431</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -2194,9 +2194,8 @@
       <div class="card">
         <h3>삼성여신 <span class="info-tip" title="포피플에서 삼성에 직접입금하거나 B2B대출로 입금하면 여신이 쌓입니다. 그 여신에서 단말기를 할인된 가격으로 주문해서 차감됩니다. B2B대출 관련 수수료·이자는 여신과 별개의 비용입니다.">ⓘ</span></h3>
         <div id="b2b-stat-cards" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px;"></div>
-        <button class="btn small secondary" style="width:auto;" onclick="showOrderAmountCheck()">주문 금액 검산</button>
-        <button class="btn small secondary" style="width:auto;" onclick="showB2BOrderUseDetail()">주문사용 내역 보기</button>
         <div id="b2b-orderuse-detail" style="display:none;margin-top:10px;"></div>
+        <div id="b2b-warn" style="display:none;font-size:12.5px;margin-top:6px;"></div>
         <p class="desc" style="margin-top:6px;">주문사용 기록은 <b>주문 관리를 열 때 자동으로 맞춰집니다.</b> 수기로 넣은 기록은 건드리지 않습니다.</p>
       </div>
 
@@ -2256,6 +2255,15 @@
           <b>이자·수수료는 은행에 내는 돈</b>이라 여신 잔액에는 영향이 없고, 비용으로만 잡힙니다.
           이자일은 <b>기업은행 매월 말일 · 대구은행 매월 실행일</b> 기준이며 첫 회차는 한 달 뒤입니다.</p>
         <div id="loan-list"></div>
+      </div>
+
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+          <h3 style="margin:0;">대출비용 <span class="info-tip" title="은행에 내는 돈입니다. B2B결제수수료·MP수수료·이자가 들어옵니다. 여신 잔액과는 별개이며 수익에서 빼는 비용입니다.">ⓘ</span></h3>
+          <span id="dl-loancost"></span>
+        </div>
+        <div id="loancost-cards" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px;"></div>
+        <div id="loancost-list"></div>
       </div>
     </div>
 
@@ -10518,6 +10526,68 @@
     el.querySelectorAll("[data-loan-detail]").forEach(b=> b.onclick = ()=> showLoanDetail(b.dataset.loanDetail));
   };
 
+  // 대출비용(수수료·이자) 목록 — 여신과 별개로 「B2B 대출」 화면에서 봅니다.
+  window.loadLoanCostList = async function(){
+    const listEl = document.getElementById("loancost-list");
+    const cardEl = document.getElementById("loancost-cards");
+    if(!listEl) return;
+    listEl.innerHTML = '<div class="list-empty">불러오는 중...</div>';
+
+    const CATS = { b2b_fee_payment:"B2B결제수수료", b2b_fee_mp:"B2BMP수수료", b2b_interest:"B2B이자" };
+    let rows = [];
+    try{
+      const snap = await getDocs(collection(db,"b2bLedger"));
+      snap.forEach(d=>{ const e = d.data(); if(CATS[e.category]) rows.push({ id:d.id, ...e }); });
+    }catch(e){}
+    rows.sort((a,b)=> String(b.date||"").localeCompare(String(a.date||"")));
+
+    if(cardEl){
+      const sum = k => rows.filter(r=> r.category===k).reduce((n,r)=> n + (Number(r.amount)||0), 0);
+      const total = rows.reduce((n,r)=> n + (Number(r.amount)||0), 0);
+      const card = (label, val, color)=>
+        '<div style="flex:1;min-width:150px;border:1px solid var(--line);background:#fff;padding:10px 14px;">'
+        + '<div style="font-size:11.5px;color:var(--gray);margin-bottom:4px;">'+label+'</div>'
+        + '<div style="font-size:19px;font-weight:800;color:'+(color||'var(--navy)')+';">'+val+'</div></div>';
+      cardEl.innerHTML =
+        card("대출비용 합계", total.toLocaleString(), "var(--danger)") +
+        card("B2B결제수수료", sum("b2b_fee_payment").toLocaleString()) +
+        card("MP수수료", sum("b2b_fee_mp").toLocaleString()) +
+        card("이자", sum("b2b_interest").toLocaleString());
+    }
+
+    if(rows.length === 0){
+      listEl.innerHTML = '<div class="list-empty">등록된 대출비용이 없습니다.</div>';
+      addDownloadBtn("dl-loancost", "loancost-list", "대출비용");
+      return;
+    }
+    const canDo = hasPerm(currentUserPerms, "paymentProcess");
+    let h = '<div style="overflow-x:auto;"><table class="data-table resv-dest-fit" style="width:auto;"><thead><tr>'
+      + '<th>거래일자</th><th>구분</th><th>은행</th><th>대상</th><th class="ta-right">금액</th><th>메모</th>'
+      + (canDo ? '<th class="ta-right">관리</th>' : '') + '</tr></thead><tbody>';
+    let total = 0;
+    rows.forEach(e=>{
+      const amt = Number(e.amount)||0; total += amt;
+      h += '<tr><td>'+comboEsc(e.date||"-")+'</td>'
+        + '<td><b>'+CATS[e.category]+'</b></td>'
+        + '<td>'+comboEsc(e.bank||"-")+'</td>'
+        + '<td>'+comboEsc(e.partner||"-")+'</td>'
+        + '<td class="ta-right">'+amt.toLocaleString()+'</td>'
+        + '<td style="font-size:11.5px;color:var(--gray);">'+comboEsc(e.memo||"-")+'</td>'
+        + (canDo ? '<td class="ta-right"><button class="btn small danger" style="width:auto;" data-lc-del="'+e.id+'">삭제</button></td>' : '')
+        + '</tr>';
+    });
+    h += '<tr style="background:#fff;font-weight:700;border-top:2px solid var(--navy);">'
+      + '<td colspan="4">합계</td><td class="ta-right">'+total.toLocaleString()+'</td>'
+      + '<td></td>' + (canDo ? '<td></td>' : '') + '</tr>';
+    h += '</tbody></table></div>';
+    listEl.innerHTML = h;
+    listEl.querySelectorAll("[data-lc-del]").forEach(b=>{
+      b.onclick = ()=> deleteB2BLedgerEntry(b.dataset.lcDel);
+    });
+    addDownloadBtn("dl-loancost", "loancost-list", "대출비용");
+    addViewCfgBtn("dl-loancost", "loancost-list");
+  };
+
   // ---------- B2B 대출 이자표 ----------
   //  은행마다 이자 내는 날이 다릅니다.
   //   · 기업은행 — 매월 말일
@@ -10937,7 +11007,8 @@
     recs.forEach(r=>{
       const amt = Number(r.amount)||0; total += amt;
       const o = r.fromOrderBatchId ? orders[r.fromOrderBatchId] : null;
-      const oAmt = o ? (Number(o.depositRequired)||0) : null;
+      // 여신차감은 「출고가 − 선할인」입니다. 입고가(원가)와 견주면 타할인만큼 늘 어긋납니다.
+      const oAmt = o ? (Number(o.creditUsed != null ? o.creditUsed : o.depositRequired)||0) : null;
       let state = "", color = "";
       if(!r.fromOrderBatchId){ state = "수기 입력"; color = "var(--gray)"; }
       else if(!o){ state = "주문 없음"; color = "var(--danger)"; }
@@ -21560,7 +21631,9 @@
     if(!confirm("이 거래 내역을 삭제하시겠습니까?")) return;
     await deleteDoc(doc(db,"b2bLedger", id));
     logAction("B2B 여신 거래 삭제", id);
-    loadB2BTab();
+    // 지금 열려 있는 화면을 새로 읽습니다. (삼성여신 · B2B 대출)
+    if(document.getElementById("tab-b2b") && document.getElementById("tab-b2b").classList.contains("active")) loadB2BTab();
+    if(document.getElementById("tab-loan") && document.getElementById("tab-loan").classList.contains("active")) loadLoanCostList();
   };
 
   window.saveB2BPostSettlementRef = async function(){
@@ -21635,7 +21708,6 @@
     html += statCard("① 여신 입금 (충전)", depositTotal.toLocaleString(), "#2e7d32");
     html += statCard("② 클럽장려금 수령", clubIncentiveTotal.toLocaleString(), "#6a1b9a");
     html += statCard("③ 주문사용 (차감)", orderUseTotal.toLocaleString(), "var(--danger)");
-    html += statCard("B2B대출비용 합계 (수수료+이자)", loanCostTotal.toLocaleString(), "var(--danger)");
     // 타할인 = 3개월 뒤 클럽장려금으로 받을 금액 (주문 품목의 타할인 합계)
     let pendingRebate = 0;
     try{
@@ -21666,11 +21738,13 @@
           ? '<span style="color:var(--danger);font-weight:700;">차이 '+diff.toLocaleString()+' (공식금액 '+postSettlementRef.toLocaleString()+', 누적 '+clubIncentiveTotal.toLocaleString()+')</span>'
           : '<span style="color:var(--gray);">공식 후정산금액을 아직 입력하지 않았습니다.</span>');
 
-    // 거래 내역 표
-    if(entries.length===0){
+    // 거래 내역 표 — 대출 수수료·이자는 여신과 무관하므로 「B2B 대출」 화면에서 봅니다.
+    const LOAN_COST_CATS = ["b2b_fee_payment","b2b_fee_mp","b2b_interest"];
+    const ledgerRows = entries.filter(e=> !LOAN_COST_CATS.includes(e.category));
+    if(ledgerRows.length===0){
       listEl.innerHTML = '<div class="list-empty">등록된 거래가 없습니다.</div>';
     }else{
-      const { pageItems: b2bPage } = paginateSlice(entries, "b2bLedger");
+      const { pageItems: b2bPage } = paginateSlice(ledgerRows, "b2bLedger");
       let tbl = '<div style="overflow-x:auto;"><table class="data-table"><thead><tr><th>거래일자</th><th>구분</th><th>매입처</th><th class="ta-right">금액</th><th>메모</th><th class="ta-right">관리</th></tr></thead><tbody>';
       b2bPage.forEach(e=>{
         tbl += '<tr><td>'+e.date+'</td><td>'+(B2B_CATEGORY_LABELS[e.category]||e.category)+'</td>' +
@@ -21681,7 +21755,7 @@
       });
       tbl += '</tbody></table></div>';
       listEl.innerHTML = tbl;
-      listEl.prepend(renderPaginationBar("b2bLedger", entries.length, loadB2BTab));
+      listEl.prepend(renderPaginationBar("b2bLedger", ledgerRows.length, loadB2BTab));
     }
   
     // 매입처 고르는 칸 채우기
@@ -21698,6 +21772,29 @@
         const curP = pSel.value;
         pSel.innerHTML = '<option value="">(미지정)</option>' +
           srcNames.map(n=>'<option value="'+comboEsc(n)+'"'+(curP===n?' selected':'')+'>'+comboEsc(n)+'</option>').join("");
+      }
+    }catch(e){}
+    // 어긋난 주문사용 기록이 있을 때만 알려드립니다. (없으면 아무것도 안 보입니다)
+    try{
+      const wEl = document.getElementById("b2b-warn");
+      if(wEl){
+        const useRecs = entries.filter(e=> e.category === "order_use" && e.fromOrderBatchId);
+        const obSnap2 = await getDocs(collection(db,"orderBatches"));
+        const obMap = {}; obSnap2.forEach(d=> obMap[d.id] = d.data());
+        const bad = useRecs.filter(r=>{
+          const o = obMap[r.fromOrderBatchId];
+          if(!o) return true;
+          if(o.status === "취소") return true;
+          const want = Number(o.creditUsed != null ? o.creditUsed : o.depositRequired)||0;
+          return want !== (Number(r.amount)||0);
+        });
+        if(bad.length){
+          wEl.style.display = "block";
+          wEl.innerHTML = '<span style="color:var(--danger);font-weight:700;">주문사용 기록 ' + bad.length
+            + '건이 주문과 맞지 않습니다.</span> <button class="btn small secondary" style="width:auto;margin-left:6px;" onclick="showB2BOrderUseDetail()">자세히 보기</button>';
+        }else{
+          wEl.style.display = "none"; wEl.innerHTML = "";
+        }
       }
     }catch(e){}
     addDownloadBtn("dl-b2b", "b2b-ledger-list", "여신내역");
@@ -26866,7 +26963,7 @@
     if(tabId==="tab-itemhistory" && typeof initItemHistoryTab === "function") initItemHistoryTab();
     if(tabId==="tab-lgrefund" && typeof loadLgRefund === "function") loadLgRefund();
     if(tabId==="tab-paycheck" && typeof loadPayCheck === "function") loadPayCheck();
-    if(tabId==="tab-loan" && typeof loadLoanList === "function") loadLoanList();
+    if(tabId==="tab-loan" && typeof loadLoanList === "function"){ loadLoanList(); loadLoanCostList(); }
     if(tabId==="tab-activation" && typeof loadActivationList === "function") loadActivationList();
     if(tabId==="tab-site" && typeof renderHiddenList === "function") renderHiddenList();
     if(tabId==="tab-site" && typeof renderCacheTargets === "function") renderCacheTargets();
