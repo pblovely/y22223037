@@ -379,7 +379,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v516</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v518</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -7167,8 +7167,13 @@
       const serialNumber = document.getElementById("item-serial-input").value.trim();
       if(!serialNumber){ alert("일련번호를 입력해주세요."); return; }
       const dupSnap = await getDocs(query(collection(db,"inventoryItems"), where("serialNumber","==",serialNumber)));
-      if(!dupSnap.empty){
-        alert("이미 등록된 일련번호입니다 (" + serialNumber + "). 중복 등록할 수 없습니다.");
+      const dupLive = dupSnap.docs.filter(d=> d.data().deleted !== true && d.id !== editingItemId);
+      if(dupLive.length){
+        alert("이미 등록된 일련번호입니다.\n\n  " + serialNumber
+          + "\n  " + dupLive.map(d=>{ const v=d.data();
+              return (v.systemModel||v.baseModel||"-") + " " + (v.systemColor||v.manufacturerColor||"") + " · " + (v.status||"-");
+            }).join("\n  ")
+          + "\n\n같은 모델·일련번호는 두 번 등록할 수 없습니다.");
         return;
       }
       const newItemRef = await addDoc(collection(db,"inventoryItems"), { ...base, entryType:"imei", quantity:1, serialNumber });
@@ -11335,7 +11340,9 @@
     el.innerHTML = h;
   };
 
+  let bulkArrSaving = false;
   window.submitBulkArrival = async function(){
+    if(bulkArrSaving){ alert("저장하는 중입니다. 잠시만 기다려주세요."); return; }
     if(bulkArrRows.length === 0){ alert("등록할 내용이 없습니다."); return; }
     const inDate  = (document.getElementById("bulk-arrival-indate").value||"").replace(/\D/g,"") || todayStr();
     const outDateIn = (document.getElementById("bulk-arrival-outdate").value||"").replace(/\D/g,"");
@@ -11351,6 +11358,40 @@
     const el = document.getElementById("bulk-arrival-result");
     el.innerHTML = '<div style="color:var(--gray);">등록 중입니다...</div>';
 
+    // ★ 저장 직전에 다시 확인합니다. ★
+    //  분석한 뒤 저장을 두 번 누르면 같은 모델·일련번호가 또 들어가던 문제를 막습니다.
+    {
+      const sns = [...new Set(bulkArrRows.map(r=> r.serial))];
+      const have = {};   // 일련번호 → 이미 있는 전산모델명 모음
+      try{
+        for(let i=0; i<sns.length; i+=10){
+          const chunk = sns.slice(i, i+10);
+          const s2 = await getDocs(query(collection(db,"inventoryItems"), where("serialNumber","in",chunk)));
+          s2.forEach(d=>{
+            const v = d.data();
+            if(v.deleted === true) return;
+            const sn = String(v.serialNumber||"").trim();
+            (have[sn] = have[sn] || new Set()).add(modelDupKey(v.systemModel||""));
+          });
+        }
+      }catch(e){
+        el.innerHTML = '<div style="color:var(--danger);">확인 중 문제가 생겨 등록하지 않았습니다. 다시 시도해주세요.</div>';
+        return;
+      }
+      const dupNow = bulkArrRows.filter(r=>
+        have[r.serial] && have[r.serial].has(modelDupKey(r.order.systemModel||"")));
+      if(dupNow.length){
+        el.innerHTML = '<div style="border:1px solid var(--danger);background:#fdecea;padding:9px 11px;font-size:12.5px;line-height:1.7;">'
+          + '<b>이미 등록된 모델·일련번호 ' + dupNow.length + '건이 있어 등록하지 않았습니다.</b><br>'
+          + dupNow.slice(0,10).map(r=> '· ' + comboEsc(r.serial) + '  ' + comboEsc(r.order.systemModel||"-")).join('<br>')
+          + (dupNow.length>10 ? '<br>... 외 ' + (dupNow.length-10) + '건' : '')
+          + '<br><span style="color:var(--gray);">이미 저장된 것 같습니다. 재고 목록에서 확인해주세요. '
+          + '겹친 것이 있으면 <b>데이터 점검 → 같은 일련번호가 여러 건</b>에서 정리하실 수 있습니다.</span></div>';
+        return;
+      }
+    }
+
+    bulkArrSaving = true;   // 저장하는 동안 다시 못 누르게 막습니다
     // 품목별로 묶어 처리합니다.
     const byOrder = {};
     bulkArrRows.forEach(r=>{
@@ -11437,9 +11478,11 @@
         }
       }
     }catch(e){
+      bulkArrSaving = false;
       el.innerHTML = '<span style="color:var(--danger);">등록에 실패했습니다.<br>' + comboEsc((e&&e.message)?e.message:String(e)) + '</span>';
       return;
     }
+    bulkArrSaving = false;
 
     logAction("도착 일괄 등록", made + "대" + (soldCnt ? " / 판매처리 " + soldCnt + "대" : ""));
     clearDashCache(); clearCache("inventory");
@@ -11593,9 +11636,14 @@
     for(let i=0;i<serials.length;i+=30){
       const chunk = serials.slice(i,i+30);
       const existingSnap = await getDocs(query(collection(db,"inventoryItems"), where("serialNumber","in", chunk)));
-      if(!existingSnap.empty){
-        const dupSerials = existingSnap.docs.map(d=>d.data().serialNumber);
-        alert("이미 등록된 일련번호가 있습니다: "+dupSerials.join(", "));
+      const live = existingSnap.docs.filter(d=> d.data().deleted !== true);   // 삭제함은 뺍니다
+      if(live.length){
+        const dupSerials = [...new Set(live.map(d=>{
+          const v = d.data();
+          return String(v.serialNumber||"") + " (" + (v.systemModel||v.baseModel||"-") + ")";
+        }))];
+        alert("이미 등록된 일련번호가 있습니다.\n\n  " + dupSerials.join("\n  ")
+          + "\n\n같은 모델·일련번호는 두 번 등록할 수 없습니다.");
         return;
       }
     }
@@ -22782,10 +22830,11 @@
     const el = document.getElementById("datacheck-detail");
     if(!el) return;
     const sns = Object.keys(dupSerialCache).sort();
-    if(sns.length === 0){ el.innerHTML = '<div class="list-empty">겹치는 일련번호가 없습니다.</div>'; return; }
+    if(sns.length === 0){ el.innerHTML = '<div class="list-empty">겹치는 모델·일련번호가 없습니다.</div>'; return; }
     let h = '<div style="border:1px solid var(--navy);padding:10px 12px;margin-top:10px;">'
-      + '<div style="font-weight:700;margin-bottom:4px;">같은 일련번호가 여러 건 — ' + sns.length + '개</div>'
+      + '<div style="font-weight:700;margin-bottom:4px;">같은 모델·일련번호가 여러 건 — ' + sns.length + '개</div>'
       + '<div style="font-size:11.5px;color:var(--gray);line-height:1.7;margin-bottom:8px;">'
+      + '<b>모델과 일련번호가 둘 다 같은 것만</b> 모았습니다. 모델이 다르면 다른 단말기라 여기 안 나옵니다.<br>'
       + '<b>남길 것 하나만 체크를 풀고</b> 나머지를 지우세요. 판매·개통된 건은 지우지 마시고, '
       + '입고일·출고일·상태를 보고 정하시면 됩니다.<br>'
       + '지운 기록은 되돌릴 수 없습니다. 주문의 도착 수는 줄지 않으니, 필요하면 주문 상세의 <b>도착 취소</b>를 쓰세요.</div>'
@@ -22794,13 +22843,13 @@
       + '<th style="width:34px;"></th><th>일련번호</th><th>모델</th><th>색상</th><th>통신사</th>'
       + '<th>입고일</th><th>출고일</th><th>상태</th><th>판매처</th><th>위치</th>'
       + '</tr></thead><tbody>';
-    sns.forEach(sn=>{
-      const list = dupSerialCache[sn];
+    sns.forEach(key=>{
+      const list = dupSerialCache[key];
       list.forEach((it, idx)=>{
         const first = (idx === 0);
         h += '<tr' + (first ? ' style="background:#f4faf4;"' : '') + '>'
           + '<td><input type="checkbox" class="dupsn-ck" value="' + it.id + '"' + (first ? '' : ' checked') + '></td>'
-          + '<td><b>' + comboEsc(sn) + '</b>' + (first ? ' <span style="font-size:10.5px;color:#2e7d32;">남김</span>' : '') + '</td>'
+          + '<td><b>' + comboEsc(it.serialNumber||"-") + '</b>' + (first ? ' <span style="font-size:10.5px;color:#2e7d32;">남김</span>' : '') + '</td>'
           + '<td>' + comboEsc(docModelLabel(it)) + '</td>'
           + '<td>' + comboEsc(it.systemColor || it.manufacturerColor || "-") + '</td>'
           + '<td>' + comboEsc(it.carrier||"-") + '</td>'
@@ -26993,7 +27042,7 @@
     if(bar) bar.style.display = "none";
   };
 
-  // 파일에 박힌 버전 글자를 읽습니다. (예: "파일 2026-08-09 v516")
+  // 파일에 박힌 버전 글자를 읽습니다. (예: "파일 2026-08-09 v518")
   function readBuildTag(text){
     const m = String(text||"").match(/파일\s*[\d-]+\s*v(\d+)/);
     return m ? m[0].trim() : "";
