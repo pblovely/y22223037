@@ -379,7 +379,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v485</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v486</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -25881,7 +25881,7 @@
     if(bar) bar.style.display = "none";
   };
 
-  // 파일에 박힌 버전 글자를 읽습니다. (예: "파일 2026-08-09 v485")
+  // 파일에 박힌 버전 글자를 읽습니다. (예: "파일 2026-08-09 v486")
   function readBuildTag(text){
     const m = String(text||"").match(/파일\s*[\d-]+\s*v(\d+)/);
     return m ? m[0].trim() : "";
@@ -29787,7 +29787,10 @@
   };
   window.openInvAdminSection = function(){
     document.getElementById("admin-group").style.display = "block";
-    document.getElementById("inv-admin-submenu").style.display = "block";
+    // 메뉴 배치를 쓰는 중이면 하위 메뉴가 이미 새 자리에 있으므로 이 판을 열지 않습니다.
+    if(!document.body.classList.contains("menu-layout-on")){
+      document.getElementById("inv-admin-submenu").style.display = "block";
+    }
     switchTab("tab-inv-model");
   };
   // 새로고침해도 보던 화면이 유지되도록 마지막 탭을 기억합니다.
@@ -29830,15 +29833,22 @@
       if(box) box.style.display = (tabId === "tab-site" && btn && btn.style.display !== "none") ? "block" : "none";
     }
 
-    // 메뉴 배치를 쓰는 중이면 하위 메뉴 버튼이 이미 새 자리로 옮겨졌으므로 여닫지 않습니다.
-    if(!document.body.classList.contains("menu-layout-on")){
-      if(INV_ADMIN_TAB_IDS.includes(tabId) && document.getElementById("tabbtn-inv-admin").style.display !== "none"){
+    // 재고 기초설정 하위 메뉴를 여닫습니다.
+    //  ★ 닫는 것은 언제나 합니다. ★
+    //   예전에는 「메뉴 배치」를 켜면 여닫기를 통째로 건너뛰어서,
+    //   한 번 열린 하위 메뉴가 다른 화면으로 옮겨도 계속 남아 있었습니다.
+    {
+      const sub = document.getElementById("inv-admin-submenu");
+      const invBtn = document.getElementById("tabbtn-inv-admin");
+      const layoutOn = document.body.classList.contains("menu-layout-on");
+      const isInvAdmin = INV_ADMIN_TAB_IDS.includes(tabId);
+      if(isInvAdmin && !layoutOn && invBtn && invBtn.style.display !== "none"){
         document.getElementById("admin-group").style.display = "block";
-        document.getElementById("inv-admin-submenu").style.display = "block";
-        const invBtn = document.getElementById("tabbtn-inv-admin");
+        if(sub) sub.style.display = "block";
         invBtn.classList.add("active");
       }else{
-        document.getElementById("inv-admin-submenu").style.display = "none";
+        if(sub) sub.style.display = "none";           // 배치를 켜든 안 켜든 닫습니다
+        if(invBtn) invBtn.classList.remove("active");
       }
     }
 
