@@ -379,7 +379,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v511</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v513</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -606,6 +606,7 @@
           <button class="btn small secondary" style="width:auto;margin-left:-1px;" onclick="toggleColPicker('order')">보기 설정</button>
           <button class="btn small secondary" style="width:auto;margin-left:-1px;" onclick="openDiscountCalc()">할인율 계산기</button>
           <button class="btn small secondary" style="width:auto;margin-left:-1px;" title="주문의 통신사와 품목 줄의 통신사가 다른 건을 찾아 맞춥니다." onclick="openCarrierFix()">통신사 맞추기</button>
+          <button class="btn small secondary" style="width:auto;margin-left:-1px;" title="매입처의 할인 계산 기준(대당·합계)에 맞춰 여신차감액과 입고가 합계를 다시 계산합니다." onclick="openAmountFix()">금액 맞추기</button>
           <span id="dl-orders"></span>
           <span id="order-wait-summary" style="margin-left:12px;font-size:12.5px;"></span>
         </div>
@@ -2372,6 +2373,23 @@
         <span class="btn-row">
           <button class="btn small" style="width:auto;" onclick="saveB2BPostSettlementRef()">저장</button>
           <button class="btn small secondary" style="width:auto;" onclick="closeB2BPostSettle()">닫기</button>
+        </span>
+      </div>
+    </div>
+
+    <!-- 금액 맞추기 -->
+    <div id="amtfix-overlay" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.55);z-index:1100;align-items:center;justify-content:center;">
+      <div style="background:#fff;border:2px solid var(--navy);max-width:880px;width:96%;max-height:90vh;overflow-y:auto;padding:22px;position:relative;">
+        <button onclick="closeAmountFix()" style="position:absolute;top:12px;right:12px;background:none;border:1px solid var(--navy);width:26px;height:26px;cursor:pointer;font-size:13px;">✕</button>
+        <h3 style="margin-top:0;margin-bottom:4px;">금액 맞추기</h3>
+        <p class="desc" style="margin-top:0;">매입처의 <b>할인 계산 기준</b>(업체정보)에 맞춰 <b>여신차감액</b>과 <b>입고가 합계</b>를 다시 계산합니다.
+          지금 값과 다른 주문만 나옵니다. <b>체크한 줄만</b> 바뀌고 이력에 남습니다.<br>
+          <span style="color:var(--gray);">품목의 출고가·할인은 건드리지 않습니다. 묶음 금액만 맞춥니다.</span></p>
+        <div id="amtfix-list"></div>
+        <div id="amtfix-msg" style="font-size:12.5px;margin:8px 0;line-height:1.7;"></div>
+        <span class="btn-row">
+          <button class="btn small" style="width:auto;" onclick="submitAmountFix()">체크한 줄 맞추기</button>
+          <button class="btn small secondary" style="width:auto;" onclick="closeAmountFix()">닫기</button>
         </span>
       </div>
     </div>
@@ -8326,13 +8344,19 @@
     recalcOrderDeposit();
   }
   function recalcOrderDeposit(){
-    let total = 0;
+    // 매입처의 「할인 계산 기준」을 따릅니다. 합계 기준이면 합계에 한 번 걸어 계산합니다.
+    const source = String((document.getElementById("order-source-select")||{}).value||"").trim();
+    const lines = [];
     document.querySelectorAll("#order-lines-body tr").forEach(tr=>{
-      const qty = Number(tr.querySelector(".ol-qty").value) || 0;
-      const netPrice = Number(tr.querySelector(".ol-purchaseprice").value) || 0;
-      total += qty*netPrice;
+      lines.push({
+        quantity: Number(tr.querySelector(".ol-qty").value) || 0,
+        listPrice: Number(tr.querySelector(".ol-listprice").value) || 0,
+        purchasePrice: Number(tr.querySelector(".ol-purchaseprice").value) || 0,
+        preDiscountAmt: Number(tr.querySelector(".ol-prediscountamt").value) || 0,
+        otherDiscountAmt: Number(tr.querySelector(".ol-otherdiscountamt").value) || 0
+      });
     });
-    document.getElementById("order-deposit-input").value = total;
+    document.getElementById("order-deposit-input").value = costFromLines(source, lines);
   }
 
   window.submitOrder = async function(){
@@ -8504,7 +8528,29 @@
         ? '<span style="color:#2e7d32;font-weight:700;">' + comboEsc(r.b.collateralDate || "발행") + '</span>'
           + (r.b.collateralNo ? '<br><span style="font-size:10.5px;color:var(--gray);">' + comboEsc(r.b.collateralNo) + '</span>' : '')
         : (r.b.paymentMethod === "b2b_credit" ? '<span style="color:var(--danger);">미발행</span>' : '-') },
-    { key:"rebate",     label:"후정산",   get:r=>{ const d=(Number(r.b.creditUsed)||0)-(Number(r.b.depositRequired)||0); return d>0 ? d.toLocaleString() : "-"; }, num:true },
+    // 후정산 = 나중에 클럽장려금으로 받을 금액 = 타할인 합계입니다.
+    //  예전에는 「여신차감 − 입고가」로 냈는데, 할인 계산 기준이 다르면 반올림 차이가 섞여 들어갔습니다.
+    //  이제 주문 품목의 타할인을 그대로 더합니다.
+    { key:"rebate",     label:"후정산",   get:r=>{
+        const s = (r.lines||[]).filter(o=> o.status !== "취소")
+          .reduce((n,o)=> n + (Number(o.otherDiscountAmt)||0) * (Number(o.quantity)||0), 0);
+        return s > 0 ? s.toLocaleString() : "-";
+      }, num:true,
+      sort:r=> (r.lines||[]).filter(o=> o.status !== "취소")
+        .reduce((n,o)=> n + (Number(o.otherDiscountAmt)||0) * (Number(o.quantity)||0), 0) },
+    // 여신차감과 입고가가 다르면 그 차이를 따로 보여줍니다. (할인 계산 기준이 달라 생기는 몇 원)
+    { key:"creditGap",  label:"여신차이", get:r=>{
+        const d = (Number(r.b.creditUsed)||0) - (Number(r.b.depositRequired)||0);
+        const reb = (r.lines||[]).filter(o=> o.status !== "취소")
+          .reduce((n,o)=> n + (Number(o.otherDiscountAmt)||0) * (Number(o.quantity)||0), 0);
+        const gap = d - reb;
+        return gap ? '<span style="color:var(--danger);">' + (gap>0?"+":"") + gap.toLocaleString() + '</span>' : "-";
+      }, num:true,
+      sort:r=>{
+        const reb = (r.lines||[]).filter(o=> o.status !== "취소")
+          .reduce((n,o)=> n + (Number(o.otherDiscountAmt)||0) * (Number(o.quantity)||0), 0);
+        return (Number(r.b.creditUsed)||0) - (Number(r.b.depositRequired)||0) - reb;
+      } },
     { key:"payDue",     label:"입금예정", get:r=> r.b.payDueDate||"-" },
     { key:"payState",   label:"입금",     get:r=> r.b.depositPaid ? '<span style="color:#2e7d32;font-weight:700;">완료</span>'
         : (r.b.paymentRequestId ? '<span style="color:#b8860b;font-weight:700;">확인중</span>' : '<span style="color:var(--danger);">필요</span>') },
@@ -9562,6 +9608,124 @@
 
   // 도착 등록은 했지만 판매처리가 안 된 재고를, 연결된 판매요청에 한 번에 매칭합니다.
   // (v22 이전에 도착 등록한 건이나, 자동 판매처리 체크를 끄고 등록한 건 정리용)
+  // ================= 금액 맞추기 =================
+  //  매입처의 「할인 계산 기준」에 맞춰 여신차감액·입고가 합계를 다시 계산합니다.
+  //  품목의 출고가·할인은 건드리지 않고 묶음 금액만 맞춥니다.
+  //  이미 읽어둔 주문 자료를 씁니다. (Firestore 읽기 0회)
+  let amtFixRows = [];
+
+  window.openAmountFix = function(){
+    if(Object.keys(orderBatchCache).length === 0){ alert("주문 목록을 먼저 불러온 뒤 눌러주세요."); return; }
+    amtFixRows = [];
+    Object.keys(orderBatchCache).forEach(bid=>{
+      const b = orderBatchCache[bid];
+      if(!b || b.status === "취소") return;
+      const lines = (orderBatchLinesCache[bid]||[]).filter(o=> o.status !== "취소");
+      if(lines.length === 0) return;
+      const src = String(b.source||"").trim();
+      const isCredit = (b.paymentMethod === "b2b_credit");
+      const wantCost   = costFromLines(src, lines);
+      const wantCredit = isCredit ? creditFromLines(src, lines) : null;
+      const nowCost   = Number(b.depositRequired)||0;
+      const nowCredit = isCredit ? (Number(b.creditUsed != null ? b.creditUsed : b.depositRequired)||0) : null;
+      const dCost   = wantCost - nowCost;
+      const dCredit = isCredit ? (wantCredit - nowCredit) : 0;
+      if(dCost === 0 && dCredit === 0) return;
+      amtFixRows.push({ batchId:bid, b, isCredit, nowCost, wantCost, nowCredit, wantCredit, dCost, dCredit });
+    });
+
+    const listEl = document.getElementById("amtfix-list");
+    if(amtFixRows.length === 0){
+      listEl.innerHTML = '<div style="border:1px solid var(--line);background:#f4faf4;color:#2e7d32;padding:10px 12px;font-size:12.5px;">'
+        + '맞출 것이 없습니다. 모든 주문이 매입처 기준과 같습니다.</div>';
+      document.getElementById("amtfix-msg").innerHTML = "";
+    }else{
+      let h = '<div style="max-height:340px;overflow-y:auto;border:1px solid var(--line);">'
+        + '<table class="data-table" style="width:100%;"><thead><tr>'
+        + '<th style="width:34px;"><input type="checkbox" id="amtfix-all" checked></th>'
+        + '<th>주문일</th><th>매입처</th><th>기준</th><th>결제</th>'
+        + '<th class="ta-right">입고가 지금</th><th class="ta-right">입고가 바뀔값</th><th class="ta-right">차이</th>'
+        + '<th class="ta-right">여신 지금</th><th class="ta-right">여신 바뀔값</th><th class="ta-right">차이</th>'
+        + '</tr></thead><tbody>';
+      amtFixRows.forEach((r,i)=>{
+        const co = (companiesCache||[]).find(x=> String(x.name||"").trim() === String(r.b.source||"").trim());
+        const base = (co && co.discountBase === "total") ? "합계" : "대당";
+        const gap = v => v ? '<span style="color:var(--danger);font-weight:700;">' + (v>0?"+":"") + v.toLocaleString() + '</span>' : '<span style="color:var(--gray);">-</span>';
+        h += '<tr>'
+          + '<td><input type="checkbox" class="amtfix-ck" value="'+i+'" checked></td>'
+          + '<td>'+comboEsc(r.b.orderDate||"-")+'</td>'
+          + '<td>'+comboEsc(r.b.source||"-")+'</td>'
+          + '<td>'+base+'</td>'
+          + '<td>'+(r.isCredit ? '<span style="color:#6a1b9a;font-weight:700;">여신</span>' : "일반")+'</td>'
+          + '<td class="ta-right">'+r.nowCost.toLocaleString()+'</td>'
+          + '<td class="ta-right"><b>'+r.wantCost.toLocaleString()+'</b></td>'
+          + '<td class="ta-right">'+gap(r.dCost)+'</td>'
+          + '<td class="ta-right">'+(r.isCredit ? r.nowCredit.toLocaleString() : "-")+'</td>'
+          + '<td class="ta-right">'+(r.isCredit ? '<b>'+r.wantCredit.toLocaleString()+'</b>' : "-")+'</td>'
+          + '<td class="ta-right">'+(r.isCredit ? gap(r.dCredit) : "-")+'</td></tr>';
+      });
+      h += '</tbody></table></div>';
+      listEl.innerHTML = h;
+      const all = document.getElementById("amtfix-all");
+      if(all) all.onchange = ()=> listEl.querySelectorAll(".amtfix-ck").forEach(c=> c.checked = all.checked);
+      document.getElementById("amtfix-msg").innerHTML =
+        '<span style="color:var(--gray);">여신결제 주문은 <b>여신 장부의 주문사용 금액도 함께</b> 바뀝니다.</span>';
+    }
+    document.getElementById("amtfix-overlay").style.display = "flex";
+  };
+
+  window.closeAmountFix = function(){
+    document.getElementById("amtfix-overlay").style.display = "none";
+    amtFixRows = [];
+  };
+
+  window.submitAmountFix = async function(){
+    const msgEl = document.getElementById("amtfix-msg");
+    const picked = Array.from(document.querySelectorAll(".amtfix-ck:checked"))
+      .map(c=> amtFixRows[Number(c.value)]).filter(Boolean);
+    if(picked.length === 0){ msgEl.innerHTML = '<span style="color:var(--danger);">맞출 줄을 골라주세요.</span>'; return; }
+    const sumCost = picked.reduce((n,r)=> n + r.dCost, 0);
+    const sumCredit = picked.reduce((n,r)=> n + r.dCredit, 0);
+    const creditCnt = picked.filter(r=> r.isCredit && r.dCredit !== 0).length;
+    if(!confirm(
+      "주문 " + picked.length + "건의 금액을 매입처 기준으로 맞춥니다.\n\n"
+      + "  입고가 합계  " + (sumCost>0?"+":"") + sumCost.toLocaleString() + "\n"
+      + "  여신차감액   " + (sumCredit>0?"+":"") + sumCredit.toLocaleString()
+      + (creditCnt ? "  (여신결제 " + creditCnt + "건)" : "") + "\n\n"
+      + "품목의 출고가·할인은 건드리지 않습니다.\n이 작업은 이력에 남습니다. 진행할까요?")) return;
+
+    msgEl.innerHTML = '<span style="color:var(--gray);">맞추는 중입니다...</span>';
+    try{
+      for(let i=0; i<picked.length; i+=300){
+        const bt = writeBatch(db);
+        picked.slice(i, i+300).forEach(r=>{
+          const patch = { depositRequired: r.wantCost };
+          if(r.isCredit) patch.creditUsed = r.wantCredit;
+          bt.update(doc(db,"orderBatches", r.batchId), patch);
+        });
+        await bt.commit();
+      }
+      // 여신결제 건은 여신 장부의 주문사용 금액도 새 값으로 맞춥니다.
+      for(const r of picked){
+        if(!r.isCredit || r.dCredit === 0) continue;
+        await replaceB2BOrderUse(r.batchId, r.wantCredit,
+          r.b.depositPaidDate || r.b.orderDate || todayStr(), r.b.source || "");
+      }
+    }catch(e){
+      msgEl.innerHTML = '<span style="color:var(--danger);">맞추는 중 문제가 생겼습니다.<br>'
+        + comboEsc((e && e.message) ? e.message : String(e)) + '</span>';
+      return;
+    }
+    logAction("주문 금액 맞추기",
+      picked.length + "건 / 입고가 " + (sumCost>0?"+":"") + sumCost.toLocaleString()
+      + " / 여신 " + (sumCredit>0?"+":"") + sumCredit.toLocaleString());
+    alert("주문 " + picked.length + "건을 맞췄습니다.");
+    closeAmountFix();
+    loadOrderList();
+    if(typeof loadB2BTab === "function") loadB2BTab();
+    if(typeof refreshLoanScreens === "function") refreshLoanScreens();
+  };
+
   // ================= 통신사 맞추기 =================
   //  주문의 통신사와 품목 줄의 통신사가 다른 건을 찾아, 품목을 주문 기준으로 맞춥니다.
   //  프로그램이 스스로 바꾸지 않습니다. 목록을 보여주고 체크한 줄만 바꿉니다.
@@ -11650,6 +11814,16 @@
     return listSum - Math.round(listSum * rate / 100);
   }
   window.creditFromLines = creditFromLines;
+
+  // 입고가 합계 = 여신차감액 − 타할인 합계
+  //  여신차감액이 합계 기준이면 입고가도 합계 기준이 되어 「여신차이」가 0이 됩니다.
+  //  대당 기준 매입처에서는 예전 계산(Σ 대당 입고가 × 수량)과 결과가 같습니다.
+  function costFromLines(source, lines){
+    const other = (lines||[]).reduce((n,l)=>
+      n + (Number(l.otherDiscountAmt)||0) * (Number(l.quantity)||0), 0);
+    return creditFromLines(source, lines) - other;
+  }
+  window.costFromLines = costFromLines;
 
   async function creditAmountOfBatch(orderBatchId){
     const snap = await getDocs(query(collection(db,"orders"), where("batchId","==",orderBatchId)));
@@ -20665,7 +20839,26 @@
         newTotal += ((kind === "order" ? (Number(src.purchasePrice)||0) : (Number(src.salePrice)||0)) * (Number(src.quantity)||0));
       }
     });
-    if(Object.keys(perLine).length > 0) batchPatch.depositRequired = newTotal;
+    // 주문이면 매입처의 「할인 계산 기준」을 따라 다시 계산합니다.
+    //  합계 기준 매입처는 합계에 한 번 걸어야 여신차감과 어긋나지 않습니다.
+    if(Object.keys(perLine).length > 0){
+      if(kind === "order"){
+        const src2 = String((document.getElementById("be-party")||{}).value||"").trim() || String(b.source||"").trim();
+        const merged = (lines||[]).filter(o=> o.status !== "취소").map(o=>{
+          const p = perLine[o.id] || {};
+          return {
+            quantity: Number(o.quantity)||0,
+            listPrice: (p.listPrice != null ? p.listPrice : (Number(o.listPrice)||0)),
+            purchasePrice: (p.purchasePrice != null ? p.purchasePrice : (Number(o.purchasePrice)||0)),
+            preDiscountAmt: (p.preDiscountAmt != null ? p.preDiscountAmt : (Number(o.preDiscountAmt)||0)),
+            otherDiscountAmt: (p.otherDiscountAmt != null ? p.otherDiscountAmt : (Number(o.otherDiscountAmt)||0))
+          };
+        });
+        batchPatch.depositRequired = costFromLines(src2, merged);
+      }else{
+        batchPatch.depositRequired = newTotal;
+      }
+    }
 
     // 결제방식 전환 — 여신 차감 기록을 함께 맞춥니다.
     // 금액을 다시 계산한 뒤에 처리해야 차감액이 정확합니다.
@@ -26663,7 +26856,7 @@
     if(bar) bar.style.display = "none";
   };
 
-  // 파일에 박힌 버전 글자를 읽습니다. (예: "파일 2026-08-09 v511")
+  // 파일에 박힌 버전 글자를 읽습니다. (예: "파일 2026-08-09 v513")
   function readBuildTag(text){
     const m = String(text||"").match(/파일\s*[\d-]+\s*v(\d+)/);
     return m ? m[0].trim() : "";
