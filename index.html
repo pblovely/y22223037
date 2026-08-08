@@ -379,7 +379,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v479</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v480</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -13474,8 +13474,16 @@
       const e = x.data(); const amt = Number(e.amount)||0;
       if(PRE[e.category]){
         creditIn += amt;
+        // 통장 출금 기록과 이어져 있는지 표시합니다.
+        //  입출금 내역에서 「삼성여신」을 골라 넣으면 이어집니다. 여신 화면에서 직접 넣으면 안 이어집니다.
+        const hasBank = !!e.fromBankDepositId;
         rows.push({ kind:"prepay", label:PRE[e.category], color:"var(--gray)", id:x.id, p:null,
-          who: (e.source || "").trim() || "(매입처 미지정)", sub:e.memo||"", date:e.date||"",
+          who: (e.source || "").trim() || "(매입처 미지정)",
+          sub: (e.category === "deposit"
+                 ? (hasBank ? "통장 출금 기록 있음" : "통장 출금 기록 없음")
+                   + (e.memo ? " · " + e.memo : "")
+                 : (e.memo||"")),
+          date:e.date||"",
           owe:amt, recv:0, done:0, left:0, payDate:e.date||"", payMemo:e.memo||"",
           taxDate:"", taxAmount:0, status:"미반영", finished:true, onHold:false, holdReason:"",
           canceled:false, recs:[], inSum:false, canProcess:false, canEdit:false });
@@ -13496,6 +13504,10 @@
         const used = Number(v.usedAmount)||0;
         const left = amt - used;
         if(!showDoneCb && left <= 0) return;   // 배분이 끝난 것은 요청 줄에 이미 나옵니다.
+        // 여신 충전으로 나간 출금은 위 「선입금」 줄과 같은 돈이라 두 번 나옵니다.
+        //  붙일 요청도 없어 「미배분」이 영영 남으므로 이 표에서는 뺍니다.
+        //  기록은 지우지 않았습니다. 「입출금 내역」 화면에서 그대로 보실 수 있습니다.
+        if(v.creditPartner) return;
         const isIn = (v.kind !== "out");
         const isOpen = left > 0;
         rows.push({
@@ -25544,7 +25556,7 @@
     if(bar) bar.style.display = "none";
   };
 
-  // 파일에 박힌 버전 글자를 읽습니다. (예: "파일 2026-08-09 v479")
+  // 파일에 박힌 버전 글자를 읽습니다. (예: "파일 2026-08-09 v480")
   function readBuildTag(text){
     const m = String(text||"").match(/파일\s*[\d-]+\s*v(\d+)/);
     return m ? m[0].trim() : "";
