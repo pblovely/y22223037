@@ -369,7 +369,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-08 v448</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-08 v449</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -2219,7 +2219,10 @@
 
     <div id="tab-b2b" class="tab-panel">
       <div class="card">
-        <h3>삼성여신 <span class="info-tip" title="포피플에서 삼성에 직접입금하거나 B2B대출로 입금하면 여신이 쌓입니다. 그 여신에서 단말기를 할인된 가격으로 주문해서 차감됩니다. B2B대출 관련 수수료·이자는 여신과 별개의 비용입니다.">ⓘ</span></h3>
+        <h3>삼성여신 <span class="info-tip" title="포피플에서 삼성에 직접입금하거나 B2B대출로 입금하면 여신이 쌓입니다. 그 여신에서 단말기를 할인된 가격으로 주문해서 차감됩니다. 삼성전자 거래처마다 여신이 따로 쌓이므로 아래 버튼으로 나눠 보세요.">ⓘ</span></h3>
+        <p class="desc" style="margin-top:0;">삼성전자 거래처마다 <b>여신을 따로</b> 관리합니다. 아래에서 거래처를 고르면 그 거래처 것만 보입니다.<br>
+          <b>B2B 대출 조건은 삼성전자끼리 같습니다.</b> 거래처가 늘어나면 버튼도 저절로 늘어납니다.</p>
+        <div class="btn-row" id="b2b-partner-tabs" style="display:inline-flex;margin-bottom:10px;"></div>
         <div id="b2b-stat-cards" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px;"></div>
         <div id="b2b-orderuse-detail" style="display:none;margin-top:10px;"></div>
         <div id="b2b-warn" style="display:none;font-size:12.5px;margin-top:6px;"></div>
@@ -22768,6 +22771,10 @@
         + names.map(n=>'<option value="'+comboEsc(n)+'">'+comboEsc(n)+'</option>').join("");
       const a = document.getElementById("b2b-partner-select"); if(a) a.innerHTML = opts;
       const b = document.getElementById("b2b-source-select");  if(b) b.innerHTML = opts;
+      // 지금 보고 있는 거래처를 미리 골라둡니다. (「전체」를 보고 있으면 비워둡니다)
+      if(a && b2bPartnerPick && b2bPartnerPick !== "(대상 미지정)"){
+        if(Array.from(a.options).some(o=> o.value === b2bPartnerPick)) a.value = b2bPartnerPick;
+      }
     }catch(e){}
     document.getElementById("b2badd-overlay").style.display = "flex";
   };
@@ -22853,6 +22860,13 @@
     loadB2BTab();
   };
 
+  // 삼성전자 거래처마다 여신이 따로 쌓입니다. 고른 거래처만 봅니다.
+  let b2bPartnerPick = "";      // "" 는 전체
+  window.setB2BPartner = function(p){
+    b2bPartnerPick = p || "";
+    loadB2BTab();
+  };
+
   async function loadB2BTab(){
     const statEl = document.getElementById("b2b-stat-cards");
     const listEl = document.getElementById("b2b-ledger-list");
@@ -22860,7 +22874,22 @@
     statEl.innerHTML = '<div class="list-empty">불러오는 중...</div>';
 
     const snap = await getDocs(query(collection(db,"b2bLedger"), orderBy("date","desc")));
-    const entries = []; snap.forEach(d=> entries.push({ id:d.id, ...d.data() }));
+    const allEntries = []; snap.forEach(d=> allEntries.push({ id:d.id, ...d.data() }));
+
+    // 거래처 고르는 버튼 — 기록에 있는 대상을 그대로 씁니다. (새 거래처가 생기면 저절로 늘어납니다)
+    const pName = e => String(e.partner||"").trim() || "(대상 미지정)";
+    const pList = [...new Set(allEntries.map(pName))].sort();
+    const tabEl = document.getElementById("b2b-partner-tabs");
+    if(tabEl){
+      const btn = (label, val, cnt)=>
+        '<button class="btn small' + (b2bPartnerPick === val ? '' : ' secondary') + '" style="width:auto;"'
+        + ' onclick="setB2BPartner(' + JSON.stringify(val).replace(/"/g,"&quot;") + ')">'
+        + comboEsc(label) + (cnt != null ? ' <span style="font-size:10.5px;">' + cnt + '</span>' : '') + '</button>';
+      tabEl.innerHTML = btn("전체", "", allEntries.length)
+        + pList.map(n=> btn(n, n, allEntries.filter(e=> pName(e) === n).length)).join("");
+    }
+    // 고른 거래처만 남깁니다.
+    const entries = b2bPartnerPick ? allEntries.filter(e=> pName(e) === b2bPartnerPick) : allEntries;
 
     let depositTotal = 0, orderUseTotal = 0, loanCostTotal = 0, clubIncentiveTotal = 0, otherTotal = 0;
     entries.forEach(e=>{
@@ -22907,14 +22936,18 @@
 
     // 계산 근거를 그대로 보여줘서 숫자가 왜 그런지 바로 알 수 있게 합니다.
     let html = statCard("실시간 잔여여신", remainingCredit.toLocaleString(),
-      remainingCredit < 0 ? "var(--danger)" : "#1565c0", "①+②−③ · 전체 합계");
-    Object.keys(byPartner).sort().forEach(pn=>{
-      const v = byPartner[pn];
-      const left = v.inAmt - v.useAmt;
-      html += statCard("잔여여신 · " + pn, left.toLocaleString(),
-        left < 0 ? "var(--danger)" : "#1565c0",
-        "충전 " + v.inAmt.toLocaleString() + " − 사용 " + v.useAmt.toLocaleString());
-    });
+      remainingCredit < 0 ? "var(--danger)" : "#1565c0",
+      b2bPartnerPick ? comboEsc(b2bPartnerPick) + " 기준" : "①+②−③ · 전체 합계");
+    // 전체를 볼 때만 거래처별 카드를 늘어놓습니다. (한 거래처만 보면 위 카드가 그 값입니다)
+    if(!b2bPartnerPick){
+      Object.keys(byPartner).sort().forEach(pn=>{
+        const v = byPartner[pn];
+        const left = v.inAmt - v.useAmt;
+        html += statCard("잔여여신 · " + pn, left.toLocaleString(),
+          left < 0 ? "var(--danger)" : "#1565c0",
+          "충전 " + v.inAmt.toLocaleString() + " − 사용 " + v.useAmt.toLocaleString());
+      });
+    }
     html += statCard("① 여신 입금 (충전)", depositTotal.toLocaleString(), "#2e7d32");
     html += statCard("② 클럽장려금 수령", clubIncentiveTotal.toLocaleString(), "#6a1b9a");
     html += statCard("③ 주문사용 (차감)", orderUseTotal.toLocaleString(), "var(--danger)");
