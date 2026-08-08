@@ -148,7 +148,10 @@
   /* 줄을 누르면 아래로 버튼 칸이 펼쳐집니다. */
   tr.rbd-clickable{ cursor:pointer; }
   tr.rbd-clickable:hover td{ background:#f4f7fb; }
-  tr.rbd-open td{ background:#eef3fa; }
+  tr.rbd-open td, tr.row-open td{ background:#eef3fa; }
+  /* 보기 설정에서 열 순서를 끌어 옮길 때 */
+  .vp-row.vp-drag{ opacity:0.45; }
+  .vp-row:hover{ background:#f4f7fb !important; }
   /* 값 자리에 들어가는 label(체크박스 묶음)은 제목 칸처럼 보이지 않게 합니다. */
   .stack-row > label:not(:first-child){ width:auto; flex:1; border-right:none; font-weight:400;
     color:inherit; padding:5px 8px; gap:6px; }
@@ -366,7 +369,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-08 v432</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-08 v438</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -2332,7 +2335,8 @@
 
         <div id="active-conditions-chips" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px;"></div>
         <div class="check-panel" id="view-panel" style="display:none;margin-bottom:8px;">
-          <div id="view-panel-checks"></div>
+          <div style="font-size:12px;color:var(--gray);margin-bottom:6px;">체크하면 보이고, <b>☰ 를 끌어서</b> 순서를 바꿉니다. 위에 있는 열이 표에서도 왼쪽입니다.</div>
+          <div id="view-panel-checks" style="max-height:340px;overflow-y:auto;"></div>
           <button class="btn small" style="width:auto;margin-top:6px;" onclick="saveViewSettings()">이 설정 저장 (내 계정에 유지)</button>
         </div>
 
@@ -3530,7 +3534,7 @@
       if(customTabLabels[key]){
         const sp = el.querySelector(".tab-label-text");
         if(sp) sp.textContent = customTabLabels[key];
-        else if(el.children.length === 0) el.textContent = customTabLabels[key];
+        else if(el.tagName !== "TABLE") el.textContent = customTabLabels[key];
       }
       if(customTabColors[key]) el.style.setProperty("color", customTabColors[key], "important");
       if(customTabFontSizes[key]) el.style.setProperty("font-size", customTabFontSizes[key]+"px", "important");
@@ -3702,17 +3706,21 @@
     const menu = document.createElement("div");
     menu.id = "customize-context-menu";
     menu.style.cssText = "position:fixed;top:"+y+"px;left:"+x+"px;background:#fff;border:1px solid var(--navy);box-shadow:0 2px 10px rgba(0,0,0,0.2);z-index:5000;min-width:150px;font-size:13px;";
-    // 표처럼 이름을 바꿀 수 없는 요소는 "이름 변경"을 숨깁니다.
-    const canRename = !!el.querySelector(".tab-label-text") || (el.children.length === 0 && el.textContent.trim() !== "");
+    // 표처럼 글자가 없는 요소만 "글자 바꾸기"를 숨깁니다.
+    //  굵은 글씨가 섞인 안내문도 바꿀 수 있게 합니다. (바꾸면 서식은 사라집니다)
+    const canRename = !!el.querySelector(".tab-label-text")
+      || (el.tagName !== "TABLE" && String(el.textContent||"").trim() !== "");
     const items = [
-      ["이름 변경", ()=>{
+      ["글자 바꾸기", ()=>{
         const span = el.querySelector(".tab-label-text");
-        const current = span ? span.textContent : el.textContent;
-        const newName = prompt("이름을 입력하세요 (같은 항목은 어디서든 같이 바뀝니다):", current);
+        const hasChild = !span && el.children.length > 0;
+        const current = (span ? span.textContent : el.textContent).replace(/\s+/g," ").trim();
+        const newName = prompt("바꿀 글자를 넣어주세요. (같은 항목은 어디서든 같이 바뀝니다)"
+          + (hasChild ? "\n\n※ 굵은 글씨·줄바꿈은 사라지고 한 줄 글자로 바뀝니다." : ""), current);
         if(newName===null) return;
         const trimmed = newName.trim();
         if(!trimmed) return;
-        saveCustomization("label", key, trimmed, "이름 변경");
+        saveCustomization("label", key, trimmed, "글자 바꾸기");
       }],
       ["색상 변경", ()=>{
         const colorInput = document.createElement("input");
@@ -3739,8 +3747,8 @@
         saveCustomization("hide", key, true, "항목 숨기기");
       }]
     ];
-    // 이름을 바꿀 수 없는 요소(표 등)는 "이름 변경"을 빼고 보여줍니다.
-    const shown = canRename ? items : items.filter(([label])=> label !== "이름 변경");
+    // 글자가 없는 요소(표 등)는 "글자 바꾸기"를 빼고 보여줍니다.
+    const shown = canRename ? items : items.filter(([label])=> label !== "글자 바꾸기");
     shown.forEach(([label, fn], idx)=>{
       const btn = document.createElement("div");
       btn.textContent = label;
@@ -6325,22 +6333,65 @@
       p.style.display = "none";
     }
   };
+  // 보기 설정에 저장된 순서를 그대로 씁니다. (저장된 목록에 없는 열은 뒤에 붙입니다)
+  function invViewCols(){
+    const byKey = {}; INV_COLUMNS.forEach(c=> byKey[c.key] = c);
+    const out = [];
+    (currentViewSettings||[]).forEach(k=>{ if(byKey[k]) out.push(byKey[k]); });
+    return out;
+  }
+
   function renderViewPanelChecks(){
     const el = document.getElementById("view-panel-checks");
     el.innerHTML = "";
-    INV_COLUMNS.forEach(col=>{
-      const label = document.createElement("label");
+    el.style.display = "block";
+    // 켠 열을 저장된 순서대로 먼저 놓고, 끈 열을 뒤에 붙입니다.
+    const on = (currentViewSettings||[]).filter(k=> INV_COLUMNS.some(c=>c.key===k));
+    const off = INV_COLUMNS.map(c=>c.key).filter(k=> !on.includes(k));
+    const byKey = {}; INV_COLUMNS.forEach(c=> byKey[c.key] = c);
+
+    [...on, ...off].forEach(key=>{
+      const col = byKey[key]; if(!col) return;
+      const row = document.createElement("div");
+      row.className = "vp-row";
+      row.draggable = true;
+      row.dataset.key = key;
+      row.style.cssText = "display:flex;align-items:center;gap:7px;padding:4px 7px;border:1px solid var(--line);"
+        + "background:#fff;margin-bottom:-1px;font-size:12.5px;cursor:grab;";
+      const grip = document.createElement("span");
+      grip.textContent = "☰";
+      grip.style.cssText = "color:var(--gray);font-size:12px;";
       const cb = document.createElement("input");
-      cb.type = "checkbox"; cb.className = "view-opt"; cb.value = col.key;
-      cb.checked = currentViewSettings.includes(col.key);
-      label.appendChild(cb);
-      label.appendChild(document.createTextNode(" "+col.label));
-      el.appendChild(label);
+      cb.type = "checkbox"; cb.className = "view-opt"; cb.value = key;
+      cb.checked = on.includes(key);
+      cb.style.cssText = "width:14px;height:14px;margin:0;";
+      const txt = document.createElement("span");
+      txt.textContent = col.label;
+      row.appendChild(grip); row.appendChild(cb); row.appendChild(txt);
+
+      row.addEventListener("dragstart", e=>{
+        row.classList.add("vp-drag");
+        e.dataTransfer.effectAllowed = "move";
+        try{ e.dataTransfer.setData("text/plain", key); }catch(err){}
+      });
+      row.addEventListener("dragend", ()=> row.classList.remove("vp-drag"));
+      row.addEventListener("dragover", e=>{
+        e.preventDefault();
+        const moving = el.querySelector(".vp-drag");
+        if(!moving || moving === row) return;
+        const box = row.getBoundingClientRect();
+        const after = (e.clientY - box.top) > (box.height / 2);
+        el.insertBefore(moving, after ? row.nextSibling : row);
+      });
+      el.appendChild(row);
     });
   }
   function syncViewCheckboxes(){ /* 패널 열 때 renderViewPanelChecks에서 반영됨 */ }
   window.saveViewSettings = async function(){
-    const checked = Array.from(document.querySelectorAll(".view-opt:checked")).map(cb=>cb.value);
+    // 화면에 놓인 순서 그대로 저장합니다.
+    const checked = Array.from(document.querySelectorAll("#view-panel-checks .vp-row"))
+      .filter(r=>{ const cb = r.querySelector(".view-opt"); return cb && cb.checked; })
+      .map(r=> r.dataset.key);
     if(checked.length===0){ alert("최소 1개는 선택해주세요."); return; }
     currentViewSettings = checked;
     const user = auth.currentUser;
@@ -6639,6 +6690,7 @@
     pagEl.innerHTML = "";
     pagEl.replaceChildren(renderPaginationBar("companies", arr.length, loadCompanyList));
   
+    foldActionColumn("company-list-wrap");
     addDownloadBtn("dl-company", "company-list-wrap", "업체정보"); addViewCfgBtn("dl-company", "company-list-wrap");
   }
 
@@ -7818,18 +7870,92 @@
       '<th style="width:34px;"><input type="checkbox" onclick="toggleAllListRows(\''+kind+'\', this)"></th>' +
       cols.map(c=>'<th'+(c.num?' class="ta-right"':'')+' style="cursor:pointer;white-space:nowrap;" onclick="setListSort(\''+kind+'\',\''+c.key+'\')">'
         + comboEsc(c.label) + (st.key===c.key ? (st.dir>0?' ▲':' ▼') : '') + '</th>').join("") +
-      '<th class="ta-right">관리</th></tr></thead><tbody>';
+      '</tr></thead><tbody>';
     rows.forEach(r=>{
-      h += '<tr'+(r.cancelled?' style="color:var(--gray);"':(r.isDone?' style="background:#f4f9f4;"':''))+'>' +
+      // 버튼은 줄을 누르면 아래로 펼쳐지는 칸에 모아 둡니다. (가로로 밀리지 않게)
+      const btns = actionsFn(r) || "";
+      const trCls = (r.cancelled ? "row-done " : "") + (btns ? "rbd-clickable" : "");
+      h += '<tr' + (trCls.trim() ? ' class="' + trCls.trim() + '"' : '')
+        + (!r.cancelled && r.isDone ? ' style="background:#f4f9f4;"' : '')
+        + (btns ? ' data-row-act="' + kind + '|' + r.id + '"' : '') + '>' +
         '<td><input type="checkbox" class="'+(kind==="order"?"order-pay-cb":"sale-pay-cb")+'" data-batch-id="'+r.id+'"'
           + (kind==="order" ? ' data-amount="'+(Number(r.b.depositRequired)||0)+'"' : ' data-amount="'+(Number(r.b.depositRequired)||0)+'" data-legacy="'+(r.isLegacy?"1":"0")+'" data-dest="'+comboEsc(r.b.destination||"")+'"')
           + ((kind==="order" ? (r.b.depositPaid||r.b.paymentRequestId) : (r.b.depositReceived||r.b.depositRequestId)) ? ' disabled' : '') + '></td>' +
         cols.map(c=>'<td'+(c.num?' class="ta-right"':'')+(c.cls?' style="'+c.cls(r)+'"':'')+'>'+c.get(r)+'</td>').join("") +
-        '<td class="ta-right" style="white-space:nowrap;">'+actionsFn(r)+'</td></tr>';
+        '</tr>';
+      if(btns){
+        h += '<tr class="row-actions" data-row-actions="' + kind + '|' + r.id + '" style="display:none;">'
+          + '<td colspan="' + (cols.length + 1) + '" style="background:#fafafa;padding:6px 8px;text-align:left;">'
+          + btns + '</td></tr>';
+      }
     });
     h += '</tbody></table></div>';
     return h;
   }
+  // 어느 목록이든 줄을 누르면 아래 버튼 칸이 펼쳐지게 붙여줍니다.
+  //  data-row-act 와 data-row-actions 의 값이 같은 짝끼리 이어집니다.
+  window.bindRowActions = function(containerId){
+    const box = containerId ? document.getElementById(containerId) : document;
+    if(!box) return;
+    box.querySelectorAll("[data-row-act]").forEach(tr=>{
+      tr.onclick = (ev)=>{
+        if(ev.target.closest("button") || ev.target.closest("input") || ev.target.closest("a")) return;
+        const key = tr.dataset.rowAct;
+        const rows = Array.from(box.querySelectorAll("[data-row-actions]"));
+        const target = rows.find(x=> x.dataset.rowActions === key);
+        const open = target && target.style.display !== "none";
+        rows.forEach(x=> x.style.display = "none");
+        box.querySelectorAll(".row-open").forEach(x=> x.classList.remove("row-open"));
+        if(target && !open){ target.style.display = ""; tr.classList.add("row-open"); }
+      };
+    });
+  };
+
+  // 「관리」 열을 없애고, 그 안의 버튼을 줄 아래 펼침 칸으로 옮깁니다.
+  //  표를 그린 뒤에 부르면 어느 목록이든 같은 모양이 됩니다.
+  //  버튼은 통째로 옮기므로 이미 붙여둔 동작이 그대로 살아 있습니다.
+  window.foldActionColumn = function(containerId, label){
+    const box = document.getElementById(containerId);
+    if(!box) return;
+    const lab = label || "관리";
+    box.querySelectorAll("table").forEach(tb=>{
+      if(tb.dataset.folded === "1") return;
+      const head = tb.tHead && tb.tHead.rows[0];
+      const body = tb.tBodies && tb.tBodies[0];
+      if(!head || !body) return;
+      let idx = -1;
+      Array.from(head.cells).forEach((th,i)=>{
+        if(String(th.textContent||"").replace(/\s+/g,"").trim() === lab) idx = i;
+      });
+      if(idx < 0) return;
+      const total = head.cells.length;
+      head.deleteCell(idx);
+      Array.from(body.rows).forEach((tr, n)=>{
+        if(tr.classList.contains("row-actions")) return;
+        if(tr.cells.length !== total) return;      // 합계줄처럼 칸 수가 다른 줄은 건드리지 않습니다.
+        const cell = tr.cells[idx];
+        const hasBtn = !!cell.querySelector("button");
+        if(!hasBtn){ tr.deleteCell(idx); return; }
+        const key = containerId + "|" + n;
+        const nr = document.createElement("tr");
+        nr.className = "row-actions";
+        nr.dataset.rowActions = key;
+        nr.style.display = "none";
+        const td = document.createElement("td");
+        td.colSpan = total - 1;
+        td.style.cssText = "background:#fafafa;padding:6px 8px;text-align:left;";
+        while(cell.firstChild) td.appendChild(cell.firstChild);   // 버튼을 통째로 옮깁니다.
+        nr.appendChild(td);
+        tr.deleteCell(idx);
+        tr.classList.add("rbd-clickable");
+        tr.dataset.rowAct = key;
+        tr.after(nr);
+      });
+      tb.dataset.folded = "1";
+    });
+    bindRowActions(containerId);
+  };
+
   window.toggleAllListRows = function(kind, cb){
     document.querySelectorAll(kind==="order" ? ".order-pay-cb" : ".sale-pay-cb").forEach(x=>{ if(!x.disabled) x.checked = cb.checked; });
   };
@@ -8270,6 +8396,7 @@
         ? '<button class="btn small danger" style="width:auto;" title="취소된 주문을 완전히 지웁니다" data-del-batch="'+r.id+'">삭제</button>' : '');
 
     listEl.innerHTML = renderListTable("order", rows, actions);
+    bindRowActions("order-list");
 
     // 버튼 동작을 연결합니다.
     listEl.querySelectorAll('[data-detail]').forEach(btn=>{
@@ -10480,7 +10607,7 @@
     let h = '<div style="overflow-x:auto;"><table class="data-table" style="min-width:1220px;"><thead><tr>' +
       '<th>적요</th><th>은행</th><th>대상</th><th>대출명</th><th>실행일</th><th>만기일</th><th>남은일수</th>' +
       '<th class="ta-right">원금</th><th class="ta-right">상환</th><th class="ta-right">잔액</th>' +
-      '<th class="ta-right">월이자</th><th class="ta-right">누적 이자·수수료</th><th>상태</th><th class="ta-right">관리</th>' +
+      '<th class="ta-right">월이자</th><th class="ta-right">누적 이자·수수료</th><th>상태</th>' +
       '</tr></thead><tbody>';
     snap.forEach(d=>{
       const L = { id:d.id, ...d.data() };
@@ -10495,7 +10622,15 @@
         : ((L.extensions||[]).length
           ? '<span style="background:#b8860b;color:#fff;font-size:10.5px;padding:1px 6px;">연장 ' + (L.extensions||[]).length + '회</span>'
           : '<span style="background:var(--navy);color:#fff;font-size:10.5px;padding:1px 6px;">진행중</span>');
-      h += '<tr>' +
+      const btns =
+          (L.status !== "상환완료"
+            ? '<button class="btn small" style="width:auto;" data-loan-sched="'+d.id+'">이자표</button>' +
+              '<button class="btn small secondary" style="width:auto;margin-left:4px;" data-loan-pay="'+d.id+'">수수료</button>' +
+              '<button class="btn small secondary" style="width:auto;margin-left:4px;" data-loan-ext="'+d.id+'">연장</button>' +
+              '<button class="btn small secondary" style="width:auto;margin-left:4px;" data-loan-repay="'+d.id+'">상환</button>'
+            : '') +
+          '<button class="btn small secondary" style="width:auto;margin-left:4px;" data-loan-detail="'+d.id+'">내역</button>';
+      h += '<tr class="rbd-clickable" data-row-act="loan|'+d.id+'">' +
         '<td><b>'+comboEsc(L.code||"-")+'</b></td>' +
         '<td>'+comboEsc(L.bank||"-")+'</td>' +
         '<td><b>'+comboEsc(L.partner||"-")+'</b></td>' +
@@ -10509,18 +10644,13 @@
         '<td class="ta-right">'+(Number(L.monthlyInterest)||0).toLocaleString()+'</td>' +
         '<td class="ta-right">'+paidCost.toLocaleString()+'</td>' +
         '<td>'+badge+'</td>' +
-        '<td class="ta-right" style="white-space:nowrap;">' +
-          (L.status !== "상환완료"
-            ? '<button class="btn small" style="width:auto;" data-loan-sched="'+d.id+'">이자표</button>' +
-              '<button class="btn small secondary" style="width:auto;" data-loan-pay="'+d.id+'">수수료</button>' +
-              '<button class="btn small secondary" style="width:auto;" data-loan-ext="'+d.id+'">연장</button>' +
-              '<button class="btn small secondary" style="width:auto;" data-loan-repay="'+d.id+'">상환</button>'
-            : '') +
-          '<button class="btn small secondary" style="width:auto;" data-loan-detail="'+d.id+'">내역</button>' +
-        '</td></tr>';
+        '</tr>' +
+        '<tr class="row-actions" data-row-actions="loan|'+d.id+'" style="display:none;">' +
+        '<td colspan="13" style="background:#fafafa;padding:6px 8px;text-align:left;">' + btns + '</td></tr>';
     });
     h += '</tbody></table></div><div id="loan-detail-area" style="margin-top:10px;"></div>';
     el.innerHTML = h;
+    bindRowActions("loan-list");
     el.querySelectorAll("[data-loan-sched]").forEach(b=> b.onclick = ()=> openLoanSchedule(b.dataset.loanSched));
     el.querySelectorAll("[data-loan-pay]").forEach(b=> b.onclick = ()=> addLoanPayment(b.dataset.loanPay));
     el.querySelectorAll("[data-loan-ext]").forEach(b=> b.onclick = ()=> extendLoan(b.dataset.loanExt));
@@ -10565,24 +10695,27 @@
     const canDo = hasPerm(currentUserPerms, "paymentProcess");
     let h = '<div style="overflow-x:auto;"><table class="data-table resv-dest-fit" style="width:auto;"><thead><tr>'
       + '<th>거래일자</th><th>구분</th><th>은행</th><th>대상</th><th class="ta-right">금액</th><th>메모</th>'
-      + (canDo ? '<th class="ta-right">관리</th>' : '') + '</tr></thead><tbody>';
+      + '</tr></thead><tbody>';
     let total = 0;
     rows.forEach(e=>{
       const amt = Number(e.amount)||0; total += amt;
-      h += '<tr><td>'+comboEsc(e.date||"-")+'</td>'
+      h += '<tr' + (canDo ? ' class="rbd-clickable" data-row-act="lc|'+e.id+'"' : '') + '><td>'+comboEsc(e.date||"-")+'</td>'
         + '<td><b>'+CATS[e.category]+'</b></td>'
         + '<td>'+comboEsc(e.bank||"-")+'</td>'
         + '<td>'+comboEsc(e.partner||"-")+'</td>'
         + '<td class="ta-right">'+amt.toLocaleString()+'</td>'
         + '<td style="font-size:11.5px;color:var(--gray);">'+comboEsc(e.memo||"-")+'</td>'
-        + (canDo ? '<td class="ta-right"><button class="btn small danger" style="width:auto;" data-lc-del="'+e.id+'">삭제</button></td>' : '')
-        + '</tr>';
+        + '</tr>'
+        + (canDo ? '<tr class="row-actions" data-row-actions="lc|'+e.id+'" style="display:none;">'
+            + '<td colspan="6" style="background:#fafafa;padding:6px 8px;text-align:left;">'
+            + '<button class="btn small danger" style="width:auto;" data-lc-del="'+e.id+'">삭제</button></td></tr>' : '');
     });
     h += '<tr style="background:#fff;font-weight:700;border-top:2px solid var(--navy);">'
       + '<td colspan="4">합계</td><td class="ta-right">'+total.toLocaleString()+'</td>'
-      + '<td></td>' + (canDo ? '<td></td>' : '') + '</tr>';
+      + '<td></td></tr>';
     h += '</tbody></table></div>';
     listEl.innerHTML = h;
+    bindRowActions("loancost-list");
     listEl.querySelectorAll("[data-lc-del]").forEach(b=>{
       b.onclick = ()=> deleteB2BLedgerEntry(b.dataset.lcDel);
     });
@@ -15019,6 +15152,7 @@
     el.querySelectorAll("[data-dep-del]").forEach(b=> b.onclick = ()=> deleteDepositEntry(b.dataset.depDel));
     el.querySelectorAll("[data-dep-use]").forEach(b=> b.onclick = ()=> showDepositUses(b.dataset.depUse));
   
+    foldActionColumn("deposit-entry-list");
     addDownloadBtn("dl-deposit", "deposit-entry-list", "통장입금");
     addViewCfgBtn("dl-deposit", "deposit-entry-list");
   };
@@ -17514,6 +17648,7 @@
     el.innerHTML = h;
     el.querySelectorAll('[data-q-view]').forEach(b=> b.onclick = ()=> openQuotationView(b.dataset.qView));
     el.querySelectorAll('[data-q-cancel]').forEach(b=> b.onclick = ()=> cancelQuotation(b.dataset.qCancel));
+    foldActionColumn("quotation-list-area");
   }
 
   // 견적서 취소 — 예약 잠금을 풀어줍니다.
@@ -18812,6 +18947,7 @@
       h2 += '</tbody></table></div>';
       recEl.innerHTML = h2;
       recEl.querySelectorAll("[data-lgr-del]").forEach(b=> b.onclick = ()=> deleteLgrEntry(b.dataset.lgrDel));
+      foldActionColumn(recEl.id);
     }
   
     addDownloadBtn("dl-lgr", "lgr-table", "LG환불");
@@ -18968,28 +19104,78 @@
     addDownloadBtn("dl-itemhistory", "ih-result", "단말이력");
     addViewCfgBtn("dl-itemhistory", "ih-result");
 
-    // 일련번호 조회면 현재 재고 상태도 함께 보여줍니다.
+    // 일련번호 조회면 지금 재고가 어떤 상태인지 위에 크게 보여줍니다.
     if(mode === "serialNumber"){
       try{
         const iq = await getDocs(query(collection(db,"inventoryItems"), where("serialNumber","==",serial)));
-        if(!iq.empty){
-          const it = iq.docs[0].data();
-          const box = document.getElementById("ih-summary");
-          box.style.display = "block";
-          box.innerHTML = '<b>' + comboEsc(serial) + '</b> · ' + comboEsc(docModelLabel(it))
-            + ' · ' + comboEsc(it.systemColor||it.manufacturerColor||"-")
-            + ' · ' + comboEsc(it.carrier||"-")
-            + '<br><span style="color:var(--gray);">현재 상태 <b>' + comboEsc(it.status||"-") + '</b>'
-            + ' · 위치 ' + comboEsc(it.location||"-")
-            + ' · 판매처 ' + comboEsc(it.destination||"-")
-            + (it.inDate ? ' · 입고 ' + comboEsc(it.inDate) : '')
-            + (it.outDate ? ' · 출고 ' + comboEsc(it.outDate) : '')
-            + (it.activateDate ? ' · 개통 ' + comboEsc(it.activateDate) : '')
-            + '</span>';
-        }
+        let items = []; iq.forEach(d=> items.push({ id:d.id, ...d.data() }));
+        items = items.filter(it=> it.deleted !== true);
+        // 전산모델명 칸으로 좁혔으면 그 모델만 봅니다.
+        if(modelQ) items = items.filter(it=> String(it.systemModel||"").toLowerCase().includes(modelQ));
+        renderItemNow(serial, items);
       }catch(e){}
     }
   };
+
+  // 지금 상태를 한눈에 — 유플러스 이력조회의 「마스터정보」 자리에 해당합니다.
+  //  같은 일련번호가 모델이 달라 여러 건이면 골라서 보도록 안내합니다.
+  function renderItemNow(serial, items){
+    const box = document.getElementById("ih-summary");
+    if(!box) return;
+    if(!items || items.length === 0){
+      box.style.display = "block";
+      box.innerHTML = '<b>' + comboEsc(serial) + '</b> <span style="color:var(--gray);">— 재고에 없습니다. (지워졌거나 아직 등록 전)</span>';
+      return;
+    }
+    box.style.display = "block";
+
+    // 여러 건이면 먼저 고르게 합니다.
+    if(items.length > 1){
+      box.innerHTML = '<div style="color:var(--danger);font-weight:700;margin-bottom:6px;">'
+        + '같은 일련번호가 ' + items.length + '건 있습니다. 모델을 골라주세요.</div>'
+        + '<div style="display:flex;gap:6px;flex-wrap:wrap;">'
+        + items.map(it=> '<button class="btn small secondary" style="width:auto;" data-ih-pick="'
+            + comboEsc(String(it.systemModel||"")) + '">' + comboEsc(docModelLabel(it))
+            + ' · ' + comboEsc(it.systemColor||it.manufacturerColor||"-")
+            + ' · ' + comboEsc(it.status||"-") + '</button>').join("")
+        + '</div>';
+      box.querySelectorAll("[data-ih-pick]").forEach(b=>{
+        b.onclick = ()=>{
+          const el = document.getElementById("ih-model");
+          if(el) el.value = b.dataset.ihPick;
+          loadItemHistory();
+        };
+      });
+      return;
+    }
+
+    const it = items[0];
+    const stColor = (it.status === "개통") ? "#6a1b9a"
+      : (it.status === "판매") ? "#1565c0"
+      : (it.status === "보유중") ? "#2e7d32" : "var(--navy)";
+    const cell = (label, val, color)=>
+      '<div style="min-width:120px;border:1px solid var(--line);background:#fff;padding:7px 10px;">'
+      + '<div style="font-size:11px;color:var(--gray);margin-bottom:2px;">' + label + '</div>'
+      + '<div style="font-size:13px;font-weight:700;color:' + (color||"var(--navy)") + ';">' + val + '</div></div>';
+    const money = v => (Number(v)||0) ? Number(v).toLocaleString() : "-";
+
+    box.innerHTML =
+      '<div style="font-size:13.5px;font-weight:800;margin-bottom:8px;">'
+      + comboEsc(serial) + ' <span style="font-weight:400;color:var(--gray);">'
+      + comboEsc(docModelLabel(it)) + ' · ' + comboEsc(it.systemColor||it.manufacturerColor||"-")
+      + ' · ' + comboEsc(it.carrier||"-") + '</span></div>'
+      + '<div style="display:flex;gap:6px;flex-wrap:wrap;">'
+      + cell("현재 상태", comboEsc(it.status||"-"), stColor)
+      + cell("위치", comboEsc(it.location||"-"))
+      + cell("판매처", comboEsc(it.destination||"-"))
+      + cell("입고일", comboEsc(it.inDate||"-"))
+      + cell("출고일", comboEsc(it.outDate||"-"))
+      + cell("개통일", comboEsc(it.activateDate||"-"), it.activateDate ? "#6a1b9a" : null)
+      + cell("출고가", money(it.listPrice))
+      + cell("판매가", money(it.salePrice))
+      + cell("공시지원금", money(it.subsidyAmount), (Number(it.subsidyAmount)||0) ? "#2e7d32" : "var(--danger)")
+      + '</div>';
+  }
 
   // 이력에 적힌 「실제로 일어난 날」을 찾습니다.
   //  eventDate 가 있으면 그것을, 예전 기록은 내용에 적힌 8자리 날짜를 씁니다.
@@ -19142,20 +19328,42 @@
     let head = "";
     try{
       const iq = await getDocs(query(collection(db,"inventoryItems"), where("serialNumber","==",serial)));
-      if(!iq.empty){
-        const it = { id: iq.docs[0].id, ...iq.docs[0].data() };
-        head = '<div style="border:1px solid var(--navy);background:#f4f7fb;padding:10px 12px;margin-bottom:10px;font-size:12.5px;line-height:1.9;">'
-          + '<b>' + comboEsc(docModelLabel(it)) + '</b> · ' + comboEsc(it.systemColor||it.manufacturerColor||"-")
-          + ' · ' + comboEsc(it.carrier||"-")
-          + '<br>현재 상태 <b>' + comboEsc(it.status||"-") + '</b> · 위치 ' + comboEsc(it.location||"-")
-          + ' · 판매처 ' + comboEsc(it.destination||"-")
-          + (it.outDate ? ' · 출고 ' + comboEsc(it.outDate) : '')
-          + (it.activateDate ? ' · 개통 ' + comboEsc(it.activateDate) : '')
+      let list = []; iq.forEach(d=> list.push({ id:d.id, ...d.data() }));
+      list = list.filter(x=> x.deleted !== true);
+      if(list.length > 1){
+        // 같은 일련번호가 모델이 달라 여러 건이면 모두 보여줍니다.
+        head = '<div style="border:1px solid var(--danger);background:#fdecea;padding:8px 10px;margin-bottom:8px;font-size:12.5px;">'
+          + '<b>같은 일련번호가 ' + list.length + '건 있습니다.</b> 모델이 다릅니다 — 아래 이력에는 ' + list.length + '건이 섞여 있습니다.</div>';
+      }
+      list.forEach(it=>{
+        const stColor = (it.status === "개통") ? "#6a1b9a"
+          : (it.status === "판매") ? "#1565c0"
+          : (it.status === "보유중") ? "#2e7d32" : "var(--navy)";
+        const cell = (label, val, color)=>
+          '<div style="min-width:110px;border:1px solid var(--line);background:#fff;padding:6px 9px;">'
+          + '<div style="font-size:11px;color:var(--gray);margin-bottom:2px;">' + label + '</div>'
+          + '<div style="font-size:12.5px;font-weight:700;color:' + (color||"var(--navy)") + ';">' + val + '</div></div>';
+        const money = v => (Number(v)||0) ? Number(v).toLocaleString() : "-";
+        head += '<div style="border:1px solid var(--navy);background:#f4f7fb;padding:10px 12px;margin-bottom:10px;font-size:12.5px;">'
+          + '<div style="font-weight:800;margin-bottom:7px;">' + comboEsc(docModelLabel(it))
+          + ' <span style="font-weight:400;color:var(--gray);">' + comboEsc(it.systemColor||it.manufacturerColor||"-")
+          + ' · ' + comboEsc(it.carrier||"-") + '</span></div>'
+          + '<div style="display:flex;gap:5px;flex-wrap:wrap;">'
+          + cell("현재 상태", comboEsc(it.status||"-"), stColor)
+          + cell("위치", comboEsc(it.location||"-"))
+          + cell("판매처", comboEsc(it.destination||"-"))
+          + cell("입고일", comboEsc(it.inDate||"-"))
+          + cell("출고일", comboEsc(it.outDate||"-"))
+          + cell("개통일", comboEsc(it.activateDate||"-"), it.activateDate ? "#6a1b9a" : null)
+          + cell("출고가", money(it.listPrice))
+          + cell("판매가", money(it.salePrice))
+          + cell("공시지원금", money(it.subsidyAmount), (Number(it.subsidyAmount)||0) ? "#2e7d32" : "var(--danger)")
+          + '</div>'
           + '<div style="margin-top:8px;">'
           + [["location","위치 이동"],["activate","개통"],["deactivate","개통취소"],["returned","반품"],["price","금액 변경"]]
               .map(([a,l])=>'<button class="btn small secondary" style="width:auto;" data-ih-act="'+a+'" data-ih-id="'+it.id+'">'+l+'</button>').join("")
           + '</div></div>';
-      }
+      });
     }catch(e){}
 
     let rows = [];
@@ -20058,6 +20266,7 @@
     h += '</tbody></table></div>';
     el.innerHTML = h;
     el.querySelectorAll('[data-v-view]').forEach(b=> b.onclick = ()=> openVoucherView(b.dataset.vView));
+    foldActionColumn("voucher-list-area");
   }
 
   async function openVoucherByNo(no){
@@ -20800,6 +21009,7 @@
     loadReservationList();
   
     // 예약 목록은 reservation-list-area 에 그려집니다. (reservation-table-area 는 예약 지표용)
+    foldActionColumn("reservation-list-area");
     addDownloadBtn("dl-reservation", "reservation-list-area", "예약목록");
     addViewCfgBtn("dl-reservation", "reservation-list-area");
   }
@@ -21044,6 +21254,7 @@
         ? '<button class="btn small danger" style="width:auto;" data-del-sr="'+r.id+'">삭제</button>' : '');
 
     listEl.innerHTML = renderListTable("sale", rows, actions);
+    bindRowActions("sale-request-list");
 
     listEl.querySelectorAll('[data-detail]').forEach(btn=>{
       const r = rows.find(x=>x.id === btn.dataset.detail);
@@ -21775,6 +21986,7 @@
       });
       tbl += '</tbody></table></div>';
       listEl.innerHTML = tbl;
+      foldActionColumn("b2b-ledger-list");
       listEl.prepend(renderPaginationBar("b2bLedger", ledgerRows.length, loadB2BTab));
     }
   
@@ -22664,7 +22876,13 @@
   function populatePrimaryCondField(){
     const sel = document.getElementById("primary-cond-field");
     if(!sel || sel.options.length>0) return;
-    FILTER_FIELDS.forEach(f=>{
+    // 보기 설정에서 정한 열 순서를 그대로 따릅니다.
+    const order = {}; (currentViewSettings||[]).forEach((k,i)=> order[k] = i);
+    FILTER_FIELDS.slice().sort((a,b)=>{
+      const ai = (order[a.key] != null) ? order[a.key] : 9999;
+      const bi = (order[b.key] != null) ? order[b.key] : 9999;
+      return ai - bi;
+    }).forEach(f=>{
       const opt = document.createElement("option");
       opt.value = f.key; opt.textContent = f.label;
       sel.appendChild(opt);
@@ -24608,7 +24826,7 @@
       return;
     }
 
-    const visibleCols = INV_COLUMNS.filter(c=>currentViewSettings.includes(c.key));
+    const visibleCols = invViewCols();
     populateBulkEditFieldSelect();
 
     const table = document.createElement("table");
@@ -25211,7 +25429,7 @@
   window.downloadInventoryExcel = function(){
     if(!lastRenderedItems || lastRenderedItems.length===0){ alert("다운로드할 재고가 없습니다."); return; }
     // 보기 설정에서 체크한 컬럼만 내려받습니다. (화면에 안 보이는 칸은 파일에도 안 넣습니다)
-    const cols = INV_COLUMNS.filter(c=> currentViewSettings.includes(c.key));
+    const cols = invViewCols();
     if(cols.length === 0){ alert("보기 설정에서 컬럼을 하나 이상 선택해주세요."); return; }
     // 현재상태는 보기 설정 항목이 아니라 항상 보이는 칸이라 그대로 넣습니다.
     // 열 위치는 보기 설정에서 고른 항목 순서 그대로입니다. 앞에 칸을 끼워넣지 않습니다.
@@ -25290,7 +25508,7 @@
     BULK_EDIT_DOWNLOAD_FIELDS.forEach(f=> bulkByKey[f.key] = f);
     // 일련번호도 화면 순서 그대로 둡니다. 앞으로 끌어오지 않습니다.
     // (업로드는 머리글 이름으로 찾으므로 어느 자리에 있어도 정확히 반영됩니다)
-    const viewCols = INV_COLUMNS.filter(c=> currentViewSettings.includes(c.key));
+    const viewCols = invViewCols();
     if(viewCols.length === 0){ alert("보기 설정에서 열을 하나 이상 켜주세요."); return; }
     if(!currentViewSettings.includes("serialNumber")){
       alert("보기 설정에서 「일련번호」를 켜주세요.\n\n일련번호가 없으면 올릴 때 어느 단말기인지 찾을 수 없습니다.");
@@ -25904,11 +26122,13 @@
     const canDo = hasPerm(currentUserPerms, "bulkEdit") || hasPerm(currentUserPerms, "menuInvWork");
     let h = '<div style="overflow-x:auto;"><table class="data-table" style="min-width:1000px;"><thead><tr>'
       + '<th>일련번호</th><th>전산모델명</th><th>색상</th><th>통신사</th><th>개통일</th>'
-      + '<th class="ta-right">출고가</th><th class="ta-right">공시지원금</th><th>위치</th><th class="ta-right">관리</th>'
+      + '<th class="ta-right">출고가</th><th class="ta-right">공시지원금</th><th>위치</th>'
       + '</tr></thead><tbody>';
     pageItems.forEach(it=>{
       const sub = Number(it.subsidyAmount)||0;
-      h += '<tr>'
+      const btns = (canDo ? '<button class="btn small secondary" style="width:auto;" data-act-sub="'+it.id+'">공시지원금</button>' : '')
+        + '<button class="btn small secondary" style="width:auto;margin-left:4px;" data-act-hist="'+comboEsc(it.serialNumber||"")+'">이력</button>';
+      h += '<tr class="rbd-clickable" data-row-act="act|'+it.id+'">'
         + '<td><b>'+comboEsc(it.serialNumber||"-")+'</b></td>'
         + '<td>'+comboEsc(it.systemModel||"-")+'</td>'
         + '<td>'+comboEsc(it.systemColor||it.manufacturerColor||"-")+'</td>'
@@ -25917,13 +26137,13 @@
         + '<td class="ta-right">'+(Number(it.listPrice)||0).toLocaleString()+'</td>'
         + '<td class="ta-right"'+(sub ? '' : ' style="color:var(--danger);"')+'>'+(sub ? sub.toLocaleString() : "미입력")+'</td>'
         + '<td>'+comboEsc(it.location||"-")+'</td>'
-        + '<td class="ta-right" style="white-space:nowrap;">'
-        + (canDo ? '<button class="btn small secondary" style="width:auto;" data-act-sub="'+it.id+'">공시지원금</button>' : '')
-        + '<button class="btn small secondary" style="width:auto;margin-left:4px;" data-act-hist="'+comboEsc(it.serialNumber||"")+'">이력</button>'
-        + '</td></tr>';
+        + '</tr>'
+        + '<tr class="row-actions" data-row-actions="act|'+it.id+'" style="display:none;">'
+        + '<td colspan="8" style="background:#fafafa;padding:6px 8px;text-align:left;">' + btns + '</td></tr>';
     });
     h += '</tbody></table></div>';
     listEl.innerHTML = h;
+    bindRowActions("activation-list");
     listEl.querySelectorAll("[data-act-sub]").forEach(b=> b.onclick = ()=> setPublicSubsidy(b.dataset.actSub));
     listEl.querySelectorAll("[data-act-hist]").forEach(b=> b.onclick = ()=> openItemHistory(b.dataset.actHist));
     addDownloadBtn("dl-activation", "activation-list", "개통목록");
@@ -27095,7 +27315,9 @@
         const saved = data.viewSettings;
         const known = (data.viewKnownKeys && data.viewKnownKeys.length) ? data.viewKnownKeys : saved;
         const added = INV_COLUMNS.map(c=>c.key).filter(k=> !known.includes(k));
-        currentViewSettings = INV_COLUMNS.map(c=>c.key).filter(k=> saved.includes(k) || added.includes(k));
+        // 저장해 둔 순서를 그대로 지키고, 새로 생긴 열만 뒤에 붙입니다.
+        const alive = saved.filter(k=> INV_COLUMNS.some(c=>c.key===k));
+        currentViewSettings = alive.concat(added.filter(k=> !alive.includes(k)));
       }else{
         currentViewSettings = DEFAULT_VIEW_SETTINGS.slice();
       }
