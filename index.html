@@ -379,7 +379,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v522</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v523</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -592,7 +592,8 @@
           </span>
           </span>
         </div>
-        <p class="desc" style="margin-top:0;">체크한 주문을 묶어 <b>출금요청</b>을 만듭니다. 실제로 이체하면 <b>입출금리스트</b>에서 처리해주세요.</p>
+        <p class="desc" style="margin-top:0;">체크한 주문을 묶어 <b>출금요청</b>을 만듭니다. 실제로 이체하면 <b>입출금리스트</b>에서 처리해주세요.<br>
+          <span style="color:var(--gray);">진행 → <b>출금요청</b> → 입금확인중 → <b>이체완료</b> → 완료. 도착만 끝나고 아직 안 낸 주문은 <b>진행</b>에 남습니다.</span></p>
         <div style="display:none;">
           <label style="font-size:12.5px;">기타 금액(원)<input type="number" id="payment-other-amount-input" placeholder="주문에 없는 결제분" style="margin-left:6px;width:130px;padding:5px 6px;border:1px solid var(--line);font-size:12.5px;"></label>
           <span class="info-tip" title="체크한 주문 외에 같이 이체해야 할 금액이 있으면 여기 적으세요. 이 금액은 주문과 연결되지 않으니, 나중에 재고를 따로 등록해주셔야 합니다.">ⓘ</span>
@@ -8575,8 +8576,14 @@
     { key:"payDue",     label:"입금예정", get:r=> r.b.payDueDate||"-" },
     { key:"payState",   label:"입금",     get:r=> r.b.depositPaid ? '<span style="color:#2e7d32;font-weight:700;">완료</span>'
         : (r.b.paymentRequestId ? '<span style="color:#b8860b;font-weight:700;">확인중</span>' : '<span style="color:var(--danger);">필요</span>') },
+    // 도착과 입금이 둘 다 끝나야 「완료」입니다. 하나만 끝났으면 무엇이 남았는지 보여줍니다.
     { key:"status",     label:"상태",     get:r=> r.cancelled ? cancelCell(r)
-        : (r.isDone ? '<span style="color:#2e7d32;font-weight:700;">완료</span>' : "진행중") },
+        : (r.isDone ? '<span style="color:#2e7d32;font-weight:700;">완료</span>'
+          : (r.arrivedAll
+              ? '진행중 <span style="color:var(--danger);font-size:10.5px;">도착완료 · 입금 남음</span>'
+              : (r.b.depositPaid === true
+                  ? '진행중 <span style="color:#b8860b;font-size:10.5px;">입금완료 · 도착 남음</span>'
+                  : "진행중"))) },
     { key:"createdBy",  label:"작성",     get:r=> comboEsc(r.b.createdBy||"-") },
     { key:"createdAt",  label:"작성일",   get:r=> fmtStamp(r.b.createdAt), sort:r=> (r.b.createdAt&&r.b.createdAt.seconds)||0 },
     { key:"updatedAt",  label:"수정일",   get:r=> fmtStamp(r.b.updatedAt) }
@@ -9240,7 +9247,8 @@
       if(b.status === "취소"){ cntCancel++; return; }
       const ls = (ordersByBatch[bd.id]||[]).filter(o=>o.status!=="취소");
       const remain = ls.reduce((n,o)=> n + ((Number(o.quantity)||0)-(Number(o.fulfilledCount)||0)), 0);
-      const done = ls.length>0 && remain===0;
+      // 도착과 입금이 둘 다 끝나야 「완료」로 셉니다.
+      const done = ls.length>0 && remain===0 && b.depositPaid === true;
       if(done) cntDone++; else cntIng++;
       if(remain > 0) arriveWait++;
       if(b.depositPaid !== true){
@@ -9277,7 +9285,10 @@
       const activeL = lines.filter(o=>o.status!=="취소");
       const remainT = activeL.reduce((sum,o)=> sum + ((o.quantity||0)-(o.fulfilledCount||0)), 0);
       const cancelled = b.status==="취소";
-      const done = !cancelled && activeL.length>0 && remainT===0;
+      // 「완료」는 도착과 입금이 둘 다 끝났을 때만입니다.
+      //  도착만 됐고 아직 안 낸 주문은 「진행」에 남아 있어야 출금요청을 만들 수 있습니다.
+      const arrivedAll = !cancelled && activeL.length>0 && remainT===0;
+      const done = arrivedAll && b.depositPaid === true;
       if(orderListFilter==="ing"     && (cancelled || done)) return;
       if(orderListFilter==="done"    && !done) return;
       if(orderListFilter==="waiting" && !(!cancelled && b.paymentRequestId && b.depositPaid !== true)) return;
@@ -9286,7 +9297,7 @@
     });
 
     if(visibleBatches.length === 0){
-      const label = { all:"", ing:"진행중인", done:"도착완료된", waiting:"입금확인중인", cancel:"취소된" }[orderListFilter] || "";
+      const label = { all:"", ing:"진행중인", done:"완료된", waiting:"입금확인중인", cancel:"취소된" }[orderListFilter] || "";
       listEl.innerHTML = '<div class="list-empty">' +
         (label ? label + ' 주문이 없습니다. 위 <b>전체</b>를 누르면 모든 주문이 보입니다.' : '등록된 주문이 없습니다.') +
         '</div>';
@@ -9301,8 +9312,9 @@
       const qty  = active.reduce((n,o)=> n + (Number(o.quantity)||0), 0);
       const done = active.reduce((n,o)=> n + (Number(o.fulfilledCount)||0), 0);
       const cancelled = b.status === "취소";
-      return { id: entry.id, b, lines, qty, done, cancelled,
-        isDone: !cancelled && active.length>0 && done>=qty };
+      const arrivedAll = !cancelled && active.length>0 && done>=qty;
+      return { id: entry.id, b, lines, qty, done, cancelled, arrivedAll,
+        isDone: arrivedAll && b.depositPaid === true };
     });
 
     const actions = (r)=>
@@ -27067,7 +27079,7 @@
     if(bar) bar.style.display = "none";
   };
 
-  // 파일에 박힌 버전 글자를 읽습니다. (예: "파일 2026-08-09 v522")
+  // 파일에 박힌 버전 글자를 읽습니다. (예: "파일 2026-08-09 v523")
   function readBuildTag(text){
     const m = String(text||"").match(/파일\s*[\d-]+\s*v(\d+)/);
     return m ? m[0].trim() : "";
