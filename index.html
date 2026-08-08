@@ -141,6 +141,17 @@
   .stack-row label{ width:170px; flex-shrink:0; padding:5px 8px; font-size:12px; font-weight:600; color:var(--navy); background:#fff; border-right:1px solid var(--line); display:flex; align-items:center; }
   .stack-row input, .stack-row select{ flex:1; border:none; padding:5px 8px; font-size:12.5px; min-height:28px; }
   .stack-row input:focus, .stack-row select:focus{ outline:2px solid var(--accent); outline-offset:-2px; }
+  /* 체크박스는 글자 크기에 맞춰 두고, 늘어나지 않게 합니다. */
+  .stack-row input[type="checkbox"]{ flex:0 0 auto; width:15px; height:15px; min-height:0; margin:0; padding:0; }
+  /* 끝난 줄은 흐리게 — 아직 할 일이 남은 줄만 눈에 들어오게 합니다. */
+  tr.row-done td, tr.row-done td *{ color:var(--gray) !important; font-weight:400 !important; }
+  /* 줄을 누르면 아래로 버튼 칸이 펼쳐집니다. */
+  tr.rbd-clickable{ cursor:pointer; }
+  tr.rbd-clickable:hover td{ background:#f4f7fb; }
+  tr.rbd-open td{ background:#eef3fa; }
+  /* 값 자리에 들어가는 label(체크박스 묶음)은 제목 칸처럼 보이지 않게 합니다. */
+  .stack-row > label:not(:first-child){ width:auto; flex:1; border-right:none; font-weight:400;
+    color:inherit; padding:5px 8px; gap:6px; }
   /* 드롭다운 메뉴 항목 (우클릭으로 이름 변경 가능) */
   .menu-item{ padding:10px 14px; cursor:pointer; font-size:13px; border-bottom:1px solid var(--line); }
   .menu-item:last-child{ border-bottom:none; }
@@ -355,7 +366,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-08 v421</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-08 v425</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -1842,6 +1853,11 @@
         <div class="stack-row"><label>업체</label>
           <select id="cbco-select" onchange="refreshCbReqList()"><option value="">(연결 안 함)</option></select>
         </div>
+        <div class="stack-row"><label>세금계산서 <span class="info-tip" title="이 입금·출금 건으로 발행한 세금계산서입니다. 예약 선입금처럼 요청보다 계산서를 먼저 끊은 경우 여기에 적어두세요.">ⓘ</span></label>
+          <label style="font-size:12.5px;"><input type="checkbox" id="cbco-taxok"> 발행완료</label>
+        </div>
+        <div class="stack-row"><label>발행일</label><input type="text" id="cbco-taxdate" maxlength="8" inputmode="numeric" placeholder="예: 20260727"></div>
+        <div class="stack-row"><label>세금계산서 금액</label><input type="number" id="cbco-taxamt" placeholder="숫자만"></div>
         <div id="cbco-msg" style="font-size:12.5px;margin:6px 0;"></div>
         <span class="btn-row" style="margin-top:6px;">
           <button class="btn small" style="width:auto;" onclick="submitCbCompany()">저장</button>
@@ -11041,6 +11057,35 @@
   // 입출금리스트에서 요청을 취소합니다.
   //  입금요청(in) → saleDepositRequests · 출금요청(out) → paymentRequests
   //  묶여 있던 판매요청·주문은 다시 풀려서 새로 요청할 수 있게 됩니다.
+  // 취소한 요청을 완전히 지웁니다. 취소 상태에서만 됩니다.
+  //  문서는 사라지고 이력(관리자 > 이력)에는 내용이 남습니다.
+  window.deleteReqBoardItem = async function(kind, reqId){
+    if(!hasPerm(currentUserPerms, "paymentProcess")){ alert("권한이 없습니다."); return; }
+    const isIn = (kind === "in");
+    const col = isIn ? "saleDepositRequests" : "paymentRequests";
+    const snap = await getDoc(doc(db, col, reqId));
+    if(!snap.exists()){ alert("이미 지워진 요청입니다."); loadReqBoard(); return; }
+    const p = snap.data();
+    if(p.status !== "취소"){ alert("취소한 건만 지울 수 있습니다.\n먼저 「취소」를 해주세요."); return; }
+
+    const word = isIn ? "입금" : "출금";
+    const who  = ((isIn ? (p.destinations||[]) : (p.sources||[])).filter(Boolean).join(", ")) || "-";
+    const total = Number(p.totalAmount)||0;
+    if(!confirm("이 " + word + "요청을 목록에서 완전히 지웁니다.\n\n"
+      + "  " + who + " · " + (p.requestDate||"-") + "\n"
+      + "  요청액 " + total.toLocaleString() + "\n"
+      + "  취소 사유: " + (p.cancelReason || "-") + "\n\n"
+      + "되돌릴 수 없습니다. 이력에는 남습니다.\n\n진행할까요?")) return;
+
+    try{
+      await deleteDoc(doc(db, col, reqId));
+    }catch(e){ alert("지우지 못했습니다.\n" + ((e && e.message) ? e.message : String(e))); return; }
+    logAction("취소 " + word + "요청 삭제",
+      who + " / " + (p.requestDate||"-") + " / " + total.toLocaleString()
+      + " / 취소 사유: " + (p.cancelReason || "-"));
+    loadReqBoard();
+  };
+
   window.cancelReqBoardItem = async function(kind, reqId){
     if(!hasPerm(currentUserPerms, "paymentProcess")){ alert("권한이 없습니다."); return; }
     const isIn = (kind === "in");
@@ -11513,7 +11558,7 @@
           owe: isIn ? 0 : (isOpen ? left : amt), recv: isIn ? (isOpen ? left : amt) : 0,
           done: isOpen ? 0 : amt, left: isOpen ? left : 0,
           payDate: v.date || "", payMemo: v.memo || "",
-          taxDate:"", taxAmount:0, status: isOpen ? "미배분" : "배분완료",
+          taxDate: v.taxDate || "", taxAmount: Number(v.taxAmount)||0, status: isOpen ? "미배분" : "배분완료",
           finished: !isOpen, onHold:false, holdReason:"",
           canceled:false, recs:[], inSum:false,
           canProcess:false, canEdit:false
@@ -11622,12 +11667,10 @@
       let vOwe=0, vRecv=0, vDone=0, vLeft=0, vTax=0;
       view.forEach(r=>{ if(!r.canceled && r.inSum){ vOwe+=r.owe; vRecv+=r.recv; vDone+=r.done; vLeft+=r.left; vTax+=r.taxAmount; } });
       const body = pageView.map(r=>{
-        let tr = '<tr>' + cols.map(c=>
-          '<td' + (c.num ? ' class="ta-right"' : '')
-          + ' style="white-space:nowrap;padding-left:6px;padding-right:6px;'
-          + (c.left ? 'text-align:left;' : '') + '">'
-          + cellOf(r, c.key) + '</td>').join("") +
-          '<td class="ta-right" style="white-space:nowrap;">' +
+        // 끝난 줄은 흐리게 둡니다. 아직 할 일이 남은 줄만 진하게 보입니다.
+        const doneRow = (r.finished || r.canceled) && !r.onHold;
+        // 버튼은 줄을 눌렀을 때 아래로 펼쳐지는 칸에 모아 둡니다. (가로로 밀리지 않게)
+        const btns =
             ((r.canProcess && !r.canceled && !r.finished && canDo)
               ? '<button class="btn small" style="width:auto;" data-rbd-do="' + r.kind + '|' + r.id + '">처리</button>'
                 + '<button class="btn small secondary" style="width:auto;margin-left:4px;" data-rbd-hold="' + r.kind + '|' + r.id + '|' + (r.onHold ? "0" : "1") + '">'
@@ -11636,18 +11679,33 @@
               ? '<button class="btn small secondary" style="width:auto;margin-left:4px;" data-rbd-edit="' + r.kind + '|' + r.id + '">수정</button>' : '') +
             ((r.canEdit && canDo && !r.canceled)
               ? '<button class="btn small danger" style="width:auto;margin-left:4px;" data-rbd-cancel="' + r.kind + '|' + r.id + '">취소</button>' : '') +
+            ((r.canEdit && canDo && r.canceled)
+              ? '<button class="btn small danger" style="width:auto;margin-left:4px;" data-rbd-del="' + r.kind + '|' + r.id + '">삭제</button>' : '') +
             ((r.cb && canDo)
-              ? '<button class="btn small secondary" style="width:auto;" data-rbd-cbco="' + r.id + '">업체 연결</button>'
+              ? '<button class="btn small secondary" style="width:auto;margin-left:4px;" data-rbd-cbco="' + r.id + '">매칭</button>'
                 + ((r.cbUsed > 0) ? ''
                    : '<button class="btn small danger" style="width:auto;margin-left:4px;" data-rbd-cbdel="' + r.id + '">지우기</button>') : '') +
             ((r.recs.length === 1 && hasPerm(currentUserPerms, "paymentProcess"))
-              ? '<button class="btn small secondary" style="width:auto;margin-left:4px;" data-delrec="' + r.kind + '|' + r.id + '|0">지우기</button>' : '') +
-            ((!r.canProcess && !r.canEdit && !r.cb) ? '<span style="color:var(--gray);">-</span>' : '') +
-          '</td></tr>';
+              ? '<button class="btn small secondary" style="width:auto;margin-left:4px;" data-delrec="' + r.kind + '|' + r.id + '|0">입금기록 지우기</button>' : '');
+
+        const rowKey = r.kind + "|" + r.id;
+        const trCls = (doneRow ? "row-done " : "") + (btns ? "rbd-clickable" : "");
+        let tr = '<tr' + (trCls.trim() ? ' class="' + trCls.trim() + '"' : '')
+          + (btns ? ' data-rbd-row="' + rowKey + '"' : '') + '>'
+          + cols.map(c=>
+          '<td' + (c.num ? ' class="ta-right"' : '')
+          + ' style="white-space:nowrap;padding-left:6px;padding-right:6px;'
+          + (c.left ? 'text-align:left;' : '') + '">'
+          + cellOf(r, c.key) + '</td>').join("") + '</tr>';
+        if(btns){
+          tr += '<tr class="rbd-actions" data-rbd-actions="' + rowKey + '" style="display:none;">'
+            + '<td colspan="' + cols.length + '" style="background:#fafafa;padding:6px 8px;text-align:left;">'
+            + btns + '</td></tr>';
+        }
         // 한 번에 다 들어온 건은 요청 줄에 이미 다 나오므로 아랫줄을 안 만듭니다.
         //  나눠서 들어온 건(2건 이상)만 언제 얼마씩인지 펼쳐 봅니다.
         if(r.recs.length > 1){
-          tr += '<tr><td colspan="' + (cols.length+1) + '" style="background:#fff;font-size:11.5px;line-height:1.9;">' +
+          tr += '<tr><td colspan="' + cols.length + '" style="background:#fff;font-size:11.5px;line-height:1.9;">' +
             r.recs.map((x,i)=> recordLine(x, i, r.kind, r.id)).join('<br>') + '</td></tr>';
         }
         return tr;
@@ -11664,10 +11722,10 @@
       };
       listEl.innerHTML = '<div style="overflow-x:auto;"><table class="data-table resv-dest-fit" style="width:auto;">' +
         '<thead><tr>' + cols.map(c=>'<th' + (c.num ? ' class="ta-right"' : '')
-          + ' style="white-space:nowrap;padding-left:6px;padding-right:6px;">' + c.label + '</th>').join("") + '<th></th></tr></thead>' +
+          + ' style="white-space:nowrap;padding-left:6px;padding-right:6px;">' + c.label + '</th>').join("") + '</tr></thead>' +
         '<tbody>' + body +
         '<tr style="background:#fff;font-weight:700;border-top:2px solid var(--navy);">' +
-        cols.map((c,i)=> sumCell(c,i)).join("") + '<td></td></tr>' +
+        cols.map((c,i)=> sumCell(c,i)).join("") + '</tr>' +
         '</tbody></table></div>' +
         '<div style="color:var(--gray);font-size:11.5px;margin-top:4px;">합계는 <b>조건에 걸린 전체</b> 기준입니다. (페이지와 무관) <b>취소</b>와 <b>선입금(미반영)</b>은 뺐습니다.</div>';
     }
@@ -11728,6 +11786,21 @@
     document.querySelectorAll("#tab-reqboard [data-rbd-edit]").forEach(b=>{
       const [kind, id] = b.dataset.rbdEdit.split("|");
       b.onclick = ()=>{ const p = reqBoardCache[kind][id]; if(p) openReqEdit(kind, id, p); };
+    });
+    // 줄을 누르면 아래 버튼 칸이 펼쳐집니다. 한 번에 한 줄만 열립니다.
+    document.querySelectorAll("#tab-reqboard [data-rbd-row]").forEach(tr=>{
+      tr.onclick = (ev)=>{
+        if(ev.target.closest("button")) return;   // 버튼을 누른 것은 그대로 둡니다.
+        const key = tr.dataset.rbdRow;
+        const box = document.querySelector('#tab-reqboard [data-rbd-actions="' + key.replace(/"/g,'') + '"]');
+        const open = box && box.style.display !== "none";
+        document.querySelectorAll("#tab-reqboard .rbd-actions").forEach(x=> x.style.display = "none");
+        document.querySelectorAll("#tab-reqboard .rbd-open").forEach(x=> x.classList.remove("rbd-open"));
+        if(box && !open){ box.style.display = ""; tr.classList.add("rbd-open"); }
+      };
+    });
+    document.querySelectorAll("#tab-reqboard [data-rbd-del]").forEach(b=>{
+      b.onclick = ()=>{ const [k,i] = b.dataset.rbdDel.split("|"); deleteReqBoardItem(k, i); };
     });
     document.querySelectorAll("#tab-reqboard [data-rbd-cancel]").forEach(b=>{
       const [kind, id] = b.dataset.rbdCancel.split("|");
@@ -14162,13 +14235,17 @@
     if(!snap.exists()) return;
     const x = snap.data();
     const cur = (x.company||"").trim();
-    cbCoTarget = { id, cur, payer:(x.payer||"-"), amount:(Number(x.amount)||0), date:(x.date||"-") };
+    cbCoTarget = { id, cur, payer:(x.payer||"-"), amount:(Number(x.amount)||0), date:(x.date||"-"),
+                   tax:{ issued: !!x.taxIssued, date: x.taxDate||"", amount: Number(x.taxAmount)||0 } };
 
     document.getElementById("cbco-payer").textContent  = cbCoTarget.payer;
     document.getElementById("cbco-amount").textContent = cbCoTarget.amount.toLocaleString();
     document.getElementById("cbco-date").textContent   = cbCoTarget.date;
     document.getElementById("cbco-cur").textContent    = cur || "미연결";
     document.getElementById("cbco-msg").innerHTML = "";
+    document.getElementById("cbco-taxok").checked   = !!x.taxIssued;
+    document.getElementById("cbco-taxdate").value   = x.taxDate || "";
+    document.getElementById("cbco-taxamt").value    = (Number(x.taxAmount)||0) ? Number(x.taxAmount) : "";
 
     try{ if(!companiesCache.length) await fetchCompanies(); }catch(e){}
     const names = [...new Set(companiesCache.map(c=> String(c.name||"").trim()).filter(Boolean))].sort();
@@ -14232,14 +14309,31 @@
     const val   = String(document.getElementById("cbco-select").value || "").trim();
     const reqId = String(document.getElementById("cbco-req").value || "").trim();
 
-    // ① 업체가 바뀌었으면 먼저 저장합니다.
-    if(val !== cur){
-      if(!confirm("업체 연결을 바꿉니다.\n\n" + (cur || "미연결") + " → " + (val || "미연결") + "\n\n진행할까요?")) return;
+    // ① 바뀐 것만 저장합니다. (업체 · 세금계산서)
+    const taxOk   = document.getElementById("cbco-taxok").checked;
+    const taxDate = String(document.getElementById("cbco-taxdate").value||"").replace(/\D/g,"");
+    const taxAmt  = Number(document.getElementById("cbco-taxamt").value)||0;
+    const curTax  = cbCoTarget.tax || { issued:false, date:"", amount:0 };
+    const taxChanged = (taxOk !== curTax.issued) || (taxDate !== curTax.date) || (taxAmt !== curTax.amount);
+
+    if(taxOk && taxDate && taxDate.length !== 8){
+      document.getElementById("cbco-msg").innerHTML = '<span style="color:var(--danger);">발행일을 20260727 형태로 넣어주세요.</span>';
+      return;
+    }
+
+    if(val !== cur || taxChanged){
+      const lines = [];
+      if(val !== cur) lines.push("업체 " + (cur || "미연결") + " → " + (val || "미연결"));
+      if(taxChanged) lines.push("세금계산서 " + (taxOk ? "발행완료" : "미발행")
+        + (taxDate ? " · " + taxDate : "") + (taxAmt ? " · " + taxAmt.toLocaleString() : ""));
+      if(!confirm("아래 내용을 저장합니다.\n\n  " + lines.join("\n  ") + "\n\n진행할까요?")) return;
       try{
-        await updateDoc(doc(db,"bankDeposits", id), { company: val });
-        logAction("입출금 내역 업체 연결",
-          amount.toLocaleString() + " / " + payer + " / "
-          + (cur || "미연결") + " → " + (val || "미연결"));
+        const patch = {};
+        if(val !== cur) patch.company = val;
+        if(taxChanged){ patch.taxIssued = taxOk; patch.taxDate = taxDate; patch.taxAmount = taxAmt || null; }
+        await updateDoc(doc(db,"bankDeposits", id), patch);
+        logAction("입출금 내역 수정",
+          amount.toLocaleString() + " / " + payer + " / " + lines.join(" / "));
       }catch(e){
         document.getElementById("cbco-msg").innerHTML = '<span style="color:var(--danger);">바꾸지 못했습니다.</span>';
         return;
@@ -17569,7 +17663,7 @@
 
     const cols = isOrder
       ? ["모델","색상","통신사","수량","출고가","입고가","선할인","선할인%","타할인","타할인%","판매처","판매가","판매할인","판매할인%","상태"]
-      : ["모델","색상","통신사","수량","판매가","판매할인","판매할인%","상태"];
+      : ["모델","색상","통신사","수량","판매처","판매가","판매할인","판매할인%","상태"];
     head.innerHTML = cols.map(c=>'<th style="padding:6px;border:1px solid var(--line);">'+c+'</th>').join("");
 
     const destNames = await fetchNamesList("outboundDestinations");
@@ -17583,6 +17677,7 @@
       if(locked) lockedCount++;
       const tr = document.createElement("tr");
       tr.dataset.lineId = l.id;
+      tr.dataset.listPrice = (l.listPrice != null ? l.listPrice : "");   // 판매할인 계산 기준
       if(locked) tr.style.background = "#f7f7f7";
 
       const cell = (el)=>{ const td = document.createElement("td");
@@ -17668,7 +17763,8 @@
   function recalcBatchLine(tr){
     const v = cls => { const el = tr.querySelector(cls); return el && el.value !== "" ? Number(el.value) : 0; };
     const has = cls => { const el = tr.querySelector(cls); return el && el.value !== ""; };
-    const L = v(".be-listprice");
+    // 판매요청 수정에는 출고가 칸이 없습니다. 그럴 때는 저장해 둔 출고가를 기준으로 씁니다.
+    const L = v(".be-listprice") || (Number(tr.dataset.listPrice)||0);
     const set = (cls, val)=>{ const el = tr.querySelector(cls); if(el) el.value = (val===""||val==null) ? "" : val; };
     if(L){
       if(has(".be-preamt"))  set(".be-prepct",  pctFromAmt(tr.querySelector(".be-preamt").value, L));
@@ -17692,7 +17788,10 @@
     rows.forEach(tr=>{
       const lp = tr.querySelector(".be-listprice");
       if(lp && lp.disabled) return;                 // 잠긴 줄은 건너뜀
-      const L = lp ? (Number(lp.value)||0) : 0;
+      const sp = tr.querySelector(".be-saleprice");
+      if(!lp && sp && sp.disabled) return;          // 판매요청은 판매가 칸이 잠겼는지로 봅니다
+      // 판매요청 수정에는 출고가 칸이 없어 저장해 둔 출고가를 기준으로 씁니다.
+      const L = (lp ? (Number(lp.value)||0) : 0) || (Number(tr.dataset.listPrice)||0);
       const set = (cls, val)=>{ const el = tr.querySelector(cls); if(el && !el.disabled) el.value = val; };
       if(preAmt !== ""){ set(".be-preamt", preAmt); set(".be-prepct", pctFromAmt(preAmt, L)); }
       else if(prePct !== "" && L){ const a = amtFromPct(prePct, L); set(".be-preamt", a); set(".be-prepct", prePct); }
