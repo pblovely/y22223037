@@ -369,7 +369,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-08 v441</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-08 v446</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -2024,7 +2024,7 @@
     <div id="tab-tax" class="tab-panel">
       <div class="card">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
-          <h3 style="margin:0;">세금계산서 <span class="info-tip" title="매입·매출 세금계산서를 등록합니다. 매입 계산서 중 「B2B 사용가능」을 체크한 것은 은행 대출 증빙으로 쓸 수 있고, 대출에 쓴 만큼 한도가 줄어듭니다.">ⓘ</span></h3>
+          <h3 style="margin:0;">세금계산서 <span class="info-tip" title="매입·매출 세금계산서를 등록하고 입출금 내역과 맞춰봅니다. B2B 대출 담보로 쓰는 계산서는 정산 → B2B 대출 → 담보 계산서에서 따로 관리합니다.">ⓘ</span></h3>
           <span class="btn-row">
             <span id="dl-tax"></span>
             <button class="btn small secondary" style="width:auto;" onclick="openTaxEstimate()">예상금액</button>
@@ -2033,7 +2033,7 @@
           </span>
         </div>
         <p class="desc" style="margin-top:0;">매입·매출 세금계산서를 등록합니다.<br>
-          매입 계산서에 <b>「B2B 사용가능」</b>을 체크하면 그 금액만큼 <b>은행 대출 한도</b>가 생깁니다. 대출에 쓴 만큼 한도가 줄고, <b>남은 한도로 나눠서</b> 또 쓸 수 있습니다. 최대는 계산서 금액입니다.</p>
+          홈택스 파일로 한 번에 올리고, <b>입출금 내역과 이어서</b> 대사합니다. 이어진 건은 흐리게 보입니다.</p>
         <div id="tax-cards" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px;"></div>
 
         <span class="btn-row" style="display:inline-flex;margin-bottom:10px;">
@@ -2043,8 +2043,6 @@
           <button class="btn small secondary" id="tx-f-free" style="width:auto;" onclick="setTaxFilter('free')">면세</button>
           <button class="btn small secondary" id="tx-f-linked" style="width:auto;" onclick="setTaxFilter('linked')">대사 완료</button>
           <button class="btn small secondary" id="tx-f-unlinked" style="width:auto;" onclick="setTaxFilter('unlinked')">대사 미완료</button>
-          <button class="btn small secondary" id="tx-f-b2b" style="width:auto;" onclick="setTaxFilter('b2b')">B2B 사용가능</button>
-          <button class="btn small secondary" id="tx-f-left" style="width:auto;" onclick="setTaxFilter('left')">한도 남음</button>
         </span>
         <div class="tbar-row" style="display:flex;gap:0;flex-wrap:wrap;align-items:center;margin-bottom:8px;">
           <input type="text" id="tax-search" placeholder="거래처·대표자·사업자번호·금액으로 찾기" oninput="loadTaxList()" style="width:280px;height:28px;border:1px solid var(--line);padding:0 8px;font-size:12.5px;box-sizing:border-box;">
@@ -2082,7 +2080,7 @@
         <div class="stack-row"><label>계산서번호</label><input type="text" id="tx-no" placeholder="선택"></div>
         <div class="stack-row"><label>금액</label><input type="text" id="tx-amount" placeholder="숫자만"></div>
         <div class="stack-row"><label>B2B</label>
-          <label style="font-size:12.5px;"><input type="checkbox" id="tx-b2bok"> 사용가능 (매입 세금계산서만)</label>
+          <span style="font-size:12px;color:var(--gray);">B2B 담보는 <b>정산 → B2B 대출 → 담보 계산서</b>에서 따로 관리합니다.</span>
         </div>
         <div class="stack-row"><label>메모</label><input type="text" id="tx-memo" placeholder="선택"></div>
         <div id="tx-msg" style="font-size:12.5px;margin:6px 0;"></div>
@@ -2228,7 +2226,25 @@
       </div>
 
       <div class="card">
-        <h3>거래 입력</h3>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+          <h3 style="margin:0;">여신 거래 내역 <span class="info-tip" title="여신 충전·주문사용·클럽장려금이 시간순으로 쌓입니다. 오른쪽 「+ 거래 등록」으로 직접 넣을 수 있습니다.">ⓘ</span></h3>
+          <span class="btn-row">
+            <span id="dl-b2b"></span>
+            <button class="btn small secondary" style="width:auto;" onclick="openB2BPostSettle()">후정산 대조</button>
+            <button class="btn small" style="width:auto;" onclick="openB2BLedgerAdd()">+ 거래 등록</button>
+          </span>
+        </div>
+        <div id="b2b-post-settlement-check" style="font-size:12.5px;margin-bottom:8px;"></div>
+        <div id="b2b-ledger-list"></div>
+      </div>
+    </div>
+
+    <!-- 여신 거래 등록 -->
+    <div id="b2badd-overlay" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.55);z-index:1090;align-items:center;justify-content:center;">
+      <div style="background:#fff;border:2px solid var(--navy);max-width:460px;width:96%;max-height:92vh;overflow-y:auto;padding:22px;position:relative;">
+        <button onclick="closeB2BLedgerAdd()" style="position:absolute;top:12px;right:12px;background:none;border:1px solid var(--navy);width:26px;height:26px;cursor:pointer;font-size:13px;">✕</button>
+        <h3 style="margin-top:0;margin-bottom:4px;">여신 거래 등록</h3>
+        <p class="desc" style="margin-top:0;">저장하면 아래 목록에 바로 나옵니다.</p>
         <div class="stack-form">
           <div class="stack-row"><label>거래일자</label><input type="text" id="b2b-date-input" placeholder="예: 20260724" maxlength="8" inputmode="numeric"></div>
           <div class="stack-row"><label>구분</label>
@@ -2250,26 +2266,31 @@
           <div class="stack-row"><label>매입처</label>
             <select id="b2b-source-select"><option value="">(미지정)</option></select>
           </div>
-          <div class="stack-row"><label>금액</label><input type="number" id="b2b-amount-input"></div>
-          <div class="stack-row"><label>메모 (선택)</label><input type="text" id="b2b-memo-input"></div>
+          <div class="stack-row"><label>금액</label><input type="number" id="b2b-amount-input" placeholder="숫자만"></div>
+          <div class="stack-row"><label>메모 (선택)</label><input type="text" id="b2b-memo-input" placeholder="선택"></div>
         </div>
-        <button class="btn small" style="width:auto;" onclick="addB2BLedgerEntry()">거래 추가</button>
+        <div id="b2badd-msg" style="font-size:12.5px;margin:8px 0;"></div>
+        <span class="btn-row">
+          <button class="btn small" style="width:auto;" onclick="addB2BLedgerEntry()">저장</button>
+          <button class="btn small secondary" style="width:auto;" onclick="closeB2BLedgerAdd()">닫기</button>
+        </span>
       </div>
+    </div>
 
-      <div class="card">
-        <h3>후정산 참고 (클럽장려금 대조)</h3>
-        <p class="desc">삼성에서 나중에 확정해주는 후정산 공식 금액이 있으면 여기에 적어두고, 위에서 입력한 클럽장려금 누적과 맞는지 비교해보세요.</p>
-        <div class="stack-form" style="max-width:400px;">
-          <div class="stack-row"><label>후정산금액합계 (공식)</label><input type="number" id="b2b-post-settlement-input"></div>
+    <!-- 후정산 대조 -->
+    <div id="b2bpost-overlay" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.55);z-index:1090;align-items:center;justify-content:center;">
+      <div style="background:#fff;border:2px solid var(--navy);max-width:440px;width:96%;padding:22px;position:relative;">
+        <button onclick="closeB2BPostSettle()" style="position:absolute;top:12px;right:12px;background:none;border:1px solid var(--navy);width:26px;height:26px;cursor:pointer;font-size:13px;">✕</button>
+        <h3 style="margin-top:0;margin-bottom:4px;">후정산 대조</h3>
+        <p class="desc" style="margin-top:0;">삼성에서 확정해주는 후정산 금액을 적어두면, 넣어둔 클럽장려금 누적과 맞는지 비교합니다.</p>
+        <div class="stack-form">
+          <div class="stack-row"><label>후정산금액합계 (공식)</label><input type="number" id="b2b-post-settlement-input" placeholder="숫자만"></div>
         </div>
-        <button class="btn small secondary" style="width:auto;" onclick="saveB2BPostSettlementRef()">저장</button>
-        <div id="b2b-post-settlement-check" style="font-size:12.5px;margin-top:10px;"></div>
-      </div>
-
-      <div class="card">
-        <h3>거래 내역</h3>
-        <div style="margin-bottom:8px;"><span id="dl-b2b"></span></div>
-        <div id="b2b-ledger-list"></div>
+        <div id="b2bpost-msg" style="font-size:12.5px;margin:8px 0;"></div>
+        <span class="btn-row">
+          <button class="btn small" style="width:auto;" onclick="saveB2BPostSettlementRef()">저장</button>
+          <button class="btn small secondary" style="width:auto;" onclick="closeB2BPostSettle()">닫기</button>
+        </span>
       </div>
     </div>
 
@@ -2282,8 +2303,8 @@
             <button class="btn small" style="width:auto;" onclick="openCollateralModal()">+ 계산서 등록</button>
           </span>
         </div>
-        <p class="desc" style="margin-top:0;">삼성전자 <b>주문완료분에 대해 말일에 발행</b>되는 세금계산서입니다. 이 금액이 <b>빌릴 수 있는 한도</b>가 됩니다.<br>
-          대출을 등록할 때 어느 계산서를 담보로 쓸지 고르면 그만큼 남은 금액이 줄어듭니다.</p>
+        <p class="desc" style="margin-top:0;"><b>여신으로 결제한 주문</b> 중 <b>도착까지 끝난 건</b>을 매입처·주문월로 묶어 보여줍니다. 그 달 말일에 발행되는 세금계산서가 담보입니다.<br>
+          발행하셨으면 <b>「계산서 등록」</b>을 눌러 발행일과 금액을 넣어주세요. 등록한 금액만 <b>빌릴 수 있는 한도</b>가 됩니다.</p>
         <div id="collateral-cards" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px;"></div>
         <div id="collateral-list"></div>
       </div>
@@ -3740,6 +3761,130 @@
     document.body.appendChild(menu);
   }
 
+  // ---------- 고르는 칸 순서 바꾸기 ----------
+  //  우클릭 → 「순서 바꾸기」로 드롭다운 항목 순서를 사람마다 정합니다.
+  //  지금은 조건 검색 필드 칸에 붙어 있습니다. 다른 칸도 여기에 추가하면 됩니다.
+  const ORDER_EDITABLE = {
+    "primary-cond-field": { name:"조건 검색 필드", store:"condFieldOrder" },
+    "cond-field-select":  { name:"조건 검색 필드", store:"condFieldOrder" }
+  };
+  let condFieldOrder = [];      // 사람마다 저장하는 순서
+
+  function orderEditableOf(el){
+    if(!el) return null;
+    // 눌린 곳이 select 이거나, 그 안·근처의 select 를 찾습니다.
+    const sel = (el.tagName === "SELECT") ? el
+      : (el.querySelector && el.querySelector("select")) || el.closest("select");
+    if(!sel || !sel.id) return null;
+    const cfg = ORDER_EDITABLE[sel.id];
+    return cfg ? { sel, cfg } : null;
+  }
+
+  window.openOrderEditor = function(el){
+    const found = orderEditableOf(el);
+    if(!found){ alert("이 칸은 순서를 바꿀 수 없습니다."); return; }
+    const { sel, cfg } = found;
+    const opts = Array.from(sel.options).map(o=> ({ value:o.value, label:o.textContent }));
+    if(opts.length < 2){ alert("바꿀 항목이 없습니다."); return; }
+
+    closeCustomizeMenu();
+    const ov = document.createElement("div");
+    ov.id = "order-editor-overlay";
+    ov.style.cssText = "position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.55);"
+      + "z-index:5200;display:flex;align-items:center;justify-content:center;";
+    ov.innerHTML = '<div style="background:#fff;border:2px solid var(--navy);max-width:420px;width:94%;max-height:88vh;'
+      + 'overflow-y:auto;padding:20px;position:relative;">'
+      + '<h3 style="margin-top:0;margin-bottom:4px;">' + comboEsc(cfg.name) + ' 순서</h3>'
+      + '<p class="desc" style="margin-top:0;">☰ 를 끌어서 순서를 바꿉니다. 위에 있는 것이 먼저 나옵니다.<br>'
+      + '<b>내 계정에만</b> 적용되고, 목록 화면의 열 순서와는 별개입니다.</p>'
+      + '<div id="oe-rows" style="max-height:44vh;overflow-y:auto;margin-bottom:10px;"></div>'
+      + '<span class="btn-row">'
+      + '<button class="btn small" style="width:auto;" id="oe-save">저장</button>'
+      + '<button class="btn small secondary" style="width:auto;" id="oe-reset">기본으로</button>'
+      + '<button class="btn small secondary" style="width:auto;" id="oe-close">닫기</button>'
+      + '</span></div>';
+    document.body.appendChild(ov);
+
+    const box = ov.querySelector("#oe-rows");
+    opts.forEach(o=>{
+      const row = document.createElement("div");
+      row.className = "vp-row"; row.draggable = true; row.dataset.key = o.value;
+      row.style.cssText = "display:flex;align-items:center;gap:7px;padding:5px 8px;border:1px solid var(--line);"
+        + "background:#fff;margin-bottom:-1px;font-size:12.5px;cursor:grab;";
+      row.innerHTML = '<span style="color:var(--gray);font-size:12px;">☰</span><span>' + comboEsc(o.label) + '</span>';
+      row.addEventListener("dragstart", e=>{ row.classList.add("vp-drag");
+        try{ e.dataTransfer.setData("text/plain", o.value); }catch(err){} });
+      row.addEventListener("dragend", ()=> row.classList.remove("vp-drag"));
+      row.addEventListener("dragover", e=>{
+        e.preventDefault();
+        const moving = box.querySelector(".vp-drag");
+        if(!moving || moving === row) return;
+        const r = row.getBoundingClientRect();
+        box.insertBefore(moving, (e.clientY - r.top) > (r.height/2) ? row.nextSibling : row);
+      });
+      box.appendChild(row);
+    });
+
+    const close = ()=> ov.remove();
+    ov.querySelector("#oe-close").onclick = close;
+    ov.addEventListener("click", e=>{ if(e.target === ov) close(); });
+    ov.querySelector("#oe-save").onclick = async ()=>{
+      const order = Array.from(box.querySelectorAll(".vp-row")).map(r=> r.dataset.key);
+      condFieldOrder = order;
+      try{
+        const u = auth.currentUser;
+        if(u) await setDoc(doc(db,"users",u.uid), { condFieldOrder: order }, { merge:true });
+      }catch(e){}
+      logAction("조건 검색 순서 저장", order.length + "개");
+      applyCondFieldOrder();
+      close();
+    };
+    ov.querySelector("#oe-reset").onclick = async ()=>{
+      if(!confirm("기본 순서로 되돌립니다. 진행할까요?")) return;
+      condFieldOrder = [];
+      try{
+        const u = auth.currentUser;
+        if(u) await setDoc(doc(db,"users",u.uid), { condFieldOrder: [] }, { merge:true });
+      }catch(e){}
+      logAction("조건 검색 순서 되돌리기", "기본으로");
+      applyCondFieldOrder();
+      close();
+    };
+  };
+
+  // 저장해 둔 순서대로 조건 검색 칸을 다시 세웁니다.
+  window.applyCondFieldOrder = function(){
+    ["primary-cond-field","cond-field-select"].forEach(id=>{
+      const sel = document.getElementById(id);
+      if(!sel || sel.options.length === 0) return;
+      const cur = sel.value;
+      const byKey = {};
+      Array.from(sel.options).forEach(o=> byKey[o.value] = o);
+      const keys = Array.from(sel.options).map(o=> o.value);
+      const order = (condFieldOrder||[]).filter(k=> byKey[k]);
+      const rest  = keys.filter(k=> !order.includes(k));
+      [...order, ...rest].forEach(k=> sel.appendChild(byKey[k]));   // 다시 붙이면 그 순서가 됩니다.
+      sel.value = cur;
+    });
+  };
+
+  // 고르는 칸(select)에서는 「순서 바꾸기」만 보여줍니다.
+  function showOrderOnlyMenu(x, y, sel){
+    closeCustomizeMenu();
+    const menu = document.createElement("div");
+    menu.id = "customize-context-menu";
+    menu.style.cssText = "position:fixed;top:"+y+"px;left:"+x+"px;background:#fff;border:1px solid var(--navy);"
+      + "box-shadow:0 2px 10px rgba(0,0,0,0.2);z-index:5000;min-width:150px;font-size:13px;";
+    const btn = document.createElement("div");
+    btn.textContent = "순서 바꾸기";
+    btn.style.cssText = "padding:10px 14px;cursor:pointer;";
+    btn.onmouseenter = ()=> btn.style.background = "#f2f2f2";
+    btn.onmouseleave = ()=> btn.style.background = "#fff";
+    btn.onclick = (ev)=>{ ev.stopPropagation(); closeCustomizeMenu(); openOrderEditor(sel); };
+    menu.appendChild(btn);
+    document.body.appendChild(menu);
+  }
+
   function showCustomizeMenu(x, y, el, key){
     closeCustomizeMenu();
     const menu = document.createElement("div");
@@ -3784,10 +3929,13 @@
       ["숨기기 (안 보이게)", ()=>{
         if(!confirm("이 항목을 화면에서 숨기시겠습니까? 관리자 설정에서 언제든 다시 되돌릴 수 있습니다.")) return;
         saveCustomization("hide", key, true, "항목 숨기기");
-      }]
+      }],
+      ["순서 바꾸기", ()=>{ openOrderEditor(el); }]
     ];
     // 글자가 없는 요소(표 등)는 "글자 바꾸기"를 빼고 보여줍니다.
-    const shown = canRename ? items : items.filter(([label])=> label !== "글자 바꾸기");
+    let shown = canRename ? items : items.filter(([label])=> label !== "글자 바꾸기");
+    // 순서를 바꿀 수 있는 칸(조건 검색 필드 등)에만 「순서 바꾸기」를 보여줍니다.
+    if(!orderEditableOf(el)) shown = shown.filter(([label])=> label !== "순서 바꾸기");
     shown.forEach(([label, fn], idx)=>{
       const btn = document.createElement("div");
       btn.textContent = label;
@@ -3809,6 +3957,14 @@
       e.preventDefault();
       applyCustomTips();   // 키가 아직 없으면 붙여줍니다
       showTipMenu(e.clientX, e.clientY, tipEl);
+      return;
+    }
+
+    // 순서를 바꿀 수 있는 고르는 칸은 오른쪽 버튼으로 순서 편집기를 엽니다.
+    const oe = orderEditableOf(e.target);
+    if(oe){
+      e.preventDefault();
+      showOrderOnlyMenu(e.clientX, e.clientY, oe.sel);
       return;
     }
 
@@ -10750,7 +10906,7 @@
   //  세금계산서 화면(매입·매출 관리)과는 별개로 여기서만 씁니다.
   let editingCollateralId = null;
 
-  window.openCollateralModal = async function(id){
+  window.openCollateralModal = async function(id, preset){
     if(!hasPerm(currentUserPerms, "paymentProcess")){ alert("권한이 없습니다."); return; }
     editingCollateralId = id || null;
     document.getElementById("col-title").textContent = id ? "담보 계산서 수정" : "담보 계산서 등록";
@@ -10765,6 +10921,19 @@
       set("col-amount", Number(c.amount)||""); set("col-memo", c.memo||"");
     }else{
       ["col-month","col-date","col-company","col-invno","col-amount","col-memo"].forEach(k=> set(k,""));
+      // 목록에서 「계산서 등록」으로 들어오면 그 달 값을 미리 채웁니다.
+      if(preset){
+        set("col-month", preset.month||"");
+        set("col-company", preset.company||"");
+        if(preset.amount) set("col-amount", preset.amount);
+        // 발행일은 그 달 말일을 기본으로 넣어둡니다. (고치실 수 있습니다)
+        const ym = String(preset.month||"").replace(/\D/g,"");
+        if(ym.length === 6){
+          const y = Number(ym.slice(0,4)), m = Number(ym.slice(4,6));
+          const last = new Date(y, m, 0).getDate();
+          set("col-date", ym + String(last).padStart(2,"0"));
+        }
+      }
     }
     // 발행처 목록은 업체정보의 매입처를 씁니다.
     try{
@@ -10848,71 +11017,141 @@
     if(!listEl) return;
     listEl.innerHTML = '<div class="list-empty">불러오는 중...</div>';
 
-    let rows = [], loans = [];
+    // ① 여신으로 결제한 주문 중 도착까지 끝난 건을 매입처·주문월로 묶습니다.
+    const months = {};   // "202607|삼성전자스타" → { qty, cost, credit }
+    try{
+      const obSnap = await getDocs(collection(db,"orderBatches"));
+      const batches = []; obSnap.forEach(d=> batches.push({ id:d.id, ...d.data() }));
+      const oSnap = await getDocs(collection(db,"orders"));
+      const byBatch = {};
+      oSnap.forEach(d=>{ const o = d.data();
+        if(!o.batchId) return;
+        (byBatch[o.batchId] = byBatch[o.batchId] || []).push(o);
+      });
+      batches.forEach(b=>{
+        if(b.status === "취소") return;
+        if(b.paymentMethod !== "b2b_credit") return;          // 여신결제 건만
+        const lines = (byBatch[b.id] || []).filter(o=> o.status !== "취소");
+        if(lines.length === 0) return;
+        const qty  = lines.reduce((n,o)=> n + (Number(o.quantity)||0), 0);
+        const done = lines.reduce((n,o)=> n + (Number(o.fulfilledCount)||0), 0);
+        if(!(done >= qty && qty > 0)) return;                  // 도착까지 끝난 건만
+        const ym = String(b.orderDate||"").replace(/\D/g,"").slice(0,6);
+        if(ym.length !== 6) return;
+        const co = String(b.source||"").trim() || "(미지정)";
+        const k = ym + "|" + co;
+        if(!months[k]) months[k] = { month:ym, company:co, qty:0, cost:0, credit:0 };
+        months[k].qty    += qty;
+        months[k].cost   += Number(b.depositRequired)||0;
+        months[k].credit += Number(b.creditUsed != null ? b.creditUsed : b.depositRequired)||0;
+      });
+    }catch(e){}
+
+    // ② 등록해 둔 담보 계산서와 대출 사용액
+    let cols = [], loans = [];
     try{
       const snap = await getDocs(collection(db,"b2bCollaterals"));
-      snap.forEach(d=> rows.push({ id:d.id, ...d.data() }));
+      snap.forEach(d=> cols.push({ id:d.id, ...d.data() }));
       const ls = await getDocs(collection(db,"b2bLoans"));
       ls.forEach(d=> loans.push({ id:d.id, ...d.data() }));
     }catch(e){}
     const usedBy = {};
     loans.forEach(L=>{ if(L.collateralId) usedBy[L.collateralId] = (usedBy[L.collateralId]||0) + (Number(L.principal)||0); });
-    rows.forEach(r=>{ r.used = usedBy[r.id] || 0; r.left = (Number(r.amount)||0) - r.used; });
+
+    // ③ 월 묶음과 계산서를 짝지어 한 줄로 만듭니다.
+    const colByKey = {};
+    cols.forEach(c=>{ colByKey[String(c.month||"") + "|" + String(c.company||"").trim()] = c; });
+
+    const rows = [];
+    Object.keys(months).forEach(k=>{
+      const m = months[k];
+      const c = colByKey[k] || null;
+      rows.push({ key:k, ...m, col:c,
+        colAmt: c ? (Number(c.amount)||0) : 0,
+        used: c ? (usedBy[c.id]||0) : 0 });
+    });
+    // 주문은 없는데 계산서만 등록한 것도 함께 보여줍니다. (예전 건 입력분)
+    cols.forEach(c=>{
+      const k = String(c.month||"") + "|" + String(c.company||"").trim();
+      if(months[k]) return;
+      rows.push({ key:k, month:c.month||"", company:c.company||"", qty:0, cost:0, credit:0,
+        col:c, colAmt:Number(c.amount)||0, used: usedBy[c.id]||0 });
+    });
+    rows.forEach(r=>{ r.left = r.colAmt - r.used; });
     rows.sort((a,b)=> String(b.month||"").localeCompare(String(a.month||""))
-                   || String(b.issueDate||"").localeCompare(String(a.issueDate||"")));
+                   || String(a.company||"").localeCompare(String(b.company||"")));
 
     if(cardEl){
-      const tot  = rows.reduce((n,r)=> n + (Number(r.amount)||0), 0);
+      const tot  = rows.reduce((n,r)=> n + r.colAmt, 0);
       const used = rows.reduce((n,r)=> n + r.used, 0);
+      const noIssue = rows.filter(r=> !r.col && r.qty > 0).length;
       const card = (label, val, color, note)=>
         '<div style="flex:1;min-width:150px;border:1px solid var(--line);background:#fff;padding:10px 14px;">'
         + '<div style="font-size:11.5px;color:var(--gray);margin-bottom:4px;">'+label+'</div>'
         + '<div style="font-size:19px;font-weight:800;color:'+(color||'var(--navy)')+';">'+val+'</div>'
         + (note ? '<div style="font-size:10.5px;color:var(--gray);margin-top:3px;">'+note+'</div>' : '') + '</div>';
       cardEl.innerHTML =
-        card("담보 총액", tot.toLocaleString(), "var(--navy)", "계산서 " + rows.length + "건") +
+        card("담보 총액", tot.toLocaleString(), "var(--navy)", "발행 등록한 계산서 합계") +
         card("대출에 쓴 금액", used.toLocaleString(), "var(--danger)") +
-        card("남은 한도", (tot - used).toLocaleString(), (tot-used) > 0 ? "#2e7d32" : "var(--gray)", "더 빌릴 수 있는 금액");
+        card("남은 한도", (tot - used).toLocaleString(), (tot-used) > 0 ? "#2e7d32" : "var(--gray)", "더 빌릴 수 있는 금액") +
+        card("계산서 미등록", noIssue + "건", noIssue ? "var(--danger)" : "var(--gray)", "주문완료분 중 발행 안 적은 달");
     }
 
     if(rows.length === 0){
-      listEl.innerHTML = '<div class="list-empty">등록된 담보 계산서가 없습니다. <b>+ 계산서 등록</b>으로 추가해주세요.</div>';
+      listEl.innerHTML = '<div class="list-empty">여신으로 결제해 도착까지 끝난 주문이 없습니다.<br>'
+        + '<span style="color:var(--gray);">예전 계산서를 직접 넣으실 때는 <b>+ 계산서 등록</b>을 쓰세요.</span></div>';
       addDownloadBtn("dl-collateral", "collateral-list", "담보계산서");
       return;
     }
     const canDo = hasPerm(currentUserPerms, "paymentProcess");
     let h = '<div style="overflow-x:auto;"><table class="data-table resv-dest-fit" style="width:auto;"><thead><tr>'
-      + '<th>귀속월</th><th>발행일</th><th>발행처</th><th>계산서번호</th>'
-      + '<th class="ta-right">금액</th><th class="ta-right">쓴 금액</th><th class="ta-right">남은 금액</th><th>메모</th>'
+      + '<th>귀속월</th><th>매입처</th><th class="ta-right">주문완료</th><th class="ta-right">원가 합계</th><th class="ta-right">여신차감</th>'
+      + '<th>계산서</th><th>발행일</th><th class="ta-right">계산서 금액</th>'
+      + '<th class="ta-right">쓴 금액</th><th class="ta-right">남은 금액</th>'
       + (canDo ? '<th class="ta-right">관리</th>' : '') + '</tr></thead><tbody>';
-    let tA=0, tU=0;
+    let tC=0, tU=0;
     rows.forEach(r=>{
-      const amt = Number(r.amount)||0; tA += amt; tU += r.used;
-      const done = r.left <= 0;
+      tC += r.colAmt; tU += r.used;
+      const done = !!r.col && r.left <= 0;
+      const diff = r.col && r.qty > 0 ? (r.colAmt - r.credit) : 0;
       h += '<tr' + (done ? ' class="row-done"' : '') + '>'
         + '<td><b>'+comboEsc(r.month||"-")+'</b></td>'
-        + '<td>'+comboEsc(r.issueDate||"-")+'</td>'
         + '<td>'+comboEsc(r.company||"-")+'</td>'
-        + '<td style="color:var(--gray);font-size:11.5px;">'+comboEsc(r.invoiceNo||"-")+'</td>'
-        + '<td class="ta-right"><b>'+amt.toLocaleString()+'</b></td>'
+        + '<td class="ta-right">'+(r.qty ? r.qty.toLocaleString() : "-")+'</td>'
+        + '<td class="ta-right">'+(r.cost ? r.cost.toLocaleString() : "-")+'</td>'
+        + '<td class="ta-right">'+(r.credit ? r.credit.toLocaleString() : "-")+'</td>'
+        + '<td>' + (r.col
+            ? '<span style="color:#2e7d32;font-weight:700;">발행완료</span>'
+            : '<span style="color:var(--danger);font-weight:700;">미발행</span>') + '</td>'
+        + '<td>'+comboEsc(r.col ? (r.col.issueDate||"-") : "-")+'</td>'
+        + '<td class="ta-right"><b>'+(r.colAmt ? r.colAmt.toLocaleString() : "-")+'</b>'
+          + (diff ? '<br><span style="color:var(--danger);font-size:10.5px;">여신차감과 '
+              + (diff>0?"+":"") + diff.toLocaleString() + '</span>' : '') + '</td>'
         + '<td class="ta-right">'+(r.used ? r.used.toLocaleString() : "-")+'</td>'
-        + '<td class="ta-right" style="color:'+(r.left > 0 ? "#2e7d32" : "var(--gray)")+';font-weight:700;">'+r.left.toLocaleString()+'</td>'
-        + '<td style="font-size:11.5px;color:var(--gray);">'+comboEsc(r.memo||"-")+'</td>'
+        + '<td class="ta-right" style="color:'+(r.left > 0 ? "#2e7d32" : "var(--gray)")+';font-weight:700;">'
+          + (r.col ? r.left.toLocaleString() : "-") + '</td>'
         + (canDo ? '<td class="ta-right" style="white-space:nowrap;">'
-            + '<button class="btn small secondary" style="width:auto;" data-col-edit="'+r.id+'">수정</button>'
-            + '<button class="btn small danger" style="width:auto;margin-left:4px;" data-col-del="'+r.id+'">삭제</button></td>' : '')
+            + (r.col
+                ? '<button class="btn small secondary" style="width:auto;" data-col-edit="'+r.col.id+'">수정</button>'
+                  + '<button class="btn small danger" style="width:auto;margin-left:4px;" data-col-del="'+r.col.id+'">삭제</button>'
+                : '<button class="btn small" style="width:auto;" data-col-new="'+comboEsc(r.month)+'|'+comboEsc(r.company)+'|'+r.credit+'">계산서 등록</button>')
+            + '</td>' : '')
         + '</tr>';
     });
     h += '<tr style="background:#fff;font-weight:700;border-top:2px solid var(--navy);">'
-      + '<td colspan="4">합계</td>'
-      + '<td class="ta-right">'+tA.toLocaleString()+'</td>'
+      + '<td colspan="7">합계</td>'
+      + '<td class="ta-right">'+tC.toLocaleString()+'</td>'
       + '<td class="ta-right">'+tU.toLocaleString()+'</td>'
-      + '<td class="ta-right">'+(tA-tU).toLocaleString()+'</td>'
-      + '<td></td>' + (canDo ? '<td></td>' : '') + '</tr>';
+      + '<td class="ta-right">'+(tC-tU).toLocaleString()+'</td>'
+      + (canDo ? '<td></td>' : '') + '</tr>';
     h += '</tbody></table></div>';
     listEl.innerHTML = h;
     listEl.querySelectorAll("[data-col-edit]").forEach(b=> b.onclick = ()=> openCollateralModal(b.dataset.colEdit));
     listEl.querySelectorAll("[data-col-del]").forEach(b=> b.onclick = ()=> deleteCollateral(b.dataset.colDel));
+    listEl.querySelectorAll("[data-col-new]").forEach(b=> b.onclick = ()=>{
+      const [m, co, amt] = String(b.dataset.colNew||"").split("|");
+      openCollateralModal(null, { month:m, company:co, amount:Number(amt)||0 });
+    });
     foldActionColumn("collateral-list");
     addDownloadBtn("dl-collateral", "collateral-list", "담보계산서");
     addViewCfgBtn("dl-collateral", "collateral-list");
@@ -14005,7 +14244,7 @@
   };
   window.setTaxFilter = function(f){
     taxFilter = f;
-    ["all","buy","sale","free","linked","unlinked","b2b","left"].forEach(k=>{
+    ["all","buy","sale","free","linked","unlinked"].forEach(k=>{
       const b = document.getElementById("tx-f-" + k);
       if(b) b.className = "btn small" + (k === f ? "" : " secondary");
     });
@@ -14069,8 +14308,6 @@
 
       if(taxFilter === "linked") return (r.linked||[]).length > 0 || r.noBankDone;
       if(taxFilter === "unlinked") return (r.linked||[]).length === 0 && !r.noBankDone;
-      if(taxFilter === "b2b") return r.b2bOk;
-      if(taxFilter === "left") return r.b2bOk && r.left > 0;
       return true;
     };
     // 검색어·기간
@@ -14123,9 +14360,6 @@
         card("매입", buyAmt.toLocaleString(), "var(--danger)", "받은 계산서 합계") +
         card("매출", saleAmt.toLocaleString(), "#1565c0", "발행한 계산서 합계") +
         card("면세", freeAmt.toLocaleString(), null, "계산서(면세) 합계") +
-        card("B2B 한도", b2bLimit.toLocaleString(), null, "사용 가능으로 체크한 것") +
-        card("B2B 사용액", b2bUsed.toLocaleString(), null, "대출에 쓴 금액") +
-        card("남은 한도", b2bLeft.toLocaleString(), "#2e7d32", "더 빌릴 수 있는 금액") +
         card("대사 완료", linkedCnt + "건", "#2e7d32", "입출금과 이어진 것") +
         card("대사 미완료", unlinkedCnt + "건", unlinkedCnt ? "var(--danger)" : null, unlinkedAmt.toLocaleString());
     }
@@ -14136,8 +14370,7 @@
     }
     el.innerHTML = '<div style="overflow-x:auto;"><table class="data-table" style="width:auto;">'
       + '<thead><tr><th>구분</th><th>작성일자</th><th>발급일자</th><th>거래처</th><th>대표자</th><th>사업자번호</th><th>계산서번호</th>'
-      + '<th class="ta-right">금액</th><th>B2B</th><th class="ta-right">사용액</th>'
-      + '<th class="ta-right">남은한도</th><th>대사</th><th>메모</th><th></th></tr></thead><tbody>'
+      + '<th class="ta-right">금액</th><th>대사</th><th>메모</th><th></th></tr></thead><tbody>'
       + pageItems.map(r=>{
           const isBuy = isBuyKind(r.kind);
           const free = (r.kind === "buyfree" || r.kind === "salefree");
@@ -14161,13 +14394,6 @@
             + '<td style="color:var(--gray);">'+(r.bizNo ? comboEsc(r.bizNo) : '-')+'</td>'
             + '<td>'+(r.invoiceNo ? comboEsc(r.invoiceNo) : '<span style="color:var(--gray);">-</span>')+'</td>'
             + '<td class="ta-right" style="font-weight:700;">'+r.amount.toLocaleString()+'</td>'
-            + '<td>' + (r.kind === "buy"
-                ? '<label style="font-size:11.5px;cursor:pointer;"><input type="checkbox" class="tx-b2b" data-tx="'+r.id+'"'
-                  + (r.b2bOk ? ' checked' : '') + (canDo ? '' : ' disabled') + '> 사용가능</label>'
-                : '<span style="color:var(--gray);">-</span>') + '</td>'
-            + '<td class="ta-right">'+(r.b2bOk ? (r.b2bUsed ? r.b2bUsed.toLocaleString() : '-') : '<span style="color:var(--gray);">-</span>')+'</td>'
-            + '<td class="ta-right" style="color:'+(r.b2bOk && r.left>0 ? "#2e7d32" : "var(--gray)")+';font-weight:700;">'
-              + (r.b2bOk ? r.left.toLocaleString() : '-') + '</td>'
             + '<td style="white-space:nowrap;">' + ((r.linked||[]).length
                 ? '<span style="color:#2e7d32;font-weight:700;">완료</span>'
                   + '<br><span style="color:var(--gray);font-size:11px;">'
@@ -14186,7 +14412,7 @@
                        : '<span style="color:var(--gray);">-</span>') + '</td>'
             + '</tr>';
           if(r.uses.length){
-            tr += '<tr><td colspan="14" style="background:#fff;font-size:11.5px;line-height:1.9;">'
+            tr += '<tr><td colspan="11" style="background:#fff;font-size:11.5px;line-height:1.9;">'
               + r.uses.map(u=>'· B2B 대출 '+(Number(u.amount)||0).toLocaleString()
                   + (u.date ? ' ('+comboEsc(u.date)+')' : '')
                   + (u.memo ? ' · '+comboEsc(u.memo) : '')).join('<br>')
@@ -14227,7 +14453,6 @@
     if(!hasPerm(currentUserPerms, "paymentProcess")){ alert("입력 권한이 없습니다."); return; }
     document.getElementById("tx-date").value = todayStr();
     ["tx-company","tx-no","tx-ceo","tx-biz","tx-amount","tx-memo"].forEach(id=>{ const e=document.getElementById(id); if(e) e.value = ""; });
-    document.getElementById("tx-b2bok").checked = false;
     document.getElementById("tx-msg").innerHTML = "";
     document.getElementById("taxadd-overlay").style.display = "flex";
   };
@@ -14248,7 +14473,7 @@
     const bizNo   = document.getElementById("tx-biz").value.trim();
     const amount  = Number(String(document.getElementById("tx-amount").value).replace(/[^0-9.]/g,""));
     const memo    = document.getElementById("tx-memo").value.trim();
-    const b2bOk   = document.getElementById("tx-b2bok").checked;
+    const b2bOk   = false;   // B2B 담보는 「담보 계산서」에서 따로 관리합니다.
 
     if(issueDate.length !== 8){ show("발행일을 20260831 형태로 넣어주세요."); return; }
     if(!company){ show("거래처를 넣어주세요."); return; }
@@ -22083,12 +22308,51 @@
     interest_received:"이자지급 수령", b2b_fee_payment:"B2B결제수수료", b2b_fee_mp:"B2BMP수수료",
     b2b_interest:"B2B이자", club_incentive:"클럽장려금", other:"기타"
   };
+  // 여신 거래 등록 — 목록만 보이게 하고 입력은 팝업으로 옮겼습니다.
+  window.openB2BLedgerAdd = async function(){
+    if(!hasPerm(currentUserPerms, "paymentProcess")){ alert("권한이 없습니다."); return; }
+    document.getElementById("b2b-date-input").value = todayStr();
+    document.getElementById("b2b-category-select").value = "deposit";
+    document.getElementById("b2b-amount-input").value = "";
+    document.getElementById("b2b-memo-input").value = "";
+    document.getElementById("b2badd-msg").innerHTML = "";
+    // 대상·매입처 목록은 업체정보의 매입처를 씁니다.
+    try{
+      const names = await fetchNamesList("inboundSources");
+      const opts = '<option value="">(미지정)</option>'
+        + names.map(n=>'<option value="'+comboEsc(n)+'">'+comboEsc(n)+'</option>').join("");
+      const a = document.getElementById("b2b-partner-select"); if(a) a.innerHTML = opts;
+      const b = document.getElementById("b2b-source-select");  if(b) b.innerHTML = opts;
+    }catch(e){}
+    document.getElementById("b2badd-overlay").style.display = "flex";
+  };
+  window.closeB2BLedgerAdd = function(){
+    document.getElementById("b2badd-overlay").style.display = "none";
+  };
+
+  window.openB2BPostSettle = async function(){
+    const el = document.getElementById("b2b-post-settlement-input");
+    document.getElementById("b2bpost-msg").innerHTML = "";
+    try{
+      const snap = await getDoc(doc(db,"settings","b2b"));
+      const v = snap.exists() ? (Number(snap.data().postSettlementRef)||0) : 0;
+      if(el) el.value = v ? v : "";
+    }catch(e){}
+    document.getElementById("b2bpost-overlay").style.display = "flex";
+  };
+  window.closeB2BPostSettle = function(){
+    document.getElementById("b2bpost-overlay").style.display = "none";
+  };
+
   window.addB2BLedgerEntry = async function(){
     const dateVal = document.getElementById("b2b-date-input").value || todayStr();
     const category = document.getElementById("b2b-category-select").value;
     const amount = Number(document.getElementById("b2b-amount-input").value);
     const memo = document.getElementById("b2b-memo-input").value.trim();
-    if(!amount){ alert("금액을 입력해주세요."); return; }
+    const msgEl = document.getElementById("b2badd-msg");
+    const bad = t => { if(msgEl) msgEl.innerHTML = '<span style="color:var(--danger);">'+t+'</span>'; };
+    if(String(dateVal).replace(/\D/g,"").length !== 8) return bad("거래일자를 20260724 형태로 넣어주세요.");
+    if(!amount || amount <= 0) return bad("금액을 넣어주세요.");
 
     const ledSource = (document.getElementById("b2b-source-select")||{}).value || "";
     const ledPartner = (document.getElementById("b2b-partner-select")||{}).value || "";
@@ -22098,8 +22362,7 @@
     });
     logAction("B2B 여신 거래 추가", "대상 " + ledPartner + " / " + B2B_CATEGORY_LABELS[category]+" "+amount.toLocaleString()
       + (ledSource ? " / " + ledSource : " / 매입처 미지정"));
-    document.getElementById("b2b-amount-input").value = "";
-    document.getElementById("b2b-memo-input").value = "";
+    closeB2BLedgerAdd();
     loadB2BTab();
   };
 
@@ -22133,8 +22396,15 @@
 
   window.saveB2BPostSettlementRef = async function(){
     const val = Number(document.getElementById("b2b-post-settlement-input").value) || 0;
-    await setDoc(doc(db,"settings","b2b"), { postSettlementRef: val }, { merge:true });
+    try{
+      await setDoc(doc(db,"settings","b2b"), { postSettlementRef: val }, { merge:true });
+    }catch(e){
+      const m = document.getElementById("b2bpost-msg");
+      if(m) m.innerHTML = '<span style="color:var(--danger);">저장에 실패했습니다.</span>';
+      return;
+    }
     logAction("B2B 후정산금액합계 저장", val.toLocaleString());
+    closeB2BPostSettle();
     loadB2BTab();
   };
 
@@ -22254,22 +22524,7 @@
       listEl.prepend(renderPaginationBar("b2bLedger", ledgerRows.length, loadB2BTab));
     }
   
-    // 매입처 고르는 칸 채우기
-    try{
-      const srcNames = await fetchNamesList("inboundSources");
-      const sel = document.getElementById("b2b-source-select");
-      if(sel){
-        const cur = sel.value;
-        sel.innerHTML = '<option value="">(미지정)</option>' +
-          srcNames.map(n=>'<option value="'+comboEsc(n)+'"'+(cur===n?' selected':'')+'>'+comboEsc(n)+'</option>').join("");
-      }
-      const pSel = document.getElementById("b2b-partner-select");
-      if(pSel){
-        const curP = pSel.value;
-        pSel.innerHTML = '<option value="">(미지정)</option>' +
-          srcNames.map(n=>'<option value="'+comboEsc(n)+'"'+(curP===n?' selected':'')+'>'+comboEsc(n)+'</option>').join("");
-      }
-    }catch(e){}
+    // 대상·매입처 목록은 등록 팝업을 열 때 채웁니다. (openB2BLedgerAdd)
     // 어긋난 주문사용 기록이 있을 때만 알려드립니다. (없으면 아무것도 안 보입니다)
     try{
       const wEl = document.getElementById("b2b-warn");
@@ -23151,6 +23406,7 @@
       opt.value = f.key; opt.textContent = f.label;
       sel.appendChild(opt);
     });
+    applyCondFieldOrder();   // 사람마다 정해둔 순서를 적용합니다.
   }
 
   window.openAddConditionModal = function(){
@@ -23163,6 +23419,7 @@
         sel.appendChild(opt);
       });
     }
+    applyCondFieldOrder();   // 사람마다 정해둔 순서를 적용합니다.
     document.getElementById("cond-value-input").value = "";
     document.getElementById("add-condition-modal-overlay").style.display = "flex";
   };
@@ -27581,6 +27838,7 @@
       pendingView.style.display="none"; mainView.style.display="block";
       document.getElementById("welcome-name").textContent = data.name;
       currentUser = { name:data.name, username:data.username, uid:user.uid };
+      condFieldOrder = (data.condFieldOrder && data.condFieldOrder.length) ? data.condFieldOrder : [];
       // 나중에 새로 생긴 열은 저장된 설정에 없어 안 보입니다. 새 열만 골라 켜줍니다.
       //  (사용자가 일부러 끈 열은 그대로 꺼둡니다)
       if(data.viewSettings && data.viewSettings.length){
