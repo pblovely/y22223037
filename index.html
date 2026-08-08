@@ -378,7 +378,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-08 v464</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-08 v465</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -2242,6 +2242,7 @@
         <p class="desc" style="margin-top:0;">삼성전자 거래처마다 <b>여신을 따로</b> 관리합니다. 아래에서 거래처를 고르면 그 거래처 것만 보입니다.<br>
           <b>B2B 대출 조건은 삼성전자끼리 같습니다.</b> 거래처가 늘어나면 버튼도 저절로 늘어납니다.</p>
         <div class="btn-row" id="b2b-partner-tabs" style="display:inline-flex;margin-bottom:10px;"></div>
+        <div id="b2b-fillpartner" style="display:none;font-size:12.5px;margin-bottom:10px;"></div>
         <div id="b2b-stat-cards" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px;"></div>
         <div id="b2b-orderuse-detail" style="display:none;margin-top:10px;"></div>
         <div id="b2b-warn" style="display:none;font-size:12.5px;margin-top:6px;"></div>
@@ -23873,6 +23874,36 @@
     loadB2BTab();
   };
 
+  // 대상이 비어 있는 기록에 매입처 값을 넣습니다. 확인을 거치고 이력에 남깁니다.
+  window.fillB2BPartners = async function(){
+    if(!hasPerm(currentUserPerms, "paymentProcess")){ alert("권한이 없습니다."); return; }
+    let need = [];
+    try{
+      const snap = await getDocs(collection(db,"b2bLedger"));
+      snap.forEach(d=>{ const e = d.data();
+        if(!String(e.partner||"").trim() && String(e.source||"").trim()) need.push({ id:d.id, source:String(e.source).trim() });
+      });
+    }catch(e){}
+    if(need.length === 0){ alert("채울 기록이 없습니다."); return; }
+    const by = {};
+    need.forEach(x=>{ by[x.source] = (by[x.source]||0)+1; });
+    if(!confirm("대상이 안 적힌 기록 " + need.length + "건에 매입처 값을 넣습니다.\n\n"
+      + Object.keys(by).map(k=> "  " + k + " " + by[k] + "건").join("\n")
+      + "\n\n넣고 나면 거래처별 여신으로 갈립니다.\n\n진행할까요?")) return;
+    try{
+      for(let i=0;i<need.length;i+=200){
+        const bt = writeBatch(db);
+        need.slice(i, i+200).forEach(x=> bt.update(doc(db,"b2bLedger", x.id), { partner: x.source }));
+        await bt.commit();
+      }
+    }catch(e){ alert("채우지 못했습니다.\n" + ((e&&e.message)?e.message:String(e))); return; }
+    logAction("여신 대상 채우기",
+      need.length + "건 / " + Object.keys(by).map(k=> k + " " + by[k]).join(", "));
+    alert(need.length + "건을 채웠습니다.");
+    b2bPartnerPick = "";
+    loadB2BTab();
+  };
+
   async function loadB2BTab(){
     const statEl = document.getElementById("b2b-stat-cards");
     const listEl = document.getElementById("b2b-ledger-list");
@@ -23902,6 +23933,26 @@
       tabEl.innerHTML = btn("전체", "", allEntries.length)
         + pList.map(n=> btn(n, n, allEntries.filter(e=> pName(e) === n).length)).join("");
     }
+    // 대상이 비어 있는데 매입처는 적혀 있는 기록 — 옮겨 넣으면 거래처별로 갈립니다.
+    {
+      const el = document.getElementById("b2b-fillpartner");
+      const need = allEntries.filter(e=> !String(e.partner||"").trim() && String(e.source||"").trim());
+      if(el){
+        if(need.length){
+          const by = {};
+          need.forEach(e=>{ const sc = String(e.source).trim(); by[sc] = (by[sc]||0)+1; });
+          el.style.display = "block";
+          el.innerHTML = '<span style="color:var(--danger);font-weight:700;">대상이 안 적힌 기록 '
+            + need.length + '건</span> <span style="color:var(--gray);">— '
+            + Object.keys(by).map(k=> comboEsc(k) + " " + by[k] + "건").join(" · ")
+            + ' · 매입처 값을 대상에 넣으면 거래처별로 갈립니다.</span>'
+            + '<button class="btn small" style="width:auto;margin-left:8px;" onclick="fillB2BPartners()">대상 채우기</button>';
+        }else{
+          el.style.display = "none"; el.innerHTML = "";
+        }
+      }
+    }
+
     // 고른 거래처만 남깁니다.
     const entries = b2bPartnerPick ? allEntries.filter(e=> pName(e) === b2bPartnerPick) : allEntries;
 
@@ -25363,7 +25414,7 @@
     if(bar) bar.style.display = "none";
   };
 
-  // 파일에 박힌 버전 글자를 읽습니다. (예: "파일 2026-08-08 v464")
+  // 파일에 박힌 버전 글자를 읽습니다. (예: "파일 2026-08-08 v465")
   function readBuildTag(text){
     const m = String(text||"").match(/파일\s*[\d-]+\s*v(\d+)/);
     return m ? m[0].trim() : "";
