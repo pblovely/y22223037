@@ -379,7 +379,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v487</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v489</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -1105,11 +1105,13 @@
         <div class="stack-form">
           <div class="stack-row"><label>귀속월 <span class="info-tip" title="주문완료분이 속한 달입니다. 예: 202607">ⓘ</span></label><input type="text" id="col-month" maxlength="6" inputmode="numeric" placeholder="예: 202607"></div>
           <div class="stack-row"><label>발행일</label><input type="text" id="col-date" maxlength="8" inputmode="numeric" placeholder="예: 20260731"></div>
-          <div class="stack-row"><label>발행처</label><input type="text" id="col-company" list="col-company-list" placeholder="예: 삼성전자스타"><datalist id="col-company-list"></datalist></div>
+          <div class="stack-row"><label>발행처</label><input type="text" id="col-company" list="col-company-list" placeholder="예: 삼성전자스타" onchange="renderCollateralOrders()"><datalist id="col-company-list"></datalist></div>
           <div class="stack-row"><label>계산서번호 (선택)</label><input type="text" id="col-invno" placeholder="홈택스 승인번호"></div>
           <div class="stack-row"><label>금액</label><input type="number" id="col-amount" placeholder="숫자만"></div>
           <div class="stack-row"><label>메모 (선택)</label><input type="text" id="col-memo" placeholder="선택"></div>
         </div>
+        <div style="font-weight:700;font-size:12.5px;margin-top:10px;margin-bottom:4px;">이 계산서에 넣을 주문</div>
+        <div id="col-orders" style="font-size:12px;"></div>
         <div style="border:1px solid var(--navy);background:#f4f7fb;padding:8px 11px;margin-top:8px;font-size:12px;line-height:1.7;">
           <b>중간 발행</b>이면 발행일까지 들어온 단말기의 <b>입고가 합계</b>로 끊습니다.<br>
           <span style="color:var(--gray);">발행처와 발행일을 넣고 아래를 누르면 그 금액을 계산해 드립니다. 이미 등록한 계산서 금액은 뺍니다.</span>
@@ -8448,6 +8450,10 @@
     { key:"credit",     label:"여신차감", get:r=> r.b.paymentMethod==="b2b_credit" ? (Number(r.b.creditUsed!=null?r.b.creditUsed:r.b.depositRequired)||0).toLocaleString() : "-", num:true,
       sort:r=> Number(r.b.creditUsed!=null?r.b.creditUsed:r.b.depositRequired)||0 },
     { key:"amount",     label:"입고가",   get:r=> (Number(r.b.depositRequired)||0).toLocaleString(), num:true, sort:r=> Number(r.b.depositRequired)||0 },
+    { key:"collateral", label:"계산서",   get:r=> r.b.collateralId
+        ? '<span style="color:#2e7d32;font-weight:700;">' + comboEsc(r.b.collateralDate || "발행") + '</span>'
+          + (r.b.collateralNo ? '<br><span style="font-size:10.5px;color:var(--gray);">' + comboEsc(r.b.collateralNo) + '</span>' : '')
+        : (r.b.paymentMethod === "b2b_credit" ? '<span style="color:var(--danger);">미발행</span>' : '-') },
     { key:"rebate",     label:"후정산",   get:r=>{ const d=(Number(r.b.creditUsed)||0)-(Number(r.b.depositRequired)||0); return d>0 ? d.toLocaleString() : "-"; }, num:true },
     { key:"payDue",     label:"입금예정", get:r=> r.b.payDueDate||"-" },
     { key:"payState",   label:"입금",     get:r=> r.b.depositPaid ? '<span style="color:#2e7d32;font-weight:700;">완료</span>'
@@ -12314,8 +12320,82 @@
       const dl = document.getElementById("col-company-list");
       if(dl) dl.innerHTML = names.map(n=>'<option value="'+comboEsc(n)+'"></option>').join("");
     }catch(e){}
+    renderCollateralOrders();     // 이 계산서에 넣을 주문 목록
     document.getElementById("collateral-overlay").style.display = "flex";
   };
+  // ---------- 담보 계산서에 넣을 주문 고르기 ----------
+  //  여신으로 산 주문을 계산서에 묶습니다. 금액 기준은 「여신차감액」입니다.
+  //   (출고가 − 선할인. 타할인은 나중에 클럽장려금으로 정산합니다)
+  //  이미 읽어둔 주문 자료를 씁니다. (Firestore 읽기 0회)
+  let colOrderCands = [];      // 고를 수 있는 주문 [{batchId, b, credit, qty, models, colId}]
+
+  window.renderCollateralOrders = function(){
+    const box = document.getElementById("col-orders");
+    if(!box) return;
+    const company = String((document.getElementById("col-company")||{}).value||"").trim();
+    colOrderCands = [];
+    if(!company){
+      box.innerHTML = '<div style="border:1px solid var(--line);background:#fafafa;padding:8px 10px;color:var(--gray);">'
+        + '발행처를 먼저 넣으면 그 매입처의 주문이 나옵니다.</div>';
+      return;
+    }
+    Object.keys(orderBatchCache||{}).forEach(bid=>{
+      const b = orderBatchCache[bid];
+      if(!b || b.status === "취소") return;
+      if(b.paymentMethod !== "b2b_credit") return;                   // 여신으로 산 것만
+      if(String(b.source||"").trim() !== company) return;
+      // 이미 다른 계산서에 묶인 주문은 뺍니다. (지금 고치는 계산서 것은 남깁니다)
+      const cid = String(b.collateralId||"");
+      if(cid && cid !== String(editingCollateralId||"")) return;
+      const lines = (orderBatchLinesCache[bid]||[]).filter(o=> o.status !== "취소");
+      if(lines.length === 0) return;
+      const qty = lines.reduce((n,o)=> n + (Number(o.quantity)||0), 0);
+      const credit = Number(b.creditUsed != null ? b.creditUsed : b.depositRequired)||0;
+      const models = [...new Set(lines.map(o=> String(o.systemModel||o.baseModel||"-")))].slice(0,3).join("·");
+      colOrderCands.push({ batchId:bid, b, qty, credit, models,
+        already: (cid && cid === String(editingCollateralId||"")) });
+    });
+    colOrderCands.sort((a,b)=> String(a.b.orderDate||"").localeCompare(String(b.b.orderDate||"")));
+
+    if(colOrderCands.length === 0){
+      box.innerHTML = '<div style="border:1px solid var(--line);background:#fafafa;padding:8px 10px;color:var(--gray);">'
+        + comboEsc(company) + ' 의 여신결제 주문 중 <b>아직 계산서에 안 묶인 건</b>이 없습니다.<br>'
+        + '주문을 안 묶어도 계산서만 등록할 수 있습니다.</div>';
+      return;
+    }
+    let h = '<div style="max-height:200px;overflow-y:auto;border:1px solid var(--line);">'
+      + '<table class="data-table" style="width:100%;"><thead><tr>'
+      + '<th style="width:30px;"><input type="checkbox" id="col-ord-all"></th>'
+      + '<th>주문일</th><th>모델</th><th class="ta-right">수량</th><th class="ta-right">여신차감액</th><th>도착</th>'
+      + '</tr></thead><tbody>';
+    colOrderCands.forEach((c,i)=>{
+      const lines = (orderBatchLinesCache[c.batchId]||[]).filter(o=> o.status !== "취소");
+      const done = lines.reduce((n,o)=> n + (Number(o.fulfilledCount)||0), 0);
+      const full = done >= c.qty && c.qty > 0;
+      h += '<tr'+(c.already ? ' style="background:#f4faf4;"' : '')+'>'
+        + '<td><input type="checkbox" class="col-ord-ck" value="'+i+'"'+(c.already?' checked':'')+'></td>'
+        + '<td>'+comboEsc(c.b.orderDate||"-")+'</td>'
+        + '<td style="font-size:11.5px;">'+comboEsc(c.models||"-")+'</td>'
+        + '<td class="ta-right">'+c.qty+'</td>'
+        + '<td class="ta-right">'+c.credit.toLocaleString()+'</td>'
+        + '<td'+(full?'':' style="color:var(--danger);"')+'>'+done+'/'+c.qty+'</td></tr>';
+    });
+    h += '</tbody></table></div>'
+      + '<div style="font-size:11.5px;color:var(--gray);margin-top:4px;">'
+      + '체크하면 아래 <b>금액</b>이 여신차감액 합계로 바뀝니다. 실제 계산서와 다르면 금액만 고치시면 됩니다.</div>';
+    box.innerHTML = h;
+
+    const sync = ()=>{
+      const picked = Array.from(box.querySelectorAll(".col-ord-ck:checked")).map(c=> colOrderCands[Number(c.value)]).filter(Boolean);
+      if(picked.length === 0) return;
+      document.getElementById("col-amount").value = picked.reduce((n,x)=> n + x.credit, 0);
+    };
+    box.querySelectorAll(".col-ord-ck").forEach(c=> c.onchange = sync);
+    const all = document.getElementById("col-ord-all");
+    if(all) all.onchange = ()=>{ box.querySelectorAll(".col-ord-ck").forEach(c=> c.checked = all.checked); sync(); };
+    sync();
+  };
+
   // 발행일까지 들어온 단말기의 입고가 합계를 구합니다.
   //  삼성전자유통처럼 월 중간에도 계산서를 끊어주는 곳에서 씁니다.
   //  이미 등록해 둔 계산서 금액은 빼서, 「아직 안 끊은 도착분」만 남깁니다.
@@ -12391,21 +12471,55 @@
       const used = await collateralUsedOf(editingCollateralId);
       if(amount < used) return bad("이미 대출에 쓴 " + used.toLocaleString() + " 보다 적게 바꿀 수 없습니다.");
     }
+    // 체크한 주문 — 이 계산서에 묶습니다.
+    const box = document.getElementById("col-orders");
+    const picked = box ? Array.from(box.querySelectorAll(".col-ord-ck:checked"))
+      .map(c=> colOrderCands[Number(c.value)]).filter(Boolean) : [];
+    const pickedCredit = picked.reduce((n,x)=> n + x.credit, 0);
+    if(picked.length && pickedCredit !== amount){
+      if(!confirm(
+        "고른 주문의 여신차감액 합계와 계산서 금액이 다릅니다.\n\n"
+        + "  주문 합계   " + pickedCredit.toLocaleString() + "\n"
+        + "  계산서 금액 " + amount.toLocaleString() + "\n"
+        + "  차이        " + (amount - pickedCredit).toLocaleString() + "\n\n"
+        + "그대로 저장할까요?")) return;
+    }
+
     const data = {
       month, issueDate: date, company,
-      invoiceNo: g("col-invno"), amount, memo: g("col-memo")
+      invoiceNo: g("col-invno"), amount, memo: g("col-memo"),
+      orderBatchIds: picked.map(x=> x.batchId),
+      orderCreditSum: pickedCredit
     };
+    let colId = editingCollateralId;
     try{
       if(editingCollateralId){
         await updateDoc(doc(db,"b2bCollaterals", editingCollateralId), data);
-        logAction("담보 계산서 수정", month + " / " + company + " / " + amount.toLocaleString());
+        logAction("담보 계산서 수정", month + " / " + company + " / " + amount.toLocaleString()
+          + (picked.length ? " / 주문 " + picked.length + "건" : ""));
       }else{
-        await addDoc(collection(db,"b2bCollaterals"), {
+        const ref = await addDoc(collection(db,"b2bCollaterals"), {
           ...data,
           createdBy: currentUser.name, createdByUsername: currentUser.username, createdAt: serverTimestamp()
         });
-        logAction("담보 계산서 등록", month + " / " + company + " / " + amount.toLocaleString());
+        colId = ref.id;
+        logAction("담보 계산서 등록", month + " / " + company + " / " + amount.toLocaleString()
+          + (picked.length ? " / 주문 " + picked.length + "건" : ""));
       }
+
+      // 주문 쪽에도 계산서를 새겨둡니다. 주문 화면·여신에서 바로 보입니다.
+      //  이 계산서에 묶여 있던 주문 중 체크가 풀린 것은 표시를 지웁니다.
+      const keep = new Set(data.orderBatchIds);
+      const before = (colOrderCands||[]).filter(x=> x.already).map(x=> x.batchId);
+      const removed = before.filter(bid=> !keep.has(bid));
+      const bt = writeBatch(db);
+      data.orderBatchIds.forEach(bid=> bt.update(doc(db,"orderBatches", bid), {
+        collateralId: colId, collateralNo: g("col-invno"), collateralDate: date
+      }));
+      removed.forEach(bid=> bt.update(doc(db,"orderBatches", bid), {
+        collateralId: "", collateralNo: "", collateralDate: ""
+      }));
+      if(data.orderBatchIds.length || removed.length) await bt.commit();
     }catch(e){ return bad("저장에 실패했습니다. " + ((e&&e.message)?e.message:String(e))); }
     closeCollateralModal();
     clearScreenCache("loan");
@@ -12433,9 +12547,25 @@
     if(!confirm("담보 계산서를 지웁니다.\n\n  " + (c.month||"-") + " · " + (c.company||"-")
       + "\n  " + (Number(c.amount)||0).toLocaleString() + "\n\n되돌릴 수 없습니다. 진행할까요?")) return;
     await deleteDoc(doc(db,"b2bCollaterals", id));
-    logAction("담보 계산서 삭제", (c.month||"-") + " / " + (c.company||"-") + " / " + (Number(c.amount)||0).toLocaleString());
+    // 이 계산서에 묶여 있던 주문의 표시도 함께 지웁니다. (안 지우면 「발행됨」이 남습니다)
+    const linked = (c.orderBatchIds||[]);
+    if(linked.length){
+      try{
+        for(let i=0; i<linked.length; i+=300){
+          const bt = writeBatch(db);
+          linked.slice(i, i+300).forEach(bid=> bt.update(doc(db,"orderBatches", bid), {
+            collateralId: "", collateralNo: "", collateralDate: ""
+          }));
+          await bt.commit();
+        }
+      }catch(e){}
+    }
+    logAction("담보 계산서 삭제", (c.month||"-") + " / " + (c.company||"-") + " / " + (Number(c.amount)||0).toLocaleString()
+      + (linked.length ? " / 주문 " + linked.length + "건 표시 해제" : ""));
     clearScreenCache("loan");
     loadCollateralList();
+    if(typeof loadOrderList === "function" && document.getElementById("tab-orders")
+       && document.getElementById("tab-orders").classList.contains("active")) loadOrderList();
   };
 
   window.loadCollateralList = async function(){
@@ -24633,9 +24763,18 @@
       });
     }catch(e){}
     const notYet = pendingRebate - clubIncentiveTotal;
-    html += statCard("클럽장려금 받을 금액 (3개월 뒤)", (notYet > 0 ? notYet : 0).toLocaleString(), "#b8860b",
-      "누적 " + pendingRebate.toLocaleString() + " · 수령 " + clubIncentiveTotal.toLocaleString()
-      + (b2bPartnerPick ? " · " + comboEsc(b2bPartnerPick) : ""));
+    // 거래처마다 타할인을 넣은 곳과 안 넣은 곳이 섞여 있습니다.
+    //  타할인이 0인데 장려금을 받았다면 「받을 금액」을 셀 기준이 없습니다. 0으로 두지 않고 그 사실을 알려줍니다.
+    const noRebateBase = (pendingRebate === 0 && clubIncentiveTotal > 0);
+    html += statCard("클럽장려금 받을 금액 (3개월 뒤)",
+      noRebateBase ? "기준 없음" : (notYet > 0 ? notYet : 0).toLocaleString(),
+      noRebateBase ? "var(--gray)" : "#b8860b",
+      noRebateBase
+        ? ("주문에 타할인을 안 넣어 셀 수가 없습니다 · 수령 " + clubIncentiveTotal.toLocaleString()
+           + (b2bPartnerPick ? " · " + comboEsc(b2bPartnerPick) : ""))
+        : ("누적 " + pendingRebate.toLocaleString() + " · 수령 " + clubIncentiveTotal.toLocaleString()
+           + (notYet < 0 ? " · 받은 금액이 " + Math.abs(notYet).toLocaleString() + " 더 많습니다" : "")
+           + (b2bPartnerPick ? " · " + comboEsc(b2bPartnerPick) : "")));
     html += statCard("이자지급 수령 합계", interestReceivedTotal.toLocaleString(), "#2e7d32");
     html += statCard("기존 매입-매출 차액 (수익)", baseProfitSum.toLocaleString(), null,
       b2bPartnerPick ? comboEsc(b2bPartnerPick) + " 매입분" : "전체");
@@ -26053,7 +26192,7 @@
     if(bar) bar.style.display = "none";
   };
 
-  // 파일에 박힌 버전 글자를 읽습니다. (예: "파일 2026-08-09 v487")
+  // 파일에 박힌 버전 글자를 읽습니다. (예: "파일 2026-08-09 v489")
   function readBuildTag(text){
     const m = String(text||"").match(/파일\s*[\d-]+\s*v(\d+)/);
     return m ? m[0].trim() : "";
