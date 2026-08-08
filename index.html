@@ -379,7 +379,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v529</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v530</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -2558,6 +2558,7 @@
           <h3 style="margin:0;">담보 계산서 <span class="info-tip" title="삼성전자에서 받은 세금계산서입니다. 이 금액만큼 B2B 대출을 받을 수 있고, 대출을 실행하면 그만큼 남은 금액이 줄어듭니다. 세금계산서 화면(매입·매출 관리)과는 별개로 여기서만 씁니다.">ⓘ</span></h3>
           <span class="btn-row">
             <span id="dl-collateral"></span>
+            <button class="btn small secondary" style="width:auto;" title="담아둔 자료를 버리고 새로 읽습니다" onclick="refreshLoanScreens()">새로 읽기</button>
             <button class="btn small" style="width:auto;" onclick="openCollateralModal()">+ 계산서 등록</button>
           </span>
         </div>
@@ -3721,6 +3722,9 @@
     // 자료가 바뀔 때마다 이 함수를 지나갑니다.
     //  담아둔 자료를 비워, 다음에 화면을 열 때 새 값을 읽게 합니다. (옛 값이 남지 않게)
     try{ if(typeof clearDocCache === "function") clearDocCache(); }catch(e){}
+    // 화면 묶음으로 담아둔 것(B2B 대출·계좌카드)도 같이 비웁니다.
+    //  여신 장부를 고쳤는데 담보 계산서가 옛 값을 보여주던 문제를 막습니다.
+    try{ if(typeof clearScreenBoxes === "function") clearScreenBoxes(); }catch(e){}
     try{
       await addDoc(collection(db, "activityLogs"), {
         actorName: currentUser.name, actorUsername: currentUser.username,
@@ -25252,6 +25256,7 @@
     logAction("B2B 여신 거래 삭제", id);
     // 지금 열려 있는 화면을 새로 읽습니다. (삼성여신 · B2B 대출)
     if(document.getElementById("tab-b2b") && document.getElementById("tab-b2b").classList.contains("active")) loadB2BTab();
+    clearScreenCache("loan");   // 담보 계산서가 여신 장부를 읽으므로 담아둔 것을 비웁니다
     if(document.getElementById("tab-loan") && document.getElementById("tab-loan").classList.contains("active")) refreshLoanScreens();
   };
 
@@ -27269,7 +27274,7 @@
     if(bar) bar.style.display = "none";
   };
 
-  // 파일에 박힌 버전 글자를 읽습니다. (예: "파일 2026-08-09 v529")
+  // 파일에 박힌 버전 글자를 읽습니다. (예: "파일 2026-08-09 v530")
   function readBuildTag(text){
     const m = String(text||"").match(/파일\s*[\d-]+\s*v(\d+)/);
     return m ? m[0].trim() : "";
@@ -27383,6 +27388,10 @@
   }
   // 데이터를 고치면 그 화면 캐시를 버립니다.
   window.clearScreenCache = function(screenKey){ delete dataCache["_m_" + screenKey]; };
+  // 화면 묶음으로 담아둔 것을 통째로 비웁니다. (자료가 바뀌면 언제나)
+  function clearScreenBoxes(){
+    Object.keys(dataCache).forEach(k=>{ if(k.indexOf("_m_") === 0) delete dataCache[k]; });
+  }
 
   window.clearAllCaches = function(){
     Object.keys(dataCache).forEach(k=> delete dataCache[k]);   // 화면별 묶음(_m_)까지 함께 지워집니다
