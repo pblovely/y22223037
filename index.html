@@ -379,7 +379,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v500</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v501</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -1060,7 +1060,7 @@
           수수료를 넣으면 등록할 때 <b>비용으로 함께 기록</b>됩니다. 비워두면 나중에 「수수료」 버튼으로 넣으셔도 됩니다.</p>
         <div class="stack-form">
           <div class="stack-row"><label>은행 <span class="info-tip" title="어느 은행 B2B 상품인지 고릅니다. 이전 내역은 기업은행, 현재는 대구은행입니다.">ⓘ</span></label>
-            <input type="text" id="loan-bank" list="loan-bank-list" placeholder="타이핑하면 목록이 나옵니다">
+            <input type="text" id="loan-bank" list="loan-bank-list" placeholder="타이핑하면 목록이 나옵니다" oninput="calcLoanDue()">
             <datalist id="loan-bank-list">
               <option value="대구은행"></option><option value="기업은행"></option>
             </datalist>
@@ -1075,7 +1075,8 @@
           <div class="stack-row"><label>대출명</label><input type="text" id="loan-name" placeholder="예: 1차 대출"></div>
           <div class="stack-row"><label>실행일</label><input type="text" id="loan-start" maxlength="8" inputmode="numeric" placeholder="예: 20260723" oninput="calcLoanDue()"></div>
           <div class="stack-row"><label>기간(개월)</label><input type="number" id="loan-term" value="6" oninput="calcLoanDue()"></div>
-          <div class="stack-row"><label>만기일 (자동)</label><input type="text" id="loan-due" disabled style="background:#fff;"></div>
+          <div class="stack-row"><label>만기일 (자동)</label><input type="text" id="loan-due" maxlength="8" inputmode="numeric" placeholder="자동으로 채워집니다. 고칠 수 있습니다"></div>
+          <div id="loan-due-note" style="font-size:11.5px;line-height:1.7;padding:0 8px 6px;"></div>
           <div class="stack-row"><label>대출 원금</label><input type="number" id="loan-principal" placeholder="예: 500000000" oninput="calcLoanInterest()"></div>
           <div class="stack-row"><label>연 이자율(%)</label><input type="number" step="0.01" id="loan-rate" placeholder="예: 5.8" oninput="calcLoanInterest()"></div>
           <div class="stack-row"><label>월 이자 (자동)</label><input type="number" id="loan-monthly" disabled style="background:#fff;"></div>
@@ -11692,6 +11693,13 @@
     const dt = new Date(y, m-1+Number(months||0), d);
     return dt.getFullYear() + String(dt.getMonth()+1).padStart(2,"0") + String(dt.getDate()).padStart(2,"0");
   }
+  // 며칠 뒤 날짜를 냅니다. (기업은행 만기는 개월이 아니라 날짜 기준입니다)
+  function addDaysStr(yyyymmdd, days){
+    const t = String(yyyymmdd||"").replace(/\D/g,"");
+    if(t.length !== 8) return "";
+    const dt = new Date(Number(t.slice(0,4)), Number(t.slice(4,6))-1, Number(t.slice(6,8)) + Number(days||0));
+    return dt.getFullYear() + String(dt.getMonth()+1).padStart(2,"0") + String(dt.getDate()).padStart(2,"0");
+  }
   function daysBetween(a, b){
     const p = t => { const x = String(t||"").replace(/\D/g,""); return x.length===8 ? new Date(+x.slice(0,4), +x.slice(4,6)-1, +x.slice(6,8)) : null; };
     const d1 = p(a), d2 = p(b);
@@ -11736,10 +11744,23 @@
       }catch(e){}
     })();
   };
+  // 만기일 — 은행마다 세는 법이 다릅니다.
+  //   · 기업은행 — 날짜 기준. 6개월이면 실행일 + 180일 (한 달 30일로 셉니다)
+  //       휴일이면 실제로는 그 전날이지만, 여기서는 180일 되는 날을 그대로 넣습니다.
+  //   · 대구은행 등 — 달 기준. 실행일에서 개월수를 더합니다.
   window.calcLoanDue = function(){
     const st = (document.getElementById("loan-start").value||"").replace(/\D/g,"");
     const tm = Number(document.getElementById("loan-term").value)||6;
-    document.getElementById("loan-due").value = addMonthsStr(st, tm);
+    const bank = String((document.getElementById("loan-bank")||{}).value||"").trim();
+    const due = (bank === "기업은행") ? addDaysStr(st, tm * 30) : addMonthsStr(st, tm);
+    document.getElementById("loan-due").value = due;
+    const note = document.getElementById("loan-due-note");
+    if(note){
+      note.innerHTML = (bank === "기업은행")
+        ? '<span style="color:var(--navy);">기업은행은 <b>날짜 기준</b>입니다. 실행일 + <b>' + (tm*30) + '일</b>로 넣었습니다.'
+          + '<br><span style="color:var(--gray);">만기일이 휴일이면 실제로는 그 전날입니다. 필요하면 직접 고쳐주세요.</span></span>'
+        : '<span style="color:var(--gray);">실행일에서 ' + tm + '개월 뒤로 넣었습니다.</span>';
+    }
     calcLoanInterest();
   };
   window.calcLoanInterest = function(){
@@ -26340,7 +26361,7 @@
     if(bar) bar.style.display = "none";
   };
 
-  // 파일에 박힌 버전 글자를 읽습니다. (예: "파일 2026-08-09 v500")
+  // 파일에 박힌 버전 글자를 읽습니다. (예: "파일 2026-08-09 v501")
   function readBuildTag(text){
     const m = String(text||"").match(/파일\s*[\d-]+\s*v(\d+)/);
     return m ? m[0].trim() : "";
