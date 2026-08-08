@@ -369,7 +369,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-08 v446</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-08 v448</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -419,6 +419,7 @@
           <button class="tab-btn" data-tab="tab-ledger" data-label-key="tab-ledger" id="tabbtn-ledger" onclick="switchTab('tab-ledger')" style="display:none;"><span class="tab-label-text">거래처 정산</span></button>
           <button class="tab-btn" data-tab="tab-b2b" data-label-key="tab-b2b" id="tabbtn-b2b" onclick="switchTab('tab-b2b')" style="display:none;"><span class="tab-label-text">삼성여신</span></button>
           <button class="tab-btn" data-tab="tab-loan" data-label-key="tab-loan" id="tabbtn-loan" onclick="switchTab('tab-loan')" style="display:none;"><span class="tab-label-text">B2B 대출</span></button>
+          <button class="tab-btn" data-tab="tab-accounts" data-label-key="tab-accounts" id="tabbtn-accounts" onclick="switchTab('tab-accounts')" style="display:none;"><span class="tab-label-text">계좌·카드</span></button>
           <button class="tab-btn" data-tab="tab-logs" data-label-key="tab-logs" id="tabbtn-logs" onclick="switchTab('tab-logs')" style="display:none;"><span class="tab-label-text">이력</span></button>
         </div>
       </div>
@@ -2327,6 +2328,58 @@
         </div>
         <div id="loancost-cards" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px;"></div>
         <div id="loancost-list"></div>
+      </div>
+    </div>
+
+    <div id="tab-accounts" class="tab-panel">
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+          <h3 style="margin:0;">계좌 목록 <span class="info-tip" title="SERP 전계좌목록 엑셀을 그대로 올립니다. 체크한 계좌만 지출예상과 입출금내역에서 씁니다. 다시 올려도 체크는 그대로 유지되고 잔액만 갱신됩니다.">ⓘ</span></h3>
+          <span class="btn-row">
+            <span id="dl-acclist"></span>
+            <button class="btn small secondary" style="width:auto;" onclick="document.getElementById('acc-file').click()">전계좌목록 올리기</button>
+            <input type="file" id="acc-file" accept=".xls,.xlsx" style="display:none;" onchange="uploadAccountList(event)">
+          </span>
+        </div>
+        <p class="desc" style="margin-top:0;">SERP <b>전계좌목록</b>을 그대로 올리세요. <b>체크한 계좌만</b> 지출예상에 잡힙니다.<br>
+          다시 올리면 <b>체크는 그대로</b> 두고 잔액만 새로 채웁니다. 새 계좌는 「제외」 상태로 들어옵니다.</p>
+        <div id="acc-upload-msg" style="font-size:12.5px;margin-bottom:8px;"></div>
+        <div id="acc-cards" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px;"></div>
+        <div class="tbar-row" style="display:flex;gap:0;flex-wrap:wrap;align-items:center;margin-bottom:8px;">
+          <select id="acc-owner" onchange="loadAccountList()" style="height:28px;border:1px solid var(--line);font-size:12.5px;box-sizing:border-box;"><option value="">예금주 전체</option></select>
+          <input type="text" id="acc-q" placeholder="은행·계좌번호·별칭으로 찾기" onchange="loadAccountList()" style="width:220px;height:28px;border:1px solid var(--line);padding:0 8px;font-size:12.5px;margin-left:-1px;box-sizing:border-box;">
+          <button class="btn small secondary" style="width:auto;margin-left:-1px;" onclick="clearAccCond()">비우기</button>
+          <span style="margin-left:10px;font-size:12px;color:var(--gray);">보이는 것 전부</span>
+          <button class="btn small secondary" style="width:auto;margin-left:6px;" onclick="setAccUseAll(true)">사용</button>
+          <button class="btn small secondary" style="width:auto;margin-left:-1px;" onclick="setAccUseAll(false)">제외</button>
+        </div>
+        <div id="account-list"></div>
+      </div>
+
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+          <h3 style="margin:0;">카드 목록 <span class="info-tip" title="SERP 보유카드목록 엑셀을 그대로 올립니다. 카드번호로 찾아 넣으므로 다시 올려도 체크가 유지됩니다. 결제일·사용자·부서는 파일에 있는 값을 그대로 씁니다.">ⓘ</span></h3>
+          <span class="btn-row">
+            <span id="dl-cardlist"></span>
+            <button class="btn small secondary" style="width:auto;" onclick="document.getElementById('card-file').click()">보유카드목록 올리기</button>
+            <input type="file" id="card-file" accept=".xls,.xlsx" style="display:none;" onchange="uploadCardList(event)">
+          </span>
+        </div>
+        <p class="desc" style="margin-top:0;">SERP <b>보유카드목록</b>을 그대로 올리세요. <b>체크한 카드만</b> 지출예상에 잡힙니다.<br>
+          결제일·사용자·부서는 파일에 있는 값을 씁니다. 다시 올리면 체크는 그대로 둡니다.</p>
+        <div id="card-upload-msg" style="font-size:12.5px;margin-bottom:8px;"></div>
+        <div id="cardlist-cards" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px;"></div>
+        <div class="tbar-row" style="display:flex;gap:0;flex-wrap:wrap;align-items:center;margin-bottom:8px;">
+          <select id="cardl-biz" onchange="loadCardList()" style="height:28px;border:1px solid var(--line);font-size:12.5px;box-sizing:border-box;"><option value="">사업자 전체</option></select>
+          <select id="cardl-co" onchange="loadCardList()" style="height:28px;border:1px solid var(--line);font-size:12.5px;margin-left:-1px;box-sizing:border-box;"><option value="">카드사 전체</option></select>
+          <input type="text" id="cardl-q" placeholder="카드번호·별칭·사용자로 찾기" onchange="loadCardList()" style="width:220px;height:28px;border:1px solid var(--line);padding:0 8px;font-size:12.5px;margin-left:-1px;box-sizing:border-box;">
+          <button class="btn small secondary" style="width:auto;margin-left:-1px;" onclick="clearCardCond()">비우기</button>
+          <span style="margin-left:10px;font-size:12px;color:var(--gray);">보이는 것 전부</span>
+          <button class="btn small secondary" style="width:auto;margin-left:6px;" onclick="setCardUseAll(true)">사용</button>
+          <button class="btn small secondary" style="width:auto;margin-left:-1px;" onclick="setCardUseAll(false)">제외</button>
+        </div>
+        <div id="cardlist-pagination"></div>
+        <div id="cardlist-list"></div>
       </div>
     </div>
 
@@ -10899,6 +10952,398 @@
     el.querySelectorAll("[data-loan-ext]").forEach(b=> b.onclick = ()=> extendLoan(b.dataset.loanExt));
     el.querySelectorAll("[data-loan-repay]").forEach(b=> b.onclick = ()=> repayLoan(b.dataset.loanRepay));
     el.querySelectorAll("[data-loan-detail]").forEach(b=> b.onclick = ()=> showLoanDetail(b.dataset.loanDetail));
+  };
+
+  // ================= 계좌 목록 =================
+  //  SERP 전계좌목록을 그대로 올립니다. 계좌번호로 찾아 넣으므로 다시 올려도 체크가 유지됩니다.
+  const accKeyOf = (bank, no)=> String(bank||"").trim() + "|" + String(no||"").replace(/[^0-9]/g,"");
+
+  window.clearAccCond = function(){
+    ["acc-owner","acc-q"].forEach(id=>{ const e=document.getElementById(id); if(e) e.value=""; });
+    loadAccountList();
+  };
+
+  window.uploadAccountList = async function(ev){
+    const f = ev.target.files && ev.target.files[0];
+    if(!f) return;
+    ev.target.value = "";
+    const msg = document.getElementById("acc-upload-msg");
+    const show = (t, color)=>{ msg.innerHTML = '<span style="color:'+(color||"var(--gray)")+';">'+t+'</span>'; };
+    if(!hasPerm(currentUserPerms, "paymentProcess")){ show("권한이 없습니다.", "var(--danger)"); return; }
+    show("파일을 읽는 중입니다...");
+    try{
+      const buf = await f.arrayBuffer();
+      const wb = XLSX.read(buf, { type:"array" });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const aoa = XLSX.utils.sheet_to_json(ws, { header:1, raw:false, defval:"" });
+      // 머리글 줄 찾기 — 「계좌번호」가 있는 줄
+      let hi = -1;
+      for(let i=0;i<Math.min(aoa.length,20);i++){
+        if((aoa[i]||[]).some(c=> String(c).indexOf("계좌번호") >= 0)){ hi = i; break; }
+      }
+      if(hi < 0){ show("「계좌번호」가 있는 머리글 줄을 찾지 못했습니다. 전계좌목록 파일인지 확인해주세요.", "var(--danger)"); return; }
+      const head = (aoa[hi]||[]).map(x=> String(x).trim());
+      const col = n => head.findIndex(h=> h.indexOf(n) >= 0);
+      const cB=col("은행"), cN=col("계좌번호"), cO=col("예금주"), cA=col("계좌별칭"),
+            cL=col("대출한도"), cBal=col("현재잔액"), cAv=col("가용자금");
+      if(cB<0 || cN<0){ show("은행·계좌번호 칸을 찾지 못했습니다.", "var(--danger)"); return; }
+
+      const num = v => Number(String(v==null?"":v).replace(/[^0-9.-]/g,"")) || 0;
+      const rows = [];
+      for(let i=hi+1;i<aoa.length;i++){
+        const r = aoa[i] || [];
+        const bank = String(r[cB]||"").trim();
+        const no   = String(r[cN]||"").trim();
+        if(!bank || !no) continue;
+        if(bank.indexOf("합계") >= 0 || no.indexOf("건") >= 0) continue;   // 맨 아래 합계줄
+        rows.push({
+          key: accKeyOf(bank, no),
+          bank, accountNo: no,
+          owner: String(r[cO]||"").trim(),
+          alias: String(r[cA]||"").trim(),
+          loanLimit: cL>=0 ? num(r[cL]) : 0,
+          balance:   cBal>=0 ? num(r[cBal]) : 0,
+          available: cAv>=0 ? num(r[cAv]) : 0
+        });
+      }
+      if(rows.length === 0){ show("읽을 계좌가 없습니다.", "var(--danger)"); return; }
+
+      // 이미 있는 계좌는 잔액만 갱신하고 「사용」 체크는 그대로 둡니다.
+      const snap = await getDocs(collection(db,"bankAccountsList"));
+      const have = new Map();
+      snap.forEach(d=>{ const x = d.data(); have.set(x.key || accKeyOf(x.bank, x.accountNo), { id:d.id, ...x }); });
+
+      let added=0, updated=0;
+      for(let i=0;i<rows.length;i+=300){
+        const bt = writeBatch(db);
+        rows.slice(i, i+300).forEach(x=>{
+          const old = have.get(x.key);
+          if(old){
+            bt.update(doc(db,"bankAccountsList", old.id), {
+              bank:x.bank, accountNo:x.accountNo, owner:x.owner, alias:x.alias,
+              loanLimit:x.loanLimit, balance:x.balance, available:x.available,
+              balanceAt: serverTimestamp()
+            });
+            updated++;
+          }else{
+            bt.set(doc(collection(db,"bankAccountsList")), {
+              ...x, useForExpense:false,      // 새 계좌는 「제외」로 들어옵니다
+              createdBy: currentUser.name, createdAt: serverTimestamp(), balanceAt: serverTimestamp()
+            });
+            added++;
+          }
+        });
+        await bt.commit();
+      }
+      logAction("계좌 목록 올리기", "새로 " + added + "건 · 갱신 " + updated + "건");
+      show("새로 <b>" + added + "건</b> · 잔액 갱신 <b>" + updated + "건</b>. 새 계좌는 「제외」 상태입니다.", "#2e7d32");
+      loadAccountList();
+    }catch(e){
+      show("읽지 못했습니다. " + comboEsc((e&&e.message)?e.message:String(e)), "var(--danger)");
+    }
+  };
+
+  window.setAccUse = async function(id, on){
+    try{
+      await updateDoc(doc(db,"bankAccountsList", id), { useForExpense: !!on });
+    }catch(e){ alert("바꾸지 못했습니다."); return; }
+    loadAccountList();
+  };
+
+  window.setAccUseAll = async function(on){
+    const ids = Array.from(document.querySelectorAll("#account-list .acc-use")).map(cb=> cb.dataset.id);
+    if(ids.length === 0) return;
+    if(!confirm("보이는 계좌 " + ids.length + "건을 모두 " + (on ? "「사용」" : "「제외」") + "으로 바꿉니다.\n\n진행할까요?")) return;
+    for(let i=0;i<ids.length;i+=300){
+      const bt = writeBatch(db);
+      ids.slice(i, i+300).forEach(id=> bt.update(doc(db,"bankAccountsList", id), { useForExpense: !!on }));
+      await bt.commit();
+    }
+    logAction("계좌 사용 여부 일괄", ids.length + "건 → " + (on ? "사용" : "제외"));
+    loadAccountList();
+  };
+
+  window.loadAccountList = async function(){
+    const listEl = document.getElementById("account-list");
+    const cardEl = document.getElementById("acc-cards");
+    if(!listEl) return;
+    listEl.innerHTML = '<div class="list-empty">불러오는 중...</div>';
+
+    let rows = [];
+    try{
+      const snap = await getDocs(collection(db,"bankAccountsList"));
+      snap.forEach(d=> rows.push({ id:d.id, ...d.data() }));
+    }catch(e){}
+    rows.sort((a,b)=> String(a.alias||"").localeCompare(String(b.alias||"")));
+
+    // 예금주 고르는 칸
+    const ownerSel = document.getElementById("acc-owner");
+    if(ownerSel){
+      const cur = ownerSel.value;
+      const names = [...new Set(rows.map(r=> String(r.owner||"").trim()).filter(Boolean))].sort();
+      ownerSel.innerHTML = '<option value="">예금주 전체</option>'
+        + names.map(n=>'<option value="'+comboEsc(n)+'"'+(cur===n?' selected':'')+'>'+comboEsc(n)+'</option>').join("");
+      ownerSel.value = cur;
+    }
+
+    if(cardEl){
+      const on = rows.filter(r=> r.useForExpense === true);
+      const bal = on.reduce((n,r)=> n + (Number(r.balance)||0), 0);
+      const card = (label, val, color, note)=>
+        '<div style="flex:1;min-width:150px;border:1px solid var(--line);background:#fff;padding:10px 14px;">'
+        + '<div style="font-size:11.5px;color:var(--gray);margin-bottom:4px;">'+label+'</div>'
+        + '<div style="font-size:19px;font-weight:800;color:'+(color||'var(--navy)')+';">'+val+'</div>'
+        + (note ? '<div style="font-size:10.5px;color:var(--gray);margin-top:3px;">'+note+'</div>' : '') + '</div>';
+      cardEl.innerHTML =
+        card("전체 계좌", rows.length, "var(--navy)") +
+        card("쓰는 계좌", on.length, "#2e7d32", "지출예상에 잡히는 것") +
+        card("쓰는 계좌 잔액", bal.toLocaleString(), "#1565c0", "올린 시점 기준");
+    }
+
+    const owner = String((document.getElementById("acc-owner")||{}).value || "");
+    const q = String((document.getElementById("acc-q")||{}).value || "").trim().toLowerCase();
+    let view = rows.filter(r=>{
+      if(owner && String(r.owner||"").trim() !== owner) return false;
+      if(q){
+        const hay = [r.bank, r.accountNo, r.alias, r.owner].map(v=> String(v||"").toLowerCase()).join(" ");
+        if(hay.indexOf(q) < 0) return false;
+      }
+      return true;
+    });
+
+    if(view.length === 0){
+      listEl.innerHTML = '<div class="list-empty">' + (rows.length ? "해당하는 계좌가 없습니다."
+        : "등록된 계좌가 없습니다. <b>전계좌목록 올리기</b>로 넣어주세요.") + '</div>';
+      addDownloadBtn("dl-acclist", "account-list", "계좌목록");
+      return;
+    }
+    let h = '<div style="overflow-x:auto;"><table class="data-table resv-dest-fit" style="width:auto;"><thead><tr>'
+      + '<th>사용</th><th>은행</th><th>계좌번호</th><th>예금주</th><th>계좌별칭</th>'
+      + '<th class="ta-right">잔액</th><th class="ta-right">가용자금</th><th class="ta-right">대출한도</th>'
+      + '</tr></thead><tbody>';
+    view.forEach(r=>{
+      const on = r.useForExpense === true;
+      h += '<tr' + (on ? '' : ' class="row-done"') + '>'
+        + '<td><input type="checkbox" class="acc-use" data-id="'+r.id+'"'+(on?' checked':'')+'></td>'
+        + '<td>'+comboEsc(r.bank||"-")+'</td>'
+        + '<td style="font-size:11.5px;">'+comboEsc(r.accountNo||"-")+'</td>'
+        + '<td>'+comboEsc(r.owner||"-")+'</td>'
+        + '<td><b>'+comboEsc(r.alias||"-")+'</b></td>'
+        + '<td class="ta-right">'+(Number(r.balance)||0).toLocaleString()+'</td>'
+        + '<td class="ta-right">'+(Number(r.available)||0).toLocaleString()+'</td>'
+        + '<td class="ta-right">'+(Number(r.loanLimit)||0).toLocaleString()+'</td>'
+        + '</tr>';
+    });
+    h += '</tbody></table></div>';
+    listEl.innerHTML = h;
+    listEl.querySelectorAll(".acc-use").forEach(cb=>{
+      cb.onchange = ()=> setAccUse(cb.dataset.id, cb.checked);
+    });
+    addDownloadBtn("dl-acclist", "account-list", "계좌목록");
+    addViewCfgBtn("dl-acclist", "account-list");
+  };
+
+  // ================= 카드 목록 =================
+  //  SERP 보유카드목록을 그대로 올립니다. 카드번호로 찾아 넣으므로 다시 올려도 체크가 유지됩니다.
+  const cardNoKey = no => String(no||"").replace(/[^0-9]/g,"");
+
+  window.clearCardCond = function(){
+    ["cardl-biz","cardl-co","cardl-q"].forEach(id=>{ const e=document.getElementById(id); if(e) e.value=""; });
+    loadCardList();
+  };
+
+  window.uploadCardList = async function(ev){
+    const f = ev.target.files && ev.target.files[0];
+    if(!f) return;
+    ev.target.value = "";
+    const msg = document.getElementById("card-upload-msg");
+    const show = (t, color)=>{ msg.innerHTML = '<span style="color:'+(color||"var(--gray)")+';">'+t+'</span>'; };
+    if(!hasPerm(currentUserPerms, "paymentProcess")){ show("권한이 없습니다.", "var(--danger)"); return; }
+    show("파일을 읽는 중입니다...");
+    try{
+      const buf = await f.arrayBuffer();
+      const wb = XLSX.read(buf, { type:"array" });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const aoa = XLSX.utils.sheet_to_json(ws, { header:1, raw:false, defval:"" });
+      let hi = -1;
+      for(let i=0;i<Math.min(aoa.length,20);i++){
+        if((aoa[i]||[]).some(c=> String(c).indexOf("카드번호") >= 0)){ hi = i; break; }
+      }
+      if(hi < 0){ show("「카드번호」가 있는 머리글 줄을 찾지 못했습니다. 보유카드목록 파일인지 확인해주세요.", "var(--danger)"); return; }
+      const head = (aoa[hi]||[]).map(x=> String(x).trim());
+      const col = n => head.findIndex(h=> h.indexOf(n) >= 0);
+      const cBiz=col("사업자번호"), cCo=col("카드사"), cNo=col("카드번호"), cAl=col("카드별칭"),
+            cDep=col("부서"), cUser=col("사용자"), cPay=col("결제일"), cLim=col("한도금액"), cAct=col("활동상태");
+      if(cNo<0){ show("카드번호 칸을 찾지 못했습니다.", "var(--danger)"); return; }
+
+      const num = v => Number(String(v==null?"":v).replace(/[^0-9.-]/g,"")) || 0;
+      const rows = [];
+      for(let i=hi+1;i<aoa.length;i++){
+        const r = aoa[i] || [];
+        const no = String(r[cNo]||"").trim();
+        if(!no || cardNoKey(no).length < 8) continue;
+        // 카드사 이름에 붙어 있는 (사업자명:번호) 를 떼어 회사명만 남깁니다.
+        const coRaw = String(cCo>=0 ? r[cCo] : "").trim();
+        const coName = coRaw.replace(/\(.*$/, "").trim() || coRaw;
+        rows.push({
+          key: cardNoKey(no),
+          bizNo: String(cBiz>=0 ? r[cBiz] : "").trim(),
+          cardCo: coName, cardCoRaw: coRaw,
+          cardNo: no,
+          alias: String(cAl>=0 ? r[cAl] : "").trim(),
+          dept:  String(cDep>=0 ? r[cDep] : "").trim(),
+          user:  String(cUser>=0 ? r[cUser] : "").trim(),
+          payDay: num(cPay>=0 ? r[cPay] : ""),          // 「15일」 → 15
+          limitAmt: cLim>=0 ? num(r[cLim]) : 0,
+          active: String(cAct>=0 ? r[cAct] : "").trim()
+        });
+      }
+      if(rows.length === 0){ show("읽을 카드가 없습니다.", "var(--danger)"); return; }
+
+      const snap = await getDocs(collection(db,"cardList"));
+      const have = new Map();
+      snap.forEach(d=>{ const x = d.data(); have.set(x.key || cardNoKey(x.cardNo), { id:d.id, ...x }); });
+
+      let added=0, updated=0;
+      for(let i=0;i<rows.length;i+=300){
+        const bt = writeBatch(db);
+        rows.slice(i, i+300).forEach(x=>{
+          const old = have.get(x.key);
+          if(old){
+            bt.update(doc(db,"cardList", old.id), {
+              bizNo:x.bizNo, cardCo:x.cardCo, cardCoRaw:x.cardCoRaw, cardNo:x.cardNo,
+              alias:x.alias, dept:x.dept, user:x.user, payDay:x.payDay,
+              limitAmt:x.limitAmt, active:x.active, syncedAt: serverTimestamp()
+            });
+            updated++;
+          }else{
+            bt.set(doc(collection(db,"cardList")), {
+              ...x, useForExpense:false,
+              createdBy: currentUser.name, createdAt: serverTimestamp(), syncedAt: serverTimestamp()
+            });
+            added++;
+          }
+        });
+        await bt.commit();
+      }
+      logAction("카드 목록 올리기", "새로 " + added + "건 · 갱신 " + updated + "건");
+      show("새로 <b>" + added + "건</b> · 갱신 <b>" + updated + "건</b>. 새 카드는 「제외」 상태입니다.", "#2e7d32");
+      loadCardList();
+    }catch(e){
+      show("읽지 못했습니다. " + comboEsc((e&&e.message)?e.message:String(e)), "var(--danger)");
+    }
+  };
+
+  window.setCardUse = async function(id, on){
+    try{ await updateDoc(doc(db,"cardList", id), { useForExpense: !!on }); }
+    catch(e){ alert("바꾸지 못했습니다."); return; }
+    loadCardList();
+  };
+
+  window.setCardUseAll = async function(on){
+    const ids = Array.from(document.querySelectorAll("#cardlist-list .card-use")).map(cb=> cb.dataset.id);
+    if(ids.length === 0) return;
+    if(!confirm("보이는 카드 " + ids.length + "건을 모두 " + (on ? "「사용」" : "「제외」") + "으로 바꿉니다.\n\n"
+      + "(지금 페이지에 보이는 것만입니다)\n\n진행할까요?")) return;
+    for(let i=0;i<ids.length;i+=300){
+      const bt = writeBatch(db);
+      ids.slice(i, i+300).forEach(id=> bt.update(doc(db,"cardList", id), { useForExpense: !!on }));
+      await bt.commit();
+    }
+    logAction("카드 사용 여부 일괄", ids.length + "건 → " + (on ? "사용" : "제외"));
+    loadCardList();
+  };
+
+  window.loadCardList = async function(){
+    const listEl = document.getElementById("cardlist-list");
+    const cardEl = document.getElementById("cardlist-cards");
+    if(!listEl) return;
+    listEl.innerHTML = '<div class="list-empty">불러오는 중...</div>';
+
+    let rows = [];
+    try{
+      const snap = await getDocs(collection(db,"cardList"));
+      snap.forEach(d=> rows.push({ id:d.id, ...d.data() }));
+    }catch(e){}
+    rows.sort((a,b)=> String(a.cardCo||"").localeCompare(String(b.cardCo||""))
+                   || String(a.alias||"").localeCompare(String(b.alias||"")));
+
+    // 고르는 칸 채우기
+    const fill = (id, vals, label)=>{
+      const sel = document.getElementById(id); if(!sel) return;
+      const cur = sel.value;
+      const list = [...new Set(vals.filter(Boolean))].sort();
+      sel.innerHTML = '<option value="">'+label+'</option>'
+        + list.map(n=>'<option value="'+comboEsc(n)+'">'+comboEsc(n)+'</option>').join("");
+      sel.value = cur;
+    };
+    fill("cardl-biz", rows.map(r=> String(r.bizNo||"").trim()), "사업자 전체");
+    fill("cardl-co",  rows.map(r=> String(r.cardCo||"").trim()), "카드사 전체");
+
+    if(cardEl){
+      const on = rows.filter(r=> r.useForExpense === true);
+      const card = (label, val, color, note)=>
+        '<div style="flex:1;min-width:150px;border:1px solid var(--line);background:#fff;padding:10px 14px;">'
+        + '<div style="font-size:11.5px;color:var(--gray);margin-bottom:4px;">'+label+'</div>'
+        + '<div style="font-size:19px;font-weight:800;color:'+(color||'var(--navy)')+';">'+val+'</div>'
+        + (note ? '<div style="font-size:10.5px;color:var(--gray);margin-top:3px;">'+note+'</div>' : '') + '</div>';
+      const noPay = on.filter(r=> !(Number(r.payDay)>0)).length;
+      cardEl.innerHTML =
+        card("전체 카드", rows.length, "var(--navy)") +
+        card("쓰는 카드", on.length, "#2e7d32", "지출예상에 잡히는 것") +
+        card("결제일 없음", noPay, noPay ? "var(--danger)" : "var(--gray)", "쓰는 카드 중");
+    }
+
+    const biz = String((document.getElementById("cardl-biz")||{}).value || "");
+    const co  = String((document.getElementById("cardl-co")||{}).value || "");
+    const q   = String((document.getElementById("cardl-q")||{}).value || "").trim().toLowerCase();
+    let view = rows.filter(r=>{
+      if(biz && String(r.bizNo||"").trim() !== biz) return false;
+      if(co  && String(r.cardCo||"").trim() !== co) return false;
+      if(q){
+        const hay = [r.cardNo, r.alias, r.user, r.dept, r.cardCo].map(v=> String(v||"").toLowerCase()).join(" ");
+        if(hay.indexOf(q) < 0) return false;
+      }
+      return true;
+    });
+
+    const pgEl = document.getElementById("cardlist-pagination");
+    if(pgEl){ pgEl.innerHTML = ""; pgEl.appendChild(renderPaginationBar("cardList", view.length, loadCardList)); }
+    const { pageItems } = paginateSlice(view, "cardList");
+
+    if(view.length === 0){
+      listEl.innerHTML = '<div class="list-empty">' + (rows.length ? "해당하는 카드가 없습니다."
+        : "등록된 카드가 없습니다. <b>보유카드목록 올리기</b>로 넣어주세요.") + '</div>';
+      addDownloadBtn("dl-cardlist", "cardlist-list", "카드목록");
+      return;
+    }
+    let h = '<div style="overflow-x:auto;"><table class="data-table resv-dest-fit" style="width:auto;"><thead><tr>'
+      + '<th>사용</th><th>카드사</th><th>카드번호</th><th>별칭</th><th>사용자</th><th>부서</th>'
+      + '<th class="ta-right">결제일</th><th class="ta-right">한도</th><th>사업자번호</th><th>상태</th>'
+      + '</tr></thead><tbody>';
+    pageItems.forEach(r=>{
+      const on = r.useForExpense === true;
+      const pd = Number(r.payDay)||0;
+      h += '<tr' + (on ? '' : ' class="row-done"') + '>'
+        + '<td><input type="checkbox" class="card-use" data-id="'+r.id+'"'+(on?' checked':'')+'></td>'
+        + '<td>'+comboEsc(r.cardCo||"-")+'</td>'
+        + '<td style="font-size:11.5px;">'+comboEsc(r.cardNo||"-")+'</td>'
+        + '<td><b>'+comboEsc(r.alias||"-")+'</b></td>'
+        + '<td>'+comboEsc(r.user||"-")+'</td>'
+        + '<td>'+comboEsc(r.dept||"-")+'</td>'
+        + '<td class="ta-right"'+(pd?'':' style="color:var(--danger);"')+'>'+(pd ? pd + "일" : "없음")+'</td>'
+        + '<td class="ta-right">'+(Number(r.limitAmt)||0).toLocaleString()+'</td>'
+        + '<td style="font-size:11.5px;color:var(--gray);">'+comboEsc(r.bizNo||"-")+'</td>'
+        + '<td>'+comboEsc(r.active||"-")+'</td>'
+        + '</tr>';
+    });
+    h += '</tbody></table></div>';
+    listEl.innerHTML = h;
+    listEl.querySelectorAll(".card-use").forEach(cb=>{
+      cb.onchange = ()=> setCardUse(cb.dataset.id, cb.checked);
+    });
+    addDownloadBtn("dl-cardlist", "cardlist-list", "카드목록");
+    addViewCfgBtn("dl-cardlist", "cardlist-list");
   };
 
   // ---------- 담보 계산서 ----------
@@ -27657,7 +28102,7 @@
     document.getElementById("signup-form").style.display="none";
     document.getElementById("login-form").style.display="block";
   };
-  const ADMIN_TAB_IDS = ["tab-site","tab-team","tab-users","tab-reqboard","tab-cashbook","tab-recon","tab-tax","tab-b2b","tab-loan","tab-logs"];
+  const ADMIN_TAB_IDS = ["tab-site","tab-team","tab-users","tab-reqboard","tab-cashbook","tab-recon","tab-tax","tab-b2b","tab-loan","tab-accounts","tab-logs"];
   const INV_ADMIN_TAB_IDS = ["tab-inv-model","tab-inv-color","tab-inv-manufacturer","tab-inv-location","tab-inv-status","tab-inv-carrier"];
 
   window.toggleAdminMenu = function(){
@@ -27734,6 +28179,7 @@
     if(tabId==="tab-lgrefund" && typeof loadLgRefund === "function") loadLgRefund();
     if(tabId==="tab-paycheck" && typeof loadPayCheck === "function") loadPayCheck();
     if(tabId==="tab-loan" && typeof loadLoanList === "function"){ loadCollateralList(); loadLoanList(); loadLoanCostList(); }
+    if(tabId==="tab-accounts" && typeof loadAccountList === "function"){ loadAccountList(); loadCardList(); }
     if(tabId==="tab-activation" && typeof loadActivationList === "function") loadActivationList();
     if(tabId==="tab-site" && typeof renderHiddenList === "function") renderHiddenList();
     if(tabId==="tab-site" && typeof renderCacheTargets === "function") renderCacheTargets();
@@ -27928,6 +28374,7 @@
       setMenu("tabbtn-recon", hasPerm(perms, "menuReqBoard") || showSettlement);
       setMenu("tabbtn-b2b", showSettlement);
       setMenu("tabbtn-loan", showSettlement);
+      setMenu("tabbtn-accounts", showSettlement);
       setMenu("tabbtn-activation", showSaleReq || showSettlement || showAnyWorkMenu);
       setMenu("tabbtn-ledger", showLedger || showSettlement);
       setMenu("tabbtn-datacheck", showDataCheck || showSettlement);
