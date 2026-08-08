@@ -379,7 +379,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-08 v470</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-08 v471</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -1364,12 +1364,37 @@
       </div>
     </div>
 
+    <!-- 모델 텍스트 붙여넣기 -->
+    <div id="mpaste-overlay" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.55);z-index:1090;align-items:center;justify-content:center;">
+      <div style="background:#fff;border:2px solid var(--navy);max-width:760px;width:96%;max-height:92vh;overflow-y:auto;padding:22px;position:relative;">
+        <button onclick="closeModelPaste()" style="position:absolute;top:12px;right:12px;background:none;border:1px solid var(--navy);width:26px;height:26px;cursor:pointer;font-size:13px;">✕</button>
+        <h3 style="margin-top:0;margin-bottom:4px;">모델 텍스트로 붙여넣기</h3>
+        <p class="desc" style="margin-top:0;">엑셀에서 그대로 복사해 붙여넣으세요. <b>탭·쉼표·여러 칸 띄우기</b>로 나뉜 것을 읽습니다.<br>
+          순서는 <b>전산모델명 · 펫네임 · 모델명 · 기가수 · 출고가</b> 입니다. 뒤쪽은 없어도 됩니다.<br>
+          <b>전산모델명만 있어도 등록됩니다.</b> 나머지는 등록 후 목록에서 수정으로 채우시면 됩니다.</p>
+        <div class="stack-form">
+          <div class="stack-row"><label>제조사 <span class="info-tip" title="붙여넣은 줄에 제조사가 없을 때 이 값으로 채웁니다. 비워두면 제조사 없이 등록됩니다.">ⓘ</span></label>
+            <select id="mpaste-maker"><option value="">(비워둠)</option></select>
+          </div>
+        </div>
+        <textarea id="mpaste-text" rows="10" placeholder="SM-F976N512	폴드8 울트라	SM-F976N	512	2830300&#10;SM-A166L	버디4	SM-A166L		399300&#10;SM-S926N256"
+          style="width:100%;box-sizing:border-box;border:1px solid var(--line);padding:8px;font-size:12.5px;font-family:monospace;margin-top:8px;"></textarea>
+        <span class="btn-row" style="margin-top:8px;">
+          <button class="btn small secondary" style="width:auto;" onclick="analyzeModelPaste()">분석</button>
+          <button class="btn small" style="width:auto;" id="mpaste-save" onclick="submitModelPaste()" disabled>등록</button>
+          <button class="btn small secondary" style="width:auto;" onclick="closeModelPaste()">닫기</button>
+        </span>
+        <div id="mpaste-msg" style="font-size:12.5px;margin-top:8px;"></div>
+        <div id="mpaste-result" style="margin-top:10px;"></div>
+      </div>
+    </div>
+
     <!-- ===== 관리자: 재고 기초설정 ===== -->
     <div id="tab-inv-model" class="tab-panel">
       <div class="card" style="max-width:1400px;">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
           <h3 style="margin:0;">모델 등록</h3>
-          <span class="btn-row"><button class="btn small secondary" style="width:auto;" onclick="syncInventoryListPrice()" title="모델 등록의 출고가를 기준으로 기존 재고의 출고가를 맞춥니다. 입고가·판매가는 그대로 두고 할인 금액과 비율만 다시 계산합니다. 실행 전 대상 건수와 미리보기를 확인할 수 있습니다.">재고 출고가 맞추기</button><button class="btn small secondary" style="width:auto;" onclick="openModelExcelModal()">파일 업로드</button><button class="btn small" style="width:auto;" onclick="openModelSingleModal()">+ 건별 등록</button></span>
+          <span class="btn-row"><button class="btn small secondary" style="width:auto;" onclick="syncInventoryListPrice()" title="모델 등록의 출고가를 기준으로 기존 재고의 출고가를 맞춥니다. 입고가·판매가는 그대로 두고 할인 금액과 비율만 다시 계산합니다. 실행 전 대상 건수와 미리보기를 확인할 수 있습니다.">재고 출고가 맞추기</button><button class="btn small secondary" style="width:auto;" onclick="openModelPaste()">텍스트로 붙여넣기</button><button class="btn small secondary" style="width:auto;" onclick="openModelExcelModal()">파일 업로드</button><button class="btn small" style="width:auto;" onclick="openModelSingleModal()">+ 건별 등록</button></span>
         </div>
         <div id="model-syscode-notice" style="display:none;font-size:12.5px;padding:9px 11px;margin-bottom:8px;border:1px solid var(--danger);background:#fdecea;line-height:1.7;"></div>
         <p class="desc">등록된 모델을 한눈에 볼 수 있습니다. SKU가 없는 색상은 빨간색으로 표시되니 클릭해서 채워주세요.</p>
@@ -6269,6 +6294,127 @@
     loadModelAdminList();
     loadColorAdminList();
     setTimeout(closeModelSingleModal, 900);
+  };
+
+  // ---------- 모델 텍스트 붙여넣기 ----------
+  //  엑셀에서 복사한 줄을 그대로 읽습니다. 전산모델명만 있어도 등록됩니다.
+  window.openModelPaste = async function(){
+    if(!hasPerm(currentUserPerms, "inventorySettings")){ alert("권한이 없습니다."); return; }
+    document.getElementById("mpaste-text").value = "";
+    document.getElementById("mpaste-msg").innerHTML = "";
+    document.getElementById("mpaste-result").innerHTML = "";
+    document.getElementById("mpaste-save").disabled = true;
+    try{
+      const names = await fetchNamesList("manufacturers");
+      const sel = document.getElementById("mpaste-maker");
+      if(sel) sel.innerHTML = '<option value="">(비워둠)</option>'
+        + names.map(n=>'<option value="'+comboEsc(n)+'">'+comboEsc(n)+'</option>').join("");
+    }catch(e){}
+    document.getElementById("mpaste-overlay").style.display = "flex";
+  };
+  window.closeModelPaste = function(){
+    document.getElementById("mpaste-overlay").style.display = "none";
+  };
+
+  // 한 줄을 칸으로 나눕니다. 탭·쉼표·두 칸 이상 띄우기를 모두 받아들입니다.
+  function splitPasteLine(line){
+    let t = String(line||"").replace(/\r/g,"").trim();
+    if(!t) return [];
+    if(t.indexOf("\t") >= 0) return t.split("\t").map(x=> x.trim());
+    if(t.indexOf(",") >= 0)  return t.split(",").map(x=> x.trim());
+    return t.split(/\s{2,}/).map(x=> x.trim());
+  }
+
+  window.analyzeModelPaste = async function(){
+    const msg = document.getElementById("mpaste-msg");
+    const box = document.getElementById("mpaste-result");
+    const show = (t,c)=>{ msg.innerHTML = '<span style="color:'+(c||"var(--gray)")+';">'+t+'</span>'; };
+    const raw = document.getElementById("mpaste-text").value || "";
+    const maker = (document.getElementById("mpaste-maker")||{}).value || "";
+    const lines = raw.split("\n").map(x=> x.trim()).filter(Boolean);
+    if(lines.length === 0){ show("붙여넣은 내용이 없습니다.", "var(--danger)"); return; }
+
+    show("모델 목록을 읽는 중입니다...");
+    try{ await fetchModelsCache(); }catch(e){}
+
+    const rows = [], bad = [];
+    lines.forEach((line, i)=>{
+      const c = splitPasteLine(line);
+      // 머리글 줄은 건너뜁니다.
+      if(c.some(x=> x === "전산모델명" || x === "펫네임")) return;
+      const systemModel = normalizeModelText(c[0] || "");
+      const petName     = (c[1] || "").trim();
+      const baseModel   = normalizeModelText(c[2] || "");
+      const capacity    = normalizeCapacity(c[3] || "");
+      const priceIncVat = c[4] ? Number(String(c[4]).replace(/[^0-9.]/g,"")) || null : null;
+      if(!systemModel && !petName && !baseModel){ bad.push({ no:i+1, line }); return; }
+      // 이미 있는 모델인지 봅니다.
+      const dup = modelsCache.find(m=>
+        (systemModel && String(m.systemModel||"").trim() === systemModel) ||
+        (baseModel && capacity && String(m.baseModel||"").trim() === baseModel
+          && String(m.capacity||"").trim() === capacity));
+      rows.push({ systemModel, petName, baseModel, capacity, priceIncVat,
+                  manufacturer: maker, dup: !!dup, dupName: dup ? (dup.petName || dup.systemModel || "-") : "" });
+    });
+
+    const fresh = rows.filter(r=> !r.dup);
+    box.innerHTML =
+      '<div style="overflow-x:auto;"><table class="data-table resv-dest-fit" style="width:auto;"><thead><tr>'
+      + '<th>전산모델명</th><th>펫네임</th><th>모델명</th><th>기가수</th><th class="ta-right">출고가</th><th>제조사</th><th>확인</th>'
+      + '</tr></thead><tbody>'
+      + rows.map(r=> '<tr' + (r.dup ? ' class="row-done"' : '') + '>'
+          + '<td><b>'+comboEsc(r.systemModel||"-")+'</b></td>'
+          + '<td>'+comboEsc(r.petName||"-")+'</td>'
+          + '<td>'+comboEsc(r.baseModel||"-")+'</td>'
+          + '<td>'+comboEsc(r.capacity||"-")+'</td>'
+          + '<td class="ta-right">'+(r.priceIncVat ? Number(r.priceIncVat).toLocaleString() : "-")+'</td>'
+          + '<td>'+comboEsc(r.manufacturer||"-")+'</td>'
+          + '<td>' + (r.dup
+              ? '<span style="color:var(--gray);">이미 있음 · 건너뜀</span>'
+              : '<span style="color:#2e7d32;font-weight:700;">등록</span>') + '</td>'
+          + '</tr>').join("")
+      + '</tbody></table></div>'
+      + (bad.length ? '<div style="color:var(--danger);font-size:12px;margin-top:8px;">읽지 못한 줄 '
+          + bad.length + '개 — ' + bad.map(b=> b.no + "번").join(", ") + '</div>' : "");
+
+    document.getElementById("mpaste-save").disabled = (fresh.length === 0);
+    document.getElementById("mpaste-save").dataset.rows = JSON.stringify(fresh);
+    show("<b>" + fresh.length + "개</b>를 등록합니다."
+      + (rows.length - fresh.length ? " 이미 있는 " + (rows.length - fresh.length) + "개는 건너뜁니다." : "")
+      + (bad.length ? " 읽지 못한 줄 " + bad.length + "개는 빠집니다." : ""),
+      fresh.length ? "#2e7d32" : "var(--danger)");
+  };
+
+  window.submitModelPaste = async function(){
+    if(!hasPerm(currentUserPerms, "inventorySettings")){ alert("권한이 없습니다."); return; }
+    const btn = document.getElementById("mpaste-save");
+    const msg = document.getElementById("mpaste-msg");
+    const show = (t,c)=>{ msg.innerHTML = '<span style="color:'+(c||"var(--gray)")+';">'+t+'</span>'; };
+    let rows = [];
+    try{ rows = JSON.parse(btn.dataset.rows || "[]"); }catch(e){}
+    if(rows.length === 0){ show("먼저 「분석」을 눌러주세요.", "var(--danger)"); return; }
+    if(!confirm("모델 " + rows.length + "개를 등록합니다.\n\n"
+      + "이미 있는 모델은 건너뜁니다. 나머지 값은 목록에서 수정으로 채우시면 됩니다.\n\n진행할까요?")) return;
+
+    btn.disabled = true;
+    let done = 0, skip = 0;
+    for(const r of rows){
+      try{
+        const priceExVat = r.priceIncVat ? Math.round(r.priceIncVat/1.1) : null;
+        const res = await upsertModel({
+          petName:r.petName, systemModel:r.systemModel, baseModel:r.baseModel,
+          capacity:r.capacity, priceIncVat:r.priceIncVat, priceExVat,
+          nickname:"", manufacturer:r.manufacturer });
+        if(res && res.created === false) skip++; else done++;
+      }catch(e){ skip++; }
+      show("넣는 중... " + (done + skip) + " / " + rows.length);
+    }
+    logAction("모델 텍스트 등록", "새로 " + done + "개 · 건너뜀 " + skip + "개");
+    show("<b>" + done + "개</b>를 등록했습니다."
+      + (skip ? " " + skip + "개는 건너뛰었습니다." : ""), "#2e7d32");
+    btn.disabled = false;
+    loadModelAdminList();
+    loadColorAdminList();
   };
 
   // ---------- 모델 엑셀 업로드 팝업 ----------
@@ -25441,7 +25587,7 @@
     if(bar) bar.style.display = "none";
   };
 
-  // 파일에 박힌 버전 글자를 읽습니다. (예: "파일 2026-08-08 v470")
+  // 파일에 박힌 버전 글자를 읽습니다. (예: "파일 2026-08-08 v471")
   function readBuildTag(text){
     const m = String(text||"").match(/파일\s*[\d-]+\s*v(\d+)/);
     return m ? m[0].trim() : "";
