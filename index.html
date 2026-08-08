@@ -379,7 +379,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v495</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v496</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -12748,10 +12748,6 @@
                   ? '<br><span style="color:#2e7d32;font-size:10.5px;font-weight:700;">✓ 여신 조정 '
                     + (colAdj>0?"+":"") + colAdj.toLocaleString() + ' 반영됨</span>'
                   : '')
-              + (canDo ? '<br><button class="btn small secondary" style="width:auto;font-size:10.5px;padding:2px 6px;height:auto;"'
-                  + ' title="계산서 금액과 여신차감액의 차이만큼 여신을 조정합니다"'
-                  + ' data-col-adj="'+comboEsc(r.company)+'|'+(diff + colAdj)+'|'+(r.col?r.col.id:"")+'">'
-                  + (colAdj !== 0 ? '조정 더하기' : '여신 조정') + '</button>' : '')
             : '') + '</td>'
         + '<td class="ta-right">'+(r.used ? r.used.toLocaleString() : "-")+'</td>'
         + '<td class="ta-right" style="color:'+(r.left > 0 ? "#2e7d32" : "var(--gray)")+';font-weight:700;">'
@@ -12759,6 +12755,10 @@
         + (canDo ? '<td class="ta-right" style="white-space:nowrap;">'
             + (r.col
                 ? '<button class="btn small secondary" style="width:auto;" data-col-edit="'+r.col.id+'">수정</button>'
+                  + (diff ? '<button class="btn small secondary" style="width:auto;margin-left:4px;"'
+                      + ' title="계산서 금액과 여신차감액의 차이만큼 여신을 조정합니다"'
+                      + ' data-col-adj="'+comboEsc(r.company)+'|'+(diff + colAdj)+'|'+r.col.id+'">'
+                      + (colAdj !== 0 ? '조정 더하기' : '여신 조정') + '</button>' : '')
                   + '<button class="btn small danger" style="width:auto;margin-left:4px;" data-col-del="'+r.col.id+'">삭제</button>'
                 : '<button class="btn small" style="width:auto;" data-col-new="'+comboEsc(r.month)+'|'+comboEsc(r.company)+'|'+r.credit+'">계산서 등록</button>')
             + '</td>' : '')
@@ -26312,7 +26312,7 @@
     if(bar) bar.style.display = "none";
   };
 
-  // 파일에 박힌 버전 글자를 읽습니다. (예: "파일 2026-08-09 v495")
+  // 파일에 박힌 버전 글자를 읽습니다. (예: "파일 2026-08-09 v496")
   function readBuildTag(text){
     const m = String(text||"").match(/파일\s*[\d-]+\s*v(\d+)/);
     return m ? m[0].trim() : "";
