@@ -379,7 +379,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v507</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v509</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -11708,8 +11708,13 @@
     return Math.round((d2 - d1) / 86400000);
   }
 
-  window.closeLoanModal = function(){ document.getElementById("loan-modal-overlay").style.display = "none"; };
+  window.closeLoanModal = function(){
+    document.getElementById("loan-modal-overlay").style.display = "none";
+    editingLoanId = null;
+  };
   window.openLoanModal = function(){
+    editingLoanId = null;
+    { const t = document.getElementById("loan-modal-title"); if(t) t.textContent = "대출 등록"; }
     ["loan-code","loan-name","loan-start","loan-due","loan-principal","loan-rate","loan-monthly","loan-mprate","loan-mpfee","loan-payfee","loan-memo"]
       .forEach(id=>{ const el = document.getElementById(id); if(el) el.value = ""; });
     document.getElementById("loan-term").value = "12";
@@ -11782,6 +11787,42 @@
     document.getElementById("loan-mpfee").value  = p && mp ? Math.round(p * mp / 100) : "";
   };
 
+  // 대출 수정 — 등록 팝업을 그대로 쓰고 값만 채워 넣습니다.
+  //  실행일·기간·원금 등을 고치면 만기와 이자표가 다시 계산됩니다.
+  let editingLoanId = null;
+
+  window.openLoanEdit = async function(loanId){
+    if(!hasPerm(currentUserPerms, "paymentProcess")){ alert("권한이 없습니다."); return; }
+    let L = null;
+    try{ const snap = await getDoc(doc(db,"b2bLoans", loanId)); if(snap.exists()) L = snap.data(); }catch(e){}
+    if(!L){ alert("대출을 찾을 수 없습니다."); return; }
+    openLoanModal();                       // 목록 채우기·초기화를 그대로 씁니다
+    editingLoanId = loanId;
+    document.getElementById("loan-modal-title").textContent = "대출 수정";
+    const set = (id,v)=>{ const el = document.getElementById(id); if(el) el.value = (v == null ? "" : v); };
+    set("loan-bank", L.bank||""); set("loan-code", L.code||""); set("loan-name", L.name||"");
+    set("loan-start", L.startDate||""); set("loan-term", Number(L.termMonths)||6);
+    set("loan-due", L.dueDate||"");
+    set("loan-principal", Number(L.principal)||"");
+    set("loan-rate", Number(L.rateAnnual)||"");
+    set("loan-monthly", Number(L.monthlyInterest)||"");
+    set("loan-mprate", Number(L.mpFeeRate)||"");
+    set("loan-mpfee", Number(L.mpFeeAmount)||"");
+    set("loan-payfee", Number(L.payFeeAmount)||"");
+    set("loan-memo", L.memo||"");
+    set("loan-charge", L.fundFlow || (L.chargedToCredit ? "yes" : "no"));
+    setTimeout(()=>{
+      const ps = document.getElementById("loan-partner");
+      if(ps && Array.from(ps.options).some(o=> o.value === (L.partner||""))) ps.value = L.partner||"";
+      const cs = document.getElementById("loan-collateral");
+      if(cs && L.collateralId && Array.from(cs.options).some(o=> o.value === L.collateralId)) cs.value = L.collateralId;
+    }, 250);
+    showModelMsg("loan-msg",
+      "고치는 중입니다. <b>실행일·기간을 바꾸면 만기와 이자표가 다시 계산됩니다.</b><br>"
+      + "<span style='color:var(--gray);'>이미 넣어둔 이자·수수료 기록은 그대로 있습니다. "
+      + "여신 충전 금액은 바뀌지 않으니, 원금을 바꾸시면 여신 장부에서 따로 맞춰주세요.</span>", false);
+  };
+
   window.submitLoan = async function(){
     const msg = (t, err)=> showModelMsg("loan-msg", t, err);
     const name = document.getElementById("loan-name").value.trim();
@@ -11798,6 +11839,35 @@
     const memo = document.getElementById("loan-memo").value.trim();
 
     if(!name){ msg("대출명을 입력해주세요.", true); return; }
+
+    // ── 수정 모드 ──
+    if(editingLoanId){
+      const bankE = String((document.getElementById("loan-bank")||{}).value||"").trim();
+      const partnerE = String((document.getElementById("loan-partner")||{}).value||"").trim();
+      const codeE = String((document.getElementById("loan-code")||{}).value||"").trim();
+      const colE = String((document.getElementById("loan-collateral")||{}).value||"");
+      if(!confirm("대출 내용을 고칩니다.\n\n"
+        + "  기간   " + term + "개월" + (bankE === "기업은행" ? " (" + (term*30) + "일)" : "") + "\n"
+        + "  만기   " + (due||"-") + "\n"
+        + "  원금   " + principal.toLocaleString() + "\n\n"
+        + "만기·이자표가 다시 계산됩니다.\n"
+        + "이미 넣어둔 이자·수수료 기록과 여신 충전 금액은 그대로 둡니다.\n\n진행할까요?")) return;
+      try{
+        await updateDoc(doc(db,"b2bLoans", editingLoanId), {
+          bank: bankE, partner: partnerE, code: codeE, collateralId: colE || null,
+          name, startDate:start, termMonths:term, dueDate:due,
+          principal, rateAnnual:rate, monthlyInterest:monthly,
+          mpFeeRate:mpRate, mpFeeAmount:mpFee, payFeeAmount:payFee, memo,
+          updatedBy: currentUser.name, updatedAt: serverTimestamp()
+        });
+      }catch(e){ msg("저장에 실패했습니다. " + comboEsc((e&&e.message)||String(e)), true); return; }
+      logAction("B2B 대출 수정", (codeE ? "[" + codeE + "] " : "") + name
+        + " / " + term + "개월 / 만기 " + (due||"-") + " / 원금 " + principal.toLocaleString());
+      editingLoanId = null;
+      closeLoanModal();
+      refreshLoanScreens();
+      return;
+    }
     if(start.length !== 8){ msg("실행일을 8자리로 입력해주세요. (예: 20260723)", true); return; }
     if(principal <= 0){ msg("대출 원금을 입력해주세요.", true); return; }
 
@@ -11932,6 +12002,7 @@
               '<button class="btn small secondary" style="width:auto;margin-left:4px;" data-loan-ext="'+d.id+'">연장</button>' +
               '<button class="btn small secondary" style="width:auto;margin-left:4px;" data-loan-repay="'+d.id+'">상환</button>'
             : '') +
+          '<button class="btn small secondary" style="width:auto;margin-left:4px;" data-loan-edit="'+d.id+'">수정</button>' +
           '<button class="btn small secondary" style="width:auto;margin-left:4px;" data-loan-detail="'+d.id+'">내역</button>';
       h += '<tr class="rbd-clickable" data-row-act="loan|'+d.id+'">' +
         '<td><b>'+comboEsc(L.code||"-")+'</b></td>' +
@@ -11959,6 +12030,7 @@
     el.querySelectorAll("[data-loan-pay]").forEach(b=> b.onclick = ()=> addLoanPayment(b.dataset.loanPay));
     el.querySelectorAll("[data-loan-ext]").forEach(b=> b.onclick = ()=> extendLoan(b.dataset.loanExt));
     el.querySelectorAll("[data-loan-repay]").forEach(b=> b.onclick = ()=> repayLoan(b.dataset.loanRepay));
+    el.querySelectorAll("[data-loan-edit]").forEach(b=> b.onclick = ()=> openLoanEdit(b.dataset.loanEdit));
     el.querySelectorAll("[data-loan-detail]").forEach(b=> b.onclick = ()=> showLoanDetail(b.dataset.loanDetail));
   };
 
@@ -24880,24 +24952,27 @@
     let need = [];
     try{
       const snap = await getDocs(collection(db,"b2bLedger"));
-      snap.forEach(d=>{ const e = d.data();
-        if(!String(e.partner||"").trim() && String(e.source||"").trim()) need.push({ id:d.id, source:String(e.source).trim() });
+      snap.forEach(d=>{
+        const e = d.data();
+        const p = String(e.partner||"").trim(), sc = String(e.source||"").trim();
+        if(!p && sc) need.push({ id:d.id, name:sc, patch:{ partner: sc } });          // 대상을 채움
+        else if(p && !sc) need.push({ id:d.id, name:p, patch:{ source: p } });        // 매입처를 채움
       });
     }catch(e){}
     if(need.length === 0){ alert("채울 기록이 없습니다."); return; }
     const by = {};
-    need.forEach(x=>{ by[x.source] = (by[x.source]||0)+1; });
-    if(!confirm("대상이 안 적힌 기록 " + need.length + "건에 매입처 값을 넣습니다.\n\n"
+    need.forEach(x=>{ by[x.name] = (by[x.name]||0)+1; });
+    if(!confirm("대상·매입처가 한쪽만 적힌 기록 " + need.length + "건을 서로 채웁니다.\n\n"
       + Object.keys(by).map(k=> "  " + k + " " + by[k] + "건").join("\n")
-      + "\n\n넣고 나면 거래처별 여신으로 갈립니다.\n\n진행할까요?")) return;
+      + "\n\n넣고 나면 거래처별 여신과 목록이 모두 맞습니다.\n\n진행할까요?")) return;
     try{
       for(let i=0;i<need.length;i+=200){
         const bt = writeBatch(db);
-        need.slice(i, i+200).forEach(x=> bt.update(doc(db,"b2bLedger", x.id), { partner: x.source }));
+        need.slice(i, i+200).forEach(x=> bt.update(doc(db,"b2bLedger", x.id), x.patch));
         await bt.commit();
       }
     }catch(e){ alert("채우지 못했습니다.\n" + ((e&&e.message)?e.message:String(e))); return; }
-    logAction("여신 대상 채우기",
+    logAction("여신 대상·매입처 채우기",
       need.length + "건 / " + Object.keys(by).map(k=> k + " " + by[k]).join(", "));
     alert(need.length + "건을 채웠습니다.");
     b2bPartnerPick = "";
@@ -24944,20 +25019,23 @@
       tabEl.innerHTML = btn("전체", "", allEntries.length)
         + pList.map(n=> btn(n, n, allEntries.filter(e=> pName(e) === n).length)).join("");
     }
-    // 대상이 비어 있는데 매입처는 적혀 있는 기록 — 옮겨 넣으면 거래처별로 갈립니다.
+    // 대상·매입처 중 한쪽만 적힌 기록 — 서로 채워 넣으면 거래처별로 갈리고 목록도 비지 않습니다.
     {
       const el = document.getElementById("b2b-fillpartner");
-      const need = allEntries.filter(e=> !String(e.partner||"").trim() && String(e.source||"").trim());
+      const needP = allEntries.filter(e=> !String(e.partner||"").trim() && String(e.source||"").trim());
+      const needS = allEntries.filter(e=> !String(e.source||"").trim() && String(e.partner||"").trim());
       if(el){
-        if(need.length){
+        if(needP.length || needS.length){
           const by = {};
-          need.forEach(e=>{ const sc = String(e.source).trim(); by[sc] = (by[sc]||0)+1; });
+          needP.concat(needS).forEach(e=>{
+            const k = String(e.source || e.partner).trim(); by[k] = (by[k]||0)+1;
+          });
           el.style.display = "block";
-          el.innerHTML = '<span style="color:var(--danger);font-weight:700;">대상이 안 적힌 기록 '
-            + need.length + '건</span> <span style="color:var(--gray);">— '
+          el.innerHTML = '<span style="color:var(--danger);font-weight:700;">대상·매입처가 한쪽만 적힌 기록 '
+            + (needP.length + needS.length) + '건</span> <span style="color:var(--gray);">— '
             + Object.keys(by).map(k=> comboEsc(k) + " " + by[k] + "건").join(" · ")
-            + ' · 매입처 값을 대상에 넣으면 거래처별로 갈립니다.</span>'
-            + '<button class="btn small" style="width:auto;margin-left:8px;" onclick="fillB2BPartners()">대상 채우기</button>';
+            + ' · 서로 채워 넣으면 거래처별 여신과 목록이 모두 맞습니다.</span>'
+            + '<button class="btn small" style="width:auto;margin-left:8px;" onclick="fillB2BPartners()">대상·매입처 채우기</button>';
         }else{
           el.style.display = "none"; el.innerHTML = "";
         }
@@ -25172,7 +25250,10 @@
         tbl += '<tr><td>'+e.date+'</td><td>'+(B2B_CATEGORY_LABELS[e.category]||e.category)
           + (e.adjustReason ? '<br><span style="font-size:10.5px;color:var(--gray);">'+comboEsc(e.adjustReason)+'</span>' : '')
           + (e.fromCollateralId ? '<br><span style="font-size:10.5px;color:#2e7d32;">담보 계산서에서</span>' : '') + '</td>' +
-          '<td>'+(e.source ? comboEsc(e.source) : '<span style="color:#b8860b;">미지정</span>')+'</td>' +
+          '<td>'+((e.source || e.partner)
+              ? comboEsc(e.source || e.partner)
+                + (!e.source && e.partner ? ' <span style="font-size:10.5px;color:var(--gray);">(대상)</span>' : '')
+              : '<span style="color:#b8860b;">미지정</span>')+'</td>' +
           '<td class="ta-right"'+(e.category==="adjust" ? ' style="font-weight:700;color:'+((Number(e.amount)||0)<0?"var(--danger)":"#1565c0")+';"' : '')+'>'
             +((e.category==="adjust" && (Number(e.amount)||0)>0) ? "+" : "")+Number(e.amount).toLocaleString()+'</td>' +
           // 통장에서 나간 기록과 이어져 있으면 여기서 바로 볼 수 있습니다.
@@ -26529,7 +26610,7 @@
     if(bar) bar.style.display = "none";
   };
 
-  // 파일에 박힌 버전 글자를 읽습니다. (예: "파일 2026-08-09 v507")
+  // 파일에 박힌 버전 글자를 읽습니다. (예: "파일 2026-08-09 v509")
   function readBuildTag(text){
     const m = String(text||"").match(/파일\s*[\d-]+\s*v(\d+)/);
     return m ? m[0].trim() : "";
