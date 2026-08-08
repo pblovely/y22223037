@@ -369,7 +369,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-08 v438</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-08 v441</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -1040,6 +1040,9 @@
           <div class="stack-row"><label>대상 <span class="info-tip" title="빌린 돈이 어느 거래처 여신으로 들어가는지 고릅니다. 목록은 업체정보의 매입처를 그대로 씁니다. 여신 잔액이 대상별로 따로 쌓입니다.">ⓘ</span></label>
             <select id="loan-partner"><option value="">(미지정)</option></select>
           </div>
+          <div class="stack-row"><label>담보 계산서 <span class="info-tip" title="이 대출의 담보로 쓸 세금계산서를 고릅니다. 남은 금액이 있는 것만 나옵니다. 안 골라도 등록은 됩니다.">ⓘ</span></label>
+            <select id="loan-collateral"><option value="">(안 고름)</option></select>
+          </div>
           <div class="stack-row"><label>적요 <span class="info-tip" title="자료에 적힌 대출 건 번호입니다. 같은 날 이자가 여러 줄 나올 때 어느 대출 것인지 이 번호로 갈립니다.">ⓘ</span></label><input type="text" id="loan-code" placeholder="예: 00055"></div>
           <div class="stack-row"><label>대출명</label><input type="text" id="loan-name" placeholder="예: 1차 대출"></div>
           <div class="stack-row"><label>실행일</label><input type="text" id="loan-start" maxlength="8" inputmode="numeric" placeholder="예: 20260723" oninput="calcLoanDue()"></div>
@@ -1062,6 +1065,28 @@
         </div>
         <button class="btn small" style="width:auto;margin-top:12px;" onclick="submitLoan()">저장</button>
         <div id="loan-msg" style="display:none;font-size:12.5px;margin-top:10px;padding:8px 10px;border-left:3px solid var(--navy);background:#fff;line-height:1.6;"></div>
+      </div>
+    </div>
+
+    <!-- 담보 계산서 등록 -->
+    <div id="collateral-overlay" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.55);z-index:1090;align-items:center;justify-content:center;">
+      <div style="background:#fff;border:2px solid var(--navy);max-width:460px;width:96%;max-height:92vh;overflow-y:auto;padding:22px;position:relative;">
+        <button onclick="closeCollateralModal()" style="position:absolute;top:12px;right:12px;background:none;border:1px solid var(--navy);width:26px;height:26px;cursor:pointer;font-size:13px;">✕</button>
+        <h3 id="col-title" style="margin-top:0;margin-bottom:4px;">담보 계산서 등록</h3>
+        <p class="desc" style="margin-top:0;">삼성전자에서 받은 세금계산서를 적어두면 그만큼 빌릴 수 있습니다.</p>
+        <div class="stack-form">
+          <div class="stack-row"><label>귀속월 <span class="info-tip" title="주문완료분이 속한 달입니다. 예: 202607">ⓘ</span></label><input type="text" id="col-month" maxlength="6" inputmode="numeric" placeholder="예: 202607"></div>
+          <div class="stack-row"><label>발행일</label><input type="text" id="col-date" maxlength="8" inputmode="numeric" placeholder="예: 20260731"></div>
+          <div class="stack-row"><label>발행처</label><input type="text" id="col-company" list="col-company-list" placeholder="예: 삼성전자스타"><datalist id="col-company-list"></datalist></div>
+          <div class="stack-row"><label>계산서번호 (선택)</label><input type="text" id="col-invno" placeholder="홈택스 승인번호"></div>
+          <div class="stack-row"><label>금액</label><input type="number" id="col-amount" placeholder="숫자만"></div>
+          <div class="stack-row"><label>메모 (선택)</label><input type="text" id="col-memo" placeholder="선택"></div>
+        </div>
+        <div id="col-msg" style="font-size:12.5px;margin:8px 0;"></div>
+        <span class="btn-row">
+          <button class="btn small" style="width:auto;" onclick="submitCollateral()">저장</button>
+          <button class="btn small secondary" style="width:auto;" onclick="closeCollateralModal()">닫기</button>
+        </span>
       </div>
     </div>
 
@@ -2251,6 +2276,20 @@
     <div id="tab-loan" class="tab-panel">
       <div class="card">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+          <h3 style="margin:0;">담보 계산서 <span class="info-tip" title="삼성전자에서 받은 세금계산서입니다. 이 금액만큼 B2B 대출을 받을 수 있고, 대출을 실행하면 그만큼 남은 금액이 줄어듭니다. 세금계산서 화면(매입·매출 관리)과는 별개로 여기서만 씁니다.">ⓘ</span></h3>
+          <span class="btn-row">
+            <span id="dl-collateral"></span>
+            <button class="btn small" style="width:auto;" onclick="openCollateralModal()">+ 계산서 등록</button>
+          </span>
+        </div>
+        <p class="desc" style="margin-top:0;">삼성전자 <b>주문완료분에 대해 말일에 발행</b>되는 세금계산서입니다. 이 금액이 <b>빌릴 수 있는 한도</b>가 됩니다.<br>
+          대출을 등록할 때 어느 계산서를 담보로 쓸지 고르면 그만큼 남은 금액이 줄어듭니다.</p>
+        <div id="collateral-cards" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px;"></div>
+        <div id="collateral-list"></div>
+      </div>
+
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
           <h3 style="margin:0;">B2B 대출 <span class="info-tip" title="은행에서 빌린 B2B 대출을 건별로 관리합니다. 대출을 실행하면 고른 대상의 여신이 충전됩니다. 이자·수수료는 은행에 내는 돈이라 여신 잔액과는 별개의 비용입니다.">ⓘ</span></h3>
           <button class="btn small" style="width:auto;" onclick="openLoanModal()">+ 대출 등록</button>
         </div>
@@ -2318,7 +2357,7 @@
             <input type="text" id="primary-cond-value" placeholder="검색어" style="width:115px;">
             <button class="btn small secondary" onclick="openAddConditionModal()">+ 조건 추가</button>
             <button class="btn small secondary" onclick="openInvPick()">목록으로 찾기</button>
-            <button class="btn small push" style="" onclick="loadInventoryList()">조회</button>
+            <button class="btn small push" style="" onclick="searchInventory()" title="조건으로 다시 찾습니다. 열 제목으로 바꿔둔 정렬은 기본으로 돌아갑니다.">조회</button>
           </div>
           <!-- 2행: 목록 도구 -->
           <div class="tbar-row">
@@ -7932,10 +7971,18 @@
       head.deleteCell(idx);
       Array.from(body.rows).forEach((tr, n)=>{
         if(tr.classList.contains("row-actions")) return;
-        if(tr.cells.length !== total) return;      // 합계줄처럼 칸 수가 다른 줄은 건드리지 않습니다.
-        const cell = tr.cells[idx];
+        // colspan 을 쓴 줄(합계줄 등)도 칸 수를 맞춰 세어 같이 줄입니다.
+        let span = 0, cell = null, cellPos = -1;
+        for(let i=0;i<tr.cells.length;i++){
+          const cs = tr.cells[i].colSpan || 1;
+          if(idx >= span && idx < span + cs){ cell = tr.cells[i]; cellPos = i; break; }
+          span += cs;
+        }
+        const totalSpan = Array.from(tr.cells).reduce((a,c)=> a + (c.colSpan||1), 0);
+        if(totalSpan !== total || !cell) return;   // 칸 수가 안 맞는 줄은 건드리지 않습니다.
+        if((cell.colSpan||1) > 1){ cell.colSpan = cell.colSpan - 1; return; }
         const hasBtn = !!cell.querySelector("button");
-        if(!hasBtn){ tr.deleteCell(idx); return; }
+        if(!hasBtn){ tr.deleteCell(cellPos); return; }
         const key = containerId + "|" + n;
         const nr = document.createElement("tr");
         nr.className = "row-actions";
@@ -7946,7 +7993,7 @@
         td.style.cssText = "background:#fafafa;padding:6px 8px;text-align:left;";
         while(cell.firstChild) td.appendChild(cell.firstChild);   // 버튼을 통째로 옮깁니다.
         nr.appendChild(td);
-        tr.deleteCell(idx);
+        tr.deleteCell(cellPos);
         tr.classList.add("rbd-clickable");
         tr.dataset.rowAct = key;
         tr.after(nr);
@@ -10476,6 +10523,7 @@
     document.getElementById("loan-start").value = todayStr();
     document.getElementById("loan-charge").value = "yes";
     document.getElementById("loan-bank").value = "";
+    document.getElementById("loan-collateral").value = "";
     document.getElementById("loan-msg").style.display = "none";
     calcLoanDue();
     document.getElementById("loan-modal-overlay").style.display = "flex";
@@ -10486,6 +10534,21 @@
         const sel = document.getElementById("loan-partner");
         if(sel) sel.innerHTML = '<option value="">(미지정)</option>'
           + names.map(n=>'<option value="'+comboEsc(n)+'">'+comboEsc(n)+'</option>').join("");
+      }catch(e){}
+      // 담보 계산서 — 남은 금액이 있는 것만 보여줍니다.
+      try{
+        const cs = await getDocs(collection(db,"b2bCollaterals"));
+        const cols = []; cs.forEach(d=> cols.push({ id:d.id, ...d.data() }));
+        const ls = await getDocs(collection(db,"b2bLoans"));
+        const used = {}; ls.forEach(d=>{ const L = d.data();
+          if(L.collateralId) used[L.collateralId] = (used[L.collateralId]||0) + (Number(L.principal)||0); });
+        const avail = cols.map(c=> ({ ...c, left:(Number(c.amount)||0) - (used[c.id]||0) }))
+          .filter(c=> c.left > 0)
+          .sort((a,b)=> String(a.month||"").localeCompare(String(b.month||"")));
+        const sel2 = document.getElementById("loan-collateral");
+        if(sel2) sel2.innerHTML = '<option value="">(안 고름)</option>'
+          + avail.map(c=>'<option value="'+c.id+'">' + comboEsc(c.month||"-") + ' · ' + comboEsc(c.company||"-")
+              + ' · 남은 ' + c.left.toLocaleString() + '</option>').join("");
       }catch(e){}
     })();
   };
@@ -10527,7 +10590,24 @@
       const bank    = document.getElementById("loan-bank").value;
       const partner = document.getElementById("loan-partner").value;
       const code = document.getElementById("loan-code").value.trim();
+      const colId = document.getElementById("loan-collateral").value || "";
       if(!partner){ msg("대상을 골라주세요.", true); return; }
+      // 담보를 골랐으면 남은 금액을 넘지 않는지 봅니다.
+      if(colId){
+        try{
+          const cSnap = await getDoc(doc(db,"b2bCollaterals", colId));
+          if(cSnap.exists()){
+            const c = cSnap.data();
+            const usedNow = await collateralUsedOf(colId);
+            const leftNow = (Number(c.amount)||0) - usedNow;
+            if(principal > leftNow){
+              msg("담보 계산서의 남은 금액을 넘습니다.<br>남은 금액 <b>" + leftNow.toLocaleString()
+                + "</b> · 이번 대출 <b>" + principal.toLocaleString() + "</b>", true);
+              return;
+            }
+          }
+        }catch(e){}
+      }
       if(!confirm("B2B 대출을 등록합니다.\n\n  " + bank + " · 대상 " + partner
         + "\n  원금 " + principal.toLocaleString() + " · 만기 " + due
         + ((payFee || mpFee) ? "\n  수수료 — 결제 " + payFee.toLocaleString() + " · MP " + mpFee.toLocaleString() : "")
@@ -10536,7 +10616,7 @@
                                 : "→ 대출만 기록하고 자금 기록은 만들지 않습니다."))
         + "\n\n진행할까요?")) return;
       const ref = await addDoc(collection(db,"b2bLoans"), {
-        bank, partner, code,
+        bank, partner, code, collateralId: colId || null,
         name, startDate:start, termMonths:term, dueDate:due,
         principal, rateAnnual:rate, monthlyInterest:monthly,
         mpFeeRate:mpRate, mpFeeAmount:mpFee, payFeeAmount:payFee,
@@ -10603,9 +10683,15 @@
     el.innerHTML = '<div class="list-empty">불러오는 중...</div>';
     const snap = await getDocs(query(collection(db,"b2bLoans"), orderBy("startDate","desc")));
     if(snap.empty){ el.innerHTML = '<div class="list-empty">등록된 대출이 없습니다. <b>+ 대출 등록</b>으로 추가해주세요.</div>'; return; }
+    // 담보 계산서 이름표 (귀속월 · 발행처)
+    const colLabel = {};
+    try{
+      const cs = await getDocs(collection(db,"b2bCollaterals"));
+      cs.forEach(d=>{ const c = d.data(); colLabel[d.id] = (c.month||"-") + " " + (c.company||""); });
+    }catch(e){}
 
     let h = '<div style="overflow-x:auto;"><table class="data-table" style="min-width:1220px;"><thead><tr>' +
-      '<th>적요</th><th>은행</th><th>대상</th><th>대출명</th><th>실행일</th><th>만기일</th><th>남은일수</th>' +
+      '<th>적요</th><th>은행</th><th>대상</th><th>담보</th><th>대출명</th><th>실행일</th><th>만기일</th><th>남은일수</th>' +
       '<th class="ta-right">원금</th><th class="ta-right">상환</th><th class="ta-right">잔액</th>' +
       '<th class="ta-right">월이자</th><th class="ta-right">누적 이자·수수료</th><th>상태</th>' +
       '</tr></thead><tbody>';
@@ -10634,6 +10720,7 @@
         '<td><b>'+comboEsc(L.code||"-")+'</b></td>' +
         '<td>'+comboEsc(L.bank||"-")+'</td>' +
         '<td><b>'+comboEsc(L.partner||"-")+'</b></td>' +
+        '<td style="font-size:11.5px;">'+comboEsc(colLabel[L.collateralId] || "-")+'</td>' +
         '<td>'+comboEsc(L.name||"-")+'</td>' +
         '<td>'+comboEsc(L.startDate||"-")+'</td>' +
         '<td>'+comboEsc(L.dueDate||"-")+'</td>' +
@@ -10646,7 +10733,7 @@
         '<td>'+badge+'</td>' +
         '</tr>' +
         '<tr class="row-actions" data-row-actions="loan|'+d.id+'" style="display:none;">' +
-        '<td colspan="13" style="background:#fafafa;padding:6px 8px;text-align:left;">' + btns + '</td></tr>';
+        '<td colspan="14" style="background:#fafafa;padding:6px 8px;text-align:left;">' + btns + '</td></tr>';
     });
     h += '</tbody></table></div><div id="loan-detail-area" style="margin-top:10px;"></div>';
     el.innerHTML = h;
@@ -10656,6 +10743,179 @@
     el.querySelectorAll("[data-loan-ext]").forEach(b=> b.onclick = ()=> extendLoan(b.dataset.loanExt));
     el.querySelectorAll("[data-loan-repay]").forEach(b=> b.onclick = ()=> repayLoan(b.dataset.loanRepay));
     el.querySelectorAll("[data-loan-detail]").forEach(b=> b.onclick = ()=> showLoanDetail(b.dataset.loanDetail));
+  };
+
+  // ---------- 담보 계산서 ----------
+  //  삼성전자에서 받은 세금계산서입니다. 이 금액만큼 B2B 대출을 받을 수 있습니다.
+  //  세금계산서 화면(매입·매출 관리)과는 별개로 여기서만 씁니다.
+  let editingCollateralId = null;
+
+  window.openCollateralModal = async function(id){
+    if(!hasPerm(currentUserPerms, "paymentProcess")){ alert("권한이 없습니다."); return; }
+    editingCollateralId = id || null;
+    document.getElementById("col-title").textContent = id ? "담보 계산서 수정" : "담보 계산서 등록";
+    document.getElementById("col-msg").innerHTML = "";
+    const set = (k,v)=>{ const e = document.getElementById(k); if(e) e.value = v; };
+    if(id){
+      const snap = await getDoc(doc(db,"b2bCollaterals", id));
+      if(!snap.exists()){ alert("찾을 수 없습니다."); return; }
+      const c = snap.data();
+      set("col-month", c.month||""); set("col-date", c.issueDate||"");
+      set("col-company", c.company||""); set("col-invno", c.invoiceNo||"");
+      set("col-amount", Number(c.amount)||""); set("col-memo", c.memo||"");
+    }else{
+      ["col-month","col-date","col-company","col-invno","col-amount","col-memo"].forEach(k=> set(k,""));
+    }
+    // 발행처 목록은 업체정보의 매입처를 씁니다.
+    try{
+      const names = await fetchNamesList("inboundSources");
+      const dl = document.getElementById("col-company-list");
+      if(dl) dl.innerHTML = names.map(n=>'<option value="'+comboEsc(n)+'"></option>').join("");
+    }catch(e){}
+    document.getElementById("collateral-overlay").style.display = "flex";
+  };
+  window.closeCollateralModal = function(){
+    document.getElementById("collateral-overlay").style.display = "none";
+    editingCollateralId = null;
+  };
+
+  window.submitCollateral = async function(){
+    const msgEl = document.getElementById("col-msg");
+    const g = k => String(document.getElementById(k).value||"").trim();
+    const month = g("col-month").replace(/\D/g,"");
+    const date  = g("col-date").replace(/\D/g,"");
+    const company = g("col-company");
+    const amount = Number(g("col-amount"))||0;
+    const bad = t => { msgEl.innerHTML = '<span style="color:var(--danger);">'+t+'</span>'; };
+    if(month.length !== 6) return bad("귀속월을 202607 형태로 넣어주세요.");
+    if(date.length !== 8)  return bad("발행일을 20260731 형태로 넣어주세요.");
+    if(!company)           return bad("발행처를 넣어주세요.");
+    if(amount <= 0)        return bad("금액을 넣어주세요.");
+
+    // 이미 대출에 쓴 금액보다 적게 줄이지 못하게 막습니다.
+    if(editingCollateralId){
+      const used = await collateralUsedOf(editingCollateralId);
+      if(amount < used) return bad("이미 대출에 쓴 " + used.toLocaleString() + " 보다 적게 바꿀 수 없습니다.");
+    }
+    const data = {
+      month, issueDate: date, company,
+      invoiceNo: g("col-invno"), amount, memo: g("col-memo")
+    };
+    try{
+      if(editingCollateralId){
+        await updateDoc(doc(db,"b2bCollaterals", editingCollateralId), data);
+        logAction("담보 계산서 수정", month + " / " + company + " / " + amount.toLocaleString());
+      }else{
+        await addDoc(collection(db,"b2bCollaterals"), {
+          ...data,
+          createdBy: currentUser.name, createdByUsername: currentUser.username, createdAt: serverTimestamp()
+        });
+        logAction("담보 계산서 등록", month + " / " + company + " / " + amount.toLocaleString());
+      }
+    }catch(e){ return bad("저장에 실패했습니다. " + ((e&&e.message)?e.message:String(e))); }
+    closeCollateralModal();
+    loadCollateralList();
+    loadLoanList();
+  };
+
+  // 이 계산서를 담보로 쓴 대출 금액의 합계
+  async function collateralUsedOf(colId){
+    try{
+      const snap = await getDocs(query(collection(db,"b2bLoans"), where("collateralId","==",colId)));
+      let n = 0; snap.forEach(d=> n += (Number(d.data().principal)||0));
+      return n;
+    }catch(e){ return 0; }
+  }
+
+  window.deleteCollateral = async function(id){
+    if(!hasPerm(currentUserPerms, "cancelDelete")){ alert("삭제 권한이 없습니다."); return; }
+    const used = await collateralUsedOf(id);
+    if(used > 0){ alert("이 계산서로 실행한 대출이 있습니다.\n\n  대출금 " + used.toLocaleString()
+      + "\n\n대출을 먼저 지운 뒤에 삭제해주세요."); return; }
+    const snap = await getDoc(doc(db,"b2bCollaterals", id));
+    if(!snap.exists()) return;
+    const c = snap.data();
+    if(!confirm("담보 계산서를 지웁니다.\n\n  " + (c.month||"-") + " · " + (c.company||"-")
+      + "\n  " + (Number(c.amount)||0).toLocaleString() + "\n\n되돌릴 수 없습니다. 진행할까요?")) return;
+    await deleteDoc(doc(db,"b2bCollaterals", id));
+    logAction("담보 계산서 삭제", (c.month||"-") + " / " + (c.company||"-") + " / " + (Number(c.amount)||0).toLocaleString());
+    loadCollateralList();
+  };
+
+  window.loadCollateralList = async function(){
+    const listEl = document.getElementById("collateral-list");
+    const cardEl = document.getElementById("collateral-cards");
+    if(!listEl) return;
+    listEl.innerHTML = '<div class="list-empty">불러오는 중...</div>';
+
+    let rows = [], loans = [];
+    try{
+      const snap = await getDocs(collection(db,"b2bCollaterals"));
+      snap.forEach(d=> rows.push({ id:d.id, ...d.data() }));
+      const ls = await getDocs(collection(db,"b2bLoans"));
+      ls.forEach(d=> loans.push({ id:d.id, ...d.data() }));
+    }catch(e){}
+    const usedBy = {};
+    loans.forEach(L=>{ if(L.collateralId) usedBy[L.collateralId] = (usedBy[L.collateralId]||0) + (Number(L.principal)||0); });
+    rows.forEach(r=>{ r.used = usedBy[r.id] || 0; r.left = (Number(r.amount)||0) - r.used; });
+    rows.sort((a,b)=> String(b.month||"").localeCompare(String(a.month||""))
+                   || String(b.issueDate||"").localeCompare(String(a.issueDate||"")));
+
+    if(cardEl){
+      const tot  = rows.reduce((n,r)=> n + (Number(r.amount)||0), 0);
+      const used = rows.reduce((n,r)=> n + r.used, 0);
+      const card = (label, val, color, note)=>
+        '<div style="flex:1;min-width:150px;border:1px solid var(--line);background:#fff;padding:10px 14px;">'
+        + '<div style="font-size:11.5px;color:var(--gray);margin-bottom:4px;">'+label+'</div>'
+        + '<div style="font-size:19px;font-weight:800;color:'+(color||'var(--navy)')+';">'+val+'</div>'
+        + (note ? '<div style="font-size:10.5px;color:var(--gray);margin-top:3px;">'+note+'</div>' : '') + '</div>';
+      cardEl.innerHTML =
+        card("담보 총액", tot.toLocaleString(), "var(--navy)", "계산서 " + rows.length + "건") +
+        card("대출에 쓴 금액", used.toLocaleString(), "var(--danger)") +
+        card("남은 한도", (tot - used).toLocaleString(), (tot-used) > 0 ? "#2e7d32" : "var(--gray)", "더 빌릴 수 있는 금액");
+    }
+
+    if(rows.length === 0){
+      listEl.innerHTML = '<div class="list-empty">등록된 담보 계산서가 없습니다. <b>+ 계산서 등록</b>으로 추가해주세요.</div>';
+      addDownloadBtn("dl-collateral", "collateral-list", "담보계산서");
+      return;
+    }
+    const canDo = hasPerm(currentUserPerms, "paymentProcess");
+    let h = '<div style="overflow-x:auto;"><table class="data-table resv-dest-fit" style="width:auto;"><thead><tr>'
+      + '<th>귀속월</th><th>발행일</th><th>발행처</th><th>계산서번호</th>'
+      + '<th class="ta-right">금액</th><th class="ta-right">쓴 금액</th><th class="ta-right">남은 금액</th><th>메모</th>'
+      + (canDo ? '<th class="ta-right">관리</th>' : '') + '</tr></thead><tbody>';
+    let tA=0, tU=0;
+    rows.forEach(r=>{
+      const amt = Number(r.amount)||0; tA += amt; tU += r.used;
+      const done = r.left <= 0;
+      h += '<tr' + (done ? ' class="row-done"' : '') + '>'
+        + '<td><b>'+comboEsc(r.month||"-")+'</b></td>'
+        + '<td>'+comboEsc(r.issueDate||"-")+'</td>'
+        + '<td>'+comboEsc(r.company||"-")+'</td>'
+        + '<td style="color:var(--gray);font-size:11.5px;">'+comboEsc(r.invoiceNo||"-")+'</td>'
+        + '<td class="ta-right"><b>'+amt.toLocaleString()+'</b></td>'
+        + '<td class="ta-right">'+(r.used ? r.used.toLocaleString() : "-")+'</td>'
+        + '<td class="ta-right" style="color:'+(r.left > 0 ? "#2e7d32" : "var(--gray)")+';font-weight:700;">'+r.left.toLocaleString()+'</td>'
+        + '<td style="font-size:11.5px;color:var(--gray);">'+comboEsc(r.memo||"-")+'</td>'
+        + (canDo ? '<td class="ta-right" style="white-space:nowrap;">'
+            + '<button class="btn small secondary" style="width:auto;" data-col-edit="'+r.id+'">수정</button>'
+            + '<button class="btn small danger" style="width:auto;margin-left:4px;" data-col-del="'+r.id+'">삭제</button></td>' : '')
+        + '</tr>';
+    });
+    h += '<tr style="background:#fff;font-weight:700;border-top:2px solid var(--navy);">'
+      + '<td colspan="4">합계</td>'
+      + '<td class="ta-right">'+tA.toLocaleString()+'</td>'
+      + '<td class="ta-right">'+tU.toLocaleString()+'</td>'
+      + '<td class="ta-right">'+(tA-tU).toLocaleString()+'</td>'
+      + '<td></td>' + (canDo ? '<td></td>' : '') + '</tr>';
+    h += '</tbody></table></div>';
+    listEl.innerHTML = h;
+    listEl.querySelectorAll("[data-col-edit]").forEach(b=> b.onclick = ()=> openCollateralModal(b.dataset.colEdit));
+    listEl.querySelectorAll("[data-col-del]").forEach(b=> b.onclick = ()=> deleteCollateral(b.dataset.colDel));
+    foldActionColumn("collateral-list");
+    addDownloadBtn("dl-collateral", "collateral-list", "담보계산서");
+    addViewCfgBtn("dl-collateral", "collateral-list");
   };
 
   // 대출비용(수수료·이자) 목록 — 여신과 별개로 「B2B 대출」 화면에서 봅니다.
@@ -13162,7 +13422,9 @@
       + '<th>세금계산서</th><th class="ta-right">차액</th><th>메모</th><th></th></tr></thead><tbody>'
       + pageItems.map(x=>{
           const s = x.state || "todo";
-          return '<tr>'
+          // 세금계산서와 이어졌거나 대사가 끝난 줄은 흐리게 둡니다.
+          const rcDone = (s === "done") || (s === "skip") || !!x.taxLabel;
+          return '<tr' + (rcDone ? ' class="row-done"' : '') + '>'
             + '<td><input type="checkbox" class="rc-ck" value="' + x.id + '"'
               + (((x.state||"todo") === "done" || (x.state||"todo") === "skip") ? ' disabled' : '') + '></td>'
             + '<td style="color:' + stColor[s] + ';font-weight:700;white-space:nowrap;">' + stLabel[s]
@@ -13879,7 +14141,9 @@
       + pageItems.map(r=>{
           const isBuy = isBuyKind(r.kind);
           const free = (r.kind === "buyfree" || r.kind === "salefree");
-          let tr = '<tr>'
+          // 입출금과 이어진(대사 완료) 줄은 흐리게 둡니다.
+          const txDone = ((r.linked||[]).length > 0) || !!r.noBankDone;
+          let tr = '<tr' + (txDone ? ' class="row-done"' : '') + '>'
             + '<td style="white-space:nowrap;"><b style="color:'+(isBuy ? "var(--danger)" : "#1565c0")+';">'+(isBuy ? "매입" : "매출")+'</b>'
               + (free ? ' <span style="background:#fff;border:1px solid var(--line);color:var(--gray);font-size:10.5px;padding:0 4px;">면세</span>' : '')
  + '</td>'
@@ -22964,6 +23228,14 @@
   let invRenderToken = 0;
   let invSortCol = "";      // 열 제목을 눌러 고른 정렬 기준
   let invSortAsc = true;    // 오름차순 여부
+  // 조회 — 조건으로 다시 찾습니다.
+  //  열 제목을 눌러 바꿔둔 정렬은 기본으로 되돌리고 첫 페이지부터 봅니다.
+  window.searchInventory = function(){
+    invSortCol = ""; invSortAsc = true;
+    getPageState("inventory").page = 1;
+    loadInventoryList();
+  };
+
   window.setInvSort = function(key){
     if(invSortCol === key){
       if(invSortAsc) invSortAsc = false;
@@ -27204,7 +27476,7 @@
     if(tabId==="tab-itemhistory" && typeof initItemHistoryTab === "function") initItemHistoryTab();
     if(tabId==="tab-lgrefund" && typeof loadLgRefund === "function") loadLgRefund();
     if(tabId==="tab-paycheck" && typeof loadPayCheck === "function") loadPayCheck();
-    if(tabId==="tab-loan" && typeof loadLoanList === "function"){ loadLoanList(); loadLoanCostList(); }
+    if(tabId==="tab-loan" && typeof loadLoanList === "function"){ loadCollateralList(); loadLoanList(); loadLoanCostList(); }
     if(tabId==="tab-activation" && typeof loadActivationList === "function") loadActivationList();
     if(tabId==="tab-site" && typeof renderHiddenList === "function") renderHiddenList();
     if(tabId==="tab-site" && typeof renderCacheTargets === "function") renderCacheTargets();
