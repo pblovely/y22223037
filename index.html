@@ -365,11 +365,20 @@
 
 <!-- ================= 로그인 후 ================= -->
 <div id="app-screen" class="screen">
+  <div id="newver-bar" style="display:none;position:sticky;top:0;z-index:4000;background:#2e7d32;color:#fff;
+    padding:9px 14px;font-size:13px;align-items:center;justify-content:center;gap:12px;">
+    <span id="newver-text">새 파일이 올라왔습니다.</span>
+    <button onclick="location.reload(true)" style="background:#fff;color:#2e7d32;border:none;padding:4px 12px;
+      font-size:12.5px;font-weight:700;cursor:pointer;">새로 받기</button>
+    <button onclick="dismissNewVer()" style="background:none;color:rgba(255,255,255,0.85);border:1px solid rgba(255,255,255,0.6);
+      padding:4px 10px;font-size:12px;cursor:pointer;">나중에</button>
+  </div>
+
   <div class="topbar">
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-08 v457</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-08 v458</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -25248,6 +25257,54 @@
   let dashCacheAt = null;
 
   // 캐시를 켤 수 있는 화면 목록 — 나중에 화면이 늘어도 여기만 추가하면 됩니다.
+  // ================= 새 파일 올라왔는지 확인 =================
+  //  GitHub Pages 에서 파일이 언제 바뀌었는지만 물어봅니다.
+  //  Firestore 를 쓰지 않으므로 읽기 한도와 아무 상관 없습니다. (오가는 데이터도 몇 백 바이트)
+  let myBuildTag = "";          // 지금 쓰고 있는 파일의 표시 (버전 글자)
+  let seenNewTag = "";          // 「나중에」를 누른 버전 — 다시 알리지 않습니다
+  let verTimer = null;
+
+  window.dismissNewVer = function(){
+    const bar = document.getElementById("newver-bar");
+    if(bar) bar.style.display = "none";
+  };
+
+  // 파일에 박힌 버전 글자를 읽습니다. (예: "파일 2026-08-08 v458")
+  function readBuildTag(text){
+    const m = String(text||"").match(/파일\s*[\d-]+\s*v(\d+)/);
+    return m ? m[0].trim() : "";
+  }
+
+  async function checkNewBuild(){
+    try{
+      // 캐시를 피하려고 뒤에 시각을 붙입니다.
+      const url = location.pathname + "?v=" + Date.now();
+      const res = await fetch(url, { cache:"no-store" });
+      if(!res.ok) return;
+      const text = await res.text();
+      const tag = readBuildTag(text);
+      if(!tag || !myBuildTag || tag === myBuildTag) return;
+      if(tag === seenNewTag) return;              // 「나중에」를 누른 것은 다시 안 알립니다
+      const bar = document.getElementById("newver-bar");
+      const txt = document.getElementById("newver-text");
+      if(txt) txt.innerHTML = "새 파일이 올라왔습니다. <b>" + comboEsc(tag) + "</b> "
+        + '<span style="opacity:0.8;">(지금 ' + comboEsc(myBuildTag) + ')</span>';
+      if(bar){ bar.style.display = "flex"; }
+      seenNewTag = tag;
+    }catch(e){}   // 확인 실패는 조용히 넘어갑니다
+  }
+
+  window.startBuildWatch = function(){
+    const el = document.getElementById("build-stamp");
+    myBuildTag = el ? String(el.textContent||"").trim() : "";
+    if(!myBuildTag) return;
+    if(verTimer) clearInterval(verTimer);
+    verTimer = setInterval(checkNewBuild, 60000);          // 1분마다
+    document.addEventListener("visibilitychange", ()=>{     // 화면으로 돌아올 때도 한 번
+      if(document.visibilityState === "visible") checkNewBuild();
+    });
+  };
+
   const CACHE_TARGETS = [
     { key:"dashboard",  label:"대시보드",   what:"재고 전체", heavy:true },
     { key:"inventory",  label:"재고 목록",  what:"재고 전체", heavy:true },
@@ -29281,6 +29338,7 @@
 
     if(data.status==="approved"){
       pendingView.style.display="none"; mainView.style.display="block";
+      startBuildWatch();   // 새 파일이 올라오면 알려줍니다 (Firestore 읽기 안 씁니다)
       document.getElementById("welcome-name").textContent = data.name;
       currentUser = { name:data.name, username:data.username, uid:user.uid };
       condFieldOrder = (data.condFieldOrder && data.condFieldOrder.length) ? data.condFieldOrder : [];
