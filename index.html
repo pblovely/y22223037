@@ -379,7 +379,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v523</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v524</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -11975,9 +11975,9 @@
     document.getElementById("loan-modal-overlay").style.display = "none";
     editingLoanId = null;
   };
-  window.openLoanModal = function(){
-    editingLoanId = null;
-    { const t = document.getElementById("loan-modal-title"); if(t) t.textContent = "대출 등록"; }
+  window.openLoanModal = function(keepEdit){
+    if(!keepEdit){ editingLoanId = null; editingLoanColId = ""; }
+    { const t = document.getElementById("loan-modal-title"); if(t) t.textContent = keepEdit ? "대출 수정" : "대출 등록"; }
     ["loan-code","loan-name","loan-start","loan-due","loan-principal","loan-rate","loan-monthly","loan-mprate","loan-mpfee","loan-payfee","loan-memo"]
       .forEach(id=>{ const el = document.getElementById(id); if(el) el.value = ""; });
     document.getElementById("loan-term").value = "12";
@@ -12003,13 +12003,18 @@
         const ls = await getDocs(collection(db,"b2bLoans"));
         const used = {}; ls.forEach(d=>{ const L = d.data();
           if(L.collateralId) used[L.collateralId] = (used[L.collateralId]||0) + (Number(L.principal)||0); });
+        // 고치는 중이면, 지금 물려 있는 계산서는 남은 금액이 0이어도 목록에 남깁니다.
+        //  안 그러면 수정할 때 그 연결이 지워집니다.
         const avail = cols.map(c=> ({ ...c, left:(Number(c.amount)||0) - (used[c.id]||0) }))
-          .filter(c=> c.left > 0)
+          .filter(c=> c.left > 0 || (editingLoanId && String(c.id) === String(editingLoanColId||"")))
           .sort((a,b)=> String(a.month||"").localeCompare(String(b.month||"")));
         const sel2 = document.getElementById("loan-collateral");
-        if(sel2) sel2.innerHTML = '<option value="">(안 고름)</option>'
-          + avail.map(c=>'<option value="'+c.id+'">' + comboEsc(c.month||"-") + ' · ' + comboEsc(c.company||"-")
-              + ' · 남은 ' + c.left.toLocaleString() + '</option>').join("");
+        if(sel2){
+          sel2.innerHTML = '<option value="">(안 고름)</option>'
+            + avail.map(c=>'<option value="'+c.id+'">' + comboEsc(c.month||"-") + ' · ' + comboEsc(c.company||"-")
+                + ' · 남은 ' + c.left.toLocaleString() + (c.left <= 0 ? ' (지금 이 대출에 물림)' : '') + '</option>').join("");
+          if(editingLoanColId) sel2.value = editingLoanColId;
+        }
       }catch(e){}
     })();
   };
@@ -12053,13 +12058,16 @@
   // 대출 수정 — 등록 팝업을 그대로 쓰고 값만 채워 넣습니다.
   //  실행일·기간·원금 등을 고치면 만기와 이자표가 다시 계산됩니다.
   let editingLoanId = null;
+  let editingLoanColId = "";   // 고치는 중인 대출에 물려 있던 담보 계산서
 
   window.openLoanEdit = async function(loanId){
     if(!hasPerm(currentUserPerms, "paymentProcess")){ alert("권한이 없습니다."); return; }
     let L = null;
     try{ const snap = await getDoc(doc(db,"b2bLoans", loanId)); if(snap.exists()) L = snap.data(); }catch(e){}
     if(!L){ alert("대출을 찾을 수 없습니다."); return; }
-    openLoanModal();                       // 목록 채우기·초기화를 그대로 씁니다
+    editingLoanId = loanId;                // 목록을 채우기 전에 정해야 담보가 빠지지 않습니다
+    editingLoanColId = String(L.collateralId || "");
+    openLoanModal(true);                   // 목록 채우기 (수정 중이라고 알려줍니다)
     editingLoanId = loanId;
     document.getElementById("loan-modal-title").textContent = "대출 수정";
     const set = (id,v)=>{ const el = document.getElementById(id); if(el) el.value = (v == null ? "" : v); };
@@ -12078,7 +12086,15 @@
       const ps = document.getElementById("loan-partner");
       if(ps && Array.from(ps.options).some(o=> o.value === (L.partner||""))) ps.value = L.partner||"";
       const cs = document.getElementById("loan-collateral");
-      if(cs && L.collateralId && Array.from(cs.options).some(o=> o.value === L.collateralId)) cs.value = L.collateralId;
+      if(cs && L.collateralId){
+        if(Array.from(cs.options).some(o=> o.value === L.collateralId)) cs.value = L.collateralId;
+        else{
+          // 목록이 아직 안 왔으면 자리를 만들어 붙여둡니다. (저장할 때 지워지지 않게)
+          const op = document.createElement("option");
+          op.value = L.collateralId; op.textContent = "(지금 물려 있는 계산서)";
+          cs.appendChild(op); cs.value = L.collateralId;
+        }
+      }
     }, 250);
     showModelMsg("loan-msg",
       "고치는 중입니다. <b>실행일·기간을 바꾸면 만기와 이자표가 다시 계산됩니다.</b><br>"
@@ -12139,7 +12155,10 @@
       const bankE = String((document.getElementById("loan-bank")||{}).value||"").trim();
       const partnerE = String((document.getElementById("loan-partner")||{}).value||"").trim();
       const codeE = String((document.getElementById("loan-code")||{}).value||"").trim();
-      const colE = String((document.getElementById("loan-collateral")||{}).value||"");
+      // 담보 계산서 — 빈 값이면 원래 물려 있던 것을 지킵니다.
+      //  (안 그러면 고치기만 해도 담보 연결이 지워져 계산서 한도가 되살아납니다)
+      let colE = String((document.getElementById("loan-collateral")||{}).value||"");
+      if(!colE && editingLoanColId) colE = editingLoanColId;
       if(!confirm("대출 내용을 고칩니다.\n\n"
         + "  기간   " + splitTerm + "개월" + (bankE === "기업은행" ? " (" + (splitTerm*30) + "일)" : "")
         + (splitExts ? " + 연장 " + splitExts[0].days + "일" : "") + "\n"
@@ -12990,6 +13009,50 @@
     refreshLoanScreens();
   };
 
+  // 담보를 안 물린 대출을 이 계산서에 이어둡니다. (수정하다 연결이 끊긴 대출을 되살릴 때)
+  window.linkLoanToCollateral = async function(colId){
+    if(!hasPerm(currentUserPerms, "paymentProcess")){ alert("권한이 없습니다."); return; }
+    let col = null;
+    try{ const s0 = await getDoc(doc(db,"b2bCollaterals", colId)); if(s0.exists()) col = s0.data(); }catch(e){}
+    if(!col){ alert("계산서를 찾을 수 없습니다."); return; }
+    const cands = [];
+    try{
+      const ls = await getDocs(collection(db,"b2bLoans"));
+      ls.forEach(d=>{
+        const L = d.data();
+        if(L.collateralId) return;                                   // 이미 물린 것은 뺍니다
+        if(String(L.partner||"").trim() !== String(col.company||"").trim()) return;
+        cands.push({ id:d.id, L });
+      });
+    }catch(e){}
+    if(cands.length === 0){
+      alert("이을 수 있는 대출이 없습니다.\n\n담보를 안 물린 " + (col.company||"-") + " 대출이 없습니다.");
+      return;
+    }
+    cands.sort((a,b)=> String(a.L.startDate||"").localeCompare(String(b.L.startDate||"")));
+    const pick = prompt(
+      "이 계산서를 담보로 실행한 대출의 번호를 넣어주세요.\n\n"
+      + "  계산서  " + (col.month||"-") + " · " + (col.company||"-") + " · " + (Number(col.amount)||0).toLocaleString() + "\n\n"
+      + cands.map((c,i)=> "  " + (i+1) + ") " + (c.L.code ? "[" + c.L.code + "] " : "") + (c.L.name||"-")
+          + " · 실행 " + (c.L.startDate||"-") + " · 원금 " + (Number(c.L.principal)||0).toLocaleString()).join("\n")
+      + "\n\n번호만 적어주세요. 취소하면 아무것도 안 바뀝니다.", "1");
+    if(pick === null) return;
+    const idx = Number(String(pick).replace(/\D/g,"")) - 1;
+    const c = cands[idx];
+    if(!c){ alert("번호를 확인해주세요."); return; }
+    if(!confirm("이 계산서를 대출에 이어둡니다.\n\n"
+      + "  계산서  " + (col.month||"-") + " · " + (Number(col.amount)||0).toLocaleString() + "\n"
+      + "  대출    " + (c.L.code ? "[" + c.L.code + "] " : "") + (c.L.name||"-") + " · " + (Number(c.L.principal)||0).toLocaleString() + "\n\n"
+      + "이으면 계산서의 남은 한도에서 그만큼 빠집니다. 진행할까요?")) return;
+    try{
+      await updateDoc(doc(db,"b2bLoans", c.id), { collateralId: colId });
+    }catch(e){ alert("잇지 못했습니다.\n" + ((e&&e.message)?e.message:String(e))); return; }
+    logAction("담보 계산서에 대출 잇기",
+      (col.month||"-") + " · " + (col.company||"-") + " ← " + (c.L.code||c.L.name||"-"));
+    alert("이었습니다.");
+    refreshLoanScreens();
+  };
+
   // 이 계산서를 담보로 쓴 대출 금액의 합계
   async function collateralUsedOf(colId){
     try{
@@ -13174,6 +13237,9 @@
                       + ' title="계산서 금액과 여신차감액의 차이만큼 여신을 조정합니다"'
                       + ' data-col-adj="'+comboEsc(r.company)+'|'+(diff + colAdj)+'|'+r.col.id+'">'
                       + (colAdj !== 0 ? '조정 더하기' : '여신 조정') + '</button>' : '')
+                  + '<button class="btn small secondary" style="width:auto;margin-left:4px;"'
+                      + ' title="이 계산서를 담보로 실행한 B2B 대출을 이어둡니다"'
+                      + ' data-col-loan="'+r.col.id+'">대출 잇기</button>'
                   + '<button class="btn small danger" style="width:auto;margin-left:4px;" data-col-del="'+r.col.id+'">삭제</button>'
                 : '<button class="btn small" style="width:auto;" data-col-new="'+comboEsc(r.month)+'|'+comboEsc(r.company)+'|'+r.credit+'">계산서 등록</button>')
             + '</td>' : '')
@@ -13188,6 +13254,7 @@
       + (canDo ? '<td></td>' : '') + '</tr>';
     h += '</tbody></table></div>';
     listEl.innerHTML = h;
+    listEl.querySelectorAll("[data-col-loan]").forEach(b=> b.onclick = ()=> linkLoanToCollateral(b.dataset.colLoan));
     listEl.querySelectorAll("[data-col-adj]").forEach(b=> b.onclick = ()=>{
       const p = String(b.dataset.colAdj).split("|");
       openAdjustFromCollateral(p[0], Number(p[1])||0, p[2]||"");
@@ -27079,7 +27146,7 @@
     if(bar) bar.style.display = "none";
   };
 
-  // 파일에 박힌 버전 글자를 읽습니다. (예: "파일 2026-08-09 v523")
+  // 파일에 박힌 버전 글자를 읽습니다. (예: "파일 2026-08-09 v524")
   function readBuildTag(text){
     const m = String(text||"").match(/파일\s*[\d-]+\s*v(\d+)/);
     return m ? m[0].trim() : "";
