@@ -379,7 +379,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v545</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v546</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -1111,7 +1111,7 @@
           <div class="stack-row"><label>발행일</label><input type="text" id="col-date" maxlength="8" inputmode="numeric" placeholder="예: 20260731"></div>
           <div class="stack-row"><label>발행처</label><input type="text" id="col-company" list="col-company-list" placeholder="예: 삼성전자스타" onchange="renderCollateralOrders()"><datalist id="col-company-list"></datalist></div>
           <div class="stack-row"><label>계산서번호 (선택)</label><input type="text" id="col-invno" placeholder="홈택스 승인번호"></div>
-          <div class="stack-row"><label>금액</label><input type="number" id="col-amount" placeholder="숫자만"></div>
+          <div class="stack-row"><label>금액</label><input type="number" id="col-amount" placeholder="숫자만" oninput="refreshCollateralShare()"></div>
           <div class="stack-row"><label>메모 (선택)</label><input type="text" id="col-memo" placeholder="선택"></div>
         </div>
         <div style="font-weight:700;font-size:12.5px;margin-top:10px;margin-bottom:4px;">이 계산서에 넣을 주문</div>
@@ -12933,6 +12933,27 @@
   //  이미 읽어둔 주문 자료를 씁니다. (Firestore 읽기 0회)
   let colOrderCands = [];      // 고를 수 있는 주문 [{batchId, b, credit, qty, models, colId}]
 
+  // 금액 칸을 손으로 고쳐도 「바뀔 값」을 다시 그립니다.
+  window.refreshCollateralShare = function(){
+    const box = document.getElementById("col-orders");
+    if(!box) return;
+    const picked = Array.from(box.querySelectorAll(".col-ord-ck:checked"))
+      .map(c=> colOrderCands[Number(c.value)]).filter(Boolean);
+    box.querySelectorAll(".col-ord-new").forEach(td=> td.innerHTML = '<span style="color:var(--gray);">-</span>');
+    if(picked.length === 0) return;
+    const total = Number((document.getElementById("col-amount")||{}).value) || 0;
+    const parts = splitByShare(total, picked.map(x=> x.listSum || x.credit || 0));
+    picked.forEach((x,i)=>{
+      const td = box.querySelector('.col-ord-new[data-i="' + colOrderCands.indexOf(x) + '"]');
+      if(!td) return;
+      const before = Number(x.credit)||0, after = parts[i];
+      td.innerHTML = (before === after)
+        ? '<span style="color:var(--gray);">그대로</span>'
+        : '<b>' + after.toLocaleString() + '</b> <span style="color:var(--danger);font-size:10.5px;">'
+          + (after-before > 0 ? "+" : "") + (after-before) + '</span>';
+    });
+  };
+
   window.renderCollateralOrders = function(){
     const box = document.getElementById("col-orders");
     if(!box) return;
@@ -12971,7 +12992,7 @@
     let h = '<div style="max-height:200px;overflow-y:auto;border:1px solid var(--line);">'
       + '<table class="data-table" style="width:100%;"><thead><tr>'
       + '<th style="width:30px;"><input type="checkbox" id="col-ord-all"></th>'
-      + '<th>주문일</th><th>모델</th><th class="ta-right">수량</th><th class="ta-right">여신차감액</th><th>도착</th>'
+      + '<th>주문일</th><th>모델</th><th class="ta-right">수량</th><th class="ta-right">여신차감액</th><th class="ta-right">바뀔 값</th><th>도착</th>'
       + '</tr></thead><tbody>';
     colOrderCands.forEach((c,i)=>{
       const lines = (orderBatchLinesCache[c.batchId]||[]).filter(o=> o.status !== "취소");
@@ -12983,11 +13004,13 @@
         + '<td style="font-size:11.5px;">'+comboEsc(c.models||"-")+'</td>'
         + '<td class="ta-right">'+c.qty+'</td>'
         + '<td class="ta-right">'+c.credit.toLocaleString()+'</td>'
+        + '<td class="ta-right col-ord-new" data-i="'+i+'">-</td>'
         + '<td'+(full?'':' style="color:var(--danger);"')+'>'+done+'/'+c.qty+'</td></tr>';
     });
     h += '</tbody></table></div>'
       + '<div style="font-size:11.5px;color:var(--gray);margin-top:4px;">'
-      + '체크하면 아래 <b>금액</b>이 여신차감액 합계로 바뀝니다. 실제 계산서와 다르면 금액만 고치시면 됩니다.</div>';
+      + '체크하면 아래 <b>금액</b>이 계산됩니다. 실제 계산서와 다르면 금액만 고치시면 됩니다.<br>'
+      + '<b>바뀔 값</b>은 저장하면 그 주문의 여신차감액이 얼마가 되는지 미리 보여드리는 것입니다.</div>';
     box.innerHTML = h;
 
     const sync = ()=>{
@@ -12999,6 +13022,22 @@
       const whole = invoiceCreditTotal(company, listSum);
       const sumEach = picked.reduce((n,x)=> n + x.credit, 0);
       document.getElementById("col-amount").value = (whole != null) ? whole : sumEach;
+      // 저장하면 각 주문이 얼마가 되는지 미리 보여줍니다.
+      {
+        const total = Number((document.getElementById("col-amount")||{}).value) || 0;
+        const shares = picked.map(x=> x.listSum || x.credit || 0);
+        const parts = splitByShare(total, shares);
+        box.querySelectorAll(".col-ord-new").forEach(td=> td.innerHTML = '<span style="color:var(--gray);">-</span>');
+        picked.forEach((x,i)=>{
+          const td = box.querySelector('.col-ord-new[data-i="' + colOrderCands.indexOf(x) + '"]');
+          if(!td) return;
+          const before = Number(x.credit)||0, after = parts[i];
+          td.innerHTML = (before === after)
+            ? '<span style="color:var(--gray);">그대로</span>'
+            : '<b>' + after.toLocaleString() + '</b> <span style="color:var(--danger);font-size:10.5px;">'
+              + (after-before > 0 ? "+" : "") + (after-before) + '</span>';
+        });
+      }
       if(note){
         note.innerHTML = (whole != null)
           ? '<span style="color:var(--navy);">공급가 기준으로 <b>계산서 한 장을 통째로</b> 계산했습니다. '
@@ -13094,13 +13133,30 @@
     const picked = box ? Array.from(box.querySelectorAll(".col-ord-ck:checked"))
       .map(c=> colOrderCands[Number(c.value)]).filter(Boolean) : [];
     const pickedCredit = picked.reduce((n,x)=> n + x.credit, 0);
-    if(picked.length && pickedCredit !== amount){
+
+    // ★ 저장하면 주문별 여신차감액이 계산서 금액에 맞춰 다시 나뉩니다. ★
+    //  무엇이 얼마로 바뀌는지 먼저 보여드리고 확인받습니다.
+    if(picked.length){
+      const shares = picked.map(x=> x.listSum || x.credit || 0);
+      const parts = splitByShare(amount, shares);
+      const changed = picked.map((x,i)=> ({ x, before: Number(x.credit)||0, after: parts[i] }))
+        .filter(r=> r.before !== r.after);
+      const won = v => (Number(v)||0).toLocaleString();
       if(!confirm(
-        "고른 주문의 여신차감액 합계와 계산서 금액이 다릅니다.\n\n"
-        + "  주문 합계   " + pickedCredit.toLocaleString() + "\n"
-        + "  계산서 금액 " + amount.toLocaleString() + "\n"
-        + "  차이        " + (amount - pickedCredit).toLocaleString() + "\n\n"
-        + "그대로 저장할까요?")) return;
+        "이 계산서에 주문 " + picked.length + "건을 묶습니다.\n\n"
+        + "  계산서 금액   " + won(amount) + "\n"
+        + "  지금 여신차감 " + won(pickedCredit)
+        + (amount !== pickedCredit ? "   (차이 " + won(amount - pickedCredit) + ")" : "   (같음)") + "\n\n"
+        + (changed.length
+            ? "저장하면 주문별 여신차감액이 계산서 기준으로 다시 나뉩니다.\n\n"
+              + changed.slice(0,10).map(r=>
+                  "  " + (r.x.b.orderDate||"-") + "  " + won(r.before) + "  →  " + won(r.after)
+                  + "  (" + (r.after-r.before > 0 ? "+" : "") + (r.after-r.before) + ")").join("\n")
+              + (changed.length > 10 ? "\n  ... 외 " + (changed.length-10) + "건" : "")
+              + "\n\n  나눈 합계 " + won(parts.reduce((a,b)=>a+b,0)) + "  = 계산서 금액\n"
+              + "  여신 장부의 주문사용도 함께 바뀝니다.\n\n"
+            : "주문별 여신차감액은 바뀌지 않습니다.\n\n")
+        + "진행할까요?")) return;
     }
 
     const data = {
@@ -27640,7 +27696,7 @@
     seenNewTag = lastSeenTag;    // 이 버전만 안 알립니다. 그 뒤에 또 올라오면 다시 알립니다.
   };
 
-  // 파일에 박힌 버전 글자를 읽습니다. (예: "파일 2026-08-09 v545")
+  // 파일에 박힌 버전 글자를 읽습니다. (예: "파일 2026-08-09 v546")
   function readBuildTag(text){
     const m = String(text||"").match(/파일\s*[\d-]+\s*v(\d+)/);
     return m ? m[0].trim() : "";
