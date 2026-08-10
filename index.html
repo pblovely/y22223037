@@ -379,7 +379,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v533</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v534</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -2069,7 +2069,7 @@
         <div id="ml-info" style="border:1px solid var(--line);background:#fff;padding:9px 11px;font-size:12.5px;line-height:1.8;margin-bottom:8px;"></div>
         <p class="desc" style="margin-top:0;">나눠 들어온 입출금을 <b>계산서 한 장</b>에 이어줍니다. 고른 건 전부 <b>완료</b>로 바뀝니다.</p>
         <div class="tbar-row" style="display:flex;gap:0;flex-wrap:wrap;align-items:center;margin-bottom:8px;">
-          <input type="text" id="ml-search" placeholder="거래처·대표자·사업자번호로 찾기" oninput="renderMultiLinkCands()" style="width:260px;height:28px;border:1px solid var(--line);padding:0 8px;font-size:12.5px;box-sizing:border-box;">
+          <input type="text" id="ml-search" placeholder="거래처·대표자·사업자번호·메모로 찾기" oninput="renderMultiLinkCands()" style="width:260px;height:28px;border:1px solid var(--line);padding:0 8px;font-size:12.5px;box-sizing:border-box;">
           <button class="btn small secondary" style="width:auto;margin-left:-1px;" onclick="clearMultiLinkSearch()">비우기</button>
           <span id="ml-count" style="font-size:11.5px;color:var(--gray);margin-left:10px;"></span>
         </div>
@@ -2115,7 +2115,7 @@
         <p class="desc" style="margin-top:0;">금액이 비슷하거나 <b>같은 거래처</b>인 계산서를 보여드립니다. 골라서 이어주시면 <b>완료</b>로 바뀝니다.<br>
           <b>상계</b>는 여러 장을 함께 고르시면 됩니다. <b>매출은 더하고 매입은 빼서</b> 입출금액과 맞춰봅니다.</p>
         <div class="tbar-row" style="display:flex;gap:0;flex-wrap:wrap;align-items:center;margin-bottom:8px;">
-          <input type="text" id="rct-search" placeholder="거래처명 또는 사업자번호로 찾기" oninput="filterReconTaxList()" style="width:260px;height:28px;border:1px solid var(--line);padding:0 8px;font-size:12.5px;box-sizing:border-box;">
+          <input type="text" id="rct-search" placeholder="거래처·사업자번호·승인번호·메모로 찾기" oninput="filterReconTaxList()" style="width:260px;height:28px;border:1px solid var(--line);padding:0 8px;font-size:12.5px;box-sizing:border-box;">
           <button class="btn small secondary" style="width:auto;margin-left:-1px;" onclick="clearReconTaxSearch()">비우기</button>
           <label style="font-size:12px;margin-left:12px;"><input type="checkbox" id="rct-all-tax" onchange="reloadReconTaxList()"> 전부 보기</label>
           <span id="rct-count" style="font-size:11.5px;color:var(--gray);margin-left:10px;"></span>
@@ -2158,7 +2158,7 @@
           <button class="btn small secondary" id="tx-f-unlinked" style="width:auto;" onclick="setTaxFilter('unlinked')">대사 미완료</button>
         </span>
         <div class="tbar-row" style="display:flex;gap:0;flex-wrap:wrap;align-items:center;margin-bottom:8px;">
-          <input type="text" id="tax-search" placeholder="거래처·대표자·사업자번호·금액으로 찾기" oninput="loadTaxList()" style="width:280px;height:28px;border:1px solid var(--line);padding:0 8px;font-size:12.5px;box-sizing:border-box;">
+          <input type="text" id="tax-search" placeholder="거래처·대표자·사업자번호·금액·ERP 비고로 찾기" oninput="loadTaxList()" style="width:280px;height:28px;border:1px solid var(--line);padding:0 8px;font-size:12.5px;box-sizing:border-box;">
           <button class="btn small secondary" style="width:auto;margin-left:-1px;" onclick="clearTaxSearch()">비우기</button>
           <input type="text" id="tax-from" placeholder="시작일 20260101" onchange="loadTaxList()" style="width:130px;height:28px;border:1px solid var(--line);padding:0 8px;font-size:12.5px;margin-left:8px;box-sizing:border-box;">
           <input type="text" id="tax-to" placeholder="종료일 20260131" onchange="loadTaxList()" style="width:130px;height:28px;border:1px solid var(--line);padding:0 8px;font-size:12.5px;margin-left:-1px;box-sizing:border-box;">
@@ -15390,7 +15390,8 @@
         return (qName && tName && tName.indexOf(qName) >= 0)
           || (qNum.length >= 3 && tBiz && tBiz.indexOf(qNum) >= 0)
           || String(t.invoiceNo||"").indexOf(q) >= 0
-          || String(t.ceo||"").toLowerCase().indexOf(q) >= 0;
+          || String(t.ceo||"").toLowerCase().indexOf(q) >= 0
+          || String(t.memo||"").toLowerCase().indexOf(q) >= 0;   // 계산서 메모
       }
       return Math.abs(t.diff) <= Math.max(sum * 0.15, 200000);
     }).sort((a,b)=> Math.abs(a.diff) - Math.abs(b.diff)).slice(0, 120);
@@ -16317,7 +16318,9 @@
         const hitName = qName && tName && tName.indexOf(qName) >= 0;
         const hitBiz  = qBiz.length >= 3 && tBiz && tBiz.indexOf(qBiz) >= 0;
         const hitNo   = String(t.invoiceNo||"").indexOf(q) >= 0;
-        return hitName || hitBiz || hitNo;
+        const hitMemo = String(t.memo||"").toLowerCase().indexOf(q) >= 0;   // 계산서 메모
+        const hitCeo  = String(t.ceo||"").toLowerCase().indexOf(q) >= 0;
+        return hitName || hitBiz || hitNo || hitMemo || hitCeo;
       }
       if(showAll) return true;                                       // 전부 보기
       if(t.dayGap > 1500) return false;
@@ -16777,7 +16780,8 @@
         ids.forEach(tid=>{
           if(!linked.has(tid)) linked.set(tid, []);
           linked.get(tid).push({ date:v.date, inAmt:Number(v.inAmt)||0, outAmt:Number(v.outAmt)||0,
-                                 diff:Number(v.diff)||0 });
+                                 diff:Number(v.diff)||0,
+                                 memo:v.memo||"", desc:v.desc||"", party:v.party||"", acct:v.acct||"" });
         });
       });
     }catch(e){}
@@ -16822,7 +16826,10 @@
       if(dFrom && d && d < dFrom) return false;
       if(dTo && d && d > dTo) return false;
       if(q){
-        const hay = [r.company, r.ceo, r.invoiceNo, r.memo]
+        // 이어진 입출금의 ERP 비고·적요·상대까지 함께 찾습니다.
+        const linkedHay = (r.linked||[]).map(L=>
+          [L.memo, L.desc, L.party, L.acct].map(v=> String(v||"")).join(" ")).join(" ");
+        const hay = [r.company, r.ceo, r.invoiceNo, r.memo, linkedHay]
           .map(v=> String(v||"").toLowerCase()).join(" ");
         let hit = hay.indexOf(q) >= 0;
         if(!hit && qNum.length >= 3){
@@ -27326,7 +27333,7 @@
     seenNewTag = lastSeenTag;    // 이 버전만 안 알립니다. 그 뒤에 또 올라오면 다시 알립니다.
   };
 
-  // 파일에 박힌 버전 글자를 읽습니다. (예: "파일 2026-08-09 v533")
+  // 파일에 박힌 버전 글자를 읽습니다. (예: "파일 2026-08-09 v534")
   function readBuildTag(text){
     const m = String(text||"").match(/파일\s*[\d-]+\s*v(\d+)/);
     return m ? m[0].trim() : "";
