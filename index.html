@@ -379,7 +379,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v535</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v536</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -2125,6 +2125,18 @@
         <div id="rct-sum" style="border:1px solid var(--navy);background:#f4f7fb;padding:8px 11px;font-size:12.5px;line-height:1.8;margin-bottom:10px;"></div>
         <div class="stack-row"><label>수기 <span class="info-tip" title="홈택스에 없는 종이 계산서로 처리한 건입니다. 체크하면 위 「수기」 목록에서 따로 볼 수 있습니다.">ⓘ</span></label>
           <label style="font-size:12.5px;"><input type="checkbox" id="rct-hand"> 수기 세금계산서로 처리</label>
+        </div>
+        <div class="stack-row" id="rct-diff-row" style="display:none;"><label>차액 확인 <span class="info-tip" title="입출금액과 계산서 금액이 다를 때, 왜 다른지 정하고 완료로 넘깁니다.">ⓘ</span></label>
+          <select id="rct-diff-reason">
+            <option value="">— 고르지 않음 (차액 그대로 남김) —</option>
+            <option value="수수료">수수료 차감</option>
+            <option value="원단위 절사">원단위 절사</option>
+            <option value="부분입금">부분입금 · 나머지 나중에</option>
+            <option value="선입금 상계">선입금 상계</option>
+            <option value="반품·할인 반영">반품·할인 반영</option>
+            <option value="이월">이월 (다음 건과 함께)</option>
+            <option value="기타">기타 (메모에 적어주세요)</option>
+          </select>
         </div>
         <div class="stack-row"><label>메모</label><input type="text" id="rct-note" placeholder="차액 사유 등 (선택)"></div>
         <div id="rct-msg" style="font-size:12.5px;margin:6px 0;"></div>
@@ -16171,7 +16183,9 @@
             + '<td style="color:' + stColor[s] + ';font-weight:700;white-space:nowrap;">' + stLabel[s]
               + ((Number(x.diff)||0) !== 0
                   ? (x.diffOk === true
-                      ? ' <span style="background:#fff;border:1px solid var(--line);color:var(--gray);font-size:10.5px;padding:0 4px;">차액 확인</span>'
+                      ? ' <span style="background:#fff;border:1px solid var(--line);color:var(--gray);font-size:10.5px;padding:0 4px;"'
+                        + (x.diffReason ? ' title="' + comboEsc(x.diffReason) + '"' : '') + '>차액 확인'
+                        + (x.diffReason ? ' · ' + comboEsc(x.diffReason) : '') + '</span>'
                       : ' <span style="background:#fdecea;border:1px solid var(--danger);color:var(--danger);font-size:10.5px;padding:0 4px;">차액</span>')
                   : '')
               + (x.handTax ? ' <span style="background:#fff8e1;border:1px solid #e0c46c;color:#8a6d0b;font-size:10.5px;padding:0 4px;">수기</span>' : '')
@@ -16269,6 +16283,8 @@
       + (x.desc ? '<br><span style="color:var(--gray);">' + comboEsc(x.desc) + '</span>' : '');
     document.getElementById("rct-note").value = x.note || "";
     { const hc = document.getElementById("rct-hand"); if(hc) hc.checked = (x.handTax === true); }
+    { const dr = document.getElementById("rct-diff-reason"); if(dr) dr.value = x.diffReason || ""; }
+    { const dw = document.getElementById("rct-diff-row"); if(dw) dw.style.display = "none"; }
     document.getElementById("rct-msg").innerHTML = "";
     reconTaxPicked = new Set();
     { const s = document.getElementById("rct-search"); if(s) s.value = ""; }
@@ -16409,7 +16425,10 @@
       + '<b>' + net.toLocaleString() + '</b><br>'
       + (isIn ? '입금' : '출금') + ' <b>' + amt.toLocaleString() + '</b> − 상계 <b>' + net.toLocaleString() + '</b> = '
       + '<b style="color:' + (diff === 0 ? "#2e7d32" : "var(--danger)") + ';">차액 ' + diff.toLocaleString() + '</b>'
-      + (diff === 0 ? ' <span style="color:#2e7d32;">딱 맞습니다</span>' : '');
+      + (diff === 0 ? ' <span style="color:#2e7d32;">딱 맞습니다</span>'
+                    : '<br><span style="color:var(--gray);">차액이 있습니다. 아래 <b>차액 확인</b>에서 사유를 고르면 완료로 넘깁니다.</span>');
+    // 차액이 있을 때만 사유 칸을 보여줍니다.
+    if(diffRow) diffRow.style.display = (diff === 0) ? "none" : "";
   };
 
   window.filterReconTaxList = function(){ renderReconTaxCands(); onReconTaxPick(); };
@@ -16458,12 +16477,22 @@
     });
     const net = isIn ? (sale - buy) : (buy - sale);
     const diff = amt - net;
+    // 차액이 있으면 사유를 고르게 합니다. 고르면 확인된 차액으로 보고 완료로 넘깁니다.
+    const diffReason = String((document.getElementById("rct-diff-reason")||{}).value || "").trim();
     if(diff !== 0){
+      if(diffReason === "기타" && !note){
+        alert("사유가 「기타」이면 메모에 무엇 때문인지 적어주세요."); return;
+      }
       if(!confirm("금액이 " + Math.abs(diff).toLocaleString() + "원 "
         + (diff > 0 ? "많습니다" : "적습니다") + ".\n\n"
         + (isIn ? "입금" : "출금") + " " + amt.toLocaleString()
         + "\n계산서 " + picked.length + "장 상계 " + net.toLocaleString()
-        + "\n\n그래도 이어줄까요? (차액은 따로 남습니다)")) return;
+        + "\n차액 " + diff.toLocaleString()
+        + (diffReason ? "\n사유 " + diffReason : "")
+        + "\n\n" + (diffReason
+            ? "차액을 확인한 것으로 보고 완료로 넘깁니다."
+            : "사유를 안 고르셨습니다. 이어주긴 하지만 차액은 그대로 남습니다.")
+        + "\n\n진행할까요?")) return;
     }
     try{
       await updateDoc(doc(db,"bankRecon", x.id), {
@@ -16472,13 +16501,15 @@
         taxLinks: links,
         taxLabel: links.length === 1 ? links[0].label
                   : (links[0].label + " 외 " + (links.length-1) + "장 상계"),
-        taxAmount: net, diff, note, handTax, state: "done", carryOver: false
+        taxAmount: net, diff, note, handTax, state: "done", carryOver: false,
+        diffReason,                                   // 차액 사유 (없으면 빈 값)
+        diffOk: (diff !== 0 && !!diffReason)          // 차액을 확인해 넘긴 건
       });
       logAction("입출금 대사 계산서 연결",
         (x.date||"-") + " / " + amt.toLocaleString() + " ↔ "
         + links.map(l=> (l.isSale ? "매출 " : "매입 ") + l.label + " " + l.amount.toLocaleString()).join(" + ")
         + (links.length > 1 ? " / 상계 " + net.toLocaleString() : "")
-        + (diff ? " / 차액 " + diff.toLocaleString() : ""));
+        + (diff ? " / 차액 " + diff.toLocaleString() + (diffReason ? " (" + diffReason + ")" : " (사유 없음)") : ""));
     }catch(e){ alert("저장에 실패했습니다."); return; }
     closeReconTax();
     loadReconList();
@@ -27346,7 +27377,7 @@
     seenNewTag = lastSeenTag;    // 이 버전만 안 알립니다. 그 뒤에 또 올라오면 다시 알립니다.
   };
 
-  // 파일에 박힌 버전 글자를 읽습니다. (예: "파일 2026-08-09 v535")
+  // 파일에 박힌 버전 글자를 읽습니다. (예: "파일 2026-08-09 v536")
   function readBuildTag(text){
     const m = String(text||"").match(/파일\s*[\d-]+\s*v(\d+)/);
     return m ? m[0].trim() : "";
