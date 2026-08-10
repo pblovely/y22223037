@@ -379,7 +379,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v542</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v543</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -1578,6 +1578,7 @@
             <select id="co-discbase-input">
               <option value="unit">대당 (한 대씩 계산 후 반올림)</option>
               <option value="total">합계 (주문 전체 합계에 한 번)</option>
+              <option value="supply">공급가 기준 (삼성전자 방식)</option>
             </select>
           </div>
         </div>
@@ -7433,7 +7434,7 @@
     document.getElementById("co-is-dest").checked = c.isDest === true;
     { const e = document.getElementById("co-is-credit"); if(e) e.checked = c.isCreditTarget === true; }
     { const e = document.getElementById("co-discbase-input");
-      if(e){ e.value = (c.discountBase === "total") ? "total" : "unit"; e.disabled = !!readOnly; } }
+      if(e){ e.value = (c.discountBase === "total" || c.discountBase === "supply") ? c.discountBase : "unit"; e.disabled = !!readOnly; } }
     document.getElementById("company-modal-title").textContent = readOnly ? "업체 보기" : (companyId ? "업체 수정" : "업체 등록");
     // 읽기 전용이면 저장 버튼을 감춥니다.
     const saveBtn = document.querySelector('#company-modal-overlay button[onclick="submitCompany()"]');
@@ -7533,7 +7534,8 @@
     payload.isSource = document.getElementById("co-is-source").checked;
     payload.isDest = document.getElementById("co-is-dest").checked;
     payload.isCreditTarget = !!(document.getElementById("co-is-credit")||{}).checked;
-    payload.discountBase = ((document.getElementById("co-discbase-input")||{}).value === "total") ? "total" : "unit";
+    { const v = (document.getElementById("co-discbase-input")||{}).value;
+      payload.discountBase = (v === "total" || v === "supply") ? v : "unit"; }
 
     if(!payload.name){
       showModelMsg("co-result-msg", "업체명은 반드시 입력해주세요.", true);
@@ -7879,7 +7881,7 @@
     const name = String((document.getElementById("order-source-select")||{}).value||"").trim();
     const c = (companiesCache||[]).find(x=> String(x.name||"").trim() === name) || null;
     const rate = c && c.cashRate !== "" && c.cashRate != null ? Number(c.cashRate) : null;
-    const base = (c && c.discountBase === "total") ? "total" : "unit";
+    const base = (c && (c.discountBase === "total" || c.discountBase === "supply")) ? c.discountBase : "unit";
     currentOrderSourceInfo = c ? { name, rate, base } : null;
 
     const el = document.getElementById("order-source-note");
@@ -7889,7 +7891,8 @@
       }else{
         el.style.display = "block";
         el.innerHTML = '<b>' + comboEsc(name) + '</b> 현금할인 <b>' + rate + '%</b> · 계산 기준 <b>'
-          + (base === "total" ? "합계 (주문 전체에 한 번)" : "대당 (한 대씩 반올림)") + '</b>'
+          + (base === "supply" ? "공급가 기준 (삼성전자 방식)"
+             : base === "total" ? "합계 (주문 전체에 한 번)" : "대당 (한 대씩 반올림)") + '</b>'
           + '<br><span style="color:var(--gray);">비어 있는 선할인% 칸에 채워드립니다. 기준을 바꾸려면 업체정보에서 고쳐주세요.</span>';
       }
     }
@@ -9767,7 +9770,8 @@
         + '</tr></thead><tbody>';
       amtFixRows.forEach((r,i)=>{
         const co = (companiesCache||[]).find(x=> String(x.name||"").trim() === String(r.b.source||"").trim());
-        const base = (co && co.discountBase === "total") ? "합계" : "대당";
+        const base = (co && co.discountBase === "supply") ? "공급가"
+                   : (co && co.discountBase === "total") ? "합계" : "대당";
         const gap = v => v ? '<span style="color:var(--danger);font-weight:700;">' + (v>0?"+":"") + v.toLocaleString() + '</span>' : '<span style="color:var(--gray);">-</span>';
         h += '<tr>'
           + '<td><input type="checkbox" class="amtfix-ck" value="'+i+'" checked></td>'
@@ -11967,11 +11971,22 @@
       return n + unit * (Number(l.quantity)||0);
     }, 0);
     const c = (companiesCache||[]).find(x=> String(x.name||"").trim() === String(source||"").trim());
-    if(!c || c.discountBase !== "total") return unitSum;
+    if(!c || (c.discountBase !== "total" && c.discountBase !== "supply")) return unitSum;
     const rate = (c.cashRate === "" || c.cashRate == null) ? null : Number(c.cashRate);
     if(!(rate > 0)) return unitSum;
     const listSum = (lines||[]).reduce((n,l)=> n + (Number(l.listPrice)||0) * (Number(l.quantity)||0), 0);
     if(!(listSum > 0)) return unitSum;
+
+    // 공급가 기준 — 삼성전자가 세금계산서를 내는 방식입니다.
+    //   공급가 = 버림( 출고가 합계 ÷ 1.1 × (1 − 할인율) )
+    //   세액   = 버림( 공급가 × 10% )
+    //   합계   = 공급가 + 세액
+    //  계산서 세 장으로 확인했습니다. (202204·202607 정확히 일치)
+    if(c.discountBase === "supply"){
+      const supply = Math.floor(listSum / 1.1 * (1 - rate / 100));
+      const vat = Math.floor(supply * 0.1);
+      return supply + vat;
+    }
     return listSum - Math.round(listSum * rate / 100);
   }
   window.creditFromLines = creditFromLines;
@@ -27538,7 +27553,7 @@
     seenNewTag = lastSeenTag;    // 이 버전만 안 알립니다. 그 뒤에 또 올라오면 다시 알립니다.
   };
 
-  // 파일에 박힌 버전 글자를 읽습니다. (예: "파일 2026-08-09 v542")
+  // 파일에 박힌 버전 글자를 읽습니다. (예: "파일 2026-08-09 v543")
   function readBuildTag(text){
     const m = String(text||"").match(/파일\s*[\d-]+\s*v(\d+)/);
     return m ? m[0].trim() : "";
