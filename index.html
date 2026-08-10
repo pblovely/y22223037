@@ -379,7 +379,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v536</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v537</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -15901,17 +15901,29 @@
   }
 
   // 이월 표시 — 초기화해도 남깁니다. 완료되면 자동으로 풀립니다.
-  window.toggleCarryOver = async function(id){
+  // 이월 표시 — 한 번만 눌리게 잠급니다.
+  //  저장하는 동안 또 누르면 켰다 껐다가 되어버려서, 끝날 때까지 막습니다.
+  const carryBusy = new Set();
+  window.toggleCarryOver = async function(id, btn){
     if(!hasPerm(currentUserPerms, "paymentProcess")){ alert("권한이 없습니다."); return; }
+    if(carryBusy.has(id)) return;                 // 이미 저장 중
     const x = reconRows.find(r=> r.id === id);
     if(!x) return;
     const on = !x.carryOver;
+    carryBusy.add(id);
+    if(btn){ btn.disabled = true; btn.textContent = "잠깐만"; }
     try{
       await updateDoc(doc(db,"bankRecon", id), { carryOver: on });
+      x.carryOver = on;                           // 화면에 담아둔 값도 맞춰둡니다
       logAction(on ? "입출금 대사 이월 표시" : "입출금 대사 이월 해제",
         (x.date||"-") + " / " + Math.max(Number(x.inAmt)||0, Number(x.outAmt)||0).toLocaleString());
-    }catch(e){ alert("바꾸지 못했습니다."); return; }
-    loadReconList();
+    }catch(e){
+      carryBusy.delete(id);
+      if(btn){ btn.disabled = false; btn.textContent = x.carryOver ? "이월중" : "이월"; }
+      alert("바꾸지 못했습니다."); return;
+    }
+    carryBusy.delete(id);
+    renderReconList();                            // 다시 읽지 않고 화면만 그립니다 (읽기 0회)
   };
 
   // 차액을 확인 완료로 표시합니다. 표시하면 「차액」 목록에서 빠집니다.
@@ -16208,9 +16220,10 @@
             + '<td class="ta-right" style="white-space:nowrap;">'
               + (canDo
                   ? '<button class="btn small secondary" style="width:auto;" data-rc-tax="' + x.id + '">계산서</button>'
-                    + '<button class="btn small secondary" style="width:auto;margin-left:3px;" data-rc-st="' + x.id + '">상태</button>'
+                    // 이월을 상태 앞에 둡니다. 한 번 누르면 잠깐 잠가 두 번 눌리지 않게 합니다.
                     + '<button class="btn small ' + (x.carryOver ? '' : 'secondary') + '" style="width:auto;margin-left:3px;" data-rc-cy="' + x.id + '">'
                     + (x.carryOver ? '이월중' : '이월') + '</button>'
+                    + '<button class="btn small secondary" style="width:auto;margin-left:3px;" data-rc-st="' + x.id + '">상태</button>'
                     + ((Number(x.diff)||0) !== 0
                         ? '<button class="btn small ' + (x.diffOk ? '' : 'secondary') + '" style="width:auto;margin-left:3px;" data-rc-dk="' + x.id + '">'
                           + (x.diffOk ? '차액확인됨' : '차액확인') + '</button>' : '')
@@ -16226,7 +16239,7 @@
       b.onclick = ()=> openReconState(b.dataset.rcSt);
     });
     document.querySelectorAll("#tab-recon [data-rc-cy]").forEach(b=>{
-      b.onclick = ()=> toggleCarryOver(b.dataset.rcCy);
+      b.onclick = ()=> toggleCarryOver(b.dataset.rcCy, b);
     });
     document.querySelectorAll("#tab-recon [data-rc-dk]").forEach(b=>{
       b.onclick = ()=> toggleDiffOk(b.dataset.rcDk);
@@ -27377,7 +27390,7 @@
     seenNewTag = lastSeenTag;    // 이 버전만 안 알립니다. 그 뒤에 또 올라오면 다시 알립니다.
   };
 
-  // 파일에 박힌 버전 글자를 읽습니다. (예: "파일 2026-08-09 v536")
+  // 파일에 박힌 버전 글자를 읽습니다. (예: "파일 2026-08-09 v537")
   function readBuildTag(text){
     const m = String(text||"").match(/파일\s*[\d-]+\s*v(\d+)/);
     return m ? m[0].trim() : "";
