@@ -379,7 +379,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v530</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v532</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -3572,7 +3572,10 @@
     cancelDelete:"⚠ 취소된 주문·판매요청 삭제 (되돌릴 수 없음)",
     accountView:"업체 계좌·사업자번호 보기 (없으면 가려짐)",
     depositApprove:"입금·이체 승인 (정산팀 — 실제 입금을 확인하고 확정)",
-    menuReqBoard:"메뉴: 입출금 요청 (보기)",
+    menuReqBoard:"메뉴: 입출금리스트 (켜면 아래 네 화면이 모두 보입니다)",
+    menuCashbook:"메뉴: 입출금 내역",
+    menuTax:"메뉴: 세금계산서",
+    menuRecon:"메뉴: 입출금 대사",
     paymentProcess:"입출금 처리 입력 (없으면 보기만 — 입금·이체 기록 못 넣음)",
     uiCustomize:"화면 문구·버튼 이름 수정 (마우스 오른쪽 클릭)",
     userApproval:"사용자 승인·추방", permissionManage:"권한 설정 관리(전체 관리자)",
@@ -3582,11 +3585,12 @@
   };
   // 권한을 성격별로 묶어서 보여줍니다 (화면에서 찾기 쉽게)
   const PERMISSION_GROUPS = [
-    { title:"화면 메뉴", keys:["dashboard","menuInvWork","menuInvUpload","menuOrders","menuSaleReq","menuReservation","menuCompany","menuDataUpload","menuItemHistory","menuLgRefund","menuLedger","menuDataCheck","menuReqBoard"] },
+    { title:"화면 메뉴", keys:["dashboard","menuInvWork","menuInvUpload","menuOrders","menuSaleReq","menuReservation","menuCompany","menuDataUpload","menuItemHistory","menuLgRefund","menuLedger","menuDataCheck","menuReqBoard","menuCashbook","menuTax","menuRecon"] },
     { title:"기능", keys:["excelExport","bulkEdit","bulkModelApply","companyEdit","listPriceOverride","cancelDelete","accountView","depositApprove","paymentProcess","uiCustomize"] },
     { title:"관리자", keys:["userApproval","permissionManage","selfPermission","teamManage","inventorySettings","settlementSettings","siteSettings","dataReset"] }
   ];
-  const PERMISSION_SUB_KEYS = ["menuInvUpload"];   // 상위 항목 아래에 들여쓰기할 항목
+  // 상위 항목 아래에 들여쓰기할 항목
+  const PERMISSION_SUB_KEYS = ["menuInvUpload","menuCashbook","menuTax","menuRecon"];
 
   const DEFAULT_SITE_NAME = "유통폰 관리 대시보드";
   const DEFAULT_PENDING_TITLE = "승인 대기 중입니다";
@@ -4935,7 +4939,7 @@
     closePersonalSettingsModal();
   };
 
-  const ALL_PERM_KEYS = ["dashboard","menuInvWork","menuInvUpload","menuOrders","menuSaleReq","menuDataUpload","menuReservation","menuCompany","menuItemHistory","menuLgRefund","menuLedger","menuDataCheck","menuReqBoard","excelExport","bulkEdit","bulkModelApply","companyEdit","listPriceOverride","cancelDelete","accountView","depositApprove","paymentProcess","uiCustomize","userApproval","permissionManage","selfPermission","teamManage","inventorySettings","settlementSettings","siteSettings","dataReset"];
+  const ALL_PERM_KEYS = ["dashboard","menuInvWork","menuInvUpload","menuOrders","menuSaleReq","menuDataUpload","menuReservation","menuCompany","menuItemHistory","menuLgRefund","menuLedger","menuDataCheck","menuReqBoard","menuCashbook","menuTax","menuRecon","excelExport","bulkEdit","bulkModelApply","companyEdit","listPriceOverride","cancelDelete","accountView","depositApprove","paymentProcess","uiCustomize","userApproval","permissionManage","selfPermission","teamManage","inventorySettings","settlementSettings","siteSettings","dataReset"];
 
   async function loadUserAdminList(){
     const listEl = document.getElementById("user-admin-list");
@@ -14561,7 +14565,7 @@
   };
 
   window.loadReqBoard = async function(){
-    if(!hasPerm(currentUserPerms, "settlementSettings") && !hasPerm(currentUserPerms, "menuReqBoard")) return;
+    if(!hasPerm(currentUserPerms, "settlementSettings") && !hasPerm(currentUserPerms, "menuReqBoard")) return;   // 입출금리스트 전용
     const listEl = document.getElementById("reqboard-list");
     if(!listEl) return;
     listEl.innerHTML = '<div class="list-empty">불러오는 중...</div>';
@@ -15203,10 +15207,56 @@
         if(Object.keys(patch).length > 0){
           ops.push({ t:"update", ref: doc(db,"taxInvoices", old.id), data:patch });
           updated++;
-          changed.push({ company:x.company,
-            what: Object.keys(patch).map(k=>({amount:"금액",company:"거래처",ceo:"대표자",issueDate:"작성일자",giveDate:"발급일자",supply:"공급가액",vat:"세액"}[k]||k)).join(", ") });
+          const KL = {amount:"금액",company:"거래처",ceo:"대표자",issueDate:"작성일자",giveDate:"발급일자",supply:"공급가액",vat:"세액"};
+          changed.push({ company:x.company, invoiceNo:x.invoiceNo, old, patch,
+            b2bUsed: Number(old.b2bUsed)||0,
+            what: Object.keys(patch).map(k=> KL[k]||k).join(", ") });
         }else kept++;
       });
+
+      // ★ 저장하기 전에 무엇이 바뀌는지 보여드리고 확인받습니다. ★
+      //  승인번호가 같은데 내용이 다른 건(수정세금계산서 등)이 조용히 덮이지 않게 합니다.
+      if(changed.length > 0){
+        const won = v => (Number(v)||0).toLocaleString();
+        const KL = {amount:"금액",company:"거래처",ceo:"대표자",issueDate:"작성일자",giveDate:"발급일자",supply:"공급가액",vat:"세액"};
+        const lines = changed.slice(0,15).map(c=>{
+          const detail = Object.keys(c.patch).map(k=>{
+            const before = (k==="amount"||k==="supply"||k==="vat") ? won(c.old[k]) : (c.old[k]||"-");
+            const after  = (k==="amount"||k==="supply"||k==="vat") ? won(c.patch[k]) : (c.patch[k]||"-");
+            return "      " + (KL[k]||k) + "  " + before + "  →  " + after;
+          }).join("\n");
+          return "  [" + c.invoiceNo + "] " + (c.company||"-")
+            + (c.b2bUsed ? "  ※ B2B 사용 " + won(c.b2bUsed) : "") + "\n" + detail;
+        }).join("\n");
+        const usedCnt = changed.filter(c=> c.b2bUsed > 0).length;
+        // 금액이 크게 달라지거나 부호가 바뀌면 수정세금계산서일 수 있습니다.
+        const suspicious = changed.filter(c=>{
+          if(c.patch.amount === undefined) return false;
+          const a = Number(c.old.amount)||0, b = Number(c.patch.amount)||0;
+          if(a === 0) return true;
+          if((a > 0) !== (b > 0)) return true;                 // 부호가 바뀜 (마이너스 계산서)
+          return Math.abs(b - a) / Math.abs(a) > 0.3;          // 30% 넘게 차이
+        });
+        if(!confirm(
+          comboEsc(f.name) + "\n\n"
+          + "이미 있는 계산서 " + changed.length + "건의 내용이 파일과 다릅니다.\n"
+          + "그대로 두면 파일 값으로 바뀝니다.\n\n"
+          + lines
+          + (changed.length > 15 ? "\n  ... 외 " + (changed.length-15) + "건" : "")
+          + (suspicious.length ? "\n\n※ 금액이 크게 달라진 건이 " + suspicious.length + "건 있습니다."
+              + "\n   수정세금계산서로 승인번호가 겹친 것일 수 있으니 꼭 확인해주세요."
+              + "\n   " + suspicious.slice(0,5).map(c=> "[" + c.invoiceNo + "] "
+                  + (Number(c.old.amount)||0).toLocaleString() + " → " + (Number(c.patch.amount)||0).toLocaleString()).join("\n   ") : "")
+          + (usedCnt ? "\n\n※ B2B 대출에 쓴 계산서가 " + usedCnt + "건 들어 있습니다. 특히 확인해주세요." : "")
+          + "\n\n새로 넣을 것 " + added + "건은 그대로 들어갑니다."
+          + "\nB2B 사용액·메모·대사 연결은 건드리지 않습니다.\n\n바꿔서 저장할까요?"
+          + "\n(취소하면 바뀌는 건 두고 새것만 넣습니다)")){
+          // 취소 — 바꾸는 것만 빼고 새로 넣는 것만 저장합니다.
+          for(let z=ops.length-1; z>=0; z--) if(ops[z].t === "update") ops.splice(z,1);
+          updated = 0; kept += changed.length;
+        }
+      }
+
       for(let i=0; i<ops.length; i+=400){
         const bt = writeBatch(db);
         ops.slice(i, i+400).forEach(o=> o.t === "set" ? bt.set(o.ref, o.data) : bt.update(o.ref, o.data));
@@ -27274,7 +27324,7 @@
     if(bar) bar.style.display = "none";
   };
 
-  // 파일에 박힌 버전 글자를 읽습니다. (예: "파일 2026-08-09 v530")
+  // 파일에 박힌 버전 글자를 읽습니다. (예: "파일 2026-08-09 v532")
   function readBuildTag(text){
     const m = String(text||"").match(/파일\s*[\d-]+\s*v(\d+)/);
     return m ? m[0].trim() : "";
@@ -31497,10 +31547,15 @@
         if(b) setMenu(b.id || "", showInvAdmin);
       });
       setMenu("tabbtn-users", showUsers);
-      setMenu("tabbtn-reqboard", hasPerm(perms, "menuReqBoard") || showSettlement);
-      setMenu("tabbtn-cashbook", hasPerm(perms, "menuReqBoard") || showSettlement);
-      setMenu("tabbtn-tax", hasPerm(perms, "menuReqBoard") || showSettlement);
-      setMenu("tabbtn-recon", hasPerm(perms, "menuReqBoard") || showSettlement);
+      // 화면마다 권한을 따로 봅니다.
+      //  예전 권한(menuReqBoard)을 가진 사람은 네 화면이 모두 보입니다. (쓰던 사람이 갑자기 못 보는 일이 없게)
+      //  한 화면만 주시려면 menuReqBoard 를 끄고 그 화면 권한만 켜주세요.
+      const allReq = hasPerm(perms, "menuReqBoard") || showSettlement;
+      const anyReq = allReq || hasPerm(perms, "menuCashbook") || hasPerm(perms, "menuTax") || hasPerm(perms, "menuRecon");
+      setMenu("tabbtn-reqboard", allReq);
+      setMenu("tabbtn-cashbook", allReq || hasPerm(perms, "menuCashbook"));
+      setMenu("tabbtn-tax",      allReq || hasPerm(perms, "menuTax"));
+      setMenu("tabbtn-recon",    allReq || hasPerm(perms, "menuRecon"));
       setMenu("tabbtn-b2b", showSettlement);
       setMenu("tabbtn-loan", showSettlement);
       setMenu("tabbtn-accounts", showSettlement);
@@ -31522,7 +31577,8 @@
       if(typeof applyMenuOrder === "function") applyMenuOrder();
       if(typeof syncTopbarHeight === "function") setTimeout(syncTopbarHeight, 80);
 
-      const hasAnyAdmin = (showSite||showTeam||showInvAdmin||showUsers||showSettlement||showLogs);
+      // 세금계산서·입출금 대사만 받은 사람도 관리자 묶음이 열려야 그 화면에 갈 수 있습니다.
+      const hasAnyAdmin = (showSite||showTeam||showInvAdmin||showUsers||showSettlement||showLogs||anyReq);
       const admBtn = document.getElementById("admin-toggle-btn");
       admBtn.style.display = hasAnyAdmin ? "block":"none";
       if(hasAnyAdmin) delete admBtn.dataset.permHidden; else admBtn.dataset.permHidden = "1";
