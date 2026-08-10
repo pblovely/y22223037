@@ -379,7 +379,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v540</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v541</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -2172,6 +2172,7 @@
           <button class="btn small secondary" id="tx-f-free" style="width:auto;" onclick="setTaxFilter('free')">면세</button>
           <button class="btn small secondary" id="tx-f-linked" style="width:auto;" onclick="setTaxFilter('linked')">대사 완료</button>
           <button class="btn small secondary" id="tx-f-unlinked" style="width:auto;" onclick="setTaxFilter('unlinked')">대사 미완료</button>
+            <button class="btn small secondary" id="tx-f-carry" onclick="setTaxFilter('carry')">이월</button>
         </span>
         <div class="tbar-row" style="display:flex;gap:0;flex-wrap:wrap;align-items:center;margin-bottom:8px;">
           <input type="text" id="tax-search" placeholder="거래처·대표자·사업자번호·금액·ERP 비고로 찾기" oninput="loadTaxList()" style="width:280px;height:28px;border:1px solid var(--line);padding:0 8px;font-size:12.5px;box-sizing:border-box;">
@@ -16906,9 +16907,34 @@
     ["tax-search","tax-from","tax-to"].forEach(id=>{ const e=document.getElementById(id); if(e) e.value=""; });
     loadTaxList();
   };
+  // 세금계산서 이월 — 이번 달에 못 맞춘 것을 다음 달로 넘깁니다.
+  //  한 번 누르면 잠깐 잠가 두 번 눌리지 않게 합니다.
+  const taxCarryBusy = new Set();
+  window.toggleTaxCarry = async function(id, btn){
+    if(!hasPerm(currentUserPerms, "paymentProcess")){ alert("권한이 없습니다."); return; }
+    if(taxCarryBusy.has(id)) return;
+    const r = (taxRows||[]).find(v=> v.id === id);
+    if(!r) return;
+    const on = !r.carryOver;
+    taxCarryBusy.add(id);
+    if(btn){ btn.disabled = true; btn.textContent = "잠깐만"; }
+    try{
+      await updateDoc(doc(db,"taxInvoices", id), { carryOver: on });
+      r.carryOver = on;
+      logAction(on ? "세금계산서 이월 표시" : "세금계산서 이월 해제",
+        (r.issueDate||"-") + " / " + (r.company||"-") + " / " + (Number(r.amount)||0).toLocaleString());
+    }catch(e){
+      taxCarryBusy.delete(id);
+      if(btn){ btn.disabled = false; btn.textContent = r.carryOver ? "이월중" : "이월"; }
+      alert("바꾸지 못했습니다."); return;
+    }
+    taxCarryBusy.delete(id);
+    loadTaxList();
+  };
+
   window.setTaxFilter = function(f){
     taxFilter = f;
-    ["all","buy","sale","free","linked","unlinked"].forEach(k=>{
+    ["all","buy","sale","free","linked","unlinked","carry"].forEach(k=>{
       const b = document.getElementById("tx-f-" + k);
       if(b) b.className = "btn small" + (k === f ? "" : " secondary");
     });
@@ -16956,7 +16982,7 @@
         id: d.id, kind: ["buy","buyfree","sale","salefree"].includes(x.kind) ? x.kind : "buy",
         issueDate: x.issueDate || "-", company: x.company || "-",
         invoiceNo: x.invoiceNo || "", amount: amt, memo: x.memo || "",
-        b2bOk: x.b2bOk === true, b2bUsed: used,
+        b2bOk: x.b2bOk === true, b2bUsed: used, carryOver: x.carryOver === true,
         ceo: x.ceo || "", bizNo: x.bizNo || "", giveDate: x.giveDate || "",
         noBankDone: x.noBankDone === true, noBankNote: x.noBankNote || "",
         linked: linked.get(d.id) || [],
@@ -16974,6 +17000,7 @@
 
       if(taxFilter === "linked") return (r.linked||[]).length > 0 || r.noBankDone;
       if(taxFilter === "unlinked") return (r.linked||[]).length === 0 && !r.noBankDone;
+      if(taxFilter === "carry") return r.carryOver === true;
       return true;
     };
     // 검색어·기간
@@ -17012,9 +17039,10 @@
 
     // 카드
     let buyAmt=0, saleAmt=0, freeAmt=0, b2bLimit=0, b2bUsed=0, b2bLeft=0;
-    let linkedCnt=0, unlinkedCnt=0, unlinkedAmt=0;
+    let linkedCnt=0, unlinkedCnt=0, unlinkedAmt=0, carryCnt=0, carryAmt=0;
     rows.forEach(r=>{
       if((r.linked||[]).length > 0 || r.noBankDone) linkedCnt++; else { unlinkedCnt++; unlinkedAmt += r.amount; }
+      if(r.carryOver){ carryCnt++; carryAmt += r.amount; }
       if(isBuyKind(r.kind)) buyAmt += r.amount; else saleAmt += r.amount;
       if(r.kind === "buyfree" || r.kind === "salefree") freeAmt += r.amount;
       if(r.b2bOk){ b2bLimit += r.amount; b2bUsed += r.b2bUsed; b2bLeft += r.left; }
@@ -17031,7 +17059,8 @@
         card("매출", saleAmt.toLocaleString(), "#1565c0", "발행한 계산서 합계") +
         card("면세", freeAmt.toLocaleString(), null, "계산서(면세) 합계") +
         card("대사 완료", linkedCnt + "건", "#2e7d32", "입출금과 이어진 것") +
-        card("대사 미완료", unlinkedCnt + "건", unlinkedCnt ? "var(--danger)" : null, unlinkedAmt.toLocaleString());
+        card("대사 미완료", unlinkedCnt + "건", unlinkedCnt ? "var(--danger)" : null, unlinkedAmt.toLocaleString()) +
+        card("이월", carryCnt + "건", carryCnt ? "#8a6d0b" : null, "다음 달로 넘김 · " + carryAmt.toLocaleString());
     }
 
     if(view.length === 0){
@@ -17051,6 +17080,7 @@
             + '<td><input type="checkbox" class="tx-ck" value="' + r.id + '"></td>'
             + '<td style="white-space:nowrap;"><b style="color:'+(isBuy ? "var(--danger)" : "#1565c0")+';">'+(isBuy ? "매입" : "매출")+'</b>'
               + (free ? ' <span style="background:#fff;border:1px solid var(--line);color:var(--gray);font-size:10.5px;padding:0 4px;">면세</span>' : '')
+              + (r.carryOver ? ' <span style="background:#fff8e1;border:1px solid #e0c46c;color:#8a6d0b;font-size:10.5px;padding:0 4px;">이월</span>' : '')
  + '</td>'
             + '<td style="white-space:nowrap;">'+comboEsc(r.issueDate)+'</td>'
             + (function(){
@@ -17079,6 +17109,9 @@
             + '<td style="color:var(--gray);font-size:11.5px;">'+comboEsc(r.memo)+'</td>'
             + '<td class="ta-right" style="white-space:nowrap;">'
               + (canDo ? ((r.linked||[]).length === 0 && !r.noBankDone ? '<button class="btn small" style="width:auto;margin-right:3px;" data-tx-link="'+r.id+'">입출금 잇기</button>' : '')
+                       // 이월 — 이번 달에 못 맞춘 계산서를 다음 달로 넘깁니다.
+                       + '<button class="btn small ' + (r.carryOver ? '' : 'secondary') + '" style="width:auto;margin-right:3px;" data-tx-cy="'+r.id+'">'
+                       + (r.carryOver ? '이월중' : '이월') + '</button>' 
                        + '<button class="btn small secondary" style="width:auto;" data-tx-edit="'+r.id+'">수정</button>'
                        + '<button class="btn small secondary" style="width:auto;margin-left:4px;" data-tx-del="'+r.id+'">삭제</button>'
                        : '<span style="color:var(--gray);">-</span>') + '</td>'
@@ -17108,6 +17141,9 @@
     });
     foldActionColumn("tax-list", "*");   // 줄을 누르면 버튼이 아래로 펼쳐집니다
     // 엑셀 다운로드 · 보기 설정 (화면에 보이는 순서 그대로 내려받습니다)
+    el.querySelectorAll("[data-tx-cy]").forEach(b=>{
+      b.onclick = ()=> toggleTaxCarry(b.dataset.txCy, b);
+    });
     { const all = document.getElementById("tx-all-ck");
       if(all) all.onchange = ()=> document.querySelectorAll("#tab-tax .tx-ck")
         .forEach(c=> c.checked = all.checked); }
@@ -27500,7 +27536,7 @@
     seenNewTag = lastSeenTag;    // 이 버전만 안 알립니다. 그 뒤에 또 올라오면 다시 알립니다.
   };
 
-  // 파일에 박힌 버전 글자를 읽습니다. (예: "파일 2026-08-09 v540")
+  // 파일에 박힌 버전 글자를 읽습니다. (예: "파일 2026-08-09 v541")
   function readBuildTag(text){
     const m = String(text||"").match(/파일\s*[\d-]+\s*v(\d+)/);
     return m ? m[0].trim() : "";
