@@ -379,7 +379,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v550</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v551</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -21290,8 +21290,8 @@
     const isOrder = (kind === "order");
 
     const cols = isOrder
-      ? ["모델","색상","통신사","수량","출고가","입고가","선할인","선할인%","타할인","타할인%","판매처","판매가","판매할인","판매할인%","상태"]
-      : ["모델","색상","통신사","수량","판매처","판매가","판매할인","판매할인%","상태"];
+      ? ["모델","색상","통신사","수량","출고가","입고가","선할인","선할인%","타할인","타할인%","판매처","판매가","판매할인","판매할인%","상태","관리"]
+      : ["모델","색상","통신사","수량","판매처","판매가","판매할인","판매할인%","상태","관리"];
     head.innerHTML = cols.map(c=>'<th style="padding:6px;border:1px solid var(--line);">'+c+'</th>').join("");
 
     const destNames = await fetchNamesList("outboundDestinations");
@@ -21379,6 +21379,22 @@
       cell(inp("be-salepct", l.saleDiscountPct, "65px"));
       cell(txt(locked ? ("도착 " + doneCnt + "/" + (l.quantity||0)) : "수정 가능"));
 
+      // 줄 삭제 — 잘못 넣은 품목을 지웁니다. 도착·매칭된 줄은 못 지웁니다.
+      {
+        const td = document.createElement("td");
+        td.style.padding = "4px"; td.style.border = "1px solid var(--line)";
+        td.style.whiteSpace = "nowrap"; td.style.textAlign = "center";
+        if(locked){
+          td.innerHTML = '<span style="color:var(--gray);font-size:11px;" title="도착·매칭된 줄이라 지울 수 없습니다. 도착 취소를 먼저 해주세요.">잠김</span>';
+        }else{
+          const del = document.createElement("button");
+          del.className = "btn small danger"; del.style.width = "auto"; del.textContent = "삭제";
+          del.onclick = ()=> deleteBatchEditLine(l.id, docModelLabel(l), Number(l.quantity)||0);
+          td.appendChild(del);
+        }
+        tr.appendChild(td);
+      }
+
       body.appendChild(tr);
     });
 
@@ -21401,6 +21417,29 @@
   }
 
   // 한 줄의 입고가·비율을 다시 계산합니다.
+  // 묶음 수정 창에서 품목 한 줄을 지웁니다.
+  //  도착·매칭된 줄은 위에서 이미 막았습니다. 지우면 되돌릴 수 없습니다.
+  window.deleteBatchEditLine = async function(lineId, label, qty){
+    if(!editingBatch) return;
+    if(!hasPerm(currentUserPerms, "cancelDelete")){ alert("삭제 권한이 없습니다."); return; }
+    const { kind, lines } = editingBatch;
+    const alive = lines.filter(x=> x.id !== lineId);
+    if(alive.length === 0){
+      alert("품목이 하나뿐입니다.\n\n마지막 품목은 여기서 지울 수 없습니다.\n주문 자체를 없애시려면 목록에서 「취소」를 눌러주세요.");
+      return;
+    }
+    if(!confirm("이 품목을 지웁니다.\n\n  " + label + "  " + qty + "대\n\n"
+      + "되돌릴 수 없습니다. 진행할까요?")) return;
+    const col = (kind === "order") ? "orders" : "saleRequests";
+    try{
+      await deleteDoc(doc(db, col, lineId));
+    }catch(e){ alert("지우지 못했습니다.\n" + ((e&&e.message)?e.message:String(e))); return; }
+    logAction((kind === "order" ? "주문" : "판매요청") + " 품목 삭제", label + " " + qty + "대");
+    editingBatch.lines = alive;
+    await renderBatchEditLines();
+    alert("지웠습니다. 금액을 확인하고 <수정 저장>을 눌러주세요.");
+  };
+
   function recalcBatchLine(tr){
     const v = cls => { const el = tr.querySelector(cls); return el && el.value !== "" ? Number(el.value) : 0; };
     const has = cls => { const el = tr.querySelector(cls); return el && el.value !== ""; };
@@ -21488,6 +21527,7 @@
 
     // 품목 표에서 고친 값을 줄마다 모읍니다. (잠긴 줄은 건드리지 않습니다)
     const perLine = {};
+    const zeroQty = [];
     let newTotal = 0;
     document.querySelectorAll("#be-lines-body tr").forEach(tr=>{
       const lid = tr.dataset.lineId;
@@ -21517,6 +21557,7 @@
         if(qe && !qe.disabled){
           const q = Number(qe.value)||0;
           if(q > 0) p.quantity = q;
+          else zeroQty.push(tr);          // 0 이나 빈칸 — 저장하지 않고 알려줍니다
         }
         p.salePrice = num(".be-saleprice");
         p.saleDiscountAmt = num(".be-saleamt");
@@ -21588,6 +21629,14 @@
         await replaceB2BOrderUse(id, amt, b.depositPaidDate || d1 || todayStr(), party);
         logAction("여신 차감액 갱신", party + " / " + amt.toLocaleString());
       }
+    }
+
+    // 수량을 0 으로 두면 저장하지 않습니다. 지우시려면 삭제 버튼을 쓰셔야 합니다.
+    if(zeroQty.length){
+      msg("<b>수량이 0인 줄이 " + zeroQty.length + "개 있습니다.</b><br>"
+        + "수량을 0으로 두어도 품목이 지워지지 않습니다. "
+        + "지우시려면 그 줄의 <b>삭제</b> 버튼을 눌러주세요. (수량은 1 이상이어야 합니다)", true);
+      return;
     }
 
     // ── 이미 도착한 재고도 같이 고칠지 물어봅니다 ──
@@ -27786,7 +27835,7 @@
     seenNewTag = lastSeenTag;    // 이 버전만 안 알립니다. 그 뒤에 또 올라오면 다시 알립니다.
   };
 
-  // 파일에 박힌 버전 글자를 읽습니다. (예: "파일 2026-08-09 v550")
+  // 파일에 박힌 버전 글자를 읽습니다. (예: "파일 2026-08-09 v551")
   function readBuildTag(text){
     const m = String(text||"").match(/파일\s*[\d-]+\s*v(\d+)/);
     return m ? m[0].trim() : "";
