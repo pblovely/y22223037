@@ -379,7 +379,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v538</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v539</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -16419,7 +16419,13 @@
       .map(t=>({ value:t.id, dataset:{ amt: String(Number(t.amount)||0),
                  sale: (t.kind === "sale" || t.kind === "salefree") ? "1" : "0",
                  label: (t.issueDate||"") + " " + (t.company||"") } }));
-    if(picked.length === 0){ el.innerHTML = '<span style="color:var(--gray);">고른 계산서가 없습니다. 골라주시거나, 메모만 저장하셔도 됩니다.</span>'; return; }
+    // 차액 사유 칸 — 고른 계산서가 없으면 숨깁니다.
+    const diffRow = document.getElementById("rct-diff-row");
+    if(picked.length === 0){
+      if(diffRow) diffRow.style.display = "none";
+      el.innerHTML = '<span style="color:var(--gray);">고른 계산서가 없습니다. 골라주시거나, 메모만 저장하셔도 됩니다.</span>';
+      return;
+    }
     const x = reconTaxTarget;
     const amt = Math.max(Number(x.inAmt)||0, Number(x.outAmt)||0);
     const isIn = (Number(x.inAmt)||0) > 0;
@@ -27390,7 +27396,7 @@
     seenNewTag = lastSeenTag;    // 이 버전만 안 알립니다. 그 뒤에 또 올라오면 다시 알립니다.
   };
 
-  // 파일에 박힌 버전 글자를 읽습니다. (예: "파일 2026-08-09 v538")
+  // 파일에 박힌 버전 글자를 읽습니다. (예: "파일 2026-08-09 v539")
   function readBuildTag(text){
     const m = String(text||"").match(/파일\s*[\d-]+\s*v(\d+)/);
     return m ? m[0].trim() : "";
