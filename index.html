@@ -379,7 +379,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v543</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v544</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -25876,6 +25876,21 @@
     }catch(e){}
     const usedByCol = {};
     loanRows.forEach(L=>{ if(L.collateralId) usedByCol[L.collateralId] = (usedByCol[L.collateralId]||0) + (Number(L.principal)||0); });
+    // 주문사용 줄이 어느 세금계산서에 묶였는지 보여주려고 주문 묶음을 읽어둡니다.
+    const batchCol = {};      // 주문묶음 id → { no, date, month }
+    const colById = {};
+    colRows.forEach(c=> colById[c.id] = c);
+    try{
+      const obs = await getDocs(collection(db,"orderBatches"));
+      obs.forEach(d=>{
+        const b = d.data();
+        if(!b.collateralId) return;
+        const c = colById[b.collateralId] || {};
+        batchCol[d.id] = { no: b.collateralNo || c.invoiceNo || "",
+                           date: b.collateralDate || c.issueDate || "",
+                           month: c.month || "" };
+      });
+    }catch(e){}
 
     // 거래처 고르는 버튼
     //  ① 업체정보에서 「여신 대상」으로 체크한 곳 — 거래가 없어도 나옵니다
@@ -26174,7 +26189,7 @@
       listEl.innerHTML = '<div class="list-empty">등록된 거래가 없습니다.</div>';
     }else{
       const { pageItems: b2bPage } = paginateSlice(ledgerRows, "b2bLedger");
-      let tbl = '<div style="overflow-x:auto;"><table class="data-table"><thead><tr><th>거래일자</th><th>구분</th><th>매입처</th><th class="ta-right">금액</th><th>통장</th><th>메모</th><th class="ta-right">관리</th></tr></thead><tbody>';
+      let tbl = '<div style="overflow-x:auto;"><table class="data-table"><thead><tr><th>거래일자</th><th>구분</th><th>매입처</th><th class="ta-right">금액</th><th>통장</th><th>계산서</th><th>메모</th><th class="ta-right">관리</th></tr></thead><tbody>';
       b2bPage.forEach(e=>{
         tbl += '<tr><td style="white-space:nowrap;">'+e.date+'</td><td style="white-space:nowrap;">'+(B2B_CATEGORY_LABELS[e.category]||e.category)
           + (e.adjustReason ? ' <span style="font-size:10.5px;color:var(--gray);">'+comboEsc(e.adjustReason)+'</span>' : '')
@@ -26191,6 +26206,15 @@
               : ((e.category === "deposit" || e.category === "collateral_cash")
                   ? '<button class="btn small secondary" style="width:auto;color:#8a6d0b;" title="통장에서 나간 기록을 이어둡니다" onclick="openLedgerBankLink(\''+e.id+'\')">통장 잇기</button>'
                   : '<span style="color:var(--gray);">-</span>')) + '</td>' +
+          // 이 주문사용이 어느 세금계산서에 묶였는지 보여줍니다.
+          '<td style="white-space:nowrap;">' + (function(){
+              const bc = e.fromOrderBatchId ? batchCol[e.fromOrderBatchId] : null;
+              if(bc) return '<span style="color:#2e7d32;font-weight:700;"'
+                + (bc.no ? ' title="계산서번호 ' + comboEsc(bc.no) + '"' : '') + '>'
+                + comboEsc(bc.date || bc.month || "발행") + '</span>';
+              if(e.category === "order_use") return '<span style="color:var(--danger);">미발행</span>';
+              return '<span style="color:var(--gray);">-</span>';
+            })() + '</td>' +
           '<td>'+(e.memo||'-')+'</td>' +
           '<td class="ta-right">'
           + (e.fromOrderBatchId || e.fromLoanId
@@ -27553,7 +27577,7 @@
     seenNewTag = lastSeenTag;    // 이 버전만 안 알립니다. 그 뒤에 또 올라오면 다시 알립니다.
   };
 
-  // 파일에 박힌 버전 글자를 읽습니다. (예: "파일 2026-08-09 v543")
+  // 파일에 박힌 버전 글자를 읽습니다. (예: "파일 2026-08-09 v544")
   function readBuildTag(text){
     const m = String(text||"").match(/파일\s*[\d-]+\s*v(\d+)/);
     return m ? m[0].trim() : "";
