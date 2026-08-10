@@ -379,7 +379,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v534</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v535</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -2118,6 +2118,7 @@
           <input type="text" id="rct-search" placeholder="거래처·사업자번호·승인번호·메모로 찾기" oninput="filterReconTaxList()" style="width:260px;height:28px;border:1px solid var(--line);padding:0 8px;font-size:12.5px;box-sizing:border-box;">
           <button class="btn small secondary" style="width:auto;margin-left:-1px;" onclick="clearReconTaxSearch()">비우기</button>
           <label style="font-size:12px;margin-left:12px;"><input type="checkbox" id="rct-all-tax" onchange="reloadReconTaxList()"> 전부 보기</label>
+          <label style="font-size:12px;margin-left:12px;" title="다른 입출금에 이미 이어진 계산서까지 보여줍니다. 평소에는 꺼두세요."><input type="checkbox" id="rct-show-used" onchange="renderReconTaxCands()"> 이어진 것도 보기</label>
           <span id="rct-count" style="font-size:11.5px;color:var(--gray);margin-left:10px;"></span>
         </div>
         <div id="rct-list" style="max-height:280px;overflow-y:auto;border:1px solid var(--line);margin-bottom:8px;"></div>
@@ -16297,6 +16298,17 @@
     const qName = (typeof cleanName === "function") ? cleanName(q) : q.toLowerCase();
     const qBiz = q.replace(/\D/g,"");
 
+    // 이미 다른 입출금에 이어진 계산서는 후보에서 뺍니다. (두 번 매칭되지 않게)
+    //  지금 고치는 중인 이 줄에 이어져 있던 것은 남겨둡니다.
+    const usedTaxIds = new Set();
+    (reconRows||[]).forEach(r=>{
+      if(r.id === x.id) return;                       // 지금 이 줄은 빼고 셉니다
+      const ids = Array.isArray(r.taxIds) ? r.taxIds : (r.taxId ? [r.taxId] : []);
+      ids.forEach(t=> usedTaxIds.add(t));
+    });
+
+    const showUsed = !!(document.getElementById("rct-show-used")||{}).checked;
+
     // 후보 — 금액이 비슷한 것 + 같은 거래처(사업자번호) 것
     const myBiz = String(x.bizNo||"").replace(/\D/g,"");
     const myName = (typeof cleanName === "function") ? cleanName(x.party || x.company || "") : "";
@@ -16311,6 +16323,7 @@
         || (myName && tName && (myName === tName || myName.indexOf(tName) >= 0 || tName.indexOf(myName) >= 0));
       return { ...t, diff, dayGap, sameParty };
     }).filter(t=>{
+      if(!showUsed && usedTaxIds.has(t.id)) return false;   // 이미 다른 입출금에 이어진 계산서
       // 검색어가 있으면 거래처명·사업자번호·계산서번호로 찾습니다. (금액·날짜와 무관하게)
       if(q){
         const tName = (typeof cleanName === "function") ? cleanName(t.company) : String(t.company||"").toLowerCase();
@@ -27333,7 +27346,7 @@
     seenNewTag = lastSeenTag;    // 이 버전만 안 알립니다. 그 뒤에 또 올라오면 다시 알립니다.
   };
 
-  // 파일에 박힌 버전 글자를 읽습니다. (예: "파일 2026-08-09 v534")
+  // 파일에 박힌 버전 글자를 읽습니다. (예: "파일 2026-08-09 v535")
   function readBuildTag(text){
     const m = String(text||"").match(/파일\s*[\d-]+\s*v(\d+)/);
     return m ? m[0].trim() : "";
