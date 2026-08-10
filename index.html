@@ -379,7 +379,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v549</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v550</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -21590,6 +21590,31 @@
       }
     }
 
+    // ── 이미 도착한 재고도 같이 고칠지 물어봅니다 ──
+    //  도착 등록할 때 주문의 출고가·입고가가 재고에 복사됩니다.
+    //  나중에 주문만 고치면 재고는 옛 값(또는 0) 그대로 남습니다.
+    let fixItems = false, itemTargets = [];
+    if(kind === "order"){
+      const priceChanged = Object.keys(perLine).filter(lid=>{
+        const p = perLine[lid] || {};
+        return p.listPrice != null || p.purchasePrice != null;
+      });
+      if(priceChanged.length){
+        priceChanged.forEach(lid=>{
+          const src = lines.find(x=> x.id === lid) || {};
+          (src.linkedItemIds || []).forEach(iid=> itemTargets.push({ iid, p: perLine[lid] }));
+        });
+        if(itemTargets.length){
+          fixItems = confirm(
+            "이 주문으로 이미 들어온 재고 " + itemTargets.length + "대가 있습니다.\n\n"
+            + "재고의 출고가·입고가도 이번에 고친 값으로 함께 바꿀까요?\n\n"
+            + "  예   — 재고 금액이 주문과 같아집니다 (권합니다)\n"
+            + "  아니오 — 주문만 바뀌고 재고는 지금 값 그대로입니다\n\n"
+            + "※ 이미 판매된 재고의 판매가는 건드리지 않습니다.");
+        }
+      }
+    }
+
     try{
       msg("저장 중...", false);
       await withTimeout(updateDoc(doc(db, col, id), batchPatch), 12000, "묶음 수정");
@@ -21600,13 +21625,32 @@
         });
         await bt.commit();
       }
+      // 재고의 출고가·입고가를 같이 맞춥니다. (고른 경우에만)
+      if(fixItems && itemTargets.length){
+        for(let i=0; i<itemTargets.length; i+=300){
+          const bt = writeBatch(db);
+          itemTargets.slice(i, i+300).forEach(t=>{
+            const patch = {};
+            if(t.p.listPrice != null) patch.listPrice = t.p.listPrice;
+            if(t.p.purchasePrice != null) patch.purchasePrice = t.p.purchasePrice;
+            if(t.p.preDiscountAmt != null){ patch.purchaseDiscountAmt = t.p.preDiscountAmt; }
+            if(t.p.preDiscountPct != null){ patch.purchaseDiscount = t.p.preDiscountPct; }
+            if(t.p.otherDiscountAmt != null) patch.otherDiscountAmt = t.p.otherDiscountAmt;
+            if(t.p.otherDiscountPct != null) patch.otherDiscountPct = t.p.otherDiscountPct;
+            if(Object.keys(patch).length) bt.update(doc(db,"inventoryItems", t.iid), patch);
+          });
+          await bt.commit();
+        }
+        clearCache("inventory"); clearDashCache();
+      }
     }catch(e){
       msg("<b>저장에 실패했습니다.</b><br>" + comboEsc((e && e.message) ? e.message : String(e)), true);
       return;
     }
     logAction((kind==="order"?"주문":"판매요청")+" 묶음 수정",
       party + " / " + d1 + " / 품목 " + lines.length + "개"
-      + (Object.keys(perLine).length ? " / 금액수정 " + Object.keys(perLine).length + "줄" : ""));
+      + (Object.keys(perLine).length ? " / 금액수정 " + Object.keys(perLine).length + "줄" : "")
+      + (fixItems && itemTargets.length ? " / 재고 " + itemTargets.length + "대 금액 함께 수정" : ""));
     msg("저장되었습니다.", false);
     if(kind === "order") loadOrderList(); else loadSaleRequestList();
     setTimeout(closeBatchEdit, 700);
@@ -27742,7 +27786,7 @@
     seenNewTag = lastSeenTag;    // 이 버전만 안 알립니다. 그 뒤에 또 올라오면 다시 알립니다.
   };
 
-  // 파일에 박힌 버전 글자를 읽습니다. (예: "파일 2026-08-09 v549")
+  // 파일에 박힌 버전 글자를 읽습니다. (예: "파일 2026-08-09 v550")
   function readBuildTag(text){
     const m = String(text||"").match(/파일\s*[\d-]+\s*v(\d+)/);
     return m ? m[0].trim() : "";
