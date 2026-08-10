@@ -379,7 +379,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v537</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v538</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -16182,9 +16182,9 @@
     const stColor = { todo:"var(--danger)", check:"#b8860b", done:"#2e7d32", skip:"var(--gray)" };
 
     el.innerHTML = '<div style="overflow-x:auto;"><table class="data-table" style="width:auto;">'
-      + '<thead><tr><th style="width:30px;"><input type="checkbox" id="rc-all-ck"></th><th>상태</th><th>법인</th><th>날짜</th><th>시간</th><th>계좌</th>'
+      + '<thead><tr><th style="width:30px;"><input type="checkbox" id="rc-all-ck"></th><th>관리</th><th>상태</th><th>법인</th><th>날짜</th><th>시간</th><th>계좌</th>'
       + '<th class="ta-right">입금</th><th class="ta-right">출금</th><th>적요</th><th>상대</th>'
-      + '<th>세금계산서</th><th class="ta-right">차액</th><th>메모</th><th></th></tr></thead><tbody>'
+      + '<th>세금계산서</th><th class="ta-right">차액</th><th>메모</th></tr></thead><tbody>'
       + pageItems.map(x=>{
           const s = x.state || "todo";
           // 세금계산서와 이어졌거나 대사가 끝난 줄은 흐리게 둡니다.
@@ -16192,6 +16192,17 @@
           return '<tr' + (rcDone ? ' class="row-done"' : '') + '>'
             + '<td><input type="checkbox" class="rc-ck" value="' + x.id + '"'
               + (((x.state||"todo") === "done" || (x.state||"todo") === "skip") ? ' disabled' : '') + '></td>'
+            + '<td style="white-space:nowrap;">'
+              + (canDo
+                  ? '<button class="btn small secondary" style="width:auto;" data-rc-tax="' + x.id + '">계산서</button>'
+                    // 이월을 상태 앞에 둡니다. 한 번 누르면 잠깐 잠가 두 번 눌리지 않게 합니다.
+                    + '<button class="btn small ' + (x.carryOver ? '' : 'secondary') + '" style="width:auto;margin-left:3px;" data-rc-cy="' + x.id + '">'
+                    + (x.carryOver ? '이월중' : '이월') + '</button>'
+                    + '<button class="btn small secondary" style="width:auto;margin-left:3px;" data-rc-st="' + x.id + '">상태</button>'
+                    + ((Number(x.diff)||0) !== 0
+                        ? '<button class="btn small ' + (x.diffOk ? '' : 'secondary') + '" style="width:auto;margin-left:3px;" data-rc-dk="' + x.id + '">'
+                          + (x.diffOk ? '차액확인됨' : '차액확인') + '</button>' : '')
+                  : '<span style="color:var(--gray);">-</span>') + '</td>'
             + '<td style="color:' + stColor[s] + ';font-weight:700;white-space:nowrap;">' + stLabel[s]
               + ((Number(x.diff)||0) !== 0
                   ? (x.diffOk === true
@@ -16217,17 +16228,6 @@
               + (x.diff ? money(x.diff) : '-') + '</td>'
             + '<td style="color:var(--gray);font-size:11.5px;white-space:nowrap;">'
               + comboEsc(x.note || x.memo || "") + '</td>'
-            + '<td class="ta-right" style="white-space:nowrap;">'
-              + (canDo
-                  ? '<button class="btn small secondary" style="width:auto;" data-rc-tax="' + x.id + '">계산서</button>'
-                    // 이월을 상태 앞에 둡니다. 한 번 누르면 잠깐 잠가 두 번 눌리지 않게 합니다.
-                    + '<button class="btn small ' + (x.carryOver ? '' : 'secondary') + '" style="width:auto;margin-left:3px;" data-rc-cy="' + x.id + '">'
-                    + (x.carryOver ? '이월중' : '이월') + '</button>'
-                    + '<button class="btn small secondary" style="width:auto;margin-left:3px;" data-rc-st="' + x.id + '">상태</button>'
-                    + ((Number(x.diff)||0) !== 0
-                        ? '<button class="btn small ' + (x.diffOk ? '' : 'secondary') + '" style="width:auto;margin-left:3px;" data-rc-dk="' + x.id + '">'
-                          + (x.diffOk ? '차액확인됨' : '차액확인') + '</button>' : '')
-                  : '<span style="color:var(--gray);">-</span>') + '</td>'
             + '</tr>';
         }).join("")
       + '</tbody></table></div>';
@@ -16247,7 +16247,7 @@
     { const all = document.getElementById("rc-all-ck");
       if(all) all.onchange = ()=> document.querySelectorAll("#tab-recon .rc-ck:not(:disabled)")
         .forEach(c=> c.checked = all.checked); }
-    foldActionColumn("recon-list", "*");   // 줄을 누르면 버튼이 아래로 펼쳐집니다
+    // 관리 버튼을 「상태」 앞으로 옮겨 늘 보이게 했으므로 접지 않습니다.
     // 엑셀 다운로드 · 보기 설정 (화면에 보이는 순서 그대로 내려받습니다)
     addDownloadBtn("dl-recon", "recon-list", "입출금대사");
     addViewCfgBtn("dl-recon", "recon-list");
@@ -27390,7 +27390,7 @@
     seenNewTag = lastSeenTag;    // 이 버전만 안 알립니다. 그 뒤에 또 올라오면 다시 알립니다.
   };
 
-  // 파일에 박힌 버전 글자를 읽습니다. (예: "파일 2026-08-09 v537")
+  // 파일에 박힌 버전 글자를 읽습니다. (예: "파일 2026-08-09 v538")
   function readBuildTag(text){
     const m = String(text||"").match(/파일\s*[\d-]+\s*v(\d+)/);
     return m ? m[0].trim() : "";
