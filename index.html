@@ -213,6 +213,17 @@
     @page { size: A4 portrait; margin: 12mm; }
   }
   /* 견적서 */
+  /* 발주서 명판 */
+  .po-date{ text-align:center; margin:14px 0 6px; font-size:13px; letter-spacing:2px; }
+  .po-plate{ margin-top:10px; margin-left:auto; width:300px; border:1px solid #333; padding:9px 11px;
+             font-size:12px; line-height:1.7; background:#fff; }
+  .po-plate-name{ font-size:15px; font-weight:700; margin-bottom:2px; }
+  .po-plate-ceo{ margin-top:5px; font-weight:700; display:flex; align-items:center; justify-content:space-between; }
+  .po-inkbox{ display:inline-flex; align-items:center; justify-content:center;
+              width:66px; height:66px; margin-left:8px; }
+  .po-inkbox img{ display:block; }
+  @media print{ .po-plate{ border:1px solid #000; } }
+
   /* 삼성전자 유통직판 발주서 */
   .po-page{ padding-bottom:10px; }
   .po-title{ text-align:center; font-size:22px; font-weight:800; letter-spacing:8px; margin:0 0 6px 0; color:#1a1a1a; }
@@ -379,7 +390,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v566</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v567</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -1292,6 +1303,11 @@
           <div class="stack-row"><label>주소</label><input type="text" id="issuer-address-input"></div>
           <div class="stack-row"><label>연락처</label><input type="text" id="issuer-contact-input"></div>
           <div class="stack-row"><label>입금 계좌</label><input type="text" id="issuer-account-input" placeholder="예: 국민 000000-00-000000 (주)포피플"></div>
+          <div class="stack-row"><label>도장 그림 <span class="info-tip" title="발주서·견적서의 「명판 / 날인」 자리에 찍힙니다. 배경이 투명한 PNG를 넣으시면 깔끔합니다.">ⓘ</span></label>
+            <span><input type="file" id="issuer-stamp-file" accept="image/*" style="font-size:12px;" onchange="onIssuerStampPick(event)">
+              <button class="btn small secondary" style="width:auto;margin-left:6px;" onclick="clearIssuerStamp()">지우기</button></span></div>
+          <div class="stack-row"><label>미리보기</label>
+            <span id="issuer-stamp-preview" style="display:inline-block;min-height:60px;"></span></div>
         </div>
         <button class="btn small" style="width:auto;margin-top:10px;" onclick="saveIssuerInfo()">저장</button>
         <div id="issuer-msg" style="font-size:12px;color:var(--navy);display:none;margin-top:8px;">저장되었습니다.</div>
@@ -21149,6 +21165,32 @@
   window.toggleAllResvRows = function(cb){
     document.querySelectorAll(".resv-row-cb").forEach(x=> x.checked = cb.checked);
   };
+  // 도장 그림 — 파일을 골라 그림 자체를 담아둡니다. (따로 저장소를 안 써도 되게)
+  let issuerStampData = "";
+  window.onIssuerStampPick = function(ev){
+    const f = ev.target.files && ev.target.files[0];
+    if(!f) return;
+    if(f.size > 300*1024){
+      alert("그림이 큽니다. 300KB 이하로 줄여서 넣어주세요.\n\n(발주서에 찍히는 도장이라 작아도 충분합니다)");
+      ev.target.value = ""; return;
+    }
+    const r = new FileReader();
+    r.onload = ()=>{ issuerStampData = String(r.result||""); renderIssuerStamp(); };
+    r.readAsDataURL(f);
+  };
+  window.clearIssuerStamp = function(){
+    issuerStampData = "";
+    const el = document.getElementById("issuer-stamp-file"); if(el) el.value = "";
+    renderIssuerStamp();
+  };
+  function renderIssuerStamp(){
+    const el = document.getElementById("issuer-stamp-preview");
+    if(!el) return;
+    el.innerHTML = issuerStampData
+      ? '<img src="' + issuerStampData + '" style="max-height:60px;border:1px solid var(--line);padding:3px;background:#fff;">'
+      : '<span style="color:var(--gray);font-size:12px;">아직 없습니다. 저장하면 발주서·견적서에 찍힙니다.</span>';
+  }
+
   window.saveIssuerInfo = async function(){
     const payload = {
       issuerName: document.getElementById("issuer-name-input").value.trim(),
@@ -21156,7 +21198,8 @@
       issuerCeo: document.getElementById("issuer-ceo-input").value.trim(),
       issuerAddress: document.getElementById("issuer-address-input").value.trim(),
       issuerContact: document.getElementById("issuer-contact-input").value.trim(),
-      issuerAccount: document.getElementById("issuer-account-input").value.trim()
+      issuerAccount: document.getElementById("issuer-account-input").value.trim(),
+      issuerStamp: issuerStampData || ""        // 도장 그림 (그림 자체를 담아둡니다)
     };
     await setDoc(doc(db,"settings","general"), payload, { merge:true });
     Object.assign(currentSettings, payload);
@@ -24775,8 +24818,22 @@
         '<td class="ta-right">'+totQty+'</td><td></td><td class="ta-right">'+totAmt.toLocaleString()+'</td></tr>';
       page += '</tbody></table>';
 
-      page += '<div class="po-foot">상기 내역의 제품을 삼성전자에 발주하오니 납품하여주시기 바랍니다.' +
-        '<div class="po-sign"><span>명판 / 날인</span><span class="po-signbox"></span></div></div>';
+      // 명판 — 설정의 발행정보와 도장 그림을 씁니다. 없으면 예전처럼 빈칸으로 둡니다.
+      const ST = currentSettings || {};
+      const stampImg = ST.issuerStamp
+        ? '<img src="' + ST.issuerStamp + '" style="max-height:62px;max-width:110px;">' : '';
+      const nameplate = (ST.issuerName || ST.issuerCeo || ST.issuerBizNumber)
+        ? '<div class="po-plate">'
+          + '<div class="po-plate-name">' + esc(ST.issuerName || P.name) + '</div>'
+          + (ST.issuerBizNumber ? '<div>사업자등록번호 ' + esc(ST.issuerBizNumber) + '</div>' : '')
+          + (ST.issuerAddress ? '<div>' + esc(ST.issuerAddress) + '</div>' : '')
+          + (ST.issuerContact ? '<div>' + esc(ST.issuerContact) + '</div>' : '')
+          + '<div class="po-plate-ceo">대표이사 ' + esc(ST.issuerCeo || P.ceo) + ' <span class="po-inkbox">' + stampImg + '</span></div>'
+          + '</div>'
+        : '<div class="po-sign"><span>명판 / 날인</span><span class="po-signbox"></span></div>';
+      page += '<div class="po-foot">상기 내역의 제품을 삼성전자에 발주하오니 납품하여주시기 바랍니다.'
+        + '<div class="po-date">' + esc(b.orderDate || todayStr()) + '</div>'
+        + nameplate + '</div>';
       page += '</div>';
       html += page;
     });
@@ -24921,6 +24978,21 @@
       (q.note ? '<br>비고: ' + comboEsc(q.note) : '') +
       (q.status === "취소" ? '<br><span style="color:var(--danger);font-weight:700;">※ 취소된 견적서입니다.</span>' : '') +
       '</div>';
+
+    // 명판 — 설정에 회사 정보나 도장 그림이 있으면 아래에 찍습니다.
+    if(st.issuerName || st.issuerCeo || st.issuerStamp){
+      const stampImg2 = st.issuerStamp
+        ? '<img src="' + st.issuerStamp + '" style="max-height:62px;max-width:110px;">' : '';
+      h += '<div class="po-date">' + comboEsc(q.issueDate || todayStr()) + '</div>'
+        + '<div class="po-plate">'
+        + '<div class="po-plate-name">' + comboEsc(st.issuerName || "-") + '</div>'
+        + (st.issuerBizNumber ? '<div>사업자등록번호 ' + comboEsc(st.issuerBizNumber) + '</div>' : '')
+        + (st.issuerAddress ? '<div>' + comboEsc(st.issuerAddress) + '</div>' : '')
+        + (st.issuerContact ? '<div>' + comboEsc(st.issuerContact) + '</div>' : '')
+        + '<div class="po-plate-ceo">대표이사 ' + comboEsc(st.issuerCeo || "-")
+        + ' <span class="po-inkbox">' + stampImg2 + '</span></div>'
+        + '</div>';
+    }
 
     document.getElementById("quotation-body").innerHTML = h;
     document.getElementById("quotation-sheet").classList.add("print-sheet");
@@ -28453,7 +28525,7 @@
     seenNewTag = lastSeenTag;    // 이 버전만 안 알립니다. 그 뒤에 또 올라오면 다시 알립니다.
   };
 
-  // 파일에 박힌 버전 글자를 읽습니다. (예: "파일 2026-08-09 v566")
+  // 파일에 박힌 버전 글자를 읽습니다. (예: "파일 2026-08-09 v567")
   function readBuildTag(text){
     const m = String(text||"").match(/파일\s*[\d-]+\s*v(\d+)/);
     return m ? m[0].trim() : "";
@@ -32761,6 +32833,8 @@
           (Array.isArray(currentSettings.pageSizes) && currentSettings.pageSizes.length>0)
             ? currentSettings.pageSizes.join(",") : DEFAULT_PAGE_SIZES.join(",");
         document.getElementById("page-size-all-input").checked = currentSettings.pageSizeIncludeAll !== false;
+        issuerStampData = currentSettings.issuerStamp || "";
+        renderIssuerStamp();
         document.getElementById("issuer-name-input").value = currentSettings.issuerName || "";
         document.getElementById("issuer-biznum-input").value = currentSettings.issuerBizNumber || "";
         document.getElementById("issuer-ceo-input").value = currentSettings.issuerCeo || "";
