@@ -379,7 +379,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v551</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v554</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -9386,7 +9386,9 @@
       //  도착만 됐고 아직 안 낸 주문은 「진행」에 남아 있어야 출금요청을 만들 수 있습니다.
       const arrivedAll = !cancelled && activeL.length>0 && remainT===0;
       const done = arrivedAll && b.depositPaid === true;
-      if(orderListFilter==="ing"     && (cancelled || done)) return;
+      // 출금요청을 만든 건은 「입금확인중」으로 넘어갑니다. 「진행」에는 안 남습니다.
+      const waiting = !cancelled && !!b.paymentRequestId && b.depositPaid !== true;
+      if(orderListFilter==="ing"     && (cancelled || done || waiting)) return;
       if(orderListFilter==="done"    && !done) return;
       if(orderListFilter==="waiting" && !(!cancelled && b.paymentRequestId && b.depositPaid !== true)) return;
       if(orderListFilter==="cancel"  && !cancelled) return;
@@ -11875,11 +11877,38 @@
   // 체크한 주문을 담아두고, 실제 이체금액을 확인받는 창을 엽니다.
   let payReqDraft = null;
 
+  // 출고가가 안 들어간 품목이 있으면 출금요청을 못 만들게 막습니다.
+  //  금액이 0으로 잡혀 잘못된 이체요청이 나가지 않게 합니다.
+  function noPriceLines(batchIds){
+    const bad = [];
+    (batchIds||[]).forEach(bid=>{
+      const b = orderBatchCache[bid]; if(!b) return;
+      (orderBatchLinesCache[bid]||[]).forEach(o=>{
+        if(o.status === "취소") return;
+        const L = Number(o.listPrice)||0, P = Number(o.purchasePrice)||0;
+        if(L <= 0 && P <= 0) bad.push({ b, o });
+      });
+    });
+    return bad;
+  }
+
   window.createPaymentRequestFromSelected = function(){
     const checked = Array.from(document.querySelectorAll(".order-pay-cb:checked"));
     const otherAmount = Number(document.getElementById("payment-other-amount-input").value) || 0;
     if(checked.length===0 && otherAmount===0){ alert("출금요청으로 묶을 주문을 체크하거나, 기타 금액을 입력해주세요."); return; }
     const batchIds = checked.map(cb=>cb.dataset.batchId);
+
+    // ★ 출고가가 빈 품목이 있으면 여기서 멈춥니다. ★
+    const bad = noPriceLines(batchIds);
+    if(bad.length){
+      alert("출고가가 안 들어간 품목이 " + bad.length + "개 있습니다.\n"
+        + "금액이 0으로 잡히므로 출금요청을 만들 수 없습니다.\n\n"
+        + bad.slice(0,10).map(x=> "  " + (x.b.orderDate||"-") + "  "
+            + (x.o.systemModel || x.o.baseModel || "-") + "  " + (Number(x.o.quantity)||0) + "대").join("\n")
+        + (bad.length > 10 ? "\n  ... 외 " + (bad.length-10) + "개" : "")
+        + "\n\n주문 목록에서 그 주문을 <수정>해 출고가를 넣어주세요.");
+      return;
+    }
     let base = otherAmount;
     checked.forEach(cb=> base += Number(cb.dataset.amount)||0);
     payReqDraft = { batchIds, otherAmount, base };
@@ -21302,6 +21331,10 @@
     lines.forEach(l=>{
       const doneCnt = Number(l.fulfilledCount)||0;
       const locked = doneCnt > 0;          // 도착·매칭된 줄은 잠금
+      // 출고가가 아예 안 들어간 줄은, 도착됐어도 금액을 채울 수 있게 열어둡니다.
+      //  (빈 칸을 채우는 것은 재고와 어긋나는 일이 아니라 오히려 맞추는 일입니다)
+      const priceEmpty = !((Number(l.listPrice)||0) > 0) && !((Number(l.purchasePrice)||0) > 0);
+      const lockedPrice = locked && !priceEmpty;
       if(locked) lockedCount++;
       const tr = document.createElement("tr");
       tr.dataset.lineId = l.id;
@@ -21316,12 +21349,35 @@
         el.type = "number"; el.className = cls; el.value = (val==null||val==="") ? "" : val;
         el.style.width = w; el.style.fontSize = "11.5px"; el.style.padding = "4px";
         el.style.border = "1px solid var(--line)"; el.style.boxSizing = "border-box";
-        if(locked){ el.disabled = true; el.style.background = "#eee"; }
-        else el.oninput = ()=> recalcBatchLine(tr);
+        if(lockedPrice){ el.disabled = true; el.style.background = "#eee"; }
+        else{
+          if(locked){ el.style.background = "#fffbe6"; el.title = "도착된 줄이지만 금액이 비어 있어 채울 수 있습니다."; }
+          el.oninput = ()=> recalcBatchLine(tr);
+        }
         return el;
       };
 
-      cell(txt(docModelLabel(l)));
+      // 모델 — 임시로 적어둔 모델명을 등록된 모델로 바꿉니다. (잠긴 줄은 글자만)
+      if(locked){
+        cell(txt(docModelLabel(l)));
+      }else{
+        const ms = document.createElement("select");
+        ms.className = "be-model";
+        ms.style.cssText = "font-size:11.5px;padding:4px;width:150px;border:1px solid var(--line);box-sizing:border-box;";
+        const cur = String(l.systemModel || "");
+        let opts = '<option value="">' + comboEsc(cur || "(모델 없음)") + ' — 그대로</option>';
+        (modelsCache||[]).slice()
+          .sort((a,b)=> String(a.systemModel||"").localeCompare(String(b.systemModel||"")))
+          .forEach(m=>{
+            const sm = String(m.systemModel||"");
+            if(!sm) return;
+            opts += '<option value="' + comboEsc(sm) + '">' + comboEsc(sm)
+                  + (m.petName ? " · " + comboEsc(m.petName) : "") + '</option>';
+          });
+        ms.innerHTML = opts;
+        ms.onchange = ()=> recalcBatchLine(tr);
+        cell(ms);
+      }
       cell(txt(l.systemColor || l.manufacturerColor || "-"));
       // 통신사 — 잘못 들어간 경우 여기서 고칩니다. (잠긴 줄은 그대로 잠깁니다)
       {
@@ -21377,7 +21433,9 @@
       cell(inp("be-saleprice", l.salePrice, "85px"));
       cell(inp("be-saleamt", l.saleDiscountAmt, "80px"));
       cell(inp("be-salepct", l.saleDiscountPct, "65px"));
-      cell(txt(locked ? ("도착 " + doneCnt + "/" + (l.quantity||0)) : "수정 가능"));
+      cell(txt(locked
+        ? ("도착 " + doneCnt + "/" + (l.quantity||0) + (priceEmpty ? " · 금액 입력 가능" : ""))
+        : "수정 가능"));
 
       // 줄 삭제 — 잘못 넣은 품목을 지웁니다. 도착·매칭된 줄은 못 지웁니다.
       {
@@ -21398,8 +21456,9 @@
       body.appendChild(tr);
     });
 
-    document.getElementById("be-lock-note").textContent = lockedCount > 0
-      ? ("이미 도착·매칭된 " + lockedCount + "줄은 재고와 금액이 어긋나지 않도록 잠겼습니다. 고치려면 도착 등록을 먼저 취소해주세요.")
+    document.getElementById("be-lock-note").innerHTML = lockedCount > 0
+      ? ("이미 도착·매칭된 " + lockedCount + "줄은 재고와 금액이 어긋나지 않도록 잠겼습니다. 고치려면 도착 등록을 먼저 취소해주세요.<br>"
+         + "<span style='color:var(--navy);'>다만 <b>금액이 비어 있는 줄</b>은 노란 칸에 채워 넣으실 수 있고, <b>모델</b>은 어느 줄이든 고칠 수 있습니다.</span>")
       : "";
 
     // 판매처 일괄 목록
@@ -21553,6 +21612,17 @@
         const cs = tr.querySelector(".be-carrier");
         if(cs && !cs.disabled) p.carrier = cs.value;
         // 수량 — 도착·매칭된 줄은 잠겨 있어 여기 안 옵니다.
+        // 모델을 바꿨으면 펫네임·모델명·전산모델명을 등록된 값으로 함께 맞춥니다.
+        const me = tr.querySelector(".be-model");
+        if(me && me.value){
+          const m = (modelsCache||[]).find(x=> String(x.systemModel||"") === me.value);
+          if(m){
+            p.systemModel = m.systemModel || "";
+            p.baseModel = m.baseModel || "";
+            p.petName = m.petName || "";
+            p.modelId = m.id || null;
+          }
+        }
         const qe = tr.querySelector(".be-qty");
         if(qe && !qe.disabled){
           const q = Number(qe.value)||0;
@@ -21566,12 +21636,23 @@
         const useQty = (p.quantity != null) ? p.quantity : (Number(src.quantity)||0);
         newTotal += ((kind === "order" ? (p.purchasePrice||0) : (p.salePrice||0)) * useQty);
       }else{
+        // 잠긴 줄이라도 모델을 바꿨으면 그것만 저장합니다. (금액·수량은 그대로)
+        const me0 = tr.querySelector(".be-model");
+        if(me0 && me0.value){
+          const m0 = (modelsCache||[]).find(x=> String(x.systemModel||"") === me0.value);
+          if(m0) perLine[lid] = { systemModel:m0.systemModel||"", baseModel:m0.baseModel||"",
+                                  petName:m0.petName||"", modelId:m0.id||null };
+        }
         newTotal += ((kind === "order" ? (Number(src.purchasePrice)||0) : (Number(src.salePrice)||0)) * (Number(src.quantity)||0));
       }
     });
     // 주문이면 매입처의 「할인 계산 기준」을 따라 다시 계산합니다.
     //  합계 기준 매입처는 합계에 한 번 걸어야 여신차감과 어긋나지 않습니다.
-    if(Object.keys(perLine).length > 0){
+    const priceTouched = Object.keys(perLine).some(k=>{
+      const p = perLine[k] || {};
+      return p.listPrice != null || p.purchasePrice != null || p.quantity != null;
+    });
+    if(priceTouched){
       if(kind === "order"){
         const src2 = String((document.getElementById("be-party")||{}).value||"").trim() || String(b.source||"").trim();
         const merged = (lines||[]).filter(o=> o.status !== "취소").map(o=>{
@@ -21646,7 +21727,7 @@
     if(kind === "order"){
       const priceChanged = Object.keys(perLine).filter(lid=>{
         const p = perLine[lid] || {};
-        return p.listPrice != null || p.purchasePrice != null;
+        return p.listPrice != null || p.purchasePrice != null || p.systemModel != null;
       });
       if(priceChanged.length){
         priceChanged.forEach(lid=>{
@@ -21656,7 +21737,7 @@
         if(itemTargets.length){
           fixItems = confirm(
             "이 주문으로 이미 들어온 재고 " + itemTargets.length + "대가 있습니다.\n\n"
-            + "재고의 출고가·입고가도 이번에 고친 값으로 함께 바꿀까요?\n\n"
+            + "재고의 모델·출고가·입고가도 이번에 고친 값으로 함께 바꿀까요?\n\n"
             + "  예   — 재고 금액이 주문과 같아집니다 (권합니다)\n"
             + "  아니오 — 주문만 바뀌고 재고는 지금 값 그대로입니다\n\n"
             + "※ 이미 판매된 재고의 판매가는 건드리지 않습니다.");
@@ -21680,6 +21761,12 @@
           const bt = writeBatch(db);
           itemTargets.slice(i, i+300).forEach(t=>{
             const patch = {};
+            if(t.p.systemModel != null){
+              patch.systemModel = t.p.systemModel;
+              patch.baseModel = t.p.baseModel || "";
+              patch.petName = t.p.petName || "";
+              if(t.p.modelId != null) patch.modelId = t.p.modelId;
+            }
             if(t.p.listPrice != null) patch.listPrice = t.p.listPrice;
             if(t.p.purchasePrice != null) patch.purchasePrice = t.p.purchasePrice;
             if(t.p.preDiscountAmt != null){ patch.purchaseDiscountAmt = t.p.preDiscountAmt; }
@@ -27835,7 +27922,7 @@
     seenNewTag = lastSeenTag;    // 이 버전만 안 알립니다. 그 뒤에 또 올라오면 다시 알립니다.
   };
 
-  // 파일에 박힌 버전 글자를 읽습니다. (예: "파일 2026-08-09 v551")
+  // 파일에 박힌 버전 글자를 읽습니다. (예: "파일 2026-08-09 v554")
   function readBuildTag(text){
     const m = String(text||"").match(/파일\s*[\d-]+\s*v(\d+)/);
     return m ? m[0].trim() : "";
