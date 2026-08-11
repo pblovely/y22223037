@@ -379,7 +379,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v560</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v562</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -3717,7 +3717,13 @@
     { key:"systemColor", label:"전산색상", get:it=>it.systemColor||"-" },
     { key:"sku", label:"삼성모델명(SKU)", get:it=>it.sku||"-" },
     { key:"serialNumber", label:"일련번호",
-      get:it=> (it.entryType==="imei" && it.serialNumber) ? it.serialNumber : "-",
+      // 같은 모델에 같은 번호가 또 있으면 빨간 「중복」을 붙입니다. (0 은 뗀 값으로 봅니다)
+      get:it=>{
+        if(!(it.entryType==="imei" && it.serialNumber)) return "-";
+        const n = invDupCount ? (invDupCount[modelDupKey(it.systemModel||it.baseModel||"") + "|" + normSerial(it.serialNumber)] || 0) : 0;
+        return comboEsc(it.serialNumber)
+          + (n > 1 ? ' <span style="background:#fdecea;border:1px solid var(--danger);color:var(--danger);font-size:10px;padding:0 3px;" title="같은 모델에 같은 일련번호가 ' + n + '건 있습니다. 데이터 점검에서 정리해주세요.">중복 ' + n + '</span>' : '');
+      },
       getRaw: it=> it.serialNumber||"",
       link: it=> (it.entryType==="imei" && it.serialNumber) ? it.serialNumber : "" },
     { key:"quantity", label:"수량", get:it=> it.entryType==="imei" ? "1" : (it.quantity != null ? String(it.quantity) : "-") },
@@ -6601,14 +6607,36 @@
     const addColors = (drop.colors||[]).filter(c=>
       keepColors.indexOf(String(c.systemColor||c.manufacturerColor||"")) < 0);
     const total = targets.length;
-    el.innerHTML =
-      '<div style="border:1px solid var(--navy);background:#f4f7fb;padding:9px 11px;">'
+    // 두 모델의 내용을 나란히 보여드립니다. 어느 쪽을 남길지 눈으로 고르실 수 있게요.
+    const F = [["systemModel","전산모델명"],["baseModel","모델명"],["petName","펫네임"],
+               ["capacity","기가수"],["manufacturer","제조사"],["nickname","닉네임"]];
+    let cmp = '<table class="data-table" style="width:100%;margin-bottom:8px;"><thead><tr>'
+      + '<th>항목</th><th style="background:#f4faf4;">남길 모델</th><th style="background:#fdecea;">없앨 모델</th></tr></thead><tbody>';
+    F.forEach(([k,l])=>{
+      const a = String(keep[k]||""), b = String(drop[k]||"");
+      const diff = a !== b;
+      cmp += '<tr><td>' + l + '</td>'
+        + '<td style="background:#f4faf4;' + (diff?'font-weight:700;':'') + '">' + (comboEsc(a)||'<span style="color:var(--gray);">-</span>') + '</td>'
+        + '<td style="background:#fdecea;' + (diff?'color:var(--danger);':'') + '">' + (comboEsc(b)||'<span style="color:var(--gray);">-</span>') + '</td></tr>';
+    });
+    const pa = Number(keep.priceIncVat)||0, pb = Number(drop.priceIncVat)||0;
+    cmp += '<tr><td>출고가</td>'
+      + '<td class="ta-right" style="background:#f4faf4;' + (pa!==pb?'font-weight:700;':'') + '">' + (pa?pa.toLocaleString():"-") + '</td>'
+      + '<td class="ta-right" style="background:#fdecea;' + (pa!==pb?'color:var(--danger);':'') + '">' + (pb?pb.toLocaleString():"-") + '</td></tr>'
+      + '<tr><td>색상</td>'
+      + '<td style="background:#f4faf4;">' + (keep.colors||[]).length + '개</td>'
+      + '<td style="background:#fdecea;">' + (drop.colors||[]).length + '개</td></tr>'
+      + '</tbody></table>';
+    el.innerHTML = cmp
+      + '<div style="border:1px solid var(--navy);background:#f4f7fb;padding:9px 11px;">'
       + '<b>' + comboEsc(drop.systemModel||"-") + '</b> 를 <b>' + comboEsc(keep.systemModel||"-") + '</b> 로 합칩니다.<br>'
       + '<span style="color:var(--gray);">옮길 자료 — </span>'
       + (total ? MERGE_COLS.map(([c,l])=> l + " " + (counts[l]||0)).join(" · ") : "없음")
       + '<br><span style="color:var(--gray);">색상 — </span>'
-      + (addColors.length ? addColors.length + "개를 남길 모델에 더합니다" : "더할 것 없음")
-      + '<br><span style="color:var(--danger);">' + comboEsc(drop.systemModel||"-") + ' 모델은 지워집니다.</span>'
+      + (addColors.length ? addColors.length + "개를 남길 모델에 더합니다 ("
+          + addColors.slice(0,6).map(c=> comboEsc(c.systemColor||c.manufacturerColor||"-")).join(", ") + ")" : "더할 것 없음")
+      + '<br><span style="color:var(--danger);">' + comboEsc(drop.systemModel||"-") + ' 모델은 지워집니다. '
+      + '옮긴 자료는 <b>남길 모델</b>의 값으로 바뀝니다.</span>'
       + '</div>';
   };
 
@@ -23904,17 +23932,19 @@
       + '<div style="font-weight:700;margin-bottom:4px;">앞에 0이 붙은 일련번호 — ' + zeroSerialCache.length + '건</div>'
       + '<div style="font-size:11.5px;color:var(--gray);line-height:1.7;margin-bottom:8px;">'
       + '0 을 떼어 한 가지 모양으로 맞춥니다. 모델과 다른 값은 건드리지 않습니다.<br>'
-      + '<b>0 을 뗀 뒤 같은 모델에 같은 번호가 이미 있으면</b> 빨갛게 표시됩니다. 그건 <b>중복</b>이니 「같은 모델·일련번호가 여러 건」에서 정리해주세요.</div>'
+      + '<b style="color:var(--danger);">빨간 줄</b>은 0 을 떼면 같은 모델에 같은 번호가 생기는 건입니다. '
+      + '정리해도 자료는 안 사라지고 재고가 두 대로 잡히니, 그다음 <b>「같은 모델·일련번호가 여러 건」</b>에서 어느 쪽을 남길지 정해주세요.</div>'
       + '<div style="max-height:340px;overflow-y:auto;border:1px solid var(--line);">'
       + '<table class="data-table" style="width:100%;"><thead><tr>'
       + '<th style="width:34px;"><input type="checkbox" id="zs-all" checked></th>'
       + '<th>지금</th><th>바뀔 값</th><th>모델</th><th>색상</th><th>상태</th><th>입고일</th>'
       + '</tr></thead><tbody>';
     zeroSerialCache.forEach((r,i)=>{
-      h += '<tr>'
+      h += '<tr' + (r.clash ? ' style="background:#fdecea;"' : '') + '>'
         + '<td><input type="checkbox" class="zs-ck" value="'+i+'" checked></td>'
         + '<td>' + comboEsc(r.from) + '</td>'
-        + '<td><b>' + comboEsc(r.to) + '</b></td>'
+        + '<td><b>' + comboEsc(r.to) + '</b>'
+          + (r.clash ? ' <span style="color:var(--danger);font-size:10.5px;font-weight:700;">겹침 ' + r.clash + '건</span>' : '') + '</td>'
         + '<td>' + comboEsc(docModelLabel(r.it)) + '</td>'
         + '<td>' + comboEsc(r.it.systemColor || r.it.manufacturerColor || "-") + '</td>'
         + '<td>' + comboEsc(r.it.status||"-") + '</td>'
@@ -23932,10 +23962,19 @@
     const picked = Array.from(document.querySelectorAll(".zs-ck:checked"))
       .map(c=> zeroSerialCache[Number(c.value)]).filter(Boolean);
     if(picked.length === 0){ alert("정리할 건을 골라주세요."); return; }
+    const clashes = picked.filter(r=> r.clash);
     if(!confirm("일련번호 앞의 0 을 뗍니다.\n\n"
-      + picked.slice(0,10).map(r=> "  " + r.from + "  →  " + r.to).join("\n")
+      + picked.slice(0,10).map(r=> "  " + r.from + "  →  " + r.to
+          + (r.clash ? "   ※ 같은 모델에 이미 있음" : "")).join("\n")
       + (picked.length > 10 ? "\n  ... 외 " + (picked.length-10) + "건" : "")
-      + "\n\n모두 " + picked.length + "건입니다. 진행할까요?")) return;
+      + "\n\n모두 " + picked.length + "건입니다."
+      + (clashes.length
+          ? "\n\n※ 그중 " + clashes.length + "건은 0 을 떼면 같은 모델에 같은 번호가 생깁니다.\n"
+            + "   재고가 두 대로 잡히니, 정리한 뒤\n"
+            + "   「같은 모델·일련번호가 여러 건」에서 어느 쪽을 남길지 정해주세요.\n"
+            + "   (지금 정리해도 자료가 사라지지는 않습니다)"
+          : "")
+      + "\n\n진행할까요?")) return;
     try{
       for(let i=0; i<picked.length; i+=300){
         const bt = writeBatch(db);
@@ -23944,7 +23983,10 @@
       }
     }catch(e){ alert("고치지 못했습니다.\n" + ((e&&e.message)?e.message:String(e))); return; }
     logAction("일련번호 앞의 0 정리", picked.length + "건");
-    alert(picked.length + "건을 정리했습니다.\n\n이어서 「같은 모델·일련번호가 여러 건」을 다시 확인해주세요.");
+    alert(picked.length + "건을 정리했습니다."
+      + (clashes.length ? "\n\n겹치게 된 " + clashes.length + "건이 있습니다.\n"
+          + "「같은 모델·일련번호가 여러 건」에서 정리해주세요." : "")
+      + "\n\n점검을 다시 돌립니다.");
     clearCache("inventory"); clearDashCache();
     document.getElementById("datacheck-detail").innerHTML = "";
     runDataCheck();
@@ -24013,29 +24055,55 @@
       + '<div style="max-height:340px;overflow-y:auto;border:1px solid var(--line);">'
       + '<table class="data-table" style="width:100%;"><thead><tr>'
       + '<th style="width:34px;"></th><th>일련번호</th><th>모델</th><th>색상</th><th>통신사</th>'
-      + '<th>입고일</th><th>출고일</th><th>상태</th><th>판매처</th><th>위치</th>'
+      + '<th>입고처</th><th>입고일</th><th>출고일</th><th>상태</th><th>판매처</th><th>위치</th>'
+      + '<th class="ta-right">출고가</th><th class="ta-right">입고가</th><th class="ta-right">판매가</th>'
+      + '<th>주문연결</th><th>등록</th>'
       + '</tr></thead><tbody>';
     sns.forEach(key=>{
       const list = dupSerialCache[key];
+      // 남길 것을 골라 둡니다 — 판매·개통 > 주문 연결 > 정보 많음 > 먼저 들어온 것
+      const score = it => {
+        let sc = 0;
+        if(it.status === "판매" || it.status === "개통") sc += 1000;
+        if(it.orderId || it.fromOrderId) sc += 500;
+        if(Number(it.listPrice)||0) sc += 50;
+        if(Number(it.purchasePrice)||0) sc += 50;
+        if(it.destination) sc += 20;
+        if(it.location) sc += 10;
+        if(it.inDate) sc += 5;
+        return sc;
+      };
+      const best = list.slice().sort((x,y)=>{
+        const d = score(y) - score(x);
+        if(d) return d;
+        return String(x.inDate||"9999").localeCompare(String(y.inDate||"9999"));
+      })[0];
       list.forEach((it, idx)=>{
-        const first = (idx === 0);
+        const first = (it.id === best.id);
         h += '<tr' + (first ? ' style="background:#f4faf4;"' : '') + '>'
           + '<td><input type="checkbox" class="dupsn-ck" value="' + it.id + '"' + (first ? '' : ' checked') + '></td>'
           + '<td><b>' + comboEsc(it.serialNumber||"-") + '</b>' + (first ? ' <span style="font-size:10.5px;color:#2e7d32;">남김</span>' : '') + '</td>'
           + '<td>' + comboEsc(docModelLabel(it)) + '</td>'
           + '<td>' + comboEsc(it.systemColor || it.manufacturerColor || "-") + '</td>'
           + '<td>' + comboEsc(it.carrier||"-") + '</td>'
+          + '<td>' + comboEsc(it.source||"-") + '</td>'
           + '<td>' + comboEsc(it.inDate||"-") + '</td>'
           + '<td>' + comboEsc(it.outDate||"-") + '</td>'
           + '<td' + (it.status === "판매" || it.status === "개통" ? ' style="color:var(--danger);font-weight:700;"' : '') + '>'
             + comboEsc(it.status||"-") + '</td>'
           + '<td>' + comboEsc(it.destination||"-") + '</td>'
-          + '<td>' + comboEsc(it.location||"-") + '</td></tr>';
+          + '<td>' + comboEsc(it.location||"-") + '</td>'
+          + '<td class="ta-right">' + ((Number(it.listPrice)||0) ? (Number(it.listPrice)||0).toLocaleString() : '<span style="color:var(--gray);">-</span>') + '</td>'
+          + '<td class="ta-right">' + ((Number(it.purchasePrice)||0) ? (Number(it.purchasePrice)||0).toLocaleString() : '<span style="color:var(--gray);">-</span>') + '</td>'
+          + '<td class="ta-right">' + ((Number(it.salePrice)||0) ? (Number(it.salePrice)||0).toLocaleString() : '<span style="color:var(--gray);">-</span>') + '</td>'
+          + '<td>' + ((it.orderId || it.fromOrderId) ? '<span style="color:#2e7d32;">있음</span>' : '<span style="color:var(--gray);">-</span>') + '</td>'
+          + '<td style="font-size:11px;">' + comboEsc(it.createdBy||"-") + '</td></tr>';
       });
     });
     h += '</tbody></table></div>'
       + '<div style="margin-top:8px;"><button class="btn small danger" style="width:auto;" onclick="deleteDupSerials()">체크한 건 지우기</button>'
-      + '<span style="margin-left:8px;font-size:11.5px;color:var(--gray);">초록 줄은 기본으로 남기게 해뒀습니다. 바꾸셔도 됩니다.</span></div>'
+      + '<span style="margin-left:8px;font-size:11.5px;color:var(--gray);">'
+      + '<b>초록 줄</b>이 남길 것으로 골라둔 것입니다 — 판매·개통 &gt; 주문 연결 &gt; 정보 많음 &gt; 먼저 들어온 것 순서. 바꾸셔도 됩니다.</span></div>'
       + '</div>';
     el.innerHTML = h;
   };
@@ -24125,6 +24193,22 @@
           if(!sn) return;
           const fixed = normSerial(sn);
           if(fixed !== sn) rows.push({ id, it, from:sn, to:fixed });
+        });
+        // 0 을 떼면 같은 모델에 같은 번호가 이미 있는지 미리 봅니다.
+        const keyOf = (mm, sn) => modelDupKey(mm || "") + "|" + normSerial(sn);
+        const liveKeys = {};
+        Object.keys(items).forEach(id=>{
+          const it = items[id];
+          if(it.deleted === true) return;
+          const sn = String(it.serialNumber||"").trim();
+          if(!sn) return;
+          const k = keyOf(it.systemModel || it.baseModel, sn);
+          (liveKeys[k] = liveKeys[k] || []).push(id);
+        });
+        rows.forEach(r=>{
+          const k = keyOf(r.it.systemModel || r.it.baseModel, r.to);
+          // 자기 자신을 뺀 나머지 중에 같은 것이 있으면 겹칩니다.
+          r.clash = (liveKeys[k] || []).filter(x=> x !== r.id).length;
         });
         zeroSerialCache = rows;
         issues.push({ n:"앞에 0이 붙은 일련번호", cnt:rows.length, unit:"재고",
@@ -27951,6 +28035,7 @@
   }
 
   let lastRenderedItems = [];
+  let invDupCount = null;        // 재고 목록의 중복 세기 (모델 + 0 뗀 일련번호)
   let lastRenderedSortLabel = "";      // 마지막 조회에 쓰인 정렬 기준 (다운로드 파일에 적어둡니다)
   let lastRenderedFilterLabels = [];   // 마지막 조회에 걸려 있던 조건 목록
   // 조회가 겹칠 때, 늦게 끝난 "옛 조회"가 화면·다운로드 대상을 덮어쓰지 못하게 막는 표입니다.
@@ -28333,7 +28418,7 @@
     seenNewTag = lastSeenTag;    // 이 버전만 안 알립니다. 그 뒤에 또 올라오면 다시 알립니다.
   };
 
-  // 파일에 박힌 버전 글자를 읽습니다. (예: "파일 2026-08-09 v560")
+  // 파일에 박힌 버전 글자를 읽습니다. (예: "파일 2026-08-09 v562")
   function readBuildTag(text){
     const m = String(text||"").match(/파일\s*[\d-]+\s*v(\d+)/);
     return m ? m[0].trim() : "";
@@ -29904,6 +29989,14 @@
     // 겹친 조회라면 여기서 멈춥니다. (옛 조회가 다운로드 대상을 덮어쓰는 것을 막습니다)
     if(myToken !== invRenderToken) return;
     lastRenderedItems = items;
+    // 같은 모델에 같은 일련번호가 몇 건인지 세어 목록에 「중복」을 표시합니다. (읽기 0회)
+    invDupCount = {};
+    items.forEach(it=>{
+      const sn = String(it.serialNumber||"").trim();
+      if(!sn || it.entryType !== "imei") return;
+      const k = modelDupKey(it.systemModel || it.baseModel || "") + "|" + normSerial(sn);
+      invDupCount[k] = (invDupCount[k]||0) + 1;
+    });
     // 이 순서가 왜 이렇게 나왔는지 파일에 적어두기 위해 정렬 기준과 조건을 기록합니다.
     lastRenderedSortLabel = (function(){
       if(invSortCol){
@@ -30665,16 +30758,19 @@
       .map(f=> f.header);
     // 화면에 보이는 순서 그대로 내려받습니다. (정렬·필터 반영)
     // 같은 일련번호가 여러 개면 「중복」으로 표시해 미리 알려드립니다.
+    // 모델과 0 을 뗀 일련번호가 둘 다 같아야 중복으로 봅니다.
     const snCount = {};
     lastRenderedItems.forEach(it=>{
       const sn = String(it.serialNumber||"").trim();
-      if(sn) snCount[sn] = (snCount[sn]||0) + 1;
+      if(sn) { const k = modelDupKey(it.systemModel || it.baseModel || "") + "|" + normSerial(sn);
+               snCount[k] = (snCount[k]||0) + 1; }
     });
     const rows = lastRenderedItems.map(it=>{
       const sn = String(it.serialNumber||"").trim();
+      const dupKey = sn ? (modelDupKey(it.systemModel || it.baseModel || "") + "|" + normSerial(sn)) : "";
       const marks = [];
       if(!sn) marks.push("일련번호 없음");
-      else if(snCount[sn] > 1) marks.push("중복");
+      else if(snCount[dupKey] > 1) marks.push("중복");
       if(!it.listPrice) marks.push("출고가 없음");
       const row = [];
       viewCols.forEach(c=>{
