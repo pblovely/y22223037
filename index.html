@@ -379,7 +379,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v559</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v560</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -5579,6 +5579,18 @@
   //   · 줄 전체가 모델명·색상이면 통째로 봅니다. ("바이올렛 쉐도우"처럼 띄어쓰기가 있어도)
   //   · 예전처럼 "모델 일련번호 색상"을 한 줄에 적어도 그대로 됩니다.
   //  돌려주는 것: [{ sn, hints, line, no }]
+  // 일련번호를 한 가지 모양으로 맞춥니다.
+  //  앞에 붙은 0 은 뗍니다. (0016589 → 16589)
+  //  전부 0 이면 "0" 하나만 남깁니다. 숫자가 아닌 일련번호는 그대로 둡니다.
+  function normSerial(v){
+    const t = String(v == null ? "" : v).trim();
+    if(!t) return "";
+    if(!/^[0-9]+$/.test(t)) return t;      // 글자가 섞였으면 손대지 않습니다
+    const cut = t.replace(/^0+/, "");
+    return cut === "" ? "0" : cut;
+  }
+  window.normSerial = normSerial;
+
   function parseSerialPaste(raw){
     const norm = v => String(v||"").trim().toLowerCase();
     const modelSet = new Set(), colorSet = new Set();
@@ -5641,6 +5653,8 @@
         });
       }
     });
+    // 일련번호 앞의 0 을 떼어 한 가지 모양으로 맞춥니다. (0016589 → 16589)
+    out.forEach(o=>{ o.sn = normSerial(o.sn); });
     return out;
   }
 
@@ -7378,7 +7392,7 @@
         }
       }
       const qty = entryType==="qty" ? (Number(document.getElementById("item-qty-input").value) || 1) : 1;
-      const serialNumber = entryType==="imei" ? document.getElementById("item-serial-input").value.trim() : "";
+      const serialNumber = entryType==="imei" ? normSerial(document.getElementById("item-serial-input").value) : "";
       if(entryType==="imei"){
         if(!serialNumber){ alert("일련번호를 입력해주세요."); return; }
         const dupSnap = await getDocs(query(collection(db,"inventoryItems"), where("serialNumber","==",serialNumber)));
@@ -7410,7 +7424,7 @@
       closeItemModal();
       loadInventoryList();
     }else{
-      const serialNumber = document.getElementById("item-serial-input").value.trim();
+      const serialNumber = normSerial(document.getElementById("item-serial-input").value);
       if(!serialNumber){ alert("일련번호를 입력해주세요."); return; }
       const dupSnap = await getDocs(query(collection(db,"inventoryItems"), where("serialNumber","==",serialNumber)));
       const dupLive = dupSnap.docs.filter(d=> d.data().deleted !== true && d.id !== editingItemId);
@@ -11960,7 +11974,7 @@
     while(idx < parsed.length){ addArrivalRow(); fill(); }
 
     // 중복 일련번호를 알려줍니다.
-    const all = Array.from(tbody.querySelectorAll(".arr-serial")).map(x=>x.value.trim()).filter(Boolean);
+    const all = Array.from(tbody.querySelectorAll(".arr-serial")).map(x=>normSerial(x.value)).filter(Boolean);
     const dup = all.filter((v,i)=> all.indexOf(v) !== i);
     msg.innerHTML = '<span style="color:#2e7d32;">' + parsed.length + '개를 넣었습니다.</span>'
       + (blocked.length ? ' <span style="color:var(--danger);">다른 모델 ' + blocked.length + '줄은 넣지 않았습니다.</span>' : '')
@@ -11979,7 +11993,7 @@
     const entries = [];
     for(const tr of rows){
       const colorName = tr.querySelector(".arr-color").value.trim();
-      const serial = tr.querySelector(".arr-serial").value.trim();
+      const serial = normSerial(tr.querySelector(".arr-serial").value);
       if(!serial) continue; // 빈 행은 건너뜀 (남은 대수보다 적게 입력해도 됨)
       if(!colorName){ alert("일련번호를 입력한 행에는 색상도 입력해주세요."); return; }
       entries.push({ colorName, serial });
@@ -23876,6 +23890,66 @@
   //  프로그램이 스스로 고치지 않습니다. 무엇이 다른지 보고 사람이 정합니다.
   let priceDiffCache = [];
 
+  // 앞에 0 이 붙은 일련번호를 모아 보여주고, 골라서 0 을 뗍니다.
+  let zeroSerialCache = [];
+
+  window.showZeroSerialList = function(){
+    const el = document.getElementById("datacheck-detail");
+    if(!el) return;
+    if(zeroSerialCache.length === 0){ el.innerHTML = '<div class="list-empty">0이 붙은 일련번호가 없습니다.</div>'; return; }
+    // 0 을 떼면 이미 있는 것과 겹치는지 미리 봅니다.
+    const live = {};
+    zeroSerialCache.forEach(r=>{ live[normSerial(r.from)] = true; });
+    let h = '<div style="border:1px solid var(--navy);padding:10px 12px;margin-top:10px;">'
+      + '<div style="font-weight:700;margin-bottom:4px;">앞에 0이 붙은 일련번호 — ' + zeroSerialCache.length + '건</div>'
+      + '<div style="font-size:11.5px;color:var(--gray);line-height:1.7;margin-bottom:8px;">'
+      + '0 을 떼어 한 가지 모양으로 맞춥니다. 모델과 다른 값은 건드리지 않습니다.<br>'
+      + '<b>0 을 뗀 뒤 같은 모델에 같은 번호가 이미 있으면</b> 빨갛게 표시됩니다. 그건 <b>중복</b>이니 「같은 모델·일련번호가 여러 건」에서 정리해주세요.</div>'
+      + '<div style="max-height:340px;overflow-y:auto;border:1px solid var(--line);">'
+      + '<table class="data-table" style="width:100%;"><thead><tr>'
+      + '<th style="width:34px;"><input type="checkbox" id="zs-all" checked></th>'
+      + '<th>지금</th><th>바뀔 값</th><th>모델</th><th>색상</th><th>상태</th><th>입고일</th>'
+      + '</tr></thead><tbody>';
+    zeroSerialCache.forEach((r,i)=>{
+      h += '<tr>'
+        + '<td><input type="checkbox" class="zs-ck" value="'+i+'" checked></td>'
+        + '<td>' + comboEsc(r.from) + '</td>'
+        + '<td><b>' + comboEsc(r.to) + '</b></td>'
+        + '<td>' + comboEsc(docModelLabel(r.it)) + '</td>'
+        + '<td>' + comboEsc(r.it.systemColor || r.it.manufacturerColor || "-") + '</td>'
+        + '<td>' + comboEsc(r.it.status||"-") + '</td>'
+        + '<td>' + comboEsc(r.it.inDate||"-") + '</td></tr>';
+    });
+    h += '</tbody></table></div>'
+      + '<div style="margin-top:8px;"><button class="btn small" style="width:auto;" onclick="fixZeroSerials()">체크한 건 0 떼기</button></div>'
+      + '</div>';
+    el.innerHTML = h;
+    const all = document.getElementById("zs-all");
+    if(all) all.onchange = ()=> el.querySelectorAll(".zs-ck").forEach(c=> c.checked = all.checked);
+  };
+
+  window.fixZeroSerials = async function(){
+    const picked = Array.from(document.querySelectorAll(".zs-ck:checked"))
+      .map(c=> zeroSerialCache[Number(c.value)]).filter(Boolean);
+    if(picked.length === 0){ alert("정리할 건을 골라주세요."); return; }
+    if(!confirm("일련번호 앞의 0 을 뗍니다.\n\n"
+      + picked.slice(0,10).map(r=> "  " + r.from + "  →  " + r.to).join("\n")
+      + (picked.length > 10 ? "\n  ... 외 " + (picked.length-10) + "건" : "")
+      + "\n\n모두 " + picked.length + "건입니다. 진행할까요?")) return;
+    try{
+      for(let i=0; i<picked.length; i+=300){
+        const bt = writeBatch(db);
+        picked.slice(i, i+300).forEach(r=> bt.update(doc(db,"inventoryItems", r.id), { serialNumber: r.to }));
+        await bt.commit();
+      }
+    }catch(e){ alert("고치지 못했습니다.\n" + ((e&&e.message)?e.message:String(e))); return; }
+    logAction("일련번호 앞의 0 정리", picked.length + "건");
+    alert(picked.length + "건을 정리했습니다.\n\n이어서 「같은 모델·일련번호가 여러 건」을 다시 확인해주세요.");
+    clearCache("inventory"); clearDashCache();
+    document.getElementById("datacheck-detail").innerHTML = "";
+    runDataCheck();
+  };
+
   window.showPriceDiffList = function(){
     const el = document.getElementById("datacheck-detail");
     if(!el) return;
@@ -24028,7 +24102,7 @@
           if(it.deleted === true) return;
           const sn = String(it.serialNumber||"").trim();
           if(!sn) return;
-          const key = modelDupKey(it.systemModel || it.baseModel || "") + "|" + sn;
+          const key = modelDupKey(it.systemModel || it.baseModel || "") + "|" + normSerial(sn);
           (byKey[key] = byKey[key] || []).push(id);
         });
         const dupKeys = Object.keys(byKey).filter(k=> byKey[k].length > 1);
@@ -24038,6 +24112,24 @@
         issues.push({ n:"같은 모델·일련번호가 여러 건", cnt:dupKeys.length, unit:"남는 " + dupExtra + "건",
           why:"모델과 일련번호가 둘 다 같으면 같은 단말기입니다. 모델이 다르면 다른 단말기라 세지 않습니다.",
           fix: dupKeys.length ? "showDupSerialList()" : null, fixLabel:"확인하고 정리" });
+      }
+
+      // ⓪-1 앞에 0 이 붙은 일련번호
+      //  0016589 처럼 앞에 0 이 붙으면 16589 와 다른 것으로 잡혀 중복을 못 걸러냅니다.
+      {
+        const rows = [];
+        Object.keys(items).forEach(id=>{
+          const it = items[id];
+          if(it.deleted === true) return;
+          const sn = String(it.serialNumber||"").trim();
+          if(!sn) return;
+          const fixed = normSerial(sn);
+          if(fixed !== sn) rows.push({ id, it, from:sn, to:fixed });
+        });
+        zeroSerialCache = rows;
+        issues.push({ n:"앞에 0이 붙은 일련번호", cnt:rows.length, unit:"재고",
+          why:"0016589 처럼 앞에 0 이 붙으면 16589 와 서로 다른 것으로 잡혀 중복을 못 걸러냅니다. 0 을 떼어 한 가지 모양으로 맞춥니다.",
+          fix: rows.length ? "showZeroSerialList()" : null, fixLabel:"확인하고 정리" });
       }
 
       // ⓪-2 모델 등록의 출고가와 다른 주문·재고
@@ -28241,7 +28333,7 @@
     seenNewTag = lastSeenTag;    // 이 버전만 안 알립니다. 그 뒤에 또 올라오면 다시 알립니다.
   };
 
-  // 파일에 박힌 버전 글자를 읽습니다. (예: "파일 2026-08-09 v559")
+  // 파일에 박힌 버전 글자를 읽습니다. (예: "파일 2026-08-09 v560")
   function readBuildTag(text){
     const m = String(text||"").match(/파일\s*[\d-]+\s*v(\d+)/);
     return m ? m[0].trim() : "";
@@ -31804,7 +31896,7 @@
       const carrierRaw = String(row["통신사"]||"").trim();
       const manufacturer = String(row["제조사"]||"").trim();
       const systemModel = String(row["전산모델명"]||"").trim();
-      const serialNumber = String(row["일련번호"]||"").trim();
+      const serialNumber = normSerial(row["일련번호"]);
       const colorName = String(row["색상"]||"").trim();
       const location = String(row["위치"]||"").trim();
       const status = String(row["현재상태"]||"").trim();
