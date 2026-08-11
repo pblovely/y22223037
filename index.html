@@ -387,7 +387,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v571</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v572</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -1304,7 +1304,7 @@
             <span><input type="file" id="issuer-stamp-file" accept="image/*" style="font-size:12px;" onchange="onIssuerStampPick(event)">
               <button class="btn small secondary" style="width:auto;margin-left:6px;" onclick="clearIssuerStamp()">지우기</button></span></div>
           <div class="stack-row"><label>명판 너비(mm) <span class="info-tip" title="종이에 찍었을 때의 실제 가로 길이를 자로 재어 넣으세요. 보통 명판은 55~70mm 입니다. 높이는 그림 비율대로 저절로 맞춰집니다.">ⓘ</span></label>
-            <span><input type="number" id="issuer-stamp-width" value="90" min="10" max="180" step="1" style="width:90px;" oninput="renderIssuerStamp()"> mm
+            <span><input type="number" id="issuer-stamp-width" value="75" min="10" max="180" step="1" style="width:90px;" oninput="renderIssuerStamp()"> mm
               <button class="btn small secondary" style="width:auto;margin-left:6px;" title="지금 크기의 1.5배로 키웁니다." onclick="scaleIssuerStamp(1.5)">1.5배</button>
               <button class="btn small secondary" style="width:auto;margin-left:3px;" title="지금 크기의 3분의 2로 줄입니다." onclick="scaleIssuerStamp(1/1.5)">되돌리기</button>
               <span style="color:var(--gray);font-size:11.5px;margin-left:8px;">자로 잰 가로 길이. 보통 55~70mm</span></span></div>
@@ -17219,7 +17219,7 @@
     if(!hasPerm(currentUserPerms, "paymentProcess")){ alert("권한이 없습니다."); return; }
     const box = document.getElementById("ram-list");
     const msg = document.getElementById("ram-msg");
-    const days = Number(String((document.getElementById("ram-days")||{}).value||"").replace(/\D/g,"")) || 90;
+    const days = Number(String((document.getElementById("ram-days")||{}).value||"").replace(/\D/g,"")) || 75;
     msg.innerHTML = '<span style="color:var(--gray);">세금계산서를 읽는 중입니다...</span>';
     document.getElementById("automatch-overlay").style.display = "flex";
 
@@ -21185,7 +21185,7 @@
   window.scaleIssuerStamp = function(k){
     const el = document.getElementById("issuer-stamp-width");
     if(!el) return;
-    const now = Number(el.value) || 90;
+    const now = Number(el.value) || 75;
     el.value = Math.min(180, Math.max(10, Math.round(now * k)));
     renderIssuerStamp();
   };
@@ -21198,7 +21198,7 @@
   function renderIssuerStamp(){
     const el = document.getElementById("issuer-stamp-preview");
     if(!el) return;
-    const w = Number((document.getElementById("issuer-stamp-width")||{}).value) || 90;
+    const w = Number((document.getElementById("issuer-stamp-width")||{}).value) || 75;
     el.innerHTML = issuerStampData
       ? '<img src="' + issuerStampData + '" style="width:' + w + 'mm;height:auto;background:#fff;">'
         + '<div style="font-size:11.5px;color:var(--gray);margin-top:4px;">종이에 찍히는 크기 — 가로 ' + w + 'mm</div>'
@@ -21214,7 +21214,7 @@
       issuerContact: document.getElementById("issuer-contact-input").value.trim(),
       issuerAccount: document.getElementById("issuer-account-input").value.trim(),
       issuerStamp: issuerStampData || "",        // 명판 그림 (그림 자체를 담아둡니다)
-      issuerStampWidth: Number((document.getElementById("issuer-stamp-width")||{}).value) || 90
+      issuerStampWidth: Number((document.getElementById("issuer-stamp-width")||{}).value) || 75
     };
     await setDoc(doc(db,"settings","general"), payload, { merge:true });
     Object.assign(currentSettings, payload);
@@ -22523,14 +22523,22 @@
             + '<td>'+(r.colorObj ? comboEsc(r.colorObj.manufacturerColor || r.colorText || "-")
                 : '<span style="color:var(--danger);">' + comboEsc(r.colorText||"-") + '</span>')+'</td>'
             + '<td>'+(r.colorObj ? comboEsc(r.colorObj.systemColor || r.colorText || "-")
-                : '<span style="color:var(--danger);" title="이 모델에 등록되지 않은 색상입니다. 등록하면 그대로 새로 만들어집니다.">'
-                  + comboEsc(r.colorText||"-") + ' <b>새 색상</b></span>')+'</td>'
+                : '<span style="color:#1565c0;" title="이 모델에 없는 색상입니다. 등록하면 모델 등록에 자동으로 만들어집니다.">'
+                  + comboEsc(r.colorText||"-") + ' <b>새로 만듦</b></span>')+'</td>'
             + '<td>'+comboEsc(r.carrier||"-")+'</td>'
             + '<td class="ta-right">'+r.qty+'</td>'
             + '<td class="ta-right">'+(r.model.priceIncVat ? Number(r.model.priceIncVat).toLocaleString() : '<span style="color:var(--danger);">미입력</span>')+'</td>'
             + '<td>'+(r.colorObj && r.colorObj.sku ? comboEsc(r.colorObj.sku)
                 : (r.skuCand ? '<span style="color:#1565c0;">'+comboEsc(r.skuCand)+' <b>새로 저장</b></span>' : '-'))+'</td></tr>').join("")
         + '</tbody></table></div>'
+        + (ok.filter(r=>!r.colorObj && r.colorText).length
+            ? '<div style="border:1px solid #1565c0;background:#eef4fb;padding:8px 10px;margin-bottom:10px;font-size:12.5px;line-height:1.7;">'
+              + '<b>모델에 없는 색상 ' + ok.filter(r=>!r.colorObj && r.colorText).length + '건</b>이 있습니다. '
+              + '등록하면 모델 등록에 <b>자동으로 만들어집니다.</b>'
+              + '<br><span style="color:var(--gray);">'
+              + [...new Set(ok.filter(r=>!r.colorObj && r.colorText).map(r=> (r.model.systemModel||"-") + " · " + r.colorText))].slice(0,8).join(" / ")
+              + '</span></div>'
+            : '')
         + (ok.filter(r=>r.skuMissing).length
             ? '<div style="border:1px solid #1565c0;background:#eef4fb;padding:8px 10px;margin-bottom:10px;font-size:12.5px;line-height:1.7;">'
               + '<b>삼성모델명(SKU)이 없는 색상 ' + ok.filter(r=>r.skuMissing).length + '건</b>을 찾았습니다.'
@@ -22626,6 +22634,46 @@
     if(!confirm(source + " 주문을 등록합니다.\n\n· 품목 " + orderPasteRows.length + "줄 / " + totalQty + "대\n"
       + "· 출고가 기준 " + totalAmt.toLocaleString() + "\n\n"
       + "입고가·판매조건은 등록 후 요청서에서 품목 수정으로 넣어주세요.\n\n진행하시겠습니까?")) return;
+
+    // 모델에 없는 색상은 모델 등록에 새로 넣어둡니다. (다음부터는 그대로 걸립니다)
+    try{
+      const addByModel = {};
+      orderPasteRows.forEach(r=>{
+        if(r.colorObj) return;                       // 이미 등록된 색상
+        const name = String(r.colorText||"").trim();
+        if(!name) return;
+        const mid = r.model.id;
+        const have = (r.model.colors||[]).map(c=> String(c.systemColor||c.manufacturerColor||""));
+        if(have.indexOf(name) >= 0) return;
+        addByModel[mid] = addByModel[mid] || { model:r.model, list:[] };
+        if(!addByModel[mid].list.some(c=> c.systemColor === name)){
+          addByModel[mid].list.push({
+            manufacturerColor: name, systemColor: name,
+            sku: r.skuCand || "", needsReview: true
+          });
+        }
+      });
+      const addKeys = Object.keys(addByModel);
+      if(addKeys.length){
+        for(const mid of addKeys){
+          const g = addByModel[mid];
+          await updateDoc(doc(db,"inventoryModels", mid),
+            { colors: [...(g.model.colors||[]), ...g.list] });
+        }
+        await fetchModelsCache();
+        // 새로 만든 색상을 줄에 이어 붙입니다.
+        orderPasteRows.forEach(r=>{
+          if(r.colorObj) return;
+          const m2 = modelsCache.find(x=> x.id === r.model.id);
+          if(!m2) return;
+          const hit = (m2.colors||[]).find(c=>
+            String(c.systemColor||"") === String(r.colorText||"").trim());
+          if(hit){ r.model = m2; r.colorObj = hit; }
+        });
+        logAction("모델 색상 자동 추가",
+          addKeys.map(k=> (addByModel[k].model.systemModel||"-") + " " + addByModel[k].list.length + "개").join(" / "));
+      }
+    }catch(e){ /* 색상 추가에 실패해도 주문 등록은 이어갑니다 */ }
 
     try{
       const batchRef = await addDoc(collection(db,"orderBatches"), {
@@ -24840,7 +24888,7 @@
       // 명판 — 설정의 발행정보와 도장 그림을 씁니다. 없으면 예전처럼 빈칸으로 둡니다.
       // 명판 — 스캔한 그림을 그대로, 정하신 너비(mm)로 찍습니다.
       const ST = currentSettings || {};
-      const plateW = Number(ST.issuerStampWidth) || 90;      // 기본 90mm
+      const plateW = Number(ST.issuerStampWidth) || 75;      // 기본 75mm
       const nameplate = ST.issuerStamp
         ? '<div class="po-plate"><img src="' + ST.issuerStamp + '" style="width:' + plateW + 'mm;"></div>'
         : '<div class="po-sign"><span>명판 / 날인</span><span class="po-signbox"></span></div>';
@@ -24994,7 +25042,7 @@
 
     // 명판 — 설정에 회사 정보나 도장 그림이 있으면 아래에 찍습니다.
     if(st.issuerStamp){
-      const plateW2 = Number(st.issuerStampWidth) || 90;
+      const plateW2 = Number(st.issuerStampWidth) || 75;
       h += '<div class="po-date">' + comboEsc(q.issueDate || todayStr()) + '</div>'
         + '<div class="po-plate"><img src="' + st.issuerStamp + '" style="width:' + plateW2 + 'mm;"></div>';
     }
@@ -28530,7 +28578,7 @@
     seenNewTag = lastSeenTag;    // 이 버전만 안 알립니다. 그 뒤에 또 올라오면 다시 알립니다.
   };
 
-  // 파일에 박힌 버전 글자를 읽습니다. (예: "파일 2026-08-09 v571")
+  // 파일에 박힌 버전 글자를 읽습니다. (예: "파일 2026-08-09 v572")
   function readBuildTag(text){
     const m = String(text||"").match(/파일\s*[\d-]+\s*v(\d+)/);
     return m ? m[0].trim() : "";
@@ -32840,7 +32888,7 @@
         document.getElementById("page-size-all-input").checked = currentSettings.pageSizeIncludeAll !== false;
         issuerStampData = currentSettings.issuerStamp || "";
         { const w = document.getElementById("issuer-stamp-width");
-          if(w) w.value = Number(currentSettings.issuerStampWidth) || 90; }
+          if(w) w.value = Number(currentSettings.issuerStampWidth) || 75; }
         renderIssuerStamp();
         document.getElementById("issuer-name-input").value = currentSettings.issuerName || "";
         document.getElementById("issuer-biznum-input").value = currentSettings.issuerBizNumber || "";
