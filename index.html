@@ -379,7 +379,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v562</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v566</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -2734,7 +2734,12 @@
             <input type="text" id="primary-cond-value" placeholder="검색어" style="width:115px;">
             <button class="btn small secondary" onclick="openAddConditionModal()">+ 조건 추가</button>
             <button class="btn small secondary" onclick="openInvPick()">목록으로 찾기</button>
-            <button class="btn small push" style="" onclick="searchInventory()" title="조건으로 다시 찾습니다. 열 제목으로 바꿔둔 정렬은 기본으로 돌아갑니다.">조회</button>
+            <span class="tbar-sep">|</span>
+            <input type="text" id="inv-freeword" placeholder="전체에서 찾기 (모든 칸)" style="width:150px;"
+              title="칸을 고르지 않고 모든 칸에서 찾습니다. 여러 말을 띄어 쓰면 그 말이 모두 들어간 것만 나옵니다."
+              onkeydown="if(event.key==='Enter') runInvFreeWord()">
+            <button class="btn small secondary" onclick="runInvFreeWord()">전체 찾기</button>
+            <button class="btn small push" style="" onclick="searchInventoryByCond()" title="조건으로 다시 찾습니다. 열 제목으로 바꿔둔 정렬은 기본으로 돌아갑니다.">조회</button>
           </div>
           <!-- 2행: 목록 도구 -->
           <div class="tbar-row">
@@ -10667,6 +10672,7 @@
       '<div id="order-sale-link" style="margin-bottom:10px;"></div>';
 
     let html = head + '<div style="overflow-x:auto;"><table class="data-table" style="min-width:1360px;"><thead><tr>' +
+      '<th class="ta-right">도착</th><th>상태</th>' +
       '<th>모델 (전산모델명)</th><th>색상</th><th>기가수</th><th>통신사</th>' +
       '<th class="ta-right">주문수량</th>' +
       '<th class="ta-right">출고가</th>' +
@@ -10675,7 +10681,7 @@
       '<th class="ta-right">입고가</th>' +
       '<th>판매처</th><th class="ta-right">판매가</th>' +
       '<th class="ta-right">판매할인</th><th class="ta-right">판매할인%</th>' +
-      '<th class="ta-right">도착</th><th>상태</th><th class="ta-right no-print">관리</th>' +
+      '<th class="ta-right no-print">관리</th>' +
       '</tr></thead><tbody id="order-detail-tbody"></tbody><tfoot id="order-detail-tfoot"></tfoot></table></div>';
     document.getElementById("order-detail-body").innerHTML = html;
     const tbody = document.getElementById("order-detail-tbody");
@@ -10700,6 +10706,9 @@
       const tr = document.createElement("tr");
       if(o.status==="취소") tr.style.color = "var(--gray)";
       tr.innerHTML =
+        // 도착·상태를 맨 앞에 둡니다. 오른쪽으로 밀지 않아도 보이게요.
+        '<td class="ta-right" style="white-space:nowrap;font-weight:700;">'+(o.fulfilledCount||0)+'/'+qty+'</td>' +
+        '<td style="white-space:nowrap;">'+comboEsc(o.status||"-")+'</td>' +
         '<td>'+comboEsc(docModelLabel(o))+'</td>' +
         '<td>'+(o.systemColor || o.manufacturerColor
           ? comboEsc(o.systemColor || o.manufacturerColor)
@@ -10721,8 +10730,7 @@
         '<td class="ta-right">'+numFmt(o.salePrice)+'</td>' +
         '<td class="ta-right">'+discFmt(o.saleDiscountAmt)+'</td>' +
         '<td class="ta-right">'+discPctFmt(o.saleDiscountPct != null ? o.saleDiscountPct : pctFromAmt(o.saleDiscountAmt, Number(o.listPrice)||0))+'</td>' +
-        '<td class="ta-right">'+(o.fulfilledCount||0)+'/'+qty+'</td>' +
-        '<td>'+comboEsc(o.status||"-")+'</td>' +
+
         '<td class="ta-right no-print">' +
           '<button class="btn small secondary" style="width:auto;" data-edit-line="'+o.id+'">수정</button>' +
           (remain>0 && o.status!=="취소"
@@ -10748,14 +10756,14 @@
 
     document.getElementById("order-detail-tfoot").innerHTML =
       '<tr style="border-top:2px solid var(--navy);font-weight:700;background:#fff;">' +
-      '<td colspan="4">합계 (품목 '+lines.length+'건)</td>' +
-      '<td class="ta-right">'+sumQty+'</td>' +
-      '<td colspan="5"></td>' +
-      '<td class="ta-right">'+sumPurchase.toLocaleString()+'</td>' +
-      '<td></td>' +
-      '<td class="ta-right">'+sumSale.toLocaleString()+'</td>' +
-      '<td colspan="2"></td>' +
-      '<td colspan="3" class="no-print"></td>' +
+      '<td colspan="6">합계 (품목 '+lines.length+'건)</td>' +      // 도착·상태·모델·색상·기가수·통신사
+      '<td class="ta-right">'+sumQty+'</td>' +                    // 주문수량
+      '<td colspan="5"></td>' +                                   // 출고가·선할인·선할인%·타할인·타할인%
+      '<td class="ta-right">'+sumPurchase.toLocaleString()+'</td>' + // 입고가
+      '<td></td>' +                                               // 판매처
+      '<td class="ta-right">'+sumSale.toLocaleString()+'</td>' +   // 판매가
+      '<td colspan="2"></td>' +                                   // 판매할인·판매할인%
+      '<td class="no-print"></td>' +                              // 관리
       '</tr>';
 
     foldActionColumn("order-detail-body");   // 줄을 누르면 버튼이 아래로 펼쳐집니다
@@ -19915,6 +19923,24 @@
   let invPickIds = null;      // null 이면 안 걸림
   let invPickInfo = null;     // { found, missing:[{line, reason}] }
 
+  let invFreeWord = "";      // 모든 글자 칸에서 찾을 말 (「미확인 입고처」 버튼 등이 씁니다)
+
+  // 칸을 고르지 않고 모든 칸에서 찾습니다.
+  //  여러 말을 띄어 쓰면 그 말이 모두 들어간 것만 나옵니다. (예: 미확인 블랙)
+  window.runInvFreeWord = function(){
+    const el = document.getElementById("inv-freeword");
+    const w = String((el||{}).value || "").trim();
+    if(!w){ alert("찾을 말을 넣어주세요."); return; }
+    const all = document.getElementById("filter-date-all");
+    if(all && !all.checked){ all.checked = true; onFilterDateAllToggle(); }   // 기간은 전체로
+    invFreeWord = w;
+    const v = document.getElementById("primary-cond-value");
+    if(v) v.value = "";
+    activeConditions = [];                 // 「+ 조건 추가」로 넣어둔 조건은 비웁니다
+    if(typeof renderConditionChips === "function") renderConditionChips();
+    searchInventory();
+  };
+
   window.openInvPick = function(){
     document.getElementById("ipk-text").value = "";
     document.getElementById("ipk-msg").innerHTML = "";
@@ -27126,6 +27152,8 @@
     document.getElementById("primary-cond-match").value = "포함";
     onCondMatchChange();
     activeConditions = [];
+    invFreeWord = "";                 // 전체 찾기도 풉니다
+    { const fw = document.getElementById("inv-freeword"); if(fw) fw.value = ""; }
     renderConditionChips();
     loadInventoryList();
   };
@@ -28045,6 +28073,13 @@
   let invSortAsc = true;    // 오름차순 여부
   // 조회 — 조건으로 다시 찾습니다.
   //  열 제목을 눌러 바꿔둔 정렬은 기본으로 되돌리고 첫 페이지부터 봅니다.
+  // 조건으로 다시 찾을 때는 자유 검색을 풉니다. (버튼으로 켠 것이 계속 남지 않게)
+  window.searchInventoryByCond = function(){
+    invFreeWord = "";
+    const el = document.getElementById("inv-freeword"); if(el) el.value = "";
+    searchInventory();
+  };
+
   window.searchInventory = function(){
     invSortCol = ""; invSortAsc = true;
     getPageState("inventory").page = 1;
@@ -28418,7 +28453,7 @@
     seenNewTag = lastSeenTag;    // 이 버전만 안 알립니다. 그 뒤에 또 올라오면 다시 알립니다.
   };
 
-  // 파일에 박힌 버전 글자를 읽습니다. (예: "파일 2026-08-09 v562")
+  // 파일에 박힌 버전 글자를 읽습니다. (예: "파일 2026-08-09 v566")
   function readBuildTag(text){
     const m = String(text||"").match(/파일\s*[\d-]+\s*v(\d+)/);
     return m ? m[0].trim() : "";
@@ -29941,6 +29976,19 @@
           label: fieldDef.label+" "+primaryMatch + (primaryNoVal ? "" : ' "'+document.getElementById("primary-cond-value").value.trim()+'"'),
           left: items.length, field: fieldDef });
       }
+    }
+
+    // 모든 글자 칸에서 찾기 — 「미확인 입고처」 같은 버튼이 씁니다.
+    if(invFreeWord){
+      // 띄어 쓴 말은 모두 들어가야 합니다. (예: "미확인 블랙" → 둘 다 있는 것만)
+      const words = String(invFreeWord).toLowerCase().split(/\s+/).filter(Boolean);
+      const hay = it => [
+        ...FILTER_FIELDS.map(f=> f.get ? (f.get(it)||"") : ""),
+        it.serialNumber, it.systemModel, it.baseModel, it.petName,
+        it.systemColor, it.manufacturerColor, it.sku, it.imei, it.nickname
+      ].map(v=> String(v||"")).join(" ").toLowerCase();
+      items = items.filter(it=>{ const h = hay(it); return words.every(w=> h.includes(w)); });
+      filterSteps.push({ label: '전체에서 "' + invFreeWord + '" 찾기', left: items.length });
     }
 
     // 추가 조건 ("+조건 추가"로 넣은 것들, 전부 AND)
