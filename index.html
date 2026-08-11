@@ -379,7 +379,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v556</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v557</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -7173,6 +7173,7 @@
     const colorLabel = systemColor || manufacturerColor || "";
 
     const base = {
+      modelId: m.id || null,        // 모델 연결 — 이름을 바꿔도 안 끊깁니다
       baseModel:m.baseModel, capacity:m.capacity, systemModel:m.systemModel,
       petName: m.petName || "", manufacturerColor, systemColor, sku, carrier, source, manufacturer, location, destination:dest,
       listPrice: listPrice?Number(listPrice):null,
@@ -27991,7 +27992,7 @@
     seenNewTag = lastSeenTag;    // 이 버전만 안 알립니다. 그 뒤에 또 올라오면 다시 알립니다.
   };
 
-  // 파일에 박힌 버전 글자를 읽습니다. (예: "파일 2026-08-09 v556")
+  // 파일에 박힌 버전 글자를 읽습니다. (예: "파일 2026-08-09 v557")
   function readBuildTag(text){
     const m = String(text||"").match(/파일\s*[\d-]+\s*v(\d+)/);
     return m ? m[0].trim() : "";
@@ -30821,6 +30822,7 @@
         colorObj = (m.colors||[]).find(c=>c.systemColor===r.colorText || c.manufacturerColor===r.colorText);
       }
       await addDoc(collection(db,"inventoryItems"), {
+        modelId: m.id || null,        // 모델 연결 — 이름을 바꿔도 안 끊깁니다
         baseModel:m.baseModel, capacity:m.capacity, systemModel:m.systemModel,
         petName:m.petName||"", manufacturerColor:colorObj.manufacturerColor||"", systemColor:colorObj.systemColor||"", sku:colorObj.sku||"",
         carrier, source, manufacturer:"", location:"", destination:dest||"",
