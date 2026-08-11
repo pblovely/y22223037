@@ -387,7 +387,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v579</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v580</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -2559,6 +2559,8 @@
         <p class="desc" style="margin-top:0;">실제로 보낼 금액이 주문 합계와 다르면 <b>실제 이체금액</b>만 고치세요.
           차액은 사유와 함께 기록됩니다. <b>주문 금액·재고는 바뀌지 않습니다.</b></p>
         <div class="stack-form">
+          <div class="stack-row"><label>요청일 <span class="info-tip" title="지난 건을 정리하실 때 그날 날짜를 넣으세요. 비우면 오늘 날짜로 들어갑니다.">ⓘ</span></label>
+            <input type="text" id="prm-date" maxlength="8" inputmode="numeric" placeholder="비우면 오늘 (예: 20260811)"></div>
           <div class="stack-row"><label>체크한 주문</label><input type="text" id="prm-count" readonly style="background:#f7f7f7;"></div>
           <div class="stack-row"><label>주문 합계</label><input type="text" id="prm-base" readonly style="background:#f7f7f7;"></div>
           <div class="stack-row"><label>실제 이체금액</label><input type="number" id="prm-actual" placeholder="숫자만"></div>
@@ -12282,6 +12284,7 @@
     document.getElementById("prm-base").value = base.toLocaleString();
     document.getElementById("prm-actual").value = base;
     document.getElementById("prm-memo").value = "";
+    { const d = document.getElementById("prm-date"); if(d) d.value = ""; }   // 비우면 오늘로 들어갑니다
     fillAdjustReasonSelect("prm-reason");
     document.getElementById("prm-msg").innerHTML = "";
     const act = document.getElementById("prm-actual");
@@ -12316,6 +12319,12 @@
     const { actual, diff } = payReqDiff();
     if(actual <= 0){ document.getElementById("prm-msg").innerHTML = '<span style="color:var(--danger);">실제 이체금액을 넣어주세요.</span>'; return; }
     const memo = (document.getElementById("prm-memo").value||"").trim();
+    // 요청일 — 비우면 오늘 날짜로 넣습니다. (지난 건을 정리하실 때 그날 날짜를 쓰시면 됩니다)
+    const reqDate = String((document.getElementById("prm-date")||{}).value||"").replace(/\D/g,"") || todayStr();
+    if(reqDate.length !== 8){
+      document.getElementById("prm-msg").innerHTML = '<span style="color:var(--danger);">요청일을 20260811 형태로 넣거나 비워주세요.</span>';
+      return;
+    }
     let adjustReason = "";
     if(diff !== 0){
       adjustReason = (document.getElementById("prm-reason")||{}).value || "";
@@ -12328,6 +12337,7 @@
       + "\n\n  주문 합계   " + base.toLocaleString()
       + "\n  실제 이체   " + total.toLocaleString()
       + (diff !== 0 ? "\n  차액        " + (diff>0?"+":"") + diff.toLocaleString() + " (" + adjustReason + ")" : "")
+      + "\n  요청일      " + reqDate
       + "\n\n출금요청을 만드시겠습니까?"
       + (otherAmount>0 ? "\n(기타 금액분은 재고를 따로 등록해주셔야 합니다)" : ""))) return;
     closePayReqMake();
@@ -12361,14 +12371,14 @@
       sources, accounts,
       payDueDate: dueDates.length ? dueDates.sort()[0] : "",   // 가장 빠른 예정일
       paidAmount: 0, payments: [],                              // 부분이체 누적
-      requestDate: todayStr(), transferCompleted:false, transferCompleteDate:"",
+      requestDate: reqDate, transferCompleted:false, transferCompleteDate:"",
       taxInvoiceIssued:false, taxInvoiceDate:"",
       status:"요청중", createdBy: currentUser.name, createdByUsername: currentUser.username, createdAt: serverTimestamp()
     });
     for(const bId of batchIds){
       await updateDoc(doc(db,"orderBatches", bId), { paymentRequestId: reqRef.id });
     }
-    logAction("출금요청 생성", batchIds.length+"건 / 기타 "+otherAmount.toLocaleString()+" / 총 "+total.toLocaleString()
+    logAction("출금요청 생성", reqDate + " / " + batchIds.length+"건 / 기타 "+otherAmount.toLocaleString()+" / 총 "+total.toLocaleString()
       + (diff !== 0 ? " / 조정 " + (diff>0?"+":"") + diff.toLocaleString() + " (" + adjustReason + ")" : ""));
     document.getElementById("payment-other-amount-input").value = "";
     payReqDraft = null;
@@ -28724,7 +28734,7 @@
     seenNewTag = lastSeenTag;    // 이 버전만 안 알립니다. 그 뒤에 또 올라오면 다시 알립니다.
   };
 
-  // 파일에 박힌 버전 글자를 읽습니다. (예: "파일 2026-08-09 v579")
+  // 파일에 박힌 버전 글자를 읽습니다. (예: "파일 2026-08-09 v580")
   function readBuildTag(text){
     const m = String(text||"").match(/파일\s*[\d-]+\s*v(\d+)/);
     return m ? m[0].trim() : "";
