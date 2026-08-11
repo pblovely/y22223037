@@ -387,7 +387,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v572</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v574</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -22368,13 +22368,52 @@
     }
     // 삼성모델명(SKU)을 찾아둡니다. 색상에 없으면 등록할 때 자동으로 채워집니다.
     const skuCand = modelCells.find(c=> /^SM-[A-Z0-9]{8,}$/i.test(String(c).trim()));
-    return { label, model, colorObj, carrier, qty, colorText,
+    // 붙여넣은 색상 글자를 따로 남겨둡니다. 무엇을 읽었는지 화면에서 볼 수 있게요.
+    const rawColor = modelCells.filter(c=> c !== usedCell && c !== usedCap
+      && !/^[0-9,]+$/.test(c) && !/^SM-/i.test(c)).join(" ");
+    return { label, model, colorObj, carrier, qty, colorText, rawColor,
       skuCand: skuCand ? String(skuCand).trim().toUpperCase() : "",
       skuMissing: !!(skuCand && (!colorObj || !String(colorObj.sku||"").trim())) };
   }
 
   // 사람이 골라야 하는 줄들 — 고르면 정상 줄로 넘어갑니다.
   let orderPastePick = [];
+
+  // 색상을 직접 고치면 그 줄에 담아둡니다. 목록에 있으면 그대로 잇고, 없으면 새로 만들 색으로 표시합니다.
+  window.onOrderPasteColor = function(el){
+    const i = Number(el.dataset.i);
+    const r = orderPasteRows[i];
+    if(!r) return;
+    const v = String(el.value||"").trim();
+    const hit = (r.model.colors||[]).find(c=>
+      String(c.systemColor||"") === v || String(c.manufacturerColor||"") === v);
+    r.colorObj = hit || null;
+    r.colorText = v;
+    el.style.borderColor = hit ? "var(--line)" : "#1565c0";
+    const note = el.parentElement ? el.parentElement.querySelector("div") : null;
+    if(note) note.textContent = hit ? "" : "등록에 없음 · 새로 만듦";
+    else if(!hit && el.parentElement){
+      const d = document.createElement("div");
+      d.style.cssText = "font-size:10.5px;color:#1565c0;";
+      d.textContent = "등록에 없음 · 새로 만듦";
+      el.parentElement.appendChild(d);
+    }
+  };
+
+  // 색상을 직접 고치면 그 줄에 담아둡니다. 목록에 있으면 그대로 잇고, 없으면 새로 만들 색으로 둡니다.
+  window.onOrderPasteColor = function(el){
+    const i = Number(el.dataset.i);
+    const r = orderPasteRows[i];
+    if(!r) return;
+    const v = String(el.value||"").trim();
+    const hit = (r.model.colors||[]).find(c=>
+      String(c.systemColor||"") === v || String(c.manufacturerColor||"") === v);
+    r.colorObj = hit || null;
+    r.colorText = v;
+    el.style.borderColor = hit ? "var(--line)" : "#1565c0";
+    const note = el.parentElement ? el.parentElement.querySelector(".op-color-note") : null;
+    if(note) note.textContent = (hit || !v) ? "" : "등록에 없음 · 새로 만듦";
+  };
 
   window.onOrderPastePick = function(idx, modelId){
     const p = orderPastePick[Number(idx)];
@@ -22518,13 +22557,19 @@
     }
     if(ok.length){
       h += '<div style="border:1px solid var(--line);max-height:260px;overflow-y:auto;margin-bottom:10px;">'
-        + '<table class="data-table" style="min-width:840px;"><thead><tr><th style="min-width:150px;">전산모델명</th><th>제조사색상</th><th>전산색상</th><th>통신사</th><th class="ta-right">수량</th><th class="ta-right">출고가</th><th>삼성모델명(SKU)</th></tr></thead><tbody>'
-        + ok.map(r=>'<tr><td>'+comboEsc(modelOptionLabel(r.model))+'</td>'
-            + '<td>'+(r.colorObj ? comboEsc(r.colorObj.manufacturerColor || r.colorText || "-")
-                : '<span style="color:var(--danger);">' + comboEsc(r.colorText||"-") + '</span>')+'</td>'
-            + '<td>'+(r.colorObj ? comboEsc(r.colorObj.systemColor || r.colorText || "-")
-                : '<span style="color:#1565c0;" title="이 모델에 없는 색상입니다. 등록하면 모델 등록에 자동으로 만들어집니다.">'
-                  + comboEsc(r.colorText||"-") + ' <b>새로 만듦</b></span>')+'</td>'
+        + '<table class="data-table" style="min-width:840px;"><thead><tr><th style="min-width:150px;">전산모델명</th><th>붙여넣은 색상</th><th style="min-width:170px;">색상 (고칠 수 있음)</th><th>통신사</th><th class="ta-right">수량</th><th class="ta-right">출고가</th><th>삼성모델명(SKU)</th></tr></thead><tbody>'
+        + ok.map((r,i)=>'<tr><td>'+comboEsc(modelOptionLabel(r.model))+'</td>'
+            + '<td style="color:var(--gray);">'+comboEsc(r.rawColor||"-")+'</td>'
+            + '<td><input type="text" class="op-color" data-i="'+i+'" list="op-color-list-'+i+'"'
+              + ' value="'+comboEsc(r.colorObj ? (r.colorObj.systemColor||"") : (r.colorText||""))+'"'
+              + ' style="width:150px;font-size:12px;padding:4px;box-sizing:border-box;border:1px solid '
+              + (r.colorObj ? 'var(--line)' : '#1565c0') + ';"'
+              + ' placeholder="색상을 적거나 고르세요" oninput="onOrderPasteColor(this)">'
+              + '<datalist id="op-color-list-'+i+'">'
+              + (r.model.colors||[]).map(c=> '<option value="'+comboEsc(c.systemColor||c.manufacturerColor||"")+'">').join("")
+              + '</datalist>'
+              + '<div class="op-color-note" style="font-size:10.5px;color:#1565c0;">' + (r.colorObj ? '' : '등록에 없음 · 새로 만듦') + '</div>'
+              + '</td>'
             + '<td>'+comboEsc(r.carrier||"-")+'</td>'
             + '<td class="ta-right">'+r.qty+'</td>'
             + '<td class="ta-right">'+(r.model.priceIncVat ? Number(r.model.priceIncVat).toLocaleString() : '<span style="color:var(--danger);">미입력</span>')+'</td>'
@@ -28578,7 +28623,7 @@
     seenNewTag = lastSeenTag;    // 이 버전만 안 알립니다. 그 뒤에 또 올라오면 다시 알립니다.
   };
 
-  // 파일에 박힌 버전 글자를 읽습니다. (예: "파일 2026-08-09 v572")
+  // 파일에 박힌 버전 글자를 읽습니다. (예: "파일 2026-08-09 v574")
   function readBuildTag(text){
     const m = String(text||"").match(/파일\s*[\d-]+\s*v(\d+)/);
     return m ? m[0].trim() : "";
