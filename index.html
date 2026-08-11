@@ -387,7 +387,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v575</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v577</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -622,6 +622,7 @@
         <div id="order-col-picker" style="display:none;border:1px solid var(--navy);background:#fff;padding:10px 12px;margin-bottom:8px;"></div>
         <div id="order-price-notice" style="display:none;font-size:12.5px;padding:9px 11px;margin-bottom:8px;border:1px solid var(--danger);background:#fdecea;line-height:1.7;"></div>
         <div id="pending-arrival-box" style="margin-bottom:10px;"></div>
+        <div id="pending-credit-box" style="margin-bottom:10px;"></div>
         <div id="order-list"></div>
       </div>
     </div>
@@ -3243,7 +3244,8 @@
     <div id="po-view-modal-overlay" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.55);z-index:1050;align-items:center;justify-content:center;">
       <div id="po-sheet" class="print-sheet" style="background:#fff;border:2px solid var(--navy);max-width:720px;width:96%;max-height:90vh;overflow-y:auto;padding:24px;position:relative;">
         <button class="no-print" onclick="closePoView()" style="position:absolute;top:12px;right:12px;background:none;border:1px solid var(--navy);width:26px;height:26px;cursor:pointer;font-size:13px;">✕</button>
-        <div class="no-print" style="display:flex;justify-content:flex-end;gap:6px;margin-bottom:8px;margin-right:32px;">
+        <div class="no-print" style="display:flex;justify-content:flex-end;gap:6px;margin-bottom:8px;margin-right:32px;flex-wrap:wrap;">
+          <span id="po-print-each"></span>
           <button class="btn small secondary" style="width:auto;" onclick="printPoSheet()">인쇄 / PDF 저장</button>
         </div>
         <div id="po-body"></div>
@@ -9476,7 +9478,7 @@
   // ---------- 미입고 현황 ----------
   //  아직 안 들어온 수량만 모델(행) × 통신사(열)로 보여줍니다.
   //  다른 화면에 붙이려면 그 화면에 빈 칸을 만들고 renderPendingArrival("칸id", 주문품목목록) 을 부르면 됩니다.
-  function renderPendingArrival(elId, allLines){
+  function renderPendingArrival(elId, allLines, title, note){
     const el = document.getElementById(elId);
     if(!el) return;
     // 취소된 품목은 빼고, 아직 안 들어온 수량만 셉니다.
@@ -9508,7 +9510,7 @@
     });
     if(total === 0){
       el.innerHTML = '<div style="border:1px solid var(--line);background:#f4faf4;color:#2e7d32;padding:8px 11px;font-size:12.5px;">'
-        + '미입고 없음 — 주문한 물량이 모두 도착했습니다.</div>';
+        + (title || "미입고") + ' 없음 — 해당하는 미입고 물량이 없습니다.</div>';
       return;
     }
     // 통신사 순서는 사이트 설정의 순서를 따릅니다.
@@ -9521,8 +9523,8 @@
       return sb - sa || a.localeCompare(b);
     });
     const colTot = {}; carriers.forEach(c=> colTot[c] = 0);
-    let html = '<div style="font-size:12.5px;font-weight:700;margin-bottom:5px;">미입고 현황 '
-      + '<span style="color:var(--gray);font-weight:400;font-size:11.5px;">— 아직 안 들어온 수량만</span></div>'
+    let html = '<div style="font-size:12.5px;font-weight:700;margin-bottom:5px;">' + (title || "미입고 현황") + ' '
+      + '<span style="color:var(--gray);font-weight:400;font-size:11.5px;">— ' + (note || "아직 안 들어온 수량만") + '</span></div>'
       + '<div style="overflow-x:auto;"><table class="data-table" style="width:auto;">'
       + '<thead><tr><th style="text-align:left;">모델</th>'
       + carriers.map(c=>'<th class="ta-right">'+comboEsc(c)+'</th>').join("")
@@ -9594,6 +9596,16 @@
         ordersByBatch[bid].forEach(o=> allLines.push(o));
       });
       renderPendingArrival("pending-arrival-box", allLines);
+      // 여신으로 산 것만 따로 — 삼성전자 여신결제 주문의 미입고
+      const creditLines = [];
+      Object.keys(ordersByBatch).forEach(bid=>{
+        if(!aliveBatch.has(bid)) return;
+        const b = orderBatchCache[bid];
+        if(!b || b.paymentMethod !== "b2b_credit") return;
+        ordersByBatch[bid].forEach(o=> creditLines.push(o));
+      });
+      renderPendingArrival("pending-credit-box", creditLines,
+        "미입고 현황 (여신결제)", "삼성전자 여신으로 산 것만 · 아직 안 들어온 수량");
     }
 
     // 여신 차감 기록을 자동으로 맞춥니다. (설정에서 끌 수 있습니다)
@@ -24851,7 +24863,38 @@
     const ov = document.getElementById("po-view-modal-overlay");
     ov.style.display = "none"; ov.classList.remove("print-open");
   };
+  // PDF 로 저장할 때 파일 이름은 「페이지 제목」에서 나옵니다.
+  //  인쇄하는 동안만 제목을 바꿔 두고, 끝나면 되돌립니다.
+  //  예) 포피플발주서SK_20260811
+  let poPrintCarriers = [], poPrintDate = "";
+  // 한 통신사 장만 인쇄합니다. 나머지 장은 잠깐 숨깁니다.
+  window.printPoOne = function(carrier){
+    const pages = Array.from(document.querySelectorAll("#po-body .po-page"));
+    const idx = poPrintCarriers.indexOf(carrier);
+    if(idx < 0 || !pages[idx]){ printPoSheet(); return; }
+    const hidden = [];
+    pages.forEach((p,i)=>{ if(i !== idx){ hidden.push([p, p.style.display]); p.style.display = "none"; } });
+    const backCs = poPrintCarriers;
+    poPrintCarriers = [carrier];
+    const done = ()=>{
+      hidden.forEach(([p,v])=> p.style.display = v);
+      poPrintCarriers = backCs;
+      window.removeEventListener("afterprint", done);
+    };
+    window.addEventListener("afterprint", done);
+    setTimeout(done, 60000);
+    printPoSheet();
+  };
+
   window.printPoSheet = function(){
+    const back = document.title;
+    const d = String(poPrintDate || todayStr()).replace(/\D/g,"") || todayStr();
+    const cs = (poPrintCarriers||[]).filter(Boolean);
+    const carrierPart = cs.length ? cs.join("") : "";
+    document.title = "포피플발주서" + carrierPart + "_" + d;
+    const restore = ()=>{ document.title = back; window.removeEventListener("afterprint", restore); };
+    window.addEventListener("afterprint", restore);
+    setTimeout(restore, 60000);          // 혹시 못 돌아오면 1분 뒤에 되돌립니다
     document.getElementById("po-view-modal-overlay").classList.add("print-open");
     window.print();
   };
@@ -24944,6 +24987,20 @@
       html += page;
     });
 
+    // 인쇄할 때 쓸 파일 이름 정보 — 통신사와 발주일자
+    poPrintCarriers = carriers.slice();
+    poPrintDate = String(b.orderDate || todayStr()).replace(/\D/g,"");
+    // 통신사가 여럿이면 한 장씩 따로 저장할 수 있게 버튼을 만듭니다.
+    {
+      const box = document.getElementById("po-print-each");
+      if(box){
+        box.innerHTML = (carriers.length > 1)
+          ? carriers.map(c=> '<button class="btn small secondary" style="width:auto;margin-right:4px;"'
+              + ' title="' + comboEsc(c) + ' 장만 인쇄합니다. 파일 이름도 포피플발주서' + comboEsc(c) + '_' + poPrintDate + ' 로 나옵니다."'
+              + ' onclick="printPoOne(\'' + comboEsc(c) + '\')">' + comboEsc(c) + '만</button>').join("")
+          : "";
+      }
+    }
     document.getElementById("po-body").innerHTML = html;
     document.getElementById("po-view-modal-overlay").style.display = "flex";
   };
@@ -28623,7 +28680,7 @@
     seenNewTag = lastSeenTag;    // 이 버전만 안 알립니다. 그 뒤에 또 올라오면 다시 알립니다.
   };
 
-  // 파일에 박힌 버전 글자를 읽습니다. (예: "파일 2026-08-09 v575")
+  // 파일에 박힌 버전 글자를 읽습니다. (예: "파일 2026-08-09 v577")
   function readBuildTag(text){
     const m = String(text||"").match(/파일\s*[\d-]+\s*v(\d+)/);
     return m ? m[0].trim() : "";
