@@ -387,7 +387,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v577</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v579</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -621,8 +621,10 @@
         </div>
         <div id="order-col-picker" style="display:none;border:1px solid var(--navy);background:#fff;padding:10px 12px;margin-bottom:8px;"></div>
         <div id="order-price-notice" style="display:none;font-size:12.5px;padding:9px 11px;margin-bottom:8px;border:1px solid var(--danger);background:#fdecea;line-height:1.7;"></div>
-        <div id="pending-arrival-box" style="margin-bottom:10px;"></div>
-        <div id="pending-credit-box" style="margin-bottom:10px;"></div>
+        <div style="display:flex;gap:18px;align-items:flex-start;flex-wrap:wrap;margin-bottom:10px;">
+          <div id="pending-arrival-box" style="flex:0 1 auto;"></div>
+          <div id="pending-credit-box" style="flex:0 1 auto;"></div>
+        </div>
         <div id="order-list"></div>
       </div>
     </div>
@@ -1497,6 +1499,13 @@
         </div>
         <div id="model-syscode-notice" style="display:none;font-size:12.5px;padding:9px 11px;margin-bottom:8px;border:1px solid var(--danger);background:#fdecea;line-height:1.7;"></div>
         <p class="desc">등록된 모델을 한눈에 볼 수 있습니다. SKU가 없는 색상은 빨간색으로 표시되니 클릭해서 채워주세요.</p>
+        <div style="display:flex;gap:6px;align-items:center;margin-bottom:8px;flex-wrap:wrap;">
+          <input type="text" id="model-search" placeholder="펫네임·전산모델명·모델명·색상·SKU로 찾기"
+            style="width:280px;height:28px;border:1px solid var(--line);padding:0 8px;font-size:12.5px;box-sizing:border-box;"
+            oninput="onModelSearch()">
+          <button class="btn small secondary" style="width:auto;" onclick="clearModelSearch()">비우기</button>
+          <span id="model-search-count" style="font-size:11.5px;color:var(--gray);"></span>
+        </div>
         <div id="model-pagination"></div>
         <div id="model-list-wrap" style="overflow-x:auto;">
         <table class="data-table" style="min-width:900px;">
@@ -5861,6 +5870,31 @@
   }
 
   // 이미 읽어둔 자료로 화면만 다시 그립니다. (Firestore 조회 0회)
+  let modelSearchWord = "";
+  window.onModelSearch = function(){
+    modelSearchWord = String((document.getElementById("model-search")||{}).value || "").trim();
+    getPageState("models").page = 1;   // 찾을 때는 1페이지부터 보여드립니다
+    renderModelAdminList();
+  };
+  window.clearModelSearch = function(){
+    modelSearchWord = "";
+    const e = document.getElementById("model-search"); if(e) e.value = "";
+    getPageState("models").page = 1;
+    renderModelAdminList();
+  };
+  // 찾을 말이 여러 개면 모두 들어간 것만 나옵니다.
+  function modelSearchFilter(list){
+    const w = modelSearchWord.toLowerCase().split(/\s+/).filter(Boolean);
+    if(w.length === 0) return list;
+    return list.filter(m=>{
+      const hay = [m.petName, m.systemModel, m.baseModel, m.capacity, m.manufacturer,
+        m.nickname, m.priceIncVat,
+        ...(m.colors||[]).map(c=> (c.systemColor||"") + " " + (c.manufacturerColor||"") + " " + (c.sku||""))
+      ].map(v=> String(v||"")).join(" ").toLowerCase();
+      return w.every(x=> hay.includes(x));
+    });
+  }
+
   function renderModelAdminList(){
     renderSystemModelNotice();
     const bodyEl = document.getElementById("model-table-body");
@@ -5873,7 +5907,16 @@
       return;
     }
     bodyEl.innerHTML = "";
-    const { pageItems, startIndex } = paginateSlice(sortModelsForList(modelsCache), "models");
+    const viewList = modelSearchFilter(sortModelsForList(modelsCache));
+    { const c = document.getElementById("model-search-count");
+      if(c) c.textContent = modelSearchWord
+        ? (viewList.length + "건 찾음 / 전체 " + modelsCache.length + "건") : ""; }
+    if(modelSearchWord && viewList.length === 0){
+      bodyEl.innerHTML = '<tr><td colspan="14" class="list-empty">찾는 모델이 없습니다.</td></tr>';
+      const pg1 = document.getElementById("model-pagination"); if(pg1) pg1.innerHTML = "";
+      return;
+    }
+    const { pageItems, startIndex } = paginateSlice(viewList, "models");
     pageItems.forEach((m, i)=>{
       const rowNum = startIndex + i + 1;
       const colors = m.colors || [];
@@ -5944,7 +5987,7 @@
     });
     document.getElementById("model-pagination").innerHTML = "";
     // 페이지를 넘길 때는 다시 읽지 않고 화면만 그립니다. (읽기 0회)
-    document.getElementById("model-pagination").replaceChildren(renderPaginationBar("models", modelsCache.length, renderModelAdminList));
+    document.getElementById("model-pagination").replaceChildren(renderPaginationBar("models", viewList.length, renderModelAdminList));
     foldActionColumn("model-list-wrap");   // 줄을 누르면 수정·삭제가 아래로 펼쳐집니다
   }
 
@@ -9478,7 +9521,7 @@
   // ---------- 미입고 현황 ----------
   //  아직 안 들어온 수량만 모델(행) × 통신사(열)로 보여줍니다.
   //  다른 화면에 붙이려면 그 화면에 빈 칸을 만들고 renderPendingArrival("칸id", 주문품목목록) 을 부르면 됩니다.
-  function renderPendingArrival(elId, allLines, title, note){
+  function renderPendingArrival(elId, allLines, title, note, note2){
     const el = document.getElementById(elId);
     if(!el) return;
     // 취소된 품목은 빼고, 아직 안 들어온 수량만 셉니다.
@@ -9552,9 +9595,10 @@
       + '<td class="ta-right" style="border-left:2px solid var(--navy);">'+Math.round(totalList).toLocaleString()+'</td>'
       + '<td class="ta-right">'+Math.round(totalAmt).toLocaleString()+'</td></tr>'
       + '</tbody></table></div>'
-      + '<div style="color:var(--gray);font-size:11.5px;margin-top:4px;line-height:1.7;">'
-      + '<b>출고가</b> — 할인을 빼지 않은 정가 그대로입니다. 출고가가 비어 있는 품목은 0으로 셉니다.<br>'
-      + '<b>입고가</b> — 입고가 × 미입고 수량입니다. 입고가가 비어 있는 품목은 출고가에서 할인을 뺀 값으로 계산합니다.</div>';
+      + (note2 === false ? '' :
+          '<div style="color:var(--gray);font-size:11.5px;margin-top:4px;line-height:1.7;">'
+          + '<b>출고가</b> — 할인을 빼지 않은 정가 그대로입니다. 출고가가 비어 있는 품목은 0으로 셉니다.<br>'
+          + '<b>입고가</b> — 입고가 × 미입고 수량입니다. 입고가가 비어 있는 품목은 출고가에서 할인을 뺀 값으로 계산합니다.</div>');
     el.innerHTML = html;
   }
 
@@ -9605,7 +9649,7 @@
         ordersByBatch[bid].forEach(o=> creditLines.push(o));
       });
       renderPendingArrival("pending-credit-box", creditLines,
-        "미입고 현황 (여신결제)", "삼성전자 여신으로 산 것만 · 아직 안 들어온 수량");
+        "미입고 현황 (여신결제)", "삼성전자 여신으로 산 것만", false);
     }
 
     // 여신 차감 기록을 자동으로 맞춥니다. (설정에서 끌 수 있습니다)
@@ -28680,7 +28724,7 @@
     seenNewTag = lastSeenTag;    // 이 버전만 안 알립니다. 그 뒤에 또 올라오면 다시 알립니다.
   };
 
-  // 파일에 박힌 버전 글자를 읽습니다. (예: "파일 2026-08-09 v577")
+  // 파일에 박힌 버전 글자를 읽습니다. (예: "파일 2026-08-09 v579")
   function readBuildTag(text){
     const m = String(text||"").match(/파일\s*[\d-]+\s*v(\d+)/);
     return m ? m[0].trim() : "";
