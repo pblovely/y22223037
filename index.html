@@ -387,7 +387,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v581</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v582</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -9811,14 +9811,27 @@
     listEl.querySelectorAll('[data-cancel-batch]').forEach(btn=>{
       const r = rows.find(x=>x.id === btn.dataset.cancelBatch);
       btn.onclick = async ()=>{
-        if(!confirm("이 주문 전체를 취소하시겠습니까? (이미 도착 등록된 재고는 그대로 유지됩니다)")) return;
+        // 여신결제 주문이면 여신 차감도 함께 되돌립니다.
+        const isCredit = (r.b.paymentMethod === "b2b_credit");
+        const usedAmt = Number(r.b.creditUsed != null ? r.b.creditUsed : r.b.depositRequired)||0;
+        if(!confirm("이 주문 전체를 취소하시겠습니까?\n\n"
+          + "  " + (r.b.source||"-") + " · " + (r.b.orderDate||"-") + " · 품목 " + r.lines.length + "개\n"
+          + (isCredit && usedAmt
+              ? "\n※ 여신결제 주문입니다. 여신 차감 " + usedAmt.toLocaleString() + " 이 함께 되돌아갑니다.\n"
+              : "")
+          + "\n이미 도착 등록된 재고는 그대로 유지됩니다.")) return;
         const reason = prompt("취소 사유를 입력해주세요. (필수)", "");
         if(reason === null) return;
         if(!String(reason).trim()){ alert("취소 사유를 입력해주세요."); return; }
         await updateDoc(doc(db,"orderBatches", r.id), { status:"취소", cancelReason:String(reason).trim(),
           cancelledAt: serverTimestamp(), cancelledBy: currentUser.name });
         for(const o of r.lines){ await updateDoc(doc(db,"orders", o.id), { status:"취소" }); }
-        logAction("주문 전체 취소", r.b.source + " / 사유: " + String(reason).trim());
+        // 여신 장부의 주문사용 기록을 지웁니다. (취소했는데 여신이 계속 빠져 있지 않게)
+        if(isCredit){
+          try{ await replaceB2BOrderUse(r.id, 0, r.b.orderDate || todayStr(), r.b.source || ""); }catch(e){}
+        }
+        logAction("주문 전체 취소", r.b.source + " / 사유: " + String(reason).trim()
+          + (isCredit && usedAmt ? " / 여신 되돌림 " + usedAmt.toLocaleString() : ""));
         loadOrderList();
       };
     });
@@ -24216,6 +24229,64 @@
   // 앞에 0 이 붙은 일련번호를 모아 보여주고, 골라서 0 을 뗍니다.
   let zeroSerialCache = [];
 
+  // 취소했는데 남아 있는 여신 차감을 모아 보여주고, 골라서 지웁니다.
+  let deadCreditCache = [];
+
+  window.showDeadCreditList = function(){
+    const el = document.getElementById("datacheck-detail");
+    if(!el) return;
+    if(deadCreditCache.length === 0){ el.innerHTML = '<div class="list-empty">남아 있는 것이 없습니다.</div>'; return; }
+    const sum = deadCreditCache.reduce((n,r)=> n + (Number(r.e.amount)||0), 0);
+    el.innerHTML = '<div style="border:1px solid var(--navy);padding:10px 12px;margin-top:10px;">'
+      + '<div style="font-weight:700;margin-bottom:4px;">취소·변경됐는데 남아 있는 여신 차감 — '
+      + deadCreditCache.length + '건 · 합계 ' + sum.toLocaleString() + '</div>'
+      + '<div style="font-size:11.5px;color:var(--gray);line-height:1.7;margin-bottom:8px;">'
+      + '지우면 그만큼 여신이 되돌아옵니다. 주문 자료는 건드리지 않습니다.</div>'
+      + '<div style="max-height:340px;overflow-y:auto;border:1px solid var(--line);">'
+      + '<table class="data-table" style="width:100%;"><thead><tr>'
+      + '<th style="width:34px;"><input type="checkbox" id="dc-all" checked></th>'
+      + '<th>날짜</th><th>매입처</th><th class="ta-right">여신차감</th><th>주문일</th><th>왜</th>'
+      + '</tr></thead><tbody>'
+      + deadCreditCache.map((r,i)=>
+          '<tr><td><input type="checkbox" class="dc-ck" value="'+i+'" checked></td>'
+          + '<td>' + comboEsc(r.e.date||"-") + '</td>'
+          + '<td>' + comboEsc(r.e.partner || r.e.source || "-") + '</td>'
+          + '<td class="ta-right">' + (Number(r.e.amount)||0).toLocaleString() + '</td>'
+          + '<td>' + comboEsc(r.b ? (r.b.orderDate||"-") : "-") + '</td>'
+          + '<td style="color:var(--danger);">' + comboEsc(r.why) + '</td></tr>').join("")
+      + '</tbody></table></div>'
+      + '<div style="margin-top:8px;"><button class="btn small danger" style="width:auto;" onclick="fixDeadCredit()">체크한 건 지우기</button></div>'
+      + '</div>';
+    const all = document.getElementById("dc-all");
+    if(all) all.onchange = ()=> el.querySelectorAll(".dc-ck").forEach(c=> c.checked = all.checked);
+  };
+
+  window.fixDeadCredit = async function(){
+    if(!hasPerm(currentUserPerms, "settlementSettings")){ alert("권한이 없습니다."); return; }
+    const picked = Array.from(document.querySelectorAll(".dc-ck:checked"))
+      .map(c=> deadCreditCache[Number(c.value)]).filter(Boolean);
+    if(picked.length === 0){ alert("지울 건을 골라주세요."); return; }
+    const sum = picked.reduce((n,r)=> n + (Number(r.e.amount)||0), 0);
+    if(!confirm("여신 차감 기록 " + picked.length + "건을 지웁니다.\n\n"
+      + "  합계 " + sum.toLocaleString() + "\n\n"
+      + "그만큼 여신이 되돌아옵니다.\n주문 자료는 건드리지 않습니다.\n\n진행할까요?")) return;
+    try{
+      for(let i=0; i<picked.length; i+=300){
+        const bt = writeBatch(db);
+        picked.slice(i, i+300).forEach(r=> bt.delete(doc(db,"b2bLedger", r.id)));
+        await bt.commit();
+      }
+      // 묶음에 적힌 여신차감도 지웁니다.
+      for(const r of picked){
+        if(r.bid){ try{ await updateDoc(doc(db,"orderBatches", r.bid), { creditUsed: null }); }catch(e){} }
+      }
+    }catch(e){ alert("지우지 못했습니다.\n" + ((e&&e.message)?e.message:String(e))); return; }
+    logAction("남아 있던 여신 차감 정리", picked.length + "건 / 합계 " + sum.toLocaleString());
+    alert(picked.length + "건을 지웠습니다.\n\n여신이 " + sum.toLocaleString() + " 되돌아왔습니다.");
+    document.getElementById("datacheck-detail").innerHTML = "";
+    runDataCheck();
+  };
+
   window.showZeroSerialList = function(){
     const el = document.getElementById("datacheck-detail");
     if(!el) return;
@@ -24475,6 +24546,32 @@
         issues.push({ n:"같은 모델·일련번호가 여러 건", cnt:dupKeys.length, unit:"남는 " + dupExtra + "건",
           why:"모델과 일련번호가 둘 다 같으면 같은 단말기입니다. 모델이 다르면 다른 단말기라 세지 않습니다.",
           fix: dupKeys.length ? "showDupSerialList()" : null, fixLabel:"확인하고 정리" });
+      }
+
+      // ⓪-0 취소했는데 여신 차감이 남아 있는 주문
+      //  주문을 취소해도 예전에는 여신 장부의 「주문사용」이 그대로 남았습니다.
+      {
+        const rows = [];
+        try{
+          const led = await getDocs(query(collection(db,"b2bLedger"), where("category","==","order_use")));
+          const bs = await getDocs(collection(db,"orderBatches"));
+          const bmap = {};
+          bs.forEach(d=> bmap[d.id] = d.data());
+          led.forEach(d=>{
+            const e = d.data();
+            const bid = e.fromOrderBatchId;
+            if(!bid) return;
+            const b = bmap[bid];
+            if(!b){ rows.push({ id:d.id, e, why:"주문이 지워졌습니다" }); return; }
+            if(b.status === "취소") rows.push({ id:d.id, e, b, bid, why:"주문이 취소되었습니다" });
+            else if(b.paymentMethod !== "b2b_credit") rows.push({ id:d.id, e, b, bid, why:"여신결제가 아닌 주문입니다" });
+          });
+        }catch(err){}
+        deadCreditCache = rows;
+        const sum = rows.reduce((n,r)=> n + (Number(r.e.amount)||0), 0);
+        issues.push({ n:"취소·변경됐는데 남아 있는 여신 차감", cnt:rows.length, unit:sum.toLocaleString(),
+          why:"주문을 취소하거나 결제방식을 바꿨는데 여신 장부의 「주문사용」이 남아 있는 건입니다. 지우면 그만큼 여신이 되돌아옵니다.",
+          fix: rows.length ? "showDeadCreditList()" : null, fixLabel:"확인하고 정리" });
       }
 
       // ⓪-1 앞에 0 이 붙은 일련번호
@@ -28782,7 +28879,7 @@
     seenNewTag = lastSeenTag;    // 이 버전만 안 알립니다. 그 뒤에 또 올라오면 다시 알립니다.
   };
 
-  // 파일에 박힌 버전 글자를 읽습니다. (예: "파일 2026-08-09 v581")
+  // 파일에 박힌 버전 글자를 읽습니다. (예: "파일 2026-08-09 v582")
   function readBuildTag(text){
     const m = String(text||"").match(/파일\s*[\d-]+\s*v(\d+)/);
     return m ? m[0].trim() : "";
