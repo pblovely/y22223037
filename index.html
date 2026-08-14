@@ -387,7 +387,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v594</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v596</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -11823,6 +11823,7 @@
     const allSerials = [...new Set(entries.map(e=> e.sn))];
     // 같은 일련번호라도 모델이 다르면 다른 단말기입니다. 그래서 모델까지 함께 기억합니다.
     const already = {};   // 일련번호 → 이미 재고에 있는 전산모델명 모음
+    const usedSerial = {}; // 일련번호 → 이미 들어온 재고 정보 (모델이 달라도 기억합니다)
     try{
       for(let i=0; i<allSerials.length; i+=10){
         const chunk = allSerials.slice(i, i+10);
@@ -11833,6 +11834,9 @@
           const sn = String(v.serialNumber||"").trim();
           if(!already[sn]) already[sn] = new Set();
           already[sn].add(modelDupKey(v.systemModel||""));
+          if(!usedSerial[sn]) usedSerial[sn] = [];
+          usedSerial[sn].push({ model:v.systemModel||"-", carrier:v.carrier||"-",
+                                inDate:v.inDate||"-", source:v.source||"-" });
         });
       }
     }catch(e){}
@@ -11862,7 +11866,16 @@
         return;
       }
       const o = cands[0];
-      // 모델까지 같아야 같은 단말기로 봅니다. (같은 일련번호가 다른 모델에 있을 수 있습니다)
+      // ★ 이미 재고에 들어온 일련번호는 모델이 달라도 막습니다. ★
+      //  다른 주문에 넣은 일련번호를 이 주문에 또 넣으면 재고가 두 배로 잡힙니다.
+      if(usedSerial[serial] && usedSerial[serial].length){
+        const u = usedSerial[serial][0];
+        bad.push({ label,
+          reason: "이미 재고에 있는 일련번호입니다 — " + u.model + " · " + u.carrier
+                + " · 입고 " + u.inDate + "  (이 주문 품목은 " + (o.systemModel||"-") + " · " + (o.carrier||"-") + ")",
+          raw:line });
+        return;
+      }
       const mKey = modelDupKey(o.systemModel||"");
       const seenKey = mKey + "|" + serial;
       if(seen.has(seenKey)){
@@ -11926,7 +11939,7 @@
     //  분석한 뒤 저장을 두 번 누르면 같은 모델·일련번호가 또 들어가던 문제를 막습니다.
     {
       const sns = [...new Set(bulkArrRows.map(r=> r.serial))];
-      const have = {};   // 일련번호 → 이미 있는 전산모델명 모음
+      const have = {};   // 일련번호 → 이미 있는 재고 정보
       try{
         for(let i=0; i<sns.length; i+=10){
           const chunk = sns.slice(i, i+10);
@@ -11935,22 +11948,32 @@
             const v = d.data();
             if(v.deleted === true) return;
             const sn = String(v.serialNumber||"").trim();
-            (have[sn] = have[sn] || new Set()).add(modelDupKey(v.systemModel||""));
+            (have[sn] = have[sn] || []).push({
+              model: v.systemModel || v.baseModel || "-",
+              carrier: v.carrier || "-", inDate: v.inDate || "-", status: v.status || "-"
+            });
           });
         }
       }catch(e){
         el.innerHTML = '<div style="color:var(--danger);">확인 중 문제가 생겨 등록하지 않았습니다. 다시 시도해주세요.</div>';
         return;
       }
-      const dupNow = bulkArrRows.filter(r=>
-        have[r.serial] && have[r.serial].has(modelDupKey(r.order.systemModel||"")));
+      // 일련번호가 이미 재고에 있으면 모델이 달라도 막습니다.
+      //  한 대의 단말기에 일련번호는 하나뿐이라, 모델이 다르면 잘못 배정된 것입니다.
+      const dupNow = bulkArrRows.filter(r=> have[r.serial] && have[r.serial].length);
       if(dupNow.length){
         el.innerHTML = '<div style="border:1px solid var(--danger);background:#fdecea;padding:9px 11px;font-size:12.5px;line-height:1.7;">'
-          + '<b>이미 등록된 모델·일련번호 ' + dupNow.length + '건이 있어 등록하지 않았습니다.</b><br>'
-          + dupNow.slice(0,10).map(r=> '· ' + comboEsc(r.serial) + '  ' + comboEsc(r.order.systemModel||"-")).join('<br>')
+          + '<b>이미 재고에 있는 일련번호 ' + dupNow.length + '건이 있어 등록하지 않았습니다.</b><br>'
+          + dupNow.slice(0,10).map(r=>{
+              const h = have[r.serial][0];
+              return '· <b>' + comboEsc(r.serial) + '</b>  넣으려는 것 ' + comboEsc(r.order.systemModel||"-")
+                + '  <span style="color:var(--gray);">→ 이미 있음: ' + comboEsc(h.model)
+                + ' · ' + comboEsc(h.carrier) + ' · 입고 ' + comboEsc(h.inDate) + '</span>';
+            }).join('<br>')
           + (dupNow.length>10 ? '<br>... 외 ' + (dupNow.length-10) + '건' : '')
-          + '<br><span style="color:var(--gray);">이미 저장된 것 같습니다. 재고 목록에서 확인해주세요. '
-          + '겹친 것이 있으면 <b>데이터 점검 → 같은 일련번호가 여러 건</b>에서 정리하실 수 있습니다.</span></div>';
+          + '<br><br><span style="color:var(--gray);">한 단말기의 일련번호는 하나뿐입니다. '
+          + '<b>모델이 다르면 주문 품목이 잘못 짝지어진 것</b>이니 확인해주세요.<br>'
+          + '이미 들어온 것이 맞다면 이 창은 닫으셔도 됩니다.</span></div>';
         return;
       }
     }
@@ -28503,11 +28526,55 @@
       alert("처리에 실패했습니다.\n" + ((e && e.message) ? e.message : String(e)));
       return;
     }
-    logAction("재고 삭제함 표시", ids.length+"건");
+    // 이 재고가 붙어 있던 주문의 도착 수를 실제 재고 수로 다시 셉니다.
+    let ordFixed = 0;
+    try{ ordFixed = await resyncOrdersForItems(ids); }catch(e){}
+    logAction("재고 삭제함 표시", ids.length+"건"
+      + (ordFixed ? " / 주문 도착 수 " + ordFixed + "개 품목 다시 셈" : ""));
     clearInvSelectAll();
     closeBulkChangeModal();
+    clearCache("orders");
+    if(ordFixed) alert(ids.length + "건을 삭제함으로 표시했습니다.\n\n"
+      + "주문 " + ordFixed + "개 품목의 도착 수도 실제 재고 수로 다시 셌습니다.");
     loadInventoryList();
   };
+
+  // 지운·되돌린 재고가 붙어 있던 주문의 도착 수를 실제 재고 수로 다시 셉니다.
+  //  살아 있는 재고만 셉니다. (삭제함 표시된 것은 뺍니다)
+  async function resyncOrdersForItems(itemIds){
+    if(!itemIds || itemIds.length === 0) return 0;
+    const orderIds = new Set();
+    try{
+      for(const iid of itemIds){
+        const sn = await getDoc(doc(db,"inventoryItems", iid));
+        if(sn.exists() && sn.data().orderId) orderIds.add(sn.data().orderId);
+      }
+    }catch(e){ return 0; }
+    if(orderIds.size === 0) return 0;
+    let fixed = 0;
+    for(const oid of orderIds){
+      try{
+        const os = await getDoc(doc(db,"orders", oid));
+        if(!os.exists()) continue;
+        const o = os.data();
+        const linked = Array.isArray(o.linkedItemIds) ? o.linkedItemIds : [];
+        const alive = [];
+        for(const iid of linked){
+          const s2 = await getDoc(doc(db,"inventoryItems", iid));
+          if(s2.exists() && s2.data().deleted !== true) alive.push(iid);
+        }
+        const real = alive.length;
+        const qty = Number(o.quantity)||0;
+        if((Number(o.fulfilledCount)||0) === real) continue;
+        await updateDoc(doc(db,"orders", oid), {
+          fulfilledCount: real, linkedItemIds: alive,
+          status: (qty && real >= qty) ? "도착완료" : (real > 0 ? "부분도착" : "주문중")
+        });
+        fixed++;
+      }catch(e){}
+    }
+    return fixed;
+  }
 
   // 삭제함 → 되돌리기
   window.restoreSelectedInventoryRows = async function(){
@@ -28527,9 +28594,14 @@
       });
       await batch.commit();
     }
-    logAction("재고 삭제함 되돌림", ids.length+"건");
+    // 되돌린 재고도 주문 도착 수에 다시 셉니다.
+    let ordFixed2 = 0;
+    try{ ordFixed2 = await resyncOrdersForItems(ids); }catch(e){}
+    logAction("재고 삭제함 되돌림", ids.length+"건"
+      + (ordFixed2 ? " / 주문 도착 수 " + ordFixed2 + "개 품목 다시 셈" : ""));
     clearInvSelectAll();
     closeBulkChangeModal();
+    clearCache("orders");
     loadInventoryList();
   };
 
@@ -28547,10 +28619,44 @@
     if(ids.length===0){ alert("완전 삭제할 재고를 먼저 선택해주세요."); return; }
     if(!confirm(ids.length+"건을 완전히 삭제합니다.\n\n되돌릴 수 없습니다. 정말 진행하시겠습니까?")) return;
     if(!confirm("다시 확인합니다.\n"+ids.length+"건을 영구히 지웁니다. 계속하시겠습니까?")) return;
+    // 지우기 전에 어느 주문에 붙어 있었는지 기억해 둡니다. (지운 뒤에는 알 수 없습니다)
+    const ordIds = new Set();
+    try{
+      for(const id of ids){
+        const sn = await getDoc(doc(db,"inventoryItems", id));
+        if(sn.exists() && sn.data().orderId) ordIds.add(sn.data().orderId);
+      }
+    }catch(e){}
     for(const id of ids){ await deleteDoc(doc(db,"inventoryItems", id)); }
-    logAction("재고 완전 삭제", ids.length+"건");
+    // 그 주문들의 도착 수를 실제 재고 수로 다시 셉니다.
+    let ordFixed3 = 0;
+    for(const oid of ordIds){
+      try{
+        const os = await getDoc(doc(db,"orders", oid));
+        if(!os.exists()) continue;
+        const o = os.data();
+        const linked = Array.isArray(o.linkedItemIds) ? o.linkedItemIds : [];
+        const alive = [];
+        for(const iid of linked){
+          const s2 = await getDoc(doc(db,"inventoryItems", iid));
+          if(s2.exists() && s2.data().deleted !== true) alive.push(iid);
+        }
+        const real = alive.length, qty = Number(o.quantity)||0;
+        if((Number(o.fulfilledCount)||0) === real) continue;
+        await updateDoc(doc(db,"orders", oid), {
+          fulfilledCount: real, linkedItemIds: alive,
+          status: (qty && real >= qty) ? "도착완료" : (real > 0 ? "부분도착" : "주문중")
+        });
+        ordFixed3++;
+      }catch(e){}
+    }
+    logAction("재고 완전 삭제", ids.length+"건"
+      + (ordFixed3 ? " / 주문 도착 수 " + ordFixed3 + "개 품목 다시 셈" : ""));
     clearInvSelectAll();
     closeBulkChangeModal();
+    clearCache("orders");
+    if(ordFixed3) alert(ids.length + "건을 지웠습니다.\n\n"
+      + "주문 " + ordFixed3 + "개 품목의 도착 수도 실제 재고 수로 다시 셌습니다.");
     loadInventoryList();
   };
 
@@ -29152,7 +29258,7 @@
     seenNewTag = lastSeenTag;    // 이 버전만 안 알립니다. 그 뒤에 또 올라오면 다시 알립니다.
   };
 
-  // 파일에 박힌 버전 글자를 읽습니다. (예: "파일 2026-08-09 v594")
+  // 파일에 박힌 버전 글자를 읽습니다. (예: "파일 2026-08-09 v596")
   function readBuildTag(text){
     const m = String(text||"").match(/파일\s*[\d-]+\s*v(\d+)/);
     return m ? m[0].trim() : "";
