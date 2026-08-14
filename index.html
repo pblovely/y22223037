@@ -387,7 +387,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v584</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v586</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -3001,6 +3001,7 @@
           <span class="btn-row" style="margin-top:10px;"><button class="btn small" style="width:auto;" onclick="analyzeBulkArrival()">분석하기</button><button class="btn small secondary" style="width:auto;" onclick="toggleBulkArrival()">닫기</button></span>
           <div id="bulk-arrival-result" style="font-size:12.5px;margin-top:10px;"></div>
         </div>
+        <div id="order-detail-pending" style="margin-bottom:10px;"></div>
         <div id="order-detail-body"></div>
       </div>
     </div>
@@ -9579,7 +9580,7 @@
       return sb - sa || a.localeCompare(b);
     });
     const colTot = {}; carriers.forEach(c=> colTot[c] = 0);
-    const hasColor = models.some(m=> Object.keys(byColor[m]||{}).length > 1);
+    const hasColor = models.some(m=> Object.keys(byColor[m]||{}).length > 0);
     let html = '<div style="font-size:12.5px;font-weight:700;margin-bottom:5px;">' + (title || "미입고 현황") + ' '
       + '<span style="color:var(--gray);font-weight:400;font-size:11.5px;">— ' + (note || "아직 안 들어온 수량만") + '</span>'
       + (hasColor ? ' <a href="javascript:void(0)" class="pa-all" data-open="0" style="font-weight:400;font-size:11.5px;margin-left:6px;">색상별 펼치기</a>' : '')
@@ -9597,7 +9598,7 @@
       const cols = Object.keys(byColor[m] || {}).sort((x,y)=> (byColor[m][y].sum - byColor[m][x].sum) || x.localeCompare(y));
       const key = String(elId) + "-" + mi;
       html += '<tr><td style="text-align:left;white-space:nowrap;">'
-        + (cols.length > 1
+        + (cols.length > 0
             ? '<a href="javascript:void(0)" class="pa-toggle" data-key="'+key+'" style="text-decoration:none;margin-right:4px;" title="색상별로 펼쳐봅니다.">▶</a>'
             : '<span style="display:inline-block;width:13px;"></span>')
         + comboEsc(m) + '</td>'
@@ -9609,7 +9610,7 @@
         + '<td class="ta-right" style="border-left:2px solid var(--navy);font-weight:700;">'+rowSum+'</td>'
         + '<td class="ta-right" style="border-left:2px solid var(--navy);">'+Math.round(listByModel[m]||0).toLocaleString()+'</td>'
         + '<td class="ta-right">'+Math.round(amtByModel[m]||0).toLocaleString()+'</td></tr>';
-      if(cols.length > 1){
+      if(cols.length > 0){
         cols.forEach(cl=>{
           const bc = byColor[m][cl];
           html += '<tr class="pa-color pa-'+key+'" style="display:none;background:#fafafa;">'
@@ -10824,6 +10825,9 @@
       '<th class="ta-right">판매할인</th><th class="ta-right">판매할인%</th>' +
       '<th class="ta-right no-print">관리</th>' +
       '</tr></thead><tbody id="order-detail-tbody"></tbody><tfoot id="order-detail-tfoot"></tfoot></table></div>';
+    // 이 주문의 미입고 현황 — 모델을 누르면 색상별로 펼쳐집니다.
+    renderPendingArrival("order-detail-pending", lines,
+      "이 주문의 미입고", "아직 안 들어온 수량만 · 모델을 누르면 색상별로 펼쳐집니다", false);
     document.getElementById("order-detail-body").innerHTML = html;
     const tbody = document.getElementById("order-detail-tbody");
 
@@ -26213,6 +26217,7 @@
       '<div style="overflow-x:auto;"><table class="data-table" style="min-width:850px;"><thead><tr>' +
       '<th>모델 (전산모델명/펫네임)</th><th>색상</th><th>기가수</th><th>통신사</th><th class="ta-right">요청수량</th><th class="ta-right">판매가</th><th class="ta-right">판매할인</th><th class="ta-right">매칭</th><th>상태</th><th class="ta-right">관리</th>' +
       '</tr></thead><tbody id="order-detail-tbody"></tbody></table></div>';
+    { const pe = document.getElementById("order-detail-pending"); if(pe) pe.innerHTML = ""; }
     document.getElementById("order-detail-body").innerHTML = html;
     const tbody = document.getElementById("order-detail-tbody");
     lines.forEach(s=>{
@@ -28930,7 +28935,7 @@
     seenNewTag = lastSeenTag;    // 이 버전만 안 알립니다. 그 뒤에 또 올라오면 다시 알립니다.
   };
 
-  // 파일에 박힌 버전 글자를 읽습니다. (예: "파일 2026-08-09 v584")
+  // 파일에 박힌 버전 글자를 읽습니다. (예: "파일 2026-08-09 v586")
   function readBuildTag(text){
     const m = String(text||"").match(/파일\s*[\d-]+\s*v(\d+)/);
     return m ? m[0].trim() : "";
