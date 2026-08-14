@@ -387,7 +387,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v582</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v583</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -9569,8 +9569,11 @@
       return sb - sa || a.localeCompare(b);
     });
     const colTot = {}; carriers.forEach(c=> colTot[c] = 0);
+    const hasColor = models.some(m=> Object.keys(byColor[m]||{}).length > 1);
     let html = '<div style="font-size:12.5px;font-weight:700;margin-bottom:5px;">' + (title || "미입고 현황") + ' '
-      + '<span style="color:var(--gray);font-weight:400;font-size:11.5px;">— ' + (note || "아직 안 들어온 수량만") + '</span></div>'
+      + '<span style="color:var(--gray);font-weight:400;font-size:11.5px;">— ' + (note || "아직 안 들어온 수량만") + '</span>'
+      + (hasColor ? ' <a href="javascript:void(0)" class="pa-all" data-open="0" style="font-weight:400;font-size:11.5px;margin-left:6px;">색상별 펼치기</a>' : '')
+      + '</div>'
       + '<div style="overflow-x:auto;"><table class="data-table" style="width:auto;">'
       + '<thead><tr><th style="text-align:left;">모델</th>'
       + carriers.map(c=>'<th class="ta-right">'+comboEsc(c)+'</th>').join("")
@@ -9579,9 +9582,15 @@
       + '<span style="font-weight:400;font-size:10.5px;color:var(--gray);">출고가</span></th>'
       + '<th class="ta-right">미입고 금액<br>'
       + '<span style="font-weight:400;font-size:10.5px;color:var(--gray);">입고가</span></th></tr></thead><tbody>';
-    models.forEach(m=>{
+    models.forEach((m, mi)=>{
       let rowSum = 0;
-      html += '<tr><td style="text-align:left;">'+comboEsc(m)+'</td>'
+      const cols = Object.keys(byColor[m] || {}).sort((x,y)=> (byColor[m][y].sum - byColor[m][x].sum) || x.localeCompare(y));
+      const key = String(elId) + "-" + mi;
+      html += '<tr><td style="text-align:left;white-space:nowrap;">'
+        + (cols.length > 1
+            ? '<a href="javascript:void(0)" class="pa-toggle" data-key="'+key+'" style="text-decoration:none;margin-right:4px;" title="색상별로 펼쳐봅니다.">▶</a>'
+            : '<span style="display:inline-block;width:13px;"></span>')
+        + comboEsc(m) + '</td>'
         + carriers.map(c=>{
             const v = grid[m][c] || 0;
             colTot[c] += v; rowSum += v;
@@ -9590,6 +9599,20 @@
         + '<td class="ta-right" style="border-left:2px solid var(--navy);font-weight:700;">'+rowSum+'</td>'
         + '<td class="ta-right" style="border-left:2px solid var(--navy);">'+Math.round(listByModel[m]||0).toLocaleString()+'</td>'
         + '<td class="ta-right">'+Math.round(amtByModel[m]||0).toLocaleString()+'</td></tr>';
+      if(cols.length > 1){
+        cols.forEach(cl=>{
+          const bc = byColor[m][cl];
+          html += '<tr class="pa-color pa-'+key+'" style="display:none;background:#fafafa;">'
+            + '<td style="text-align:left;padding-left:22px;color:var(--gray);white-space:nowrap;">└ '+comboEsc(cl)+'</td>'
+            + carriers.map(c=>{
+                const v = bc.car[c] || 0;
+                return '<td class="ta-right" style="color:'+(v?'var(--gray)':'#ccc')+';">'+(v || '-')+'</td>';
+              }).join("")
+            + '<td class="ta-right" style="border-left:2px solid var(--navy);color:var(--gray);">'+bc.sum+'</td>'
+            + '<td class="ta-right" style="border-left:2px solid var(--navy);color:var(--gray);">'+Math.round(bc.list).toLocaleString()+'</td>'
+            + '<td class="ta-right" style="color:var(--gray);">'+Math.round(bc.amt).toLocaleString()+'</td></tr>';
+        });
+      }
     });
     html += '<tr style="background:#fff;font-weight:700;border-top:2px solid var(--navy);">'
       + '<td style="text-align:left;">합계</td>'
@@ -9603,6 +9626,24 @@
           + '<b>출고가</b> — 할인을 빼지 않은 정가 그대로입니다. 출고가가 비어 있는 품목은 0으로 셉니다.<br>'
           + '<b>입고가</b> — 입고가 × 미입고 수량입니다. 입고가가 비어 있는 품목은 출고가에서 할인을 뺀 값으로 계산합니다.</div>');
     el.innerHTML = html;
+    // 모델 줄의 ▶ 를 누르면 색상 줄이 펼쳐집니다.
+    el.querySelectorAll(".pa-toggle").forEach(a=>{
+      a.onclick = ()=>{
+        const rows = el.querySelectorAll(".pa-" + a.dataset.key);
+        const open = a.textContent.trim() === "▼";
+        rows.forEach(r=> r.style.display = open ? "none" : "");
+        a.textContent = open ? "▶" : "▼";
+      };
+    });
+    { const allA = el.querySelector(".pa-all");
+      if(allA) allA.onclick = ()=>{
+        const open = allA.dataset.open === "1";
+        el.querySelectorAll(".pa-color").forEach(r=> r.style.display = open ? "none" : "");
+        el.querySelectorAll(".pa-toggle").forEach(x=> x.textContent = open ? "▶" : "▼");
+        allA.dataset.open = open ? "0" : "1";
+        allA.textContent = open ? "색상별 펼치기" : "색상별 접기";
+      };
+    }
   }
 
   async function loadOrderList(){
@@ -28879,7 +28920,7 @@
     seenNewTag = lastSeenTag;    // 이 버전만 안 알립니다. 그 뒤에 또 올라오면 다시 알립니다.
   };
 
-  // 파일에 박힌 버전 글자를 읽습니다. (예: "파일 2026-08-09 v582")
+  // 파일에 박힌 버전 글자를 읽습니다. (예: "파일 2026-08-09 v583")
   function readBuildTag(text){
     const m = String(text||"").match(/파일\s*[\d-]+\s*v(\d+)/);
     return m ? m[0].trim() : "";
