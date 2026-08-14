@@ -387,7 +387,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v592</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v593</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -7552,7 +7552,8 @@
       logItem(ref.id, serialNumber, "inbound", "포피플 입고 · " + (source||"-") + (location ? " · " + location : ""),
         { systemModel: m.systemModel||"", eventDate: inDate || todayStr(), location: location || "" });
 
-      if(currentOrderLinkId){
+      // 새로 등록할 때만 도착 수를 올립니다. 수정 저장에서는 올리지 않습니다.
+      if(currentOrderLinkId && !editingItemId){
         await advanceOrderFulfillment(currentOrderLinkId, newItemRef.id);
       }
 
@@ -12309,12 +12310,25 @@
     const oSnap = await getDoc(doc(db,"orders", orderId));
     if(!oSnap.exists()) return;
     const o = oSnap.data();
-    const newFulfilled = (o.fulfilledCount||0) + 1;
+    const linked = o.linkedItemIds || [];
+    // 같은 재고가 두 번 세지지 않게 합니다.
+    if(newItemId && linked.includes(newItemId)) return;
+    const qty = Number(o.quantity)||0;
+    const now = Number(o.fulfilledCount)||0;
+    // 주문 수량을 넘으면 올리지 않습니다.
+    if(qty && now >= qty){
+      alert("이 품목은 이미 주문 수량만큼 도착했습니다.\n\n"
+        + "  주문 " + qty + "대 · 도착 " + now + "대\n\n"
+        + "도착 수는 더 올리지 않고 재고만 등록했습니다.\n"
+        + "수량이 맞지 않으면 주문 수정에서 확인해주세요.");
+      return;
+    }
+    const newFulfilled = now + 1;
     const patch = {
       fulfilledCount: newFulfilled,
-      linkedItemIds: [...(o.linkedItemIds||[]), newItemId]
+      linkedItemIds: [...linked, newItemId]
     };
-    if(newFulfilled >= o.quantity) patch.status = "도착완료";
+    if(qty && newFulfilled >= qty) patch.status = "도착완료";
     else patch.status = "부분도착";
     await updateDoc(doc(db,"orders", orderId), patch);
     loadOrderList();
@@ -24338,6 +24352,67 @@
   // 취소했는데 남아 있는 여신 차감을 모아 보여주고, 골라서 지웁니다.
   let deadCreditCache = [];
 
+  // 도착 수가 재고와 다른 주문을 모아 보여주고 맞춥니다.
+  let badFulfillCache = [];
+
+  window.showBadFulfillList = function(){
+    const el = document.getElementById("datacheck-detail");
+    if(!el) return;
+    if(badFulfillCache.length === 0){ el.innerHTML = '<div class="list-empty">어긋난 것이 없습니다.</div>'; return; }
+    el.innerHTML = '<div style="border:1px solid var(--navy);padding:10px 12px;margin-top:10px;">'
+      + '<div style="font-weight:700;margin-bottom:4px;">도착 수가 재고와 다른 주문 — ' + badFulfillCache.length + '개</div>'
+      + '<div style="font-size:11.5px;color:var(--gray);line-height:1.7;margin-bottom:8px;">'
+      + '<b>실제 재고</b>는 이 주문으로 들어와 지금 살아 있는 재고 수입니다. 그 수로 도착 수를 맞춥니다.<br>'
+      + '재고 자료는 건드리지 않고 주문의 도착 수만 고칩니다.</div>'
+      + '<div style="max-height:340px;overflow-y:auto;border:1px solid var(--line);">'
+      + '<table class="data-table" style="width:100%;"><thead><tr>'
+      + '<th style="width:34px;"><input type="checkbox" id="bf-all" checked></th>'
+      + '<th>주문일</th><th>모델</th><th>색상</th><th class="ta-right">주문</th>'
+      + '<th class="ta-right">지금 도착</th><th class="ta-right">실제 재고</th><th class="ta-right">차이</th>'
+      + '</tr></thead><tbody>'
+      + badFulfillCache.map((r,i)=>
+          '<tr><td><input type="checkbox" class="bf-ck" value="'+i+'" checked></td>'
+          + '<td>' + comboEsc(r.o.orderDate||"-") + '</td>'
+          + '<td>' + comboEsc(docModelLabel(r.o)) + '</td>'
+          + '<td>' + comboEsc(r.o.systemColor || r.o.manufacturerColor || "-") + '</td>'
+          + '<td class="ta-right">' + r.qty + '</td>'
+          + '<td class="ta-right" style="color:var(--danger);font-weight:700;">' + r.now + '</td>'
+          + '<td class="ta-right" style="color:#2e7d32;font-weight:700;">' + r.real + '</td>'
+          + '<td class="ta-right">' + (r.real - r.now > 0 ? "+" : "") + (r.real - r.now) + '</td></tr>').join("")
+      + '</tbody></table></div>'
+      + '<div style="margin-top:8px;"><button class="btn small" style="width:auto;" onclick="fixBadFulfill()">체크한 건 실제 재고 수로 맞추기</button></div>'
+      + '</div>';
+    const all = document.getElementById("bf-all");
+    if(all) all.onchange = ()=> el.querySelectorAll(".bf-ck").forEach(c=> c.checked = all.checked);
+  };
+
+  window.fixBadFulfill = async function(){
+    const picked = Array.from(document.querySelectorAll(".bf-ck:checked"))
+      .map(c=> badFulfillCache[Number(c.value)]).filter(Boolean);
+    if(picked.length === 0){ alert("맞출 건을 골라주세요."); return; }
+    if(!confirm("도착 수를 실제 재고 수로 맞춥니다.\n\n"
+      + picked.slice(0,10).map(r=> "  " + (r.o.orderDate||"-") + "  " + (r.o.systemModel||"-")
+          + "  " + r.now + " → " + r.real).join("\n")
+      + (picked.length > 10 ? "\n  ... 외 " + (picked.length-10) + "개" : "")
+      + "\n\n모두 " + picked.length + "개입니다.\n재고 자료는 건드리지 않습니다. 진행할까요?")) return;
+    try{
+      for(let i=0; i<picked.length; i+=300){
+        const bt = writeBatch(db);
+        picked.slice(i, i+300).forEach(r=>{
+          const st = (r.qty && r.real >= r.qty) ? "도착완료" : (r.real > 0 ? "부분도착" : "주문중");
+          bt.update(doc(db,"orders", r.id),
+            { fulfilledCount: r.real, linkedItemIds: r.alive, status: st });
+        });
+        await bt.commit();
+      }
+    }catch(e){ alert("맞추지 못했습니다.\n" + ((e&&e.message)?e.message:String(e))); return; }
+    logAction("도착 수 바로잡기", picked.length + "개 품목");
+    alert(picked.length + "개를 맞췄습니다.");
+    clearCache("orders"); clearDashCache();
+    document.getElementById("datacheck-detail").innerHTML = "";
+    runDataCheck();
+  };
+
   window.showDeadCreditList = function(){
     const el = document.getElementById("datacheck-detail");
     if(!el) return;
@@ -24652,6 +24727,29 @@
         issues.push({ n:"같은 모델·일련번호가 여러 건", cnt:dupKeys.length, unit:"남는 " + dupExtra + "건",
           why:"모델과 일련번호가 둘 다 같으면 같은 단말기입니다. 모델이 다르면 다른 단말기라 세지 않습니다.",
           fix: dupKeys.length ? "showDupSerialList()" : null, fixLabel:"확인하고 정리" });
+      }
+
+      // ⓪-A 도착 수가 실제 재고와 다른 주문
+      //  재고를 수정만 해도 도착 수가 올라가던 문제로 어긋난 것을 찾습니다.
+      {
+        const rows = [];
+        Object.keys(orders).forEach(oid=>{
+          const o = orders[oid];
+          if(o.status === "취소") return;
+          const linked = Array.isArray(o.linkedItemIds) ? o.linkedItemIds : [];
+          // 실제로 살아 있는 재고만 셉니다.
+          const alive = linked.filter(iid=> items[iid] && items[iid].deleted !== true);
+          const real = alive.length;
+          const now = Number(o.fulfilledCount)||0;
+          const qty = Number(o.quantity)||0;
+          if(now !== real || (qty && now > qty)){
+            rows.push({ id:oid, o, now, real, qty, alive });
+          }
+        });
+        badFulfillCache = rows;
+        issues.push({ n:"도착 수가 재고와 다른 주문", cnt:rows.length, unit:"품목",
+          why:"주문에 적힌 도착 수와 실제로 들어온 재고 수가 다릅니다. 재고를 수정할 때 도착 수가 잘못 올라간 경우입니다. 실제 재고 수로 맞춥니다.",
+          fix: rows.length ? "showBadFulfillList()" : null, fixLabel:"확인하고 맞추기" });
       }
 
       // ⓪-0 취소했는데 여신 차감이 남아 있는 주문
@@ -29045,7 +29143,7 @@
     seenNewTag = lastSeenTag;    // 이 버전만 안 알립니다. 그 뒤에 또 올라오면 다시 알립니다.
   };
 
-  // 파일에 박힌 버전 글자를 읽습니다. (예: "파일 2026-08-09 v592")
+  // 파일에 박힌 버전 글자를 읽습니다. (예: "파일 2026-08-09 v593")
   function readBuildTag(text){
     const m = String(text||"").match(/파일\s*[\d-]+\s*v(\d+)/);
     return m ? m[0].trim() : "";
