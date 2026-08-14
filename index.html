@@ -387,7 +387,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v599</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v600</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -24376,6 +24376,7 @@
     const onlyCarrier = !!(document.getElementById("xs-only-carrier")||{}).checked;
     const dayFrom = String((document.getElementById("xs-from")||{}).value||"").replace(/\D/g,"");
     const dayTo   = String((document.getElementById("xs-to")||{}).value||"").replace(/\D/g,"");
+    const onlyDay = !!(document.getElementById("xs-only-day")||{}).checked;
     const view = crossSnCache.filter(g=>{
       if(onlyCarrier){
         const cs = new Set(g.list.map(x=> String(x.it.carrier||"").trim()));
@@ -24414,6 +24415,8 @@
       + ' <button class="btn small secondary" style="width:auto;margin-left:3px;" onclick="xsClear()">전체</button>'
       + '</div>'
       + '<div style="margin-bottom:6px;font-size:12px;">'
+      + '<label style="margin-right:14px;"><input type="checkbox" id="xs-only-day"'
+        + (onlyDay ? ' checked' : '') + ' onchange="showCrossSnList()"> 그 기간에 들어온 줄만 보기</label>'
       + '한 번에 체크 — <button class="btn small secondary" style="width:auto;" onclick="xsCheckBy(\'LG\')">LG로 등록된 쪽</button>'
       + ' <button class="btn small secondary" style="width:auto;margin-left:3px;" onclick="xsCheckBy(\'SK\')">SK로 등록된 쪽</button>'
       + ' <button class="btn small secondary" style="width:auto;margin-left:3px;" onclick="xsCheckBy(\'KT\')">KT로 등록된 쪽</button>'
@@ -24426,10 +24429,21 @@
       + '</tr></thead><tbody>';
     crossSnCache.forEach((g, gi)=>{
       // 입고일이 늦은 것을 잘못 들어온 것으로 봅니다. (같으면 뒤에 등록된 것)
-      const sorted = g.list.slice().sort((a,b)=>
+      let sorted = g.list.slice().sort((a,b)=>
         String(a.it.inDate||"").localeCompare(String(b.it.inDate||"")));
+      // 「그 기간에 들어온 줄만 보기」를 켜면 그 줄만 보여드립니다.
+      if(onlyDay && (dayFrom || dayTo)){
+        const only = sorted.filter(x=>{
+          const d = String(x.it.inDate||"").replace(/\D/g,"");
+          if(!d) return false;
+          if(dayFrom && d < dayFrom) return false;
+          if(dayTo && d > dayTo) return false;
+          return true;
+        });
+        if(only.length) sorted = only;
+      }
       sorted.forEach((x, i)=>{
-        const later = (i > 0);          // 첫 줄(먼저 들어온 것)은 남기고 나머지를 체크
+        const later = onlyDay ? false : (i > 0);   // 기간만 볼 때는 자동 체크하지 않습니다
         h += '<tr data-xs-carrier="' + comboEsc(String(x.it.carrier||"").trim()) + '"'
           + (later ? ' style="background:#fdecea;"' : ' style="background:#f4faf4;"') + '>'
           + '<td><input type="checkbox" class="xs-ck" value="' + comboEsc(x.id) + '"'
@@ -29387,7 +29401,7 @@
     seenNewTag = lastSeenTag;    // 이 버전만 안 알립니다. 그 뒤에 또 올라오면 다시 알립니다.
   };
 
-  // 파일에 박힌 버전 글자를 읽습니다. (예: "파일 2026-08-09 v599")
+  // 파일에 박힌 버전 글자를 읽습니다. (예: "파일 2026-08-09 v600")
   function readBuildTag(text){
     const m = String(text||"").match(/파일\s*[\d-]+\s*v(\d+)/);
     return m ? m[0].trim() : "";
