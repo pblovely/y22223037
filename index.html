@@ -387,7 +387,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v601</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v602</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -24409,10 +24409,11 @@
       + '<label style="margin-right:14px;"><input type="checkbox" id="xs-only-carrier"'
         + (onlyCarrier ? ' checked' : '') + ' onchange="showCrossSnList()"> 통신사가 서로 다른 것만</label>'
       + '입고일 <input type="text" id="xs-from" maxlength="8" placeholder="20260814" value="' + comboEsc(dayFrom) + '"'
+        + ' oninput="xsLater(this)"'
         + ' style="width:90px;height:24px;border:1px solid var(--line);padding:0 6px;font-size:12px;">'
       + ' ~ <input type="text" id="xs-to" maxlength="8" placeholder="20260814" value="' + comboEsc(dayTo) + '"'
-        + ' style="width:90px;height:24px;border:1px solid var(--line);padding:0 6px;font-size:12px;">'
-      + ' <button class="btn small secondary" style="width:auto;margin-left:4px;" onclick="showCrossSnList()">거르기</button>'
+        + ' oninput="xsLater(this)"'
+        + ' style="width:90px;height:24px;border:1px solid var(--line);padding:0 6px;font-size:12px;">' 
       + ' <button class="btn small secondary" style="width:auto;margin-left:3px;" onclick="xsToday()">오늘만</button>'
       + ' <button class="btn small secondary" style="width:auto;margin-left:3px;" onclick="xsClear()">전체</button>'
       + '</div>'
@@ -24479,6 +24480,18 @@
       ck.checked = carrier ? (tr.dataset.xsCarrier === carrier) : false;
     });
   };
+  // 날짜를 넣으면 잠시 뒤 저절로 걸러줍니다. (커서는 그 칸에 그대로 둡니다)
+  let xsTimer = null;
+  window.xsLater = function(el){
+    const id = el && el.id;
+    if(xsTimer) clearTimeout(xsTimer);
+    xsTimer = setTimeout(()=>{
+      showCrossSnList();
+      const back = document.getElementById(id);
+      if(back){ back.focus(); try{ back.setSelectionRange(back.value.length, back.value.length); }catch(e){} }
+    }, 500);
+  };
+
   window.xsToday = function(){
     const f = document.getElementById("xs-from"), t = document.getElementById("xs-to");
     if(f) f.value = todayStr();
@@ -29404,7 +29417,7 @@
     seenNewTag = lastSeenTag;    // 이 버전만 안 알립니다. 그 뒤에 또 올라오면 다시 알립니다.
   };
 
-  // 파일에 박힌 버전 글자를 읽습니다. (예: "파일 2026-08-09 v601")
+  // 파일에 박힌 버전 글자를 읽습니다. (예: "파일 2026-08-09 v602")
   function readBuildTag(text){
     const m = String(text||"").match(/파일\s*[\d-]+\s*v(\d+)/);
     return m ? m[0].trim() : "";
