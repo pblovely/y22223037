@@ -387,7 +387,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v597</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v599</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -937,7 +937,7 @@
               <input type="number" id="be-bulk-otheramt" placeholder="타할인" style="width:100px;height:28px;border:1px solid var(--line);padding:0 6px;font-size:12.5px;margin-left:-1px;box-sizing:border-box;">
               <input type="number" step="0.01" id="be-bulk-otherpct" placeholder="타할인%" style="width:90px;height:28px;border:1px solid var(--line);padding:0 6px;font-size:12.5px;margin-left:-1px;box-sizing:border-box;">
               <select id="be-bulk-dest" style="width:150px;height:28px;border:1px solid var(--line);padding:0 6px;font-size:12.5px;margin-left:-1px;box-sizing:border-box;"><option value="">판매처 (선택)</option></select>
-              <input type="number" step="0.01" id="be-bulk-salepct" placeholder="판매선할인%" style="width:110px;height:28px;border:1px solid var(--line);padding:0 6px;font-size:12.5px;margin-left:-1px;box-sizing:border-box;"><input type="number" step="0.01" id="be-bulk-saleotherpct" placeholder="판매후할인%" style="width:110px;height:28px;border:1px solid var(--line);padding:0 6px;font-size:12.5px;margin-left:-1px;box-sizing:border-box;">
+              <input type="number" step="0.01" id="be-bulk-salepct" placeholder="판매할인%" style="width:100px;height:28px;border:1px solid var(--line);padding:0 6px;font-size:12.5px;margin-left:-1px;box-sizing:border-box;">
               <button class="btn small" style="width:auto;margin-left:6px;" onclick="applyBulkToBatchLines()">모든 줄에 적용</button>
             </div>
           </div>
@@ -3720,14 +3720,6 @@
     if(!list || amt === null) return null;
     return Number(((amt/list)*100).toFixed(2));
   }
-  // 판매 할인 합계 — 선할인 + 후할인
-  function totalSaleDiscountOf(it){
-    const pre = saleDiscountAmtOf(it);
-    const other = (it.saleOtherDiscountAmt != null) ? Number(it.saleOtherDiscountAmt) : null;
-    if(pre === null && other === null) return null;   // 둘 다 없으면 0 대신 빈칸
-    return (pre || 0) + (other || 0);
-  }
-
   function totalInDiscountOf(it){
     const pre = preDiscountAmtOf(it);
     const other = (it.otherDiscountAmt != null) ? Number(it.otherDiscountAmt) : null;
@@ -3783,11 +3775,8 @@
     { key:"totalPurchaseDiscount", label:"입고할인", get:it=> discFmt(totalInDiscountOf(it)), getRaw:it=> discRaw(totalInDiscountOf(it)) },
     { key:"destination", label:"판매처", get:it=>it.destination||"-" },
     { key:"salePrice", label:"판매가", get:it=>it.salePrice?Number(it.salePrice).toLocaleString():"-", getRaw:it=>it.salePrice!=null?Number(it.salePrice):"" },
-    { key:"saleDiscountAmt", label:"판매선할인", get:it=> discFmt(saleDiscountAmtOf(it)), getRaw:it=> discRaw(saleDiscountAmtOf(it)) },
-    { key:"saleDiscount", label:"판매선할인%", get:it=> discPctFmt(saleDiscountPctOf(it)), getRaw:it=> discRaw(saleDiscountPctOf(it)) },
-    { key:"saleOtherDiscountAmt", label:"판매후할인", get:it=> discFmt(it.saleOtherDiscountAmt), getRaw:it=> discRaw(it.saleOtherDiscountAmt) },
-    { key:"saleOtherDiscountPct", label:"판매후할인%", get:it=> discPctFmt(it.saleOtherDiscountPct), getRaw:it=> discRaw(it.saleOtherDiscountPct) },
-    { key:"totalSaleDiscount", label:"판매할인 합계", get:it=> discFmt(totalSaleDiscountOf(it)), getRaw:it=> discRaw(totalSaleDiscountOf(it)) },
+    { key:"saleDiscountAmt", label:"판매할인", get:it=> discFmt(saleDiscountAmtOf(it)), getRaw:it=> discRaw(saleDiscountAmtOf(it)) },
+    { key:"saleDiscount", label:"판매할인%", get:it=> discPctFmt(saleDiscountPctOf(it)), getRaw:it=> discRaw(saleDiscountPctOf(it)) },
     { key:"subsidyAmount", label:"공시지원금", get:it=> (it.subsidyAmount!=null)?Number(it.subsidyAmount).toLocaleString():"-", getRaw:it=>it.subsidyAmount!=null?Number(it.subsidyAmount):"" },
     { key:"subsidyStatus", label:"공시지원금 상태", get:it=>it.subsidyStatus||"-" },
     { key:"clawbackAmount", label:"환수액", get:it=> (it.clawbackAmount!=null)?Number(it.clawbackAmount).toLocaleString():"-", getRaw:it=>it.clawbackAmount!=null?Number(it.clawbackAmount):"" },
@@ -21925,8 +21914,8 @@
     const isOrder = (kind === "order");
 
     const cols = isOrder
-      ? ["모델","색상","통신사","수량","출고가","입고가","선할인","선할인%","타할인","타할인%","판매처","판매가","판매선할인","판매선할인%","판매후할인","판매후할인%","상태","관리"]
-      : ["모델","색상","통신사","수량","판매처","판매가","판매선할인","판매선할인%","판매후할인","판매후할인%","상태","관리"];
+      ? ["모델","색상","통신사","수량","출고가","입고가","선할인","선할인%","타할인","타할인%","판매처","판매가","판매할인","판매할인%","상태","관리"]
+      : ["모델","색상","통신사","수량","판매처","판매가","판매할인","판매할인%","상태","관리"];
     head.innerHTML = cols.map(c=>'<th style="padding:6px;border:1px solid var(--line);">'+c+'</th>').join("");
 
     const destNames = await fetchNamesList("outboundDestinations");
@@ -22039,8 +22028,6 @@
       cell(inp("be-saleprice", l.salePrice, "85px"));
       cell(inp("be-saleamt", l.saleDiscountAmt, "80px"));
       cell(inp("be-salepct", l.saleDiscountPct, "65px"));
-      cell(inp("be-saleotheramt", l.saleOtherDiscountAmt, "80px"));
-      cell(inp("be-saleotherpct", l.saleOtherDiscountPct, "65px"));
       cell(txt(locked
         ? ("도착 " + doneCnt + "/" + (l.quantity||0) + (priceEmpty ? " · 금액 입력 가능" : ""))
         : "수정 가능"));
@@ -22118,8 +22105,6 @@
       if(has(".be-otheramt")) set(".be-otherpct", pctFromAmt(tr.querySelector(".be-otheramt").value, L));
       if(has(".be-saleprice")) set(".be-saleamt", L - v(".be-saleprice"));
       if(has(".be-saleamt"))  set(".be-salepct", pctFromAmt(tr.querySelector(".be-saleamt").value, L));
-      // 판매후할인 — 나중에 받는 것이라 판매가는 안 바꿉니다. %만 맞춰둡니다.
-      if(has(".be-saleotheramt")) set(".be-saleotherpct", pctFromAmt(tr.querySelector(".be-saleotheramt").value, L));
       set(".be-purchase", L - v(".be-preamt") - v(".be-otheramt"));
     }
   }
@@ -22131,8 +22116,7 @@
     const preAmt = g("be-bulk-preamt"), prePct = g("be-bulk-prepct");
     const othAmt = g("be-bulk-otheramt"), othPct = g("be-bulk-otherpct");
     const dest = g("be-bulk-dest"), salePct = g("be-bulk-salepct");
-    const saleOtherPct = g("be-bulk-saleotherpct");
-    if(!preAmt && !prePct && !othAmt && !othPct && !dest && !salePct && !saleOtherPct){ alert("넣을 값을 하나 이상 입력해주세요."); return; }
+    if(!preAmt && !prePct && !othAmt && !othPct && !dest && !salePct){ alert("넣을 값을 하나 이상 입력해주세요."); return; }
 
     let n = 0;
     rows.forEach(tr=>{
@@ -22151,7 +22135,6 @@
         if(!Array.from(ds.options).some(o=>o.value===dest)){ const o=document.createElement("option"); o.value=dest; o.textContent=dest; ds.appendChild(o); }
         ds.value = dest; } }
       if(salePct !== "" && L){ const a = amtFromPct(salePct, L); set(".be-saleamt", a); set(".be-salepct", salePct); set(".be-saleprice", L - Number(a)); }
-      if(saleOtherPct !== "" && L){ const a2 = amtFromPct(saleOtherPct, L); set(".be-saleotheramt", a2); set(".be-saleotherpct", saleOtherPct); }
       recalcBatchLine(tr);
       n++;
     });
@@ -22244,8 +22227,6 @@
         p.salePrice = num(".be-saleprice");
         p.saleDiscountAmt = num(".be-saleamt");
         p.saleDiscountPct = num(".be-salepct");
-        p.saleOtherDiscountAmt = num(".be-saleotheramt");
-        p.saleOtherDiscountPct = num(".be-saleotherpct");
         perLine[lid] = p;
         const useQty = (p.quantity != null) ? p.quantity : (Number(src.quantity)||0);
         newTotal += ((kind === "order" ? (p.purchasePrice||0) : (p.salePrice||0)) * useQty);
@@ -22343,7 +22324,7 @@
       const priceChanged = Object.keys(perLine).filter(lid=>{
         const p = perLine[lid] || {};
         return p.listPrice != null || p.purchasePrice != null || p.systemModel != null
-            || p.salePrice != null || p.saleDiscountAmt != null || p.saleOtherDiscountAmt != null;
+            || p.salePrice != null || p.saleDiscountAmt != null;
       });
       if(priceChanged.length){
         priceChanged.forEach(lid=>{
@@ -22405,19 +22386,16 @@
             if(t.p.salePrice != null) patch.salePrice = t.p.salePrice;
             if(t.p.saleDiscountAmt != null) patch.saleDiscountAmt = t.p.saleDiscountAmt;
             if(t.p.saleDiscountPct != null) patch.saleDiscount = t.p.saleDiscountPct;
-            if(t.p.saleOtherDiscountAmt != null) patch.saleOtherDiscountAmt = t.p.saleOtherDiscountAmt;
-            if(t.p.saleOtherDiscountPct != null) patch.saleOtherDiscountPct = t.p.saleOtherDiscountPct;
             if(t.p.preDiscountAmt != null){ patch.purchaseDiscountAmt = t.p.preDiscountAmt; }
             if(t.p.preDiscountPct != null){ patch.purchaseDiscount = t.p.preDiscountPct; }
             if(t.p.otherDiscountAmt != null) patch.otherDiscountAmt = t.p.otherDiscountAmt;
             if(t.p.otherDiscountPct != null) patch.otherDiscountPct = t.p.otherDiscountPct;
-            // 수익 = 판매가 − 후할인 − 입고가 (선할인은 이미 판매가에 반영돼 있습니다)
+            // 수익 = 판매가 − 입고가
             {
               const it0 = (invItemsForFix && invItemsForFix[t.iid]) || {};
               const sp = (patch.salePrice != null) ? patch.salePrice : Number(it0.salePrice);
               const bp = (patch.purchasePrice != null) ? patch.purchasePrice : Number(it0.purchasePrice);
-              const so = (patch.saleOtherDiscountAmt != null) ? patch.saleOtherDiscountAmt : (Number(it0.saleOtherDiscountAmt)||0);
-              if(sp && bp) patch.profit = sp - so - bp;
+              if(sp && bp) patch.profit = sp - bp;
             }
             if(Object.keys(patch).length) bt.update(doc(db,"inventoryItems", t.iid), patch);
           });
@@ -24394,14 +24372,54 @@
     const el = document.getElementById("datacheck-detail");
     if(!el) return;
     if(crossSnCache.length === 0){ el.innerHTML = '<div class="list-empty">겹치는 것이 없습니다.</div>'; return; }
+    // 걸러보기 — 통신사가 다른 것만 / 입고일로 좁히기
+    const onlyCarrier = !!(document.getElementById("xs-only-carrier")||{}).checked;
+    const dayFrom = String((document.getElementById("xs-from")||{}).value||"").replace(/\D/g,"");
+    const dayTo   = String((document.getElementById("xs-to")||{}).value||"").replace(/\D/g,"");
+    const view = crossSnCache.filter(g=>{
+      if(onlyCarrier){
+        const cs = new Set(g.list.map(x=> String(x.it.carrier||"").trim()));
+        if(cs.size < 2) return false;
+      }
+      if(dayFrom || dayTo){
+        const hit = g.list.some(x=>{
+          const d = String(x.it.inDate||"").replace(/\D/g,"");
+          if(!d) return false;
+          if(dayFrom && d < dayFrom) return false;
+          if(dayTo && d > dayTo) return false;
+          return true;
+        });
+        if(!hit) return false;
+      }
+      return true;
+    });
+
     let h = '<div style="border:1px solid var(--navy);padding:10px 12px;margin-top:10px;">'
       + '<div style="font-weight:700;margin-bottom:4px;">같은 일련번호인데 모델이 다른 재고 — '
-      + crossSnCache.length + '개 일련번호</div>'
+      + view.length + '개 일련번호'
+      + (view.length !== crossSnCache.length ? ' <span style="font-weight:400;color:var(--gray);font-size:11.5px;">(전체 ' + crossSnCache.length + '개 중)</span>' : '')
+      + '</div>'
       + '<div style="font-size:11.5px;color:var(--gray);line-height:1.7;margin-bottom:8px;">'
       + '한 대의 단말기에 일련번호는 하나뿐입니다. <b>잘못 들어간 쪽에 체크</b>하고 지워주세요.<br>'
-      + '지우면 그 주문의 <b>도착 수도 실제 재고 수로 함께 맞춰집니다.</b><br>'
-      + '<span style="color:var(--danger);">나중에 들어온 것</span>이 잘못된 경우가 많아 그쪽을 미리 체크해 두었습니다. 꼭 확인하고 바꿔주세요.</div>'
-      + '<div style="max-height:380px;overflow-y:auto;border:1px solid var(--line);">'
+      + '지우면 그 주문의 <b>도착 수도 실제 재고 수로 함께 맞춰집니다.</b></div>'
+      + '<div style="border:1px solid var(--line);background:#f7f9fc;padding:8px 10px;margin-bottom:8px;font-size:12px;">'
+      + '<label style="margin-right:14px;"><input type="checkbox" id="xs-only-carrier"'
+        + (onlyCarrier ? ' checked' : '') + ' onchange="showCrossSnList()"> 통신사가 서로 다른 것만</label>'
+      + '입고일 <input type="text" id="xs-from" maxlength="8" placeholder="20260814" value="' + comboEsc(dayFrom) + '"'
+        + ' style="width:90px;height:24px;border:1px solid var(--line);padding:0 6px;font-size:12px;">'
+      + ' ~ <input type="text" id="xs-to" maxlength="8" placeholder="20260814" value="' + comboEsc(dayTo) + '"'
+        + ' style="width:90px;height:24px;border:1px solid var(--line);padding:0 6px;font-size:12px;">'
+      + ' <button class="btn small secondary" style="width:auto;margin-left:4px;" onclick="showCrossSnList()">거르기</button>'
+      + ' <button class="btn small secondary" style="width:auto;margin-left:3px;" onclick="xsToday()">오늘만</button>'
+      + ' <button class="btn small secondary" style="width:auto;margin-left:3px;" onclick="xsClear()">전체</button>'
+      + '</div>'
+      + '<div style="margin-bottom:6px;font-size:12px;">'
+      + '한 번에 체크 — <button class="btn small secondary" style="width:auto;" onclick="xsCheckBy(\'LG\')">LG로 등록된 쪽</button>'
+      + ' <button class="btn small secondary" style="width:auto;margin-left:3px;" onclick="xsCheckBy(\'SK\')">SK로 등록된 쪽</button>'
+      + ' <button class="btn small secondary" style="width:auto;margin-left:3px;" onclick="xsCheckBy(\'KT\')">KT로 등록된 쪽</button>'
+      + ' <button class="btn small secondary" style="width:auto;margin-left:3px;" onclick="xsCheckBy(\'\')">모두 해제</button>'
+      + '</div>'
+      + '<div style="max-height:380px;overflow-y:auto;border:1px solid var(--line);">' 
       + '<table class="data-table" style="width:100%;"><thead><tr>'
       + '<th style="width:34px;">지움</th><th>일련번호</th><th>모델</th><th>색상</th><th>통신사</th>'
       + '<th>입고처</th><th>입고일</th><th>출고일</th><th>상태</th><th>주문일</th>'
@@ -24412,7 +24430,8 @@
         String(a.it.inDate||"").localeCompare(String(b.it.inDate||"")));
       sorted.forEach((x, i)=>{
         const later = (i > 0);          // 첫 줄(먼저 들어온 것)은 남기고 나머지를 체크
-        h += '<tr' + (later ? ' style="background:#fdecea;"' : ' style="background:#f4faf4;"') + '>'
+        h += '<tr data-xs-carrier="' + comboEsc(String(x.it.carrier||"").trim()) + '"'
+          + (later ? ' style="background:#fdecea;"' : ' style="background:#f4faf4;"') + '>'
           + '<td><input type="checkbox" class="xs-ck" value="' + comboEsc(x.id) + '"'
             + (later ? ' checked' : '') + '></td>'
           + '<td>' + (i === 0 ? '<b>' + comboEsc(g.sn) + '</b>' : '') + '</td>'
@@ -24433,6 +24452,30 @@
       + '</div>';
     el.innerHTML = h;
   };
+
+  // 통신사로 한 번에 체크합니다.
+  window.xsCheckBy = function(carrier){
+    const el = document.getElementById("datacheck-detail");
+    if(!el) return;
+    el.querySelectorAll("tr[data-xs-carrier]").forEach(tr=>{
+      const ck = tr.querySelector(".xs-ck");
+      if(!ck) return;
+      ck.checked = carrier ? (tr.dataset.xsCarrier === carrier) : false;
+    });
+  };
+  window.xsToday = function(){
+    const f = document.getElementById("xs-from"), t = document.getElementById("xs-to");
+    if(f) f.value = todayStr();
+    if(t) t.value = todayStr();
+    showCrossSnList();
+  };
+  window.xsClear = function(){
+    const f = document.getElementById("xs-from"), t = document.getElementById("xs-to");
+    if(f) f.value = ""; if(t) t.value = "";
+    const c = document.getElementById("xs-only-carrier"); if(c) c.checked = false;
+    showCrossSnList();
+  };
+
 
   window.fixCrossSn = async function(){
     const ids = Array.from(document.querySelectorAll(".xs-ck:checked")).map(c=> c.value);
@@ -28156,16 +28199,7 @@
       }
     }
 
-    // 판매후할인 — 판매가는 그대로 두고 %만 맞춥니다.
-    if(key === "saleOtherDiscountAmt"){ const a = num(val); p.saleOtherDiscountPct = pct(a); }
-    if(key === "saleOtherDiscountPct"){ const pv = num(val); if(L) p.saleOtherDiscountAmt = Math.round(L * pv / 100); }
-
-    // 수익 = 판매가 − 후할인 − 입고가 (선할인은 이미 판매가에 반영돼 있습니다)
-    if(sale && buy){
-      const sOther = (p.saleOtherDiscountAmt != null) ? Number(p.saleOtherDiscountAmt)
-                     : (Number(it.saleOtherDiscountAmt) || 0);
-      p.profit = sale - sOther - buy;
-    }
+    if(sale && buy) p.profit = sale - buy;
     return p;
   }
 
@@ -28228,10 +28262,8 @@
     { key:"purchasePrice",    label:"입고가",        type:"number", link:"buy" },
     { key:"destination",      label:"판매처",        type:"names",  col:"outboundDestinations" },
     { key:"salePrice",        label:"판매가",        type:"number", link:"saleprice" },
-    { key:"saleDiscountAmt",  label:"판매선할인",    type:"number", link:"saleamt" },
-    { key:"saleDiscount",     label:"판매선할인%",   type:"number", link:"salepct" },
-    { key:"saleOtherDiscountAmt", label:"판매후할인",  type:"number", link:"saleotheramt" },
-    { key:"saleOtherDiscountPct", label:"판매후할인%", type:"number", link:"saleotherpct" },
+    { key:"saleDiscountAmt",  label:"판매할인",      type:"number", link:"saleamt" },
+    { key:"saleDiscount",     label:"판매할인%",     type:"number", link:"salepct" },
     { key:"subsidyAmount",    label:"공시지원금",     type:"number" },
     { key:"subsidyStatus",    label:"공시지원금 상태", type:"options", options:["지급대기","지급완료","환수"] },
     { key:"clawbackAmount",   label:"환수액",        type:"number" },
@@ -28265,12 +28297,9 @@
       const pre = L - (g("purchasePrice")||0) - (g("otherDiscountAmt")||0);
       set("purchaseDiscountAmt", pre); set("purchaseDiscount", pctFromAmt(pre, L));
     }
-    // 판매 — 선할인만 판매가에 반영합니다. 후할인은 나중에 따로 받는 것이라 판매가를 안 바꿉니다.
     if(src==="saleamt"){ set("saleDiscount", pctFromAmt(document.getElementById(meId("saleDiscountAmt")).value, L)); if(L) set("salePrice", L - (g("saleDiscountAmt")||0)); }
     if(src==="salepct"){ const a = amtFromPct(document.getElementById(meId("saleDiscount")).value, L); set("saleDiscountAmt", a); if(L && a!=="") set("salePrice", L - Number(a)); }
     if(src==="saleprice" && L){ const a = L - (g("salePrice")||0); set("saleDiscountAmt", a); set("saleDiscount", pctFromAmt(a, L)); }
-    if(src==="saleotheramt") set("saleOtherDiscountPct", pctFromAmt(document.getElementById(meId("saleOtherDiscountAmt")).value, L));
-    if(src==="saleotherpct") set("saleOtherDiscountAmt", amtFromPct(document.getElementById(meId("saleOtherDiscountPct")).value, L));
     if(src==="list"){
       set("purchaseDiscount", pctFromAmt(document.getElementById(meId("purchaseDiscountAmt")).value, L));
       set("otherDiscountPct", pctFromAmt(document.getElementById(meId("otherDiscountAmt")).value, L));
@@ -28446,10 +28475,7 @@
           // 수익은 항상 앞뒤가 맞게 다시 계산합니다.
           const sale = (p.salePrice !== undefined) ? p.salePrice : it.salePrice;
           const buy  = (p.purchasePrice !== undefined) ? p.purchasePrice : it.purchasePrice;
-          // 수익 = 판매가 − 후할인 − 입고가 (선할인은 이미 판매가에 반영돼 있습니다)
-          const sOther = (p.saleOtherDiscountAmt !== undefined)
-            ? (Number(p.saleOtherDiscountAmt)||0) : (Number(it.saleOtherDiscountAmt)||0);
-          if(sale && buy) p.profit = Number(sale) - sOther - Number(buy);
+          if(sale && buy) p.profit = Number(sale) - Number(buy);
           batch.update(doc(db,"inventoryItems", id), p);
         });
         await batch.commit();
@@ -28461,7 +28487,7 @@
     // 판매 금액을 고쳤으면 이 재고가 붙어 있는 판매요청도 같은 값으로 맞춥니다.
     let srFixed = 0;
     {
-      const saleKeys = ["salePrice","saleDiscountAmt","saleDiscount","saleOtherDiscountAmt","saleOtherDiscountPct","destination"];
+      const saleKeys = ["salePrice","saleDiscountAmt","saleDiscount","destination"];
       const touched = saleKeys.filter(k=> patch[k] !== undefined);
       if(touched.length){
         try{
@@ -28504,11 +28530,9 @@
   //  재고 목록에서 판매 관련 값을 바꾸면 판매요청과 어긋납니다.
   //  (재고만 바뀌고 판매요청·예약 배정은 그대로 남습니다)
   const SALE_LOCKED_FIELDS = ["status", "destination", "salePrice", "saleDiscountAmt",
-                              "saleDiscount", "saleOtherDiscountAmt", "saleOtherDiscountPct",
-                              "outDate", "profit"];
+                              "saleDiscount", "outDate", "profit"];
   const SALE_LOCKED_LABEL = { status:"현재상태", destination:"판매처", salePrice:"판매가",
-                              saleDiscountAmt:"판매선할인", saleDiscount:"판매선할인%",
-                              saleOtherDiscountAmt:"판매후할인", saleOtherDiscountPct:"판매후할인%",
+                              saleDiscountAmt:"판매할인", saleDiscount:"판매할인%",
                               outDate:"출고일", profit:"수익" };
   // 고른 재고 중 판매요청에 묶인 것을 찾습니다.
   function findSaleLinked(ids){
@@ -29363,7 +29387,7 @@
     seenNewTag = lastSeenTag;    // 이 버전만 안 알립니다. 그 뒤에 또 올라오면 다시 알립니다.
   };
 
-  // 파일에 박힌 버전 글자를 읽습니다. (예: "파일 2026-08-09 v597")
+  // 파일에 박힌 버전 글자를 읽습니다. (예: "파일 2026-08-09 v599")
   function readBuildTag(text){
     const m = String(text||"").match(/파일\s*[\d-]+\s*v(\d+)/);
     return m ? m[0].trim() : "";
@@ -32630,14 +32654,10 @@
     html += '<div class="stack-form">';
     html += '<div class="stack-row"><label>판매처</label><select id="paste-sale-dest-select"></select></div>';
     html += '<div class="stack-row"><label>출고일</label><input type="text" id="paste-sale-outdate-input" maxlength="8" inputmode="numeric" value="'+(matchedDate||todayStr())+'"></div>';
-    html += '<div class="stack-row"><label>판매선할인 <span class="info-tip" title="판매할 때 바로 빼주는 할인입니다. 판매가에서 이 금액을 뺀 값이 실제로 받는 돈이 됩니다. 금액이나 %% 중 하나만 넣으시면 나머지는 알아서 계산합니다.">ⓘ</span></label>'
+    html += '<div class="stack-row"><label>판매할인 <span class="info-tip" title="모든 줄에 똑같이 넣습니다. 금액이나 %% 중 하나만 넣으시면 나머지는 알아서 계산합니다. 안 넣으시면 할인 없이 판매가 그대로 들어갑니다.">ⓘ</span></label>'
       + '<span><input type="number" id="paste-sale-discamt" placeholder="할인 금액" style="width:120px;" oninput="onPasteSaleDisc(\'amt\')"> 원'
       + ' &nbsp; <input type="number" id="paste-sale-discpct" placeholder="할인%" step="0.01" style="width:90px;" oninput="onPasteSaleDisc(\'pct\')"> %'
       + ' <span style="color:var(--gray);font-size:11.5px;margin-left:6px;">비우면 할인 없음</span></span></div>';
-    html += '<div class="stack-row"><label>판매후할인 <span class="info-tip" title="나중에 따로 정산해 받는 할인입니다. 판매가는 그대로 두고 따로 적어둡니다. 수익 계산에는 함께 반영됩니다.">ⓘ</span></label>'
-      + '<span><input type="number" id="paste-sale-otheramt" placeholder="후할인 금액" style="width:120px;" oninput="onPasteSaleOther(\'amt\')"> 원'
-      + ' &nbsp; <input type="number" id="paste-sale-otherpct" placeholder="후할인%" step="0.01" style="width:90px;" oninput="onPasteSaleOther(\'pct\')"> %'
-      + ' <span style="color:var(--gray);font-size:11.5px;margin-left:6px;">판매가는 그대로</span></span></div>';
     html += '</div>';
 
     html += '<p class="desc" style="margin-top:10px;margin-bottom:4px;font-weight:700;color:var(--navy);">인식된 품목 미리보기</p>';
@@ -32695,8 +32715,7 @@
     if(!el) return;
     const rows = JSON.parse(document.getElementById("paste-sale-analysis").dataset.rows||"[]");
     const dAmt = Number((document.getElementById("paste-sale-discamt")||{}).value) || 0;
-    const oAmt = Number((document.getElementById("paste-sale-otheramt")||{}).value) || 0;
-    const cut = dAmt + oAmt;
+    const cut = dAmt;
     el.querySelectorAll("[data-ps-final]").forEach((td,i)=>{
       const p = Number(rows[i] && rows[i].price) || 0;
       const f = Math.max(0, p - cut);
@@ -32706,30 +32725,11 @@
     });
   }
 
-  // 판매후할인 — 나중에 받는 것이라 판매가는 안 바꿉니다.
-  window.onPasteSaleOther = function(from){
-    const rows = JSON.parse(document.getElementById("paste-sale-analysis").dataset.rows||"[]");
-    const base = rows.reduce((n,r)=> n + (Number(r.price)||0), 0);
-    const aEl = document.getElementById("paste-sale-otheramt");
-    const pEl = document.getElementById("paste-sale-otherpct");
-    if(!aEl || !pEl || !(base > 0)) return;
-    const unit = base / rows.length;
-    if(from === "amt"){
-      const a = Number(aEl.value);
-      pEl.value = (aEl.value === "" || !(a > 0)) ? "" : Number(((a / unit) * 100).toFixed(2));
-    }else{
-      const p = Number(pEl.value);
-      aEl.value = (pEl.value === "" || !(p > 0)) ? "" : Math.round(unit * p / 100);
-    }
-    renderPasteSalePreview();
-  };
-
   window.submitPasteSale = async function(){
     const dataRows = JSON.parse(document.getElementById("paste-sale-analysis").dataset.rows||"[]");
     const dest = document.getElementById("paste-sale-dest-select").value;
     const outDate = document.getElementById("paste-sale-outdate-input").value || todayStr();
     const discAmt = Number((document.getElementById("paste-sale-discamt")||{}).value) || 0;
-    const otherAmt = Number((document.getElementById("paste-sale-otheramt")||{}).value) || 0;
     const resultEl = document.getElementById("paste-sale-result");
     if(!dest){ alert("판매처를 선택해주세요."); return; }
     if(discAmt < 0){ alert("판매할인은 0 이상으로 넣어주세요."); return; }
@@ -32750,12 +32750,7 @@
           patch.saleDiscountAmt = discAmt;
           patch.saleDiscount = Number(((discAmt / Number(salePrice)) * 100).toFixed(2));
         }
-        if(otherAmt > 0){
-          patch.saleOtherDiscountAmt = otherAmt;
-          patch.saleOtherDiscountPct = Number(((otherAmt / Number(salePrice)) * 100).toFixed(2));
-        }
-        // 수익은 선할인·후할인을 모두 뺀 금액으로 봅니다.
-        const net = Number(salePrice) - discAmt - otherAmt;
+        const net = Number(salePrice) - discAmt;
         if(it.purchasePrice) patch.profit = net - Number(it.purchasePrice);
       }
       await updateDoc(doc(db,"inventoryItems", itemDoc.id), patch);
@@ -32767,7 +32762,7 @@
     let madeReq = 0;
     if(madeLines.length){
       try{
-        // 판매요청 금액은 선할인만 뺍니다. 후할인은 나중에 따로 정산합니다.
+        // 판매요청 금액은 할인을 뺀 값입니다.
         const total = madeLines.reduce((n,x)=> n + Math.max(0, x.salePrice - discAmt), 0);
         const srBatch = await addDoc(collection(db,"saleRequestBatches"), {
           destination: dest, requestDate: outDate,
