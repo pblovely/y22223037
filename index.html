@@ -387,7 +387,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v583</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v584</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -9531,6 +9531,8 @@
     const grid = {};           // grid[모델][통신사] = 수량
     const amtByModel = {};     // 모델별 미입고 금액 (입고가 기준)
     const listByModel = {};    // 모델별 미입고 금액 (출고가 기준)
+    // 색상별로도 따로 셉니다. 모델 줄의 ▶ 를 누르면 아래로 펼쳐집니다.
+    const byColor = {};        // byColor[모델][색상] = { car:{통신사:수량}, sum, list, amt }
     const carrierSet = new Set();
     let total = 0, totalAmt = 0, totalList = 0;
     (allLines||[]).forEach(o=>{
@@ -9543,15 +9545,23 @@
       if(!grid[model]) grid[model] = {};
       grid[model][car] = (grid[model][car] || 0) + left;
       total += left;
+      // 색상별
+      const col = String(o.systemColor || o.manufacturerColor || "미지정").trim() || "미지정";
+      if(!byColor[model]) byColor[model] = {};
+      if(!byColor[model][col]) byColor[model][col] = { car:{}, sum:0, list:0, amt:0 };
+      byColor[model][col].car[car] = (byColor[model][col].car[car] || 0) + left;
+      byColor[model][col].sum += left;
       // 금액은 입고가 기준입니다. 입고가가 비어 있으면 출고가에서 할인을 뺀 값으로 계산합니다.
       const unit = Number(o.purchasePrice) || Math.max(0,
         (Number(o.listPrice)||0) - (Number(o.preDiscountAmt)||0) - (Number(o.otherDiscountAmt)||0));
       const amt = unit * left;
       amtByModel[model] = (amtByModel[model] || 0) + amt;
+      byColor[model][col].amt += amt;
       totalAmt += amt;
       // 출고가 기준 — 할인을 빼지 않은 정가 그대로입니다.
       const listAmt = (Number(o.listPrice)||0) * left;
       listByModel[model] = (listByModel[model] || 0) + listAmt;
+      byColor[model][col].list += listAmt;
       totalList += listAmt;
     });
     if(total === 0){
@@ -28920,7 +28930,7 @@
     seenNewTag = lastSeenTag;    // 이 버전만 안 알립니다. 그 뒤에 또 올라오면 다시 알립니다.
   };
 
-  // 파일에 박힌 버전 글자를 읽습니다. (예: "파일 2026-08-09 v583")
+  // 파일에 박힌 버전 글자를 읽습니다. (예: "파일 2026-08-09 v584")
   function readBuildTag(text){
     const m = String(text||"").match(/파일\s*[\d-]+\s*v(\d+)/);
     return m ? m[0].trim() : "";
