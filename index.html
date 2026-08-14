@@ -387,7 +387,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v586</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v589</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -3720,6 +3720,14 @@
     if(!list || amt === null) return null;
     return Number(((amt/list)*100).toFixed(2));
   }
+  // 판매 할인 합계 — 선할인 + 후할인
+  function totalSaleDiscountOf(it){
+    const pre = saleDiscountAmtOf(it);
+    const other = (it.saleOtherDiscountAmt != null) ? Number(it.saleOtherDiscountAmt) : null;
+    if(pre === null && other === null) return null;   // 둘 다 없으면 0 대신 빈칸
+    return (pre || 0) + (other || 0);
+  }
+
   function totalInDiscountOf(it){
     const pre = preDiscountAmtOf(it);
     const other = (it.otherDiscountAmt != null) ? Number(it.otherDiscountAmt) : null;
@@ -3775,8 +3783,11 @@
     { key:"totalPurchaseDiscount", label:"입고할인", get:it=> discFmt(totalInDiscountOf(it)), getRaw:it=> discRaw(totalInDiscountOf(it)) },
     { key:"destination", label:"판매처", get:it=>it.destination||"-" },
     { key:"salePrice", label:"판매가", get:it=>it.salePrice?Number(it.salePrice).toLocaleString():"-", getRaw:it=>it.salePrice!=null?Number(it.salePrice):"" },
-    { key:"saleDiscountAmt", label:"판매할인", get:it=> discFmt(saleDiscountAmtOf(it)), getRaw:it=> discRaw(saleDiscountAmtOf(it)) },
-    { key:"saleDiscount", label:"판매할인%", get:it=> discPctFmt(saleDiscountPctOf(it)), getRaw:it=> discRaw(saleDiscountPctOf(it)) },
+    { key:"saleDiscountAmt", label:"판매선할인", get:it=> discFmt(saleDiscountAmtOf(it)), getRaw:it=> discRaw(saleDiscountAmtOf(it)) },
+    { key:"saleDiscount", label:"판매선할인%", get:it=> discPctFmt(saleDiscountPctOf(it)), getRaw:it=> discRaw(saleDiscountPctOf(it)) },
+    { key:"saleOtherDiscountAmt", label:"판매후할인", get:it=> discFmt(it.saleOtherDiscountAmt), getRaw:it=> discRaw(it.saleOtherDiscountAmt) },
+    { key:"saleOtherDiscountPct", label:"판매후할인%", get:it=> discPctFmt(it.saleOtherDiscountPct), getRaw:it=> discRaw(it.saleOtherDiscountPct) },
+    { key:"totalSaleDiscount", label:"판매할인 합계", get:it=> discFmt(totalSaleDiscountOf(it)), getRaw:it=> discRaw(totalSaleDiscountOf(it)) },
     { key:"subsidyAmount", label:"공시지원금", get:it=> (it.subsidyAmount!=null)?Number(it.subsidyAmount).toLocaleString():"-", getRaw:it=>it.subsidyAmount!=null?Number(it.subsidyAmount):"" },
     { key:"subsidyStatus", label:"공시지원금 상태", get:it=>it.subsidyStatus||"-" },
     { key:"clawbackAmount", label:"환수액", get:it=> (it.clawbackAmount!=null)?Number(it.clawbackAmount).toLocaleString():"-", getRaw:it=>it.clawbackAmount!=null?Number(it.clawbackAmount):"" },
@@ -27870,7 +27881,16 @@
       }
     }
 
-    if(sale && buy) p.profit = sale - buy;
+    // 판매후할인 — 판매가는 그대로 두고 %만 맞춥니다.
+    if(key === "saleOtherDiscountAmt"){ const a = num(val); p.saleOtherDiscountPct = pct(a); }
+    if(key === "saleOtherDiscountPct"){ const pv = num(val); if(L) p.saleOtherDiscountAmt = Math.round(L * pv / 100); }
+
+    // 수익 = 판매가 − 후할인 − 입고가 (선할인은 이미 판매가에 반영돼 있습니다)
+    if(sale && buy){
+      const sOther = (p.saleOtherDiscountAmt != null) ? Number(p.saleOtherDiscountAmt)
+                     : (Number(it.saleOtherDiscountAmt) || 0);
+      p.profit = sale - sOther - buy;
+    }
     return p;
   }
 
@@ -27933,8 +27953,10 @@
     { key:"purchasePrice",    label:"입고가",        type:"number", link:"buy" },
     { key:"destination",      label:"판매처",        type:"names",  col:"outboundDestinations" },
     { key:"salePrice",        label:"판매가",        type:"number", link:"saleprice" },
-    { key:"saleDiscountAmt",  label:"판매할인",      type:"number", link:"saleamt" },
-    { key:"saleDiscount",     label:"판매할인%",     type:"number", link:"salepct" },
+    { key:"saleDiscountAmt",  label:"판매선할인",    type:"number", link:"saleamt" },
+    { key:"saleDiscount",     label:"판매선할인%",   type:"number", link:"salepct" },
+    { key:"saleOtherDiscountAmt", label:"판매후할인",  type:"number", link:"saleotheramt" },
+    { key:"saleOtherDiscountPct", label:"판매후할인%", type:"number", link:"saleotherpct" },
     { key:"subsidyAmount",    label:"공시지원금",     type:"number" },
     { key:"subsidyStatus",    label:"공시지원금 상태", type:"options", options:["지급대기","지급완료","환수"] },
     { key:"clawbackAmount",   label:"환수액",        type:"number" },
@@ -27968,9 +27990,12 @@
       const pre = L - (g("purchasePrice")||0) - (g("otherDiscountAmt")||0);
       set("purchaseDiscountAmt", pre); set("purchaseDiscount", pctFromAmt(pre, L));
     }
+    // 판매 — 선할인만 판매가에 반영합니다. 후할인은 나중에 따로 받는 것이라 판매가를 안 바꿉니다.
     if(src==="saleamt"){ set("saleDiscount", pctFromAmt(document.getElementById(meId("saleDiscountAmt")).value, L)); if(L) set("salePrice", L - (g("saleDiscountAmt")||0)); }
     if(src==="salepct"){ const a = amtFromPct(document.getElementById(meId("saleDiscount")).value, L); set("saleDiscountAmt", a); if(L && a!=="") set("salePrice", L - Number(a)); }
     if(src==="saleprice" && L){ const a = L - (g("salePrice")||0); set("saleDiscountAmt", a); set("saleDiscount", pctFromAmt(a, L)); }
+    if(src==="saleotheramt") set("saleOtherDiscountPct", pctFromAmt(document.getElementById(meId("saleOtherDiscountAmt")).value, L));
+    if(src==="saleotherpct") set("saleOtherDiscountAmt", amtFromPct(document.getElementById(meId("saleOtherDiscountPct")).value, L));
     if(src==="list"){
       set("purchaseDiscount", pctFromAmt(document.getElementById(meId("purchaseDiscountAmt")).value, L));
       set("otherDiscountPct", pctFromAmt(document.getElementById(meId("otherDiscountAmt")).value, L));
@@ -27987,16 +28012,7 @@
       + (items.length ? '<br><span style="color:var(--gray);font-size:12px;">' +
           [...new Set(items.map(it=>docModelLabel(it)))].slice(0,3).map(comboEsc).join(" · ") +
           (new Set(items.map(it=>docModelLabel(it))).size > 3 ? " 외" : "") + '</span>' : '');
-    const warnEl = document.getElementById("me-price-warn");
-    if(warnEl){
-      if(noPriceModels.length > 0){
-        warnEl.style.display = "block";
-        warnEl.innerHTML = '<b>모델 등록에 출고가가 없습니다.</b>'
-          + '<br>' + noPriceModels.slice(0,5).map(comboEsc).join("<br>")
-          + (noPriceModels.length>5 ? '<br>... 외 ' + (noPriceModels.length-5) + '개' : '')
-          + '<br><span style="color:var(--gray);">재고 기초설정 → 모델 등록에서 출고가를 먼저 넣어주세요. 그래야 출고가·할인이 정확히 계산됩니다.</span>';
-      }else{ warnEl.style.display = "none"; }
-    }
+    // 출고가 안내는 아래에서 모델을 확인한 뒤에 그립니다.
 
     // 폼 만들기
     const form = document.getElementById("multi-edit-form");
@@ -28021,6 +28037,20 @@
       if(!p) noPriceModels.push((m.systemModel||m.baseModel||"-") + " (출고가 미입력)");
       else if(!modelPrices.includes(p)) modelPrices.push(p);
     });
+
+    // 모델 등록에 출고가가 없으면 알려드립니다.
+    {
+      const warnEl = document.getElementById("me-price-warn");
+      if(warnEl){
+        if(noPriceModels.length > 0){
+          warnEl.style.display = "block";
+          warnEl.innerHTML = '<b>모델 등록에 출고가가 없습니다.</b>'
+            + '<br>' + noPriceModels.slice(0,5).map(comboEsc).join("<br>")
+            + (noPriceModels.length>5 ? '<br>... 외 ' + (noPriceModels.length-5) + '개' : '')
+            + '<br><span style="color:var(--gray);">재고 기초설정 → 모델 등록에서 출고가를 먼저 넣어주세요. 그래야 출고가·할인이 정확히 계산됩니다.</span>';
+        }else{ warnEl.style.display = "none"; }
+      }
+    }
 
     // 체크한 건들의 현재 값을 미리 보여줍니다.
     //  · 모두 같으면 그 값을 채우고, 다르면 "건별 다름"으로 알려줍니다.
@@ -28935,7 +28965,7 @@
     seenNewTag = lastSeenTag;    // 이 버전만 안 알립니다. 그 뒤에 또 올라오면 다시 알립니다.
   };
 
-  // 파일에 박힌 버전 글자를 읽습니다. (예: "파일 2026-08-09 v586")
+  // 파일에 박힌 버전 글자를 읽습니다. (예: "파일 2026-08-09 v589")
   function readBuildTag(text){
     const m = String(text||"").match(/파일\s*[\d-]+\s*v(\d+)/);
     return m ? m[0].trim() : "";
@@ -32202,16 +32232,26 @@
     html += '<div class="stack-form">';
     html += '<div class="stack-row"><label>판매처</label><select id="paste-sale-dest-select"></select></div>';
     html += '<div class="stack-row"><label>출고일</label><input type="text" id="paste-sale-outdate-input" maxlength="8" inputmode="numeric" value="'+(matchedDate||todayStr())+'"></div>';
+    html += '<div class="stack-row"><label>판매선할인 <span class="info-tip" title="판매할 때 바로 빼주는 할인입니다. 판매가에서 이 금액을 뺀 값이 실제로 받는 돈이 됩니다. 금액이나 %% 중 하나만 넣으시면 나머지는 알아서 계산합니다.">ⓘ</span></label>'
+      + '<span><input type="number" id="paste-sale-discamt" placeholder="할인 금액" style="width:120px;" oninput="onPasteSaleDisc(\'amt\')"> 원'
+      + ' &nbsp; <input type="number" id="paste-sale-discpct" placeholder="할인%" step="0.01" style="width:90px;" oninput="onPasteSaleDisc(\'pct\')"> %'
+      + ' <span style="color:var(--gray);font-size:11.5px;margin-left:6px;">비우면 할인 없음</span></span></div>';
+    html += '<div class="stack-row"><label>판매후할인 <span class="info-tip" title="나중에 따로 정산해 받는 할인입니다. 판매가는 그대로 두고 따로 적어둡니다. 수익 계산에는 함께 반영됩니다.">ⓘ</span></label>'
+      + '<span><input type="number" id="paste-sale-otheramt" placeholder="후할인 금액" style="width:120px;" oninput="onPasteSaleOther(\'amt\')"> 원'
+      + ' &nbsp; <input type="number" id="paste-sale-otherpct" placeholder="후할인%" step="0.01" style="width:90px;" oninput="onPasteSaleOther(\'pct\')"> %'
+      + ' <span style="color:var(--gray);font-size:11.5px;margin-left:6px;">판매가는 그대로</span></span></div>';
     html += '</div>';
 
     html += '<p class="desc" style="margin-top:10px;margin-bottom:4px;font-weight:700;color:var(--navy);">인식된 품목 미리보기</p>';
-    html += '<div style="overflow-x:auto;border:1px solid var(--line);max-height:260px;overflow-y:auto;"><table class="data-table"><thead><tr><th>일련번호</th><th>모델 (전산모델명)</th><th class="ta-right">판매가</th><th>상태</th></tr></thead><tbody>';
-    dataRows.forEach(r=>{
+    html += '<div style="overflow-x:auto;border:1px solid var(--line);max-height:260px;overflow-y:auto;"><table class="data-table"><thead><tr><th>일련번호</th><th>모델 (전산모델명)</th><th class="ta-right">판매가</th><th class="ta-right">할인 뒤</th><th>상태</th></tr></thead><tbody id="paste-sale-preview-body">';
+    dataRows.forEach((r,ri)=>{
       const it = foundMap[r.serial];
+      const p = (r.price != null) ? Number(r.price) : (it && it.listPrice ? Number(it.listPrice) : 0);
       html += '<tr'+(it?'':' style="color:var(--danger);"')+'>' +
         '<td>'+r.serial+'</td>' +
         '<td>'+(it ? comboEsc(docModelLabel(it)) : '-')+'</td>' +
         '<td class="ta-right">'+(r.price!=null?r.price.toLocaleString():(it&&it.listPrice?Number(it.listPrice).toLocaleString()+'(출고가)':'-'))+'</td>' +
+        '<td class="ta-right" data-ps-final="'+ri+'">'+(p?p.toLocaleString():'<span style="color:var(--gray);">-</span>')+'</td>' +
         '<td>'+(it ? (it.status==='판매'?'이미 판매됨':'✓ 보유중') : '재고를 찾을 수 없음')+'</td>' +
         '</tr>';
     });
@@ -32220,19 +32260,81 @@
     html += '<div id="paste-sale-result" style="font-size:12.5px;margin-top:10px;"></div>';
 
     analysisEl.innerHTML = html;
-    analysisEl.dataset.rows = JSON.stringify(dataRows);
+    // 판매가가 비어 있으면 재고의 출고가를 채워 담습니다. (할인 계산 기준이 됩니다)
+    analysisEl.dataset.rows = JSON.stringify(dataRows.map(r=>{
+      const it = foundMap[r.serial];
+      const p = (r.price != null) ? Number(r.price) : (it && it.listPrice ? Number(it.listPrice) : null);
+      return { ...r, price: p };
+    }));
 
     const destSel = document.getElementById("paste-sale-dest-select");
     destSel.innerHTML = '<option value="">선택</option>';
     destNames.forEach(n=>{ const opt=document.createElement("option"); opt.value=n; opt.textContent=n; if(n===matchedDest) opt.selected=true; destSel.appendChild(opt); });
   };
 
+  // 판매할인 — 금액이나 %% 중 하나만 넣으면 나머지를 채웁니다. 기준은 판매가입니다.
+  window.onPasteSaleDisc = function(from){
+    const rows = JSON.parse(document.getElementById("paste-sale-analysis").dataset.rows||"[]");
+    const base = rows.reduce((n,r)=> n + (Number(r.price)||0), 0);   // 판매가 합계
+    const aEl = document.getElementById("paste-sale-discamt");
+    const pEl = document.getElementById("paste-sale-discpct");
+    if(!aEl || !pEl) return;
+    if(!(base > 0)) return;
+    const unit = base / rows.length;      // 대당 평균 판매가
+    if(from === "amt"){
+      const a = Number(aEl.value);
+      pEl.value = (aEl.value === "" || !(a > 0)) ? "" : Number(((a / unit) * 100).toFixed(2));
+    }else{
+      const p = Number(pEl.value);
+      aEl.value = (pEl.value === "" || !(p > 0)) ? "" : Math.round(unit * p / 100);
+    }
+    renderPasteSalePreview();
+  };
+
+  // 할인을 넣으면 미리보기 표의 판매가를 다시 그립니다.
+  function renderPasteSalePreview(){
+    const el = document.getElementById("paste-sale-preview-body");
+    if(!el) return;
+    const rows = JSON.parse(document.getElementById("paste-sale-analysis").dataset.rows||"[]");
+    const dAmt = Number((document.getElementById("paste-sale-discamt")||{}).value) || 0;
+    const oAmt = Number((document.getElementById("paste-sale-otheramt")||{}).value) || 0;
+    const cut = dAmt + oAmt;
+    el.querySelectorAll("[data-ps-final]").forEach((td,i)=>{
+      const p = Number(rows[i] && rows[i].price) || 0;
+      const f = Math.max(0, p - cut);
+      td.innerHTML = cut
+        ? '<b>' + f.toLocaleString() + '</b> <span style="color:var(--danger);font-size:10.5px;">-' + cut.toLocaleString() + '</span>'
+        : (p ? p.toLocaleString() : '<span style="color:var(--gray);">-</span>');
+    });
+  }
+
+  // 판매후할인 — 나중에 받는 것이라 판매가는 안 바꿉니다.
+  window.onPasteSaleOther = function(from){
+    const rows = JSON.parse(document.getElementById("paste-sale-analysis").dataset.rows||"[]");
+    const base = rows.reduce((n,r)=> n + (Number(r.price)||0), 0);
+    const aEl = document.getElementById("paste-sale-otheramt");
+    const pEl = document.getElementById("paste-sale-otherpct");
+    if(!aEl || !pEl || !(base > 0)) return;
+    const unit = base / rows.length;
+    if(from === "amt"){
+      const a = Number(aEl.value);
+      pEl.value = (aEl.value === "" || !(a > 0)) ? "" : Number(((a / unit) * 100).toFixed(2));
+    }else{
+      const p = Number(pEl.value);
+      aEl.value = (pEl.value === "" || !(p > 0)) ? "" : Math.round(unit * p / 100);
+    }
+    renderPasteSalePreview();
+  };
+
   window.submitPasteSale = async function(){
     const dataRows = JSON.parse(document.getElementById("paste-sale-analysis").dataset.rows||"[]");
     const dest = document.getElementById("paste-sale-dest-select").value;
     const outDate = document.getElementById("paste-sale-outdate-input").value || todayStr();
+    const discAmt = Number((document.getElementById("paste-sale-discamt")||{}).value) || 0;
+    const otherAmt = Number((document.getElementById("paste-sale-otheramt")||{}).value) || 0;
     const resultEl = document.getElementById("paste-sale-result");
     if(!dest){ alert("판매처를 선택해주세요."); return; }
+    if(discAmt < 0){ alert("판매할인은 0 이상으로 넣어주세요."); return; }
 
     let sold = 0; const notFound = [];
     const madeLines = [];   // 판매요청으로 묶을 품목들
@@ -32245,7 +32347,18 @@
       const salePrice = r.price!=null ? r.price : it.listPrice;
       if(salePrice){
         patch.salePrice = Number(salePrice);
-        if(it.purchasePrice) patch.profit = Number(salePrice) - Number(it.purchasePrice);
+        // 판매할인 — 넣으셨으면 그대로 적고, 수익은 할인 뒤 금액으로 계산합니다.
+        if(discAmt > 0){
+          patch.saleDiscountAmt = discAmt;
+          patch.saleDiscount = Number(((discAmt / Number(salePrice)) * 100).toFixed(2));
+        }
+        if(otherAmt > 0){
+          patch.saleOtherDiscountAmt = otherAmt;
+          patch.saleOtherDiscountPct = Number(((otherAmt / Number(salePrice)) * 100).toFixed(2));
+        }
+        // 수익은 선할인·후할인을 모두 뺀 금액으로 봅니다.
+        const net = Number(salePrice) - discAmt - otherAmt;
+        if(it.purchasePrice) patch.profit = net - Number(it.purchasePrice);
       }
       await updateDoc(doc(db,"inventoryItems", itemDoc.id), patch);
       sold++;
@@ -32256,7 +32369,8 @@
     let madeReq = 0;
     if(madeLines.length){
       try{
-        const total = madeLines.reduce((n,x)=> n + x.salePrice, 0);
+        // 판매요청 금액은 선할인만 뺍니다. 후할인은 나중에 따로 정산합니다.
+        const total = madeLines.reduce((n,x)=> n + Math.max(0, x.salePrice - discAmt), 0);
         const srBatch = await addDoc(collection(db,"saleRequestBatches"), {
           destination: dest, requestDate: outDate,
           depositRequired: total, depositReceived:false, depositReceivedDate:"",
