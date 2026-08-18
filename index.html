@@ -387,7 +387,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v616</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v622</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -3008,7 +3008,7 @@
         <button class="no-print" onclick="closeOrderDetailModal()" style="position:absolute;top:12px;right:12px;background:none;border:1px solid var(--navy);width:26px;height:26px;cursor:pointer;font-size:13px;">✕</button>
         <div style="display:flex;justify-content:space-between;align-items:flex-start;">
           <h3 style="margin-top:0;margin-bottom:4px;" id="order-detail-heading">주문 요청서</h3>
-          <span class="no-print btn-row" style="margin-right:34px;"><button class="btn small secondary" style="width:auto;" id="order-po-btn" onclick="openPoFromDetail()">삼성전자 발주서</button><button class="btn small secondary" style="width:auto;" id="order-bulkarr-btn" onclick="toggleBulkArrival()">도착 일괄 등록</button><button class="btn small secondary" style="width:auto;" onclick="printOrderDetail()">인쇄 / PDF 저장</button></span>
+          <span class="no-print btn-row" style="margin-right:34px;"><button class="btn small secondary" style="width:auto;" id="order-po-btn" onclick="openPoFromDetail()">삼성전자 발주서</button><button class="btn small secondary" style="width:auto;" id="order-bulkarr-btn" onclick="toggleBulkArrival()">도착 일괄 등록</button><button class="btn small danger" style="width:auto;" id="order-allcancel-btn" title="이 주문에 도착 등록된 재고를 전부 되돌립니다. 재고는 지워지고 도착 수는 0이 됩니다." onclick="cancelAllArrivals()">도착 전체 취소</button><button class="btn small secondary" style="width:auto;" onclick="printOrderDetail()">인쇄 / PDF 저장</button></span>
         </div>
         <p class="desc" id="order-detail-title"></p>
         <div id="bulk-arrival-box" class="no-print" style="display:none;border:1px solid var(--navy);background:#f4f7fb;padding:12px 14px;margin-bottom:12px;">
@@ -10113,6 +10113,127 @@
   };
 
   let currentPoBatch = null;
+  // 주문 품목 하나에 붙어 있는 재고를 보여줍니다.
+  window.showOrderLineItems = async function(orderId){
+    const box = document.getElementById("order-detail-pending");
+    if(!box) return;
+    box.innerHTML = '<div style="color:var(--gray);font-size:12.5px;">불러오는 중입니다...</div>';
+    let o = null, items = [];
+    try{
+      const os = await getDoc(doc(db,"orders", orderId));
+      if(os.exists()) o = { id:os.id, ...os.data() };
+      const snap = await getDocs(query(collection(db,"inventoryItems"), where("orderId","==", orderId)));
+      snap.forEach(d=>{ const v = d.data(); if(v.deleted !== true) items.push({ id:d.id, ...v }); });
+    }catch(e){ box.innerHTML = '<div style="color:var(--danger);">읽지 못했습니다.</div>'; return; }
+    if(!o){ box.innerHTML = ""; return; }
+    const oM = modelDupKey(o.systemModel||""), oC = modelDupKey(o.systemColor||"");
+    const bad = items.filter(it=> modelDupKey(it.systemModel||"") !== oM || modelDupKey(it.systemColor||"") !== oC);
+    box.innerHTML = '<div style="border:1px solid var(--navy);padding:9px 11px;margin-bottom:8px;">'
+      + '<div style="font-weight:700;margin-bottom:4px;">'
+      + comboEsc(o.systemModel||"-") + ' · ' + comboEsc(o.systemColor||"-")
+      + ' — 주문 ' + (Number(o.quantity)||0) + '대 · 도착 ' + (Number(o.fulfilledCount)||0) + '대 · 붙은 재고 ' + items.length + '대</div>'
+      + (bad.length
+          ? '<div style="border:1px solid var(--danger);background:#fdecea;padding:6px 9px;margin-bottom:6px;font-size:12px;">'
+            + '<b>이 품목과 다른 재고가 ' + bad.length + '대</b> 붙어 있습니다. 잘못 배정된 것입니다.</div>'
+          : '')
+      + '<table class="data-table" style="width:100%;"><thead><tr>'
+      + '<th>일련번호</th><th>재고의 모델</th><th>재고의 색상</th><th>통신사</th><th>입고일</th><th>상태</th><th>맞나</th>'
+      + '</tr></thead><tbody>'
+      + (items.length ? items.map(it=>{
+          const ok = modelDupKey(it.systemModel||"") === oM && modelDupKey(it.systemColor||"") === oC;
+          return '<tr style="background:' + (ok ? '#f4faf4' : '#fdecea') + ';">'
+            + '<td><b>' + comboEsc(it.serialNumber||"-") + '</b></td>'
+            + '<td>' + comboEsc(it.systemModel||"-") + '</td>'
+            + '<td>' + comboEsc(it.systemColor||"-") + '</td>'
+            + '<td>' + comboEsc(it.carrier||"-") + '</td>'
+            + '<td>' + comboEsc(it.inDate||"-") + '</td>'
+            + '<td>' + comboEsc(it.status||"-") + '</td>'
+            + '<td style="' + (ok ? 'color:#2e7d32;' : 'color:var(--danger);font-weight:700;') + '">'
+            + (ok ? '맞음' : '다름') + '</td></tr>';
+        }).join("") : '<tr><td colspan="7" class="list-empty">붙은 재고가 없습니다.</td></tr>')
+      + '</tbody></table>'
+      + '<div style="font-size:11.5px;color:var(--gray);margin-top:6px;line-height:1.7;">'
+      + '<b>다름</b>인 재고는 이 품목에 잘못 붙은 것입니다. '
+      + '데이터 점검의 <b>「일련번호로 주문↔재고 맞추기」</b>에 그 일련번호를 넣어 정리하세요.</div>'
+      + '</div>';
+  };
+
+  // 이 주문의 도착을 전부 되돌립니다. 재고는 지워지고 도착 수는 0이 됩니다.
+  window.cancelAllArrivals = async function(){
+    if(!currentPoBatch){ alert("주문을 먼저 열어주세요."); return; }
+    if(!hasPerm(currentUserPerms, "cancelDelete")){ alert("권한이 없습니다."); return; }
+    const { batchId, b } = currentPoBatch;
+    const lines = (orderBatchLinesCache[batchId] || []).filter(o=> o.status !== "취소");
+    const done = lines.filter(o=> (Number(o.fulfilledCount)||0) > 0);
+    if(done.length === 0){ alert("되돌릴 도착 건이 없습니다."); return; }
+
+    // 이 주문으로 들어온 재고를 모읍니다.
+    let items = [];
+    try{
+      for(const o of done){
+        const snap = await getDocs(query(collection(db,"inventoryItems"), where("orderId","==", o.id)));
+        snap.forEach(d=>{ const v = d.data(); if(v.deleted !== true) items.push({ id:d.id, lineId:o.id, ...v }); });
+      }
+    }catch(e){ alert("재고를 읽지 못했습니다."); return; }
+
+    const sold = items.filter(x=> x.status === "판매" || x.status === "개통");
+    if(!confirm("이 주문의 도착을 전부 되돌립니다.\n\n"
+      + "  " + (b.source||"-") + " · " + (b.orderDate||"-") + " · " + (b.carrier||"-") + "\n"
+      + "  품목 " + done.length + "개 · 재고 " + items.length + "대\n\n"
+      + (sold.length ? "※ 그중 " + sold.length + "대는 판매·개통된 재고입니다. 함께 지워집니다.\n\n" : "")
+      + "되돌린 재고는 지워지고 도착 수는 0이 됩니다.\n"
+      + "판매요청 매칭도 함께 풀립니다.\n\n되돌릴 수 없습니다. 진행할까요?")) return;
+    if(sold.length && !confirm("다시 확인합니다.\n\n판매·개통된 재고 " + sold.length + "대가 함께 지워집니다.\n계속하시겠습니까?")) return;
+
+    let srReleased = 0;
+    try{
+      // ① 판매요청 매칭 풀기
+      const ids = items.map(x=> x.id);
+      const srSnap = await getDocs(query(collection(db,"saleRequests"), where("fromOrderBatchId","==", batchId)));
+      for(const d of srSnap.docs){
+        const sr = d.data();
+        const keep = (sr.matchedItemIds||[]).filter(x=> ids.indexOf(x) < 0);
+        const removed = (sr.matchedItemIds||[]).length - keep.length;
+        if(removed <= 0) continue;
+        const nf2 = Math.max(0, (Number(sr.fulfilledCount)||0) - removed);
+        await updateDoc(doc(db,"saleRequests", d.id), {
+          matchedItemIds: keep, fulfilledCount: nf2,
+          status: (nf2 <= 0) ? "요청중" : (nf2 >= (Number(sr.quantity)||0) ? "매칭완료" : "부분매칭")
+        });
+        srReleased += removed;
+      }
+      // ② 재고 지우기
+      for(let i=0; i<ids.length; i+=300){
+        const bt = writeBatch(db);
+        ids.slice(i, i+300).forEach(id=> bt.delete(doc(db,"inventoryItems", id)));
+        await bt.commit();
+      }
+      // ③ 주문 품목의 도착 수 0으로
+      for(let i=0; i<done.length; i+=300){
+        const bt = writeBatch(db);
+        done.slice(i, i+300).forEach(o=> bt.update(doc(db,"orders", o.id),
+          { fulfilledCount: 0, linkedItemIds: [], status: "주문중" }));
+        await bt.commit();
+      }
+    }catch(e){ alert("되돌리지 못했습니다.\n" + ((e&&e.message)?e.message:String(e))); return; }
+
+    logAction("도착 전체 취소", (b.source||"-") + " " + (b.orderDate||"-")
+      + " / 품목 " + done.length + "개 · 재고 " + items.length + "대"
+      + (srReleased ? " / 판매요청 매칭 " + srReleased + "건 해제" : ""));
+    alert("되돌렸습니다.\n\n  재고 " + items.length + "대 지움\n  품목 " + done.length + "개 도착 0으로"
+      + (srReleased ? "\n  판매요청 매칭 " + srReleased + "건 해제" : "")
+      + "\n\n이제 <수정>에서 모델·색상을 고치신 뒤 다시 도착 등록해주세요.");
+    clearCache("inventory"); clearCache("orders"); clearDashCache();
+    // 창은 그대로 두고 안쪽만 다시 그립니다. (다시 열 필요 없게)
+    try{
+      (orderBatchLinesCache[batchId] || []).forEach(o=>{
+        if(done.some(d=> d.id === o.id)){ o.fulfilledCount = 0; o.linkedItemIds = []; o.status = "주문중"; }
+      });
+      await openOrderBatchDetailModal(batchId, b);
+    }catch(e){ closeOrderDetailModal(); }
+    loadOrderList();
+  };
+
   window.openPoFromDetail = function(){
     if(!currentPoBatch) return;
     closeOrderDetailModal();
@@ -10869,6 +10990,10 @@
     const tbody = document.getElementById("order-detail-tbody");
 
     // 이 주문에서 자동생성된 판매요청 현황을 머리부 아래에 보여줍니다.
+    // 도착 수를 누르면 그 품목에 붙은 재고를 보여줍니다.
+    tbody.querySelectorAll("[data-od-items]").forEach(a=>{
+      a.onclick = ()=> showOrderLineItems(a.dataset.odItems);
+    });
     renderOrderSaleLink(batchId, lines);
     currentPoBatch = { batchId, b };
     const poBtn2 = document.getElementById("order-po-btn");
@@ -10888,8 +11013,12 @@
       const tr = document.createElement("tr");
       if(o.status==="취소") tr.style.color = "var(--gray)";
       tr.innerHTML =
-        // 도착·상태를 맨 앞에 둡니다. 오른쪽으로 밀지 않아도 보이게요.
-        '<td class="ta-right" style="white-space:nowrap;font-weight:700;">'+(o.fulfilledCount||0)+'/'+qty+'</td>' +
+        // 도착·상태를 맨 앞에 둡니다. 눌러보면 어떤 재고가 붙었는지 나옵니다.
+        '<td class="ta-right" style="white-space:nowrap;font-weight:700;">'
+          + ((o.fulfilledCount||0) > 0
+              ? '<a href="javascript:void(0)" data-od-items="'+o.id+'" title="이 품목에 붙은 재고를 봅니다.">'
+                + (o.fulfilledCount||0)+'/'+qty + '</a>'
+              : (o.fulfilledCount||0)+'/'+qty) + '</td>' +
         '<td style="white-space:nowrap;">'+comboEsc(o.status||"-")+'</td>' +
         '<td>'+comboEsc(docModelLabel(o))+'</td>' +
         '<td>'+(o.systemColor || o.manufacturerColor
@@ -21919,6 +22048,14 @@
     const lineCol = (kind === "order") ? "orders" : "saleRequests";
     const lineSnap = await getDocs(query(collection(db, lineCol), where("batchId","==",id)));
     const lines = []; lineSnap.forEach(d=> lines.push({ id:d.id, ...d.data() }));
+    // 상세 화면과 같은 순서로 보이게 맞춥니다. (줄번호 → 만든 시각)
+    lines.sort((a,b)=>{
+      const la = Number(a.lineNo)||0, lb = Number(b.lineNo)||0;
+      if(la && lb && la !== lb) return la - lb;
+      const ta = (a.createdAt && a.createdAt.seconds) || 0;
+      const tb = (b.createdAt && b.createdAt.seconds) || 0;
+      return ta - tb;
+    });
     editingBatch = { kind, id, b, lines, col, lineCol };
 
     document.getElementById("be-title").textContent = (kind === "order") ? "주문 수정" : "판매요청 수정";
@@ -22030,7 +22167,8 @@
                   + (m.petName ? " · " + comboEsc(m.petName) : "") + '</option>';
           });
         ms.innerHTML = opts;
-        ms.onchange = ()=> recalcBatchLine(tr);
+        // 모델을 바꾸면 그 모델의 출고가로 바꾸고, 색상 목록도 그 모델 것으로 갈아 끼웁니다.
+        ms.onchange = ()=> onBatchEditModelChange(tr);
         cell(ms);
       }
       // 색상 — 그 모델에 등록된 색상에서 고릅니다. (도착된 줄도 고칠 수 있습니다)
@@ -22173,6 +22311,35 @@
     editingBatch.lines = alive;
     await renderBatchEditLines();
     alert("지웠습니다. 금액을 확인하고 <수정 저장>을 눌러주세요.");
+  };
+
+  // 모델을 바꿨을 때 — 출고가·색상 목록을 그 모델 기준으로 다시 채웁니다.
+  window.onBatchEditModelChange = function(tr){
+    const ms = tr.querySelector(".be-model");
+    if(!ms || !ms.value){ recalcBatchLine(tr); return; }
+    const m = (modelsCache||[]).find(x=> String(x.systemModel||"") === ms.value);
+    if(!m){ recalcBatchLine(tr); return; }
+
+    // 출고가 — 그 모델에 등록된 값으로 바꿉니다.
+    const lp = tr.querySelector(".be-listprice");
+    if(lp && !lp.disabled){
+      const p = Number(m.priceIncVat)||0;
+      if(p > 0) lp.value = p;
+    }
+    // 색상 — 그 모델에 등록된 색상으로 목록을 갈아 끼웁니다.
+    const cs = tr.querySelector(".be-color");
+    if(cs){
+      const cols = m.colors || [];
+      let op = '<option value="">(색상을 골라주세요)</option>';
+      cols.forEach(c=>{
+        const v = (c.manufacturerColor||"") + "|" + (c.systemColor||"") + "|" + (c.sku||"");
+        op += '<option value="' + comboEsc(v) + '">' + comboEsc(c.systemColor || c.manufacturerColor || "-") + '</option>';
+      });
+      cs.innerHTML = op;
+      cs.style.borderColor = "var(--danger)";      // 색상을 다시 고르시라고 표시
+      cs.title = "모델이 바뀌었습니다. 색상을 다시 골라주세요.";
+    }
+    recalcBatchLine(tr);
   };
 
   function recalcBatchLine(tr){
@@ -24854,6 +25021,57 @@
   // 주문과 재고의 모델·색상이 다른 건 — 재고에 맞춥니다.
   let orderItemDiffCache = [];
 
+  // 주문 수량보다 도착이 많은 품목 — 어떤 재고가 붙었는지 보여줍니다.
+  let overFulfillCache = [];
+
+  window.showOverFulfillList = async function(){
+    const el = document.getElementById("datacheck-detail");
+    if(!el) return;
+    if(overFulfillCache.length === 0){ el.innerHTML = '<div class="list-empty">넘은 것이 없습니다.</div>'; return; }
+    el.innerHTML = '<div style="color:var(--gray);font-size:12.5px;">붙은 재고를 읽는 중입니다...</div>';
+    // 품목마다 붙은 재고를 읽어옵니다.
+    for(const r of overFulfillCache){
+      if(r.items) continue;
+      r.items = [];
+      try{
+        const snap = await getDocs(query(collection(db,"inventoryItems"), where("orderId","==", r.oid)));
+        snap.forEach(d=>{ const v = d.data(); if(v.deleted !== true) r.items.push({ id:d.id, ...v }); });
+      }catch(e){}
+    }
+    let h = '<div style="border:1px solid var(--navy);padding:10px 12px;margin-top:10px;">'
+      + '<div style="font-weight:700;margin-bottom:4px;">주문 수량보다 도착이 많은 품목 — '
+      + overFulfillCache.length + '개</div>'
+      + '<div style="font-size:11.5px;color:var(--gray);line-height:1.7;margin-bottom:8px;">'
+      + '<b>다름</b>인 재고가 이 품목에 잘못 붙은 것입니다. 그 일련번호를 적어두고 '
+      + '재고 목록에서 <b>모델·색상</b>을 실제에 맞게 고쳐주세요.<br>'
+      + '고치면 도착 수도 다시 세어집니다.</div>';
+    overFulfillCache.forEach(r=>{
+      const oM = modelDupKey(r.o.systemModel||""), oC = modelDupKey(r.o.systemColor||"");
+      h += '<div style="border:1px solid var(--line);margin-bottom:8px;">'
+        + '<div style="background:#f7f9fc;padding:6px 9px;font-weight:700;font-size:12.5px;">'
+        + comboEsc(r.o.orderDate||"-") + ' · ' + comboEsc(r.o.systemModel||"-") + ' · ' + comboEsc(r.o.systemColor||"-")
+        + ' — 주문 ' + r.qty + '대 · 도착 <span style="color:var(--danger);">' + r.done + '대</span>'
+        + ' (' + r.over + '대 넘음)</div>'
+        + '<table class="data-table" style="width:100%;"><thead><tr>'
+        + '<th>일련번호</th><th>재고의 모델</th><th>재고의 색상</th><th>통신사</th><th>입고일</th><th>맞나</th>'
+        + '</tr></thead><tbody>'
+        + ((r.items||[]).length ? r.items.map(it=>{
+            const ok = modelDupKey(it.systemModel||"") === oM && modelDupKey(it.systemColor||"") === oC;
+            return '<tr style="background:' + (ok ? '#f4faf4' : '#fdecea') + ';">'
+              + '<td><b>' + comboEsc(it.serialNumber||"-") + '</b></td>'
+              + '<td>' + comboEsc(it.systemModel||"-") + '</td>'
+              + '<td>' + comboEsc(it.systemColor||"-") + '</td>'
+              + '<td>' + comboEsc(it.carrier||"-") + '</td>'
+              + '<td>' + comboEsc(it.inDate||"-") + '</td>'
+              + '<td style="' + (ok ? 'color:#2e7d32;' : 'color:var(--danger);font-weight:700;') + '">'
+              + (ok ? '맞음' : '다름') + '</td></tr>';
+          }).join("") : '<tr><td colspan="6" class="list-empty">붙은 재고가 없습니다.</td></tr>')
+        + '</tbody></table></div>';
+    });
+    h += '</div>';
+    el.innerHTML = h;
+  };
+
   window.showOrderItemDiffList = function(){
     const el = document.getElementById("datacheck-detail");
     if(!el) return;
@@ -25549,6 +25767,25 @@
         issues.push({ n:"같은 모델·일련번호가 여러 건", cnt:dupKeys.length, unit:"남는 " + dupExtra + "건",
           why:"모델과 일련번호가 둘 다 같으면 같은 단말기입니다. 모델이 다르면 다른 단말기라 세지 않습니다.",
           fix: dupKeys.length ? "showDupSerialList()" : null, fixLabel:"확인하고 정리" });
+      }
+
+      // ⓪-E 주문 품목의 도착 수가 주문 수량을 넘은 건
+      //  색상이 안 맞을 때 남은 품목에 그냥 넣던 문제로 생긴 것입니다.
+      {
+        const rows = [];
+        Object.keys(orders).forEach(oid=>{
+          const o = orders[oid];
+          if(o.status === "취소") return;
+          const qty = Number(o.quantity)||0;
+          const done = Number(o.fulfilledCount)||0;
+          if(!qty || done <= qty) return;
+          rows.push({ oid, o, qty, done, over: done - qty });
+        });
+        overFulfillCache = rows;
+        const overSum = rows.reduce((n,r)=> n + r.over, 0);
+        issues.push({ n:"주문 수량보다 도착이 많은 품목", cnt:rows.length, unit:overSum + "대 초과",
+          why:"주문한 것보다 많이 도착한 것으로 되어 있습니다. 색상이 안 맞는 재고가 엉뚱한 품목에 붙은 경우입니다.",
+          fix: rows.length ? "showOverFulfillList()" : null, fixLabel:"확인하기" });
       }
 
       // ⓪-D 주문 품목과 그 재고의 모델·색상이 다른 건
@@ -30224,7 +30461,7 @@
     seenNewTag = lastSeenTag;    // 이 버전만 안 알립니다. 그 뒤에 또 올라오면 다시 알립니다.
   };
 
-  // 파일에 박힌 버전 글자를 읽습니다. (예: "파일 2026-08-09 v616")
+  // 파일에 박힌 버전 글자를 읽습니다. (예: "파일 2026-08-09 v622")
   function readBuildTag(text){
     const m = String(text||"").match(/파일\s*[\d-]+\s*v(\d+)/);
     return m ? m[0].trim() : "";
