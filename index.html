@@ -387,7 +387,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v607</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v610</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -884,6 +884,20 @@
         <p class="desc" style="margin-top:0;">데이터가 서로 어긋난 곳을 찾습니다. 정리는 <b>뒤에서부터</b> — 재고 매칭 → 판매요청 → 주문 순서로 푸는 것이 안전합니다.</p>
         <div id="datacheck-result"><div class="list-empty">위 <b>전체 점검</b>을 눌러주세요.</div></div>
         <div id="datacheck-detail"></div>
+
+        <div style="border-top:1px solid var(--line);margin-top:18px;padding-top:14px;">
+          <div style="font-weight:700;margin-bottom:4px;">붙여넣은 내용과 재고 맞춰보기
+            <span class="info-tip" title="도착 등록·재고 등록에 쓰신 원문을 그대로 붙여넣으면, 실제 재고와 하나씩 대조해 다른 곳을 알려드립니다.">ⓘ</span></div>
+          <p class="desc" style="margin-top:0;">등록하실 때 쓰신 <b>원문을 그대로</b> 붙여넣으세요.
+            일련번호를 찾아 실제 재고의 <b>모델·색상</b>과 하나씩 맞춰봅니다. 자료는 바꾸지 않습니다.</p>
+          <textarea id="dc-compare-text" rows="7" placeholder="예)&#10;1219243  SM-F976N512  라벤더&#10;1203702  SM-F976N512  그라파이트&#10;1207705  SM-F976N512  크림"
+            style="width:100%;font-family:monospace;font-size:12.5px;padding:8px;border:1px solid var(--line);box-sizing:border-box;"></textarea>
+          <div style="margin-top:6px;">
+            <button class="btn small" style="width:auto;" onclick="runCompareText()">맞춰보기</button>
+            <span style="font-size:11.5px;color:var(--gray);margin-left:8px;">읽기 — 붙여넣은 일련번호 수만큼</span>
+          </div>
+          <div id="dc-compare-result" style="margin-top:10px;"></div>
+        </div>
       </div>
     </div>
 
@@ -5481,7 +5495,10 @@
   // 전산모델명·모델명은 대문자로 통일해서 저장합니다.
   // 소문자로 넣어도 같은 모델로 보고, 중복 줄이 생기지 않게 하기 위한 것입니다.
   function normalizeModelText(v){
-    return String(v == null ? "" : v).trim().toUpperCase().replace(/\s+/g, "");
+    // 가운뎃줄표 종류가 달라도(‐ ‑ – — －) 보통 하이픈으로 맞춥니다.
+    return String(v == null ? "" : v).trim().toUpperCase()
+      .replace(/[\u2010\u2011\u2012\u2013\u2014\u2015\uFF0D]/g, "-")
+      .replace(/\s+/g, "");
   }
   // 중복인지 가릴 때 쓰는 열쇠값입니다. 하이픈 종류가 달라도(‐ ‑ – —) 같은 것으로 봅니다.
   function modelDupKey(v){
@@ -5793,17 +5810,22 @@
       const m = modelsCache.find(x=> String(x.id||"") === String(it.modelId));
       if(m) return m;
     }
+    // 이름으로 찾을 때는 대소문자·공백·가운뎃줄표 차이를 무시합니다.
     if(it.systemModel){
-      const m = modelsCache.find(x=> String(x.systemModel||"") === String(it.systemModel));
+      const v = modelDupKey(it.systemModel);
+      const m = modelsCache.find(x=> modelDupKey(x.systemModel) === v);
       if(m) return m;
     }
     if(it.baseModel){
-      const m = modelsCache.find(x=> String(x.baseModel||"") === String(it.baseModel)
-        && String(x.capacity||"") === String(it.capacity||""));
+      const v = modelDupKey(it.baseModel);
+      const cap = normalizeCapacity(it.capacity);
+      const m = modelsCache.find(x=> modelDupKey(x.baseModel) === v
+        && normalizeCapacity(x.capacity) === cap);
       if(m) return m;
     }
     if(it.sku){
-      const m = modelsCache.find(x=> (x.colors||[]).some(c=>c.sku === it.sku));
+      const v = modelDupKey(it.sku);
+      const m = modelsCache.find(x=> (x.colors||[]).some(c=> modelDupKey(c.sku) === v));
       if(m) return m;
     }
     return null;
@@ -22572,7 +22594,9 @@
   // 한 줄에서 모델을 찾습니다.
   // 순서: 삼성코드(SKU) → 전산모델명 → 모델명 → "모델명 + 기가수"
   function findModelFromCells(cells){
-    const norm = v => String(v||"").trim().toLowerCase();
+    // 가운뎃줄표 종류가 달라도(‐ ‑ – — －) 같은 것으로 봅니다.
+    const norm = v => String(v||"").trim().toLowerCase()
+      .replace(/[\u2010\u2011\u2012\u2013\u2014\u2015\uFF0D]/g, "-");
     // 1) 삼성코드
     for(const c of cells){
       const v = norm(c); if(!v) continue;
@@ -22587,11 +22611,31 @@
       const m = modelsCache.find(x=> norm(x.systemModel) === v);
       if(m) return { model:m, colorObj:null, usedCell:c };
     }
-    // 3) 모델명
-    for(const c of cells){
-      const v = norm(c); if(!v) continue;
-      const m = modelsCache.find(x=> norm(x.baseModel) === v);
-      if(m) return { model:m, colorObj:null, usedCell:c };
+    // 3) 모델명 + 기가수 — 기가수가 있으면 반드시 함께 맞춥니다.
+    //    "SM-F976N 512" 를 적었는데 256 이 잡히는 일이 없게 합니다.
+    {
+      const caps = [];
+      cells.forEach(c=>{
+        const t = String(c||"").trim();
+        const m1 = t.match(/^(\d{2,4})\s*(?:GB|기가)?$/i);
+        if(m1) caps.push(m1[1]);
+        if(/^1\s*TB$/i.test(t)) caps.push("1024");
+      });
+      for(const c of cells){
+        const v = norm(c); if(!v) continue;
+        const same = modelsCache.filter(x=> norm(x.baseModel) === v);
+        if(same.length === 0) continue;
+        if(caps.length){
+          const hit = same.find(x=>
+            String(x.capacity||"").replace(/\D/g,"") === String(caps[0]).replace(/\D/g,""));
+          if(hit) return { model:hit, colorObj:null, usedCell:c, usedCap:caps[0] };
+          // 기가수를 적었는데 맞는 것이 없으면 여기서 멈춥니다. (엉뚱한 것에 붙지 않게)
+          return { ambiguous:true, cands:same, usedCell:c };
+        }
+        if(same.length === 1) return { model:same[0], colorObj:null, usedCell:c };
+        // 기가수를 안 적었고 후보가 여럿이면 사람이 고르게 합니다.
+        return { ambiguous:true, cands:same, usedCell:c };
+      }
     }
     // 4) 삼성코드에서 모델명을 뽑고, 다른 칸의 기가수를 붙여서 찾습니다.
     //    예: "SM-F776NLIAKOD" + "플립 256" → SM-F776N + 256 → SM-F776N256
@@ -24447,6 +24491,121 @@
   // 같은 일련번호인데 모델이 다른 재고 — 잘못 들어간 쪽을 골라 지웁니다.
   let crossSnCache = [];
 
+  // 전산모델명과 모델명·기가수가 안 맞는 재고를 보여줍니다.
+  let modelMismatchCache = [];
+
+  // 붙여넣은 원문과 실제 재고를 하나씩 맞춰봅니다. 자료는 바꾸지 않습니다.
+  window.runCompareText = async function(){
+    const raw = String((document.getElementById("dc-compare-text")||{}).value||"");
+    const el = document.getElementById("dc-compare-result");
+    if(!el) return;
+    if(!raw.trim()){ alert("맞춰볼 내용을 붙여넣어주세요."); return; }
+
+    // 줄마다 일련번호와 나머지 말을 뽑습니다.
+    const rows = [];
+    raw.split(/\r?\n/).forEach((line, i)=>{
+      const t = line.trim();
+      if(!t) return;
+      const cells = t.split(/\t|\s{2,}|\s+/).map(x=> x.trim()).filter(Boolean);
+      const sn = cells.find(c=> /^[0-9]{4,}$/.test(c));
+      if(!sn) return;
+      rows.push({ no:i+1, sn: normSerial(sn), hints: cells.filter(c=> c !== sn), raw:t });
+    });
+    if(rows.length === 0){ el.innerHTML = '<div class="list-empty">일련번호를 찾지 못했습니다.</div>'; return; }
+
+    el.innerHTML = '<div style="color:var(--gray);font-size:12.5px;">맞춰보는 중입니다... (' + rows.length + '줄)</div>';
+    // 재고에서 그 일련번호들을 찾습니다.
+    const found = {};
+    try{
+      const sns = [...new Set(rows.map(r=> r.sn))];
+      for(let i=0; i<sns.length; i+=10){
+        const chunk = sns.slice(i, i+10);
+        const snap = await getDocs(query(collection(db,"inventoryItems"), where("serialNumber","in", chunk)));
+        snap.forEach(d=>{
+          const v = d.data();
+          if(v.deleted === true) return;
+          const k = normSerial(v.serialNumber);
+          (found[k] = found[k] || []).push({ id:d.id, ...v });
+        });
+      }
+    }catch(e){ el.innerHTML = '<div style="color:var(--danger);">재고를 읽지 못했습니다.</div>'; return; }
+
+    let same = 0, diff = 0, none = 0;
+    let h = '<div style="border:1px solid var(--line);max-height:420px;overflow-y:auto;">'
+      + '<table class="data-table" style="width:100%;"><thead><tr>'
+      + '<th>줄</th><th>일련번호</th><th>적어주신 것</th><th>재고의 모델</th><th>재고의 색상</th><th>통신사</th><th>결과</th>'
+      + '</tr></thead><tbody>';
+    rows.forEach(r=>{
+      const list = found[r.sn] || [];
+      if(list.length === 0){
+        none++;
+        h += '<tr style="background:#fff8e1;"><td>' + r.no + '</td><td><b>' + comboEsc(r.sn) + '</b></td>'
+          + '<td>' + comboEsc(r.hints.join(" ")) + '</td>'
+          + '<td colspan="3" style="color:var(--gray);">재고에 없습니다</td>'
+          + '<td style="color:#8a6d0b;">없음</td></tr>';
+        return;
+      }
+      list.forEach(it=>{
+        // 적어주신 말이 재고의 모델·색상·SKU 와 맞는지 봅니다.
+        const pool = [it.systemModel, it.baseModel, it.systemColor, it.manufacturerColor, it.sku, it.petName]
+          .map(v=> modelDupKey(v||""));
+        const miss = r.hints.filter(t=>{
+          const v = modelDupKey(t);
+          if(!v || /^[0-9]+$/.test(t)) return false;      // 숫자(수량 등)는 건너뜁니다
+          return !pool.some(p=> p && p === v);
+        });
+        const okRow = miss.length === 0;
+        if(okRow) same++; else diff++;
+        h += '<tr style="background:' + (okRow ? '#f4faf4' : '#fdecea') + ';">'
+          + '<td>' + r.no + '</td><td><b>' + comboEsc(r.sn) + '</b></td>'
+          + '<td>' + comboEsc(r.hints.join(" ")) + '</td>'
+          + '<td>' + comboEsc(docModelLabel(it)) + '</td>'
+          + '<td>' + comboEsc(it.systemColor || it.manufacturerColor || "-") + '</td>'
+          + '<td>' + comboEsc(it.carrier || "-") + '</td>'
+          + '<td style="' + (okRow ? 'color:#2e7d32;' : 'color:var(--danger);font-weight:700;') + '">'
+          + (okRow ? '같음' : '다름 — ' + comboEsc(miss.join(", "))) + '</td></tr>';
+      });
+    });
+    h += '</tbody></table></div>';
+    el.innerHTML = '<div style="font-weight:700;margin-bottom:6px;">맞춰본 결과 — '
+      + '<span style="color:#2e7d32;">같음 ' + same + '</span>'
+      + (diff ? ' / <span style="color:var(--danger);">다름 ' + diff + '</span>' : '')
+      + (none ? ' / <span style="color:#8a6d0b;">재고에 없음 ' + none + '</span>' : '')
+      + '</div>' + h
+      + '<div style="font-size:11.5px;color:var(--gray);margin-top:6px;line-height:1.7;">'
+      + '<b>다름</b>으로 나온 줄은 재고 목록에서 그 일련번호를 찾아 <b>모델·색상</b>을 고쳐주세요.<br>'
+      + '이 화면은 <b>보여드리기만</b> 하고 자료를 바꾸지 않습니다.</div>';
+  };
+
+  window.showModelMismatchList = function(){
+    const el = document.getElementById("datacheck-detail");
+    if(!el) return;
+    if(modelMismatchCache.length === 0){ el.innerHTML = '<div class="list-empty">안 맞는 것이 없습니다.</div>'; return; }
+    el.innerHTML = '<div style="border:1px solid var(--navy);padding:10px 12px;margin-top:10px;">'
+      + '<div style="font-weight:700;margin-bottom:4px;">전산모델명과 모델명·기가수가 안 맞는 재고 — '
+      + modelMismatchCache.length + '대</div>'
+      + '<div style="font-size:11.5px;color:var(--gray);line-height:1.7;margin-bottom:8px;">'
+      + '전산모델명은 <b>모델명 + 기가수</b>여야 합니다. 안 맞으면 다른 모델로 잘못 들어갔을 수 있습니다.<br>'
+      + '재고 목록에서 그 건을 찾아 <b>모델을 다시 골라</b>주세요.</div>'
+      + '<div style="max-height:340px;overflow-y:auto;border:1px solid var(--line);">'
+      + '<table class="data-table" style="width:100%;"><thead><tr>'
+      + '<th>일련번호</th><th>전산모델명</th><th>모델명</th><th>기가수</th><th>이래야 맞음</th>'
+      + '<th>색상</th><th>통신사</th><th>입고일</th><th>상태</th>'
+      + '</tr></thead><tbody>'
+      + modelMismatchCache.map(r=>
+          '<tr style="background:#fdecea;">'
+          + '<td>' + comboEsc(r.it.serialNumber||"-") + '</td>'
+          + '<td><b>' + comboEsc(r.sys||"-") + '</b></td>'
+          + '<td>' + comboEsc(r.base||"-") + '</td>'
+          + '<td>' + comboEsc(r.cap||"-") + '</td>'
+          + '<td style="color:#2e7d32;font-weight:700;">' + comboEsc(r.want||"-") + '</td>'
+          + '<td>' + comboEsc(r.it.systemColor || r.it.manufacturerColor || "-") + '</td>'
+          + '<td>' + comboEsc(r.it.carrier||"-") + '</td>'
+          + '<td>' + comboEsc(r.it.inDate||"-") + '</td>'
+          + '<td>' + comboEsc(r.it.status||"-") + '</td></tr>').join("")
+      + '</tbody></table></div></div>';
+  };
+
   window.showCrossSnList = function(){
     const el = document.getElementById("datacheck-detail");
     if(!el) return;
@@ -24989,6 +25148,29 @@
         issues.push({ n:"같은 모델·일련번호가 여러 건", cnt:dupKeys.length, unit:"남는 " + dupExtra + "건",
           why:"모델과 일련번호가 둘 다 같으면 같은 단말기입니다. 모델이 다르면 다른 단말기라 세지 않습니다.",
           fix: dupKeys.length ? "showDupSerialList()" : null, fixLabel:"확인하고 정리" });
+      }
+
+      // ⓪-C 전산모델명과 모델명·기가수가 서로 안 맞는 재고
+      //  "SM-F976N 512" 를 적었는데 256 으로 들어간 것 같은 경우를 찾습니다.
+      {
+        const rows = [];
+        Object.keys(items).forEach(id=>{
+          const it = items[id];
+          if(it.deleted === true) return;
+          const sys = modelDupKey(it.systemModel||"");
+          const base = modelDupKey(it.baseModel||"");
+          const cap = normalizeCapacity(it.capacity);
+          if(!sys || !base) return;
+          // 전산모델명은 「모델명 + 기가수」 여야 합니다.
+          const want = base + (cap || "");
+          if(sys === want) return;
+          if(!cap && sys === base) return;      // 기가수가 없는 모델은 그대로
+          rows.push({ id, it, sys:it.systemModel, base:it.baseModel, cap:it.capacity, want });
+        });
+        modelMismatchCache = rows;
+        issues.push({ n:"전산모델명과 모델명·기가수가 안 맞는 재고", cnt:rows.length, unit:"대",
+          why:"전산모델명은 「모델명 + 기가수」여야 합니다. 안 맞으면 다른 모델로 잘못 들어갔을 수 있습니다.",
+          fix: rows.length ? "showModelMismatchList()" : null, fixLabel:"확인하기" });
       }
 
       // ⓪-B 같은 일련번호가 여러 건 (모델이 달라도)
@@ -29595,7 +29777,7 @@
     seenNewTag = lastSeenTag;    // 이 버전만 안 알립니다. 그 뒤에 또 올라오면 다시 알립니다.
   };
 
-  // 파일에 박힌 버전 글자를 읽습니다. (예: "파일 2026-08-09 v607")
+  // 파일에 박힌 버전 글자를 읽습니다. (예: "파일 2026-08-09 v610")
   function readBuildTag(text){
     const m = String(text||"").match(/파일\s*[\d-]+\s*v(\d+)/);
     return m ? m[0].trim() : "";
