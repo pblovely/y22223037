@@ -387,7 +387,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v623</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v624</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -22221,7 +22221,29 @@
       }
 
       if(isOrder){
-        cell(inp("be-listprice", l.listPrice, "85px"));
+        // 출고가 — 모델 등록과 다르면 빨갛게 알려드립니다.
+        {
+          const lpEl = inp("be-listprice", l.listPrice, "85px");
+          const m3 = (modelsCache||[]).find(x=>
+            modelDupKey(x.systemModel||"") === modelDupKey(l.systemModel||"")
+            || (l.modelId && x.id === l.modelId));
+          const want = m3 ? (Number(m3.priceIncVat)||0) : 0;
+          const cur = Number(l.listPrice)||0;
+          if(want && cur !== want){
+            lpEl.style.borderColor = "var(--danger)";
+            lpEl.style.background = "#fdecea";
+            const wrap = document.createElement("div");
+            wrap.appendChild(lpEl);
+            const note = document.createElement("div");
+            note.style.cssText = "font-size:10.5px;color:var(--danger);line-height:1.4;margin-top:2px;white-space:nowrap;";
+            note.innerHTML = '모델 ' + want.toLocaleString()
+              + ' <a href="javascript:void(0)" class="be-usemodel" data-p="' + want + '" style="color:#2e7d32;">쓰기</a>';
+            wrap.appendChild(note);
+            cell(wrap);
+          }else{
+            cell(lpEl);
+          }
+        }
         const buy = document.createElement("input");
         buy.type = "number"; buy.className = "be-purchase"; buy.value = l.purchasePrice||"";
         buy.disabled = true; buy.style.cssText = "width:85px;font-size:11.5px;padding:4px;background:#fff;border:1px solid var(--line);box-sizing:border-box;";
@@ -22268,6 +22290,21 @@
       }
 
       body.appendChild(tr);
+    });
+
+    // 출고가 「쓰기」 — 모델 값으로 채우고 할인·입고가를 다시 계산합니다.
+    body.querySelectorAll(".be-usemodel").forEach(a=>{
+      a.onclick = ()=>{
+        const tr = a.closest("tr");
+        const lp = tr.querySelector(".be-listprice");
+        if(lp && !lp.disabled){
+          lp.value = Number(a.dataset.p)||0;
+          lp.style.borderColor = "var(--line)";
+          lp.style.background = "";
+          recalcBatchLine(tr);
+          a.parentElement.innerHTML = '<span style="color:#2e7d32;">맞췄습니다</span>';
+        }
+      };
     });
 
     document.getElementById("be-lock-note").innerHTML = lockedCount > 0
@@ -30558,7 +30595,7 @@
     seenNewTag = lastSeenTag;    // 이 버전만 안 알립니다. 그 뒤에 또 올라오면 다시 알립니다.
   };
 
-  // 파일에 박힌 버전 글자를 읽습니다. (예: "파일 2026-08-09 v623")
+  // 파일에 박힌 버전 글자를 읽습니다. (예: "파일 2026-08-09 v624")
   function readBuildTag(text){
     const m = String(text||"").match(/파일\s*[\d-]+\s*v(\d+)/);
     return m ? m[0].trim() : "";
