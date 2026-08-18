@@ -387,7 +387,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v615</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v616</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -897,6 +897,20 @@
             <span style="font-size:11.5px;color:var(--gray);margin-left:8px;">읽기 — 붙여넣은 일련번호 수만큼</span>
           </div>
           <div id="dc-compare-result" style="margin-top:10px;"></div>
+        </div>
+
+        <div style="border-top:1px solid var(--line);margin-top:18px;padding-top:14px;">
+          <div style="font-weight:700;margin-bottom:4px;">일련번호로 주문↔재고 맞추기
+            <span class="info-tip" title="일련번호만 붙여넣으면 그 재고와 주문 품목을 대조해, 다른 곳을 찾아 재고 기준으로 맞춥니다.">ⓘ</span></div>
+          <p class="desc" style="margin-top:0;">고치신 <b>일련번호만</b> 줄바꿈으로 붙여넣으세요.
+            그 재고와 <b>주문 품목</b>을 대조해 다른 것을 찾아드리고, 재고 기준으로 맞춰드립니다.</p>
+          <textarea id="dc-sn-text" rows="6" placeholder="1097929&#10;1094780&#10;1025452"
+            style="width:100%;font-family:monospace;font-size:12.5px;padding:8px;border:1px solid var(--line);box-sizing:border-box;"></textarea>
+          <div style="margin-top:6px;">
+            <button class="btn small" style="width:auto;" onclick="runSnOrderMatch()">찾아보기</button>
+            <span style="font-size:11.5px;color:var(--gray);margin-left:8px;">읽기 — 붙여넣은 일련번호 수만큼</span>
+          </div>
+          <div id="dc-sn-result" style="margin-top:10px;"></div>
         </div>
       </div>
     </div>
@@ -24498,6 +24512,115 @@
   // 전산모델명과 모델명·기가수가 안 맞는 재고를 보여줍니다.
   let modelMismatchCache = [];
 
+  // 일련번호로 그 재고와 주문 품목을 대조합니다.
+  let snMatchList = [];
+
+  window.runSnOrderMatch = async function(){
+    const raw = String((document.getElementById("dc-sn-text")||{}).value||"");
+    const el = document.getElementById("dc-sn-result");
+    if(!el) return;
+    const sns = [...new Set(raw.split(/[\s,]+/).map(x=> normSerial(x)).filter(Boolean))];
+    if(sns.length === 0){ alert("일련번호를 붙여넣어주세요."); return; }
+    el.innerHTML = '<div style="color:var(--gray);font-size:12.5px;">찾는 중입니다... (' + sns.length + '개)</div>';
+
+    const rows = [];
+    try{
+      for(let i=0; i<sns.length; i+=10){
+        const chunk = sns.slice(i, i+10);
+        const snap = await getDocs(query(collection(db,"inventoryItems"), where("serialNumber","in", chunk)));
+        for(const d of snap.docs){
+          const it = { id:d.id, ...d.data() };
+          if(it.deleted === true) continue;
+          if(!it.orderId){ rows.push({ it, o:null, why:"주문에 이어져 있지 않습니다" }); continue; }
+          const os = await getDoc(doc(db,"orders", it.orderId));
+          if(!os.exists()){ rows.push({ it, o:null, why:"주문 품목을 찾을 수 없습니다" }); continue; }
+          const o = { id:os.id, ...os.data() };
+          const cSame = modelDupKey(o.systemColor||"") === modelDupKey(it.systemColor||"");
+          const mSame = modelDupKey(o.systemModel||"") === modelDupKey(it.systemModel||"");
+          rows.push({ it, o, same: cSame && mSame, colorDiff:!cSame, modelDiff:!mSame });
+        }
+      }
+    }catch(e){ el.innerHTML = '<div style="color:var(--danger);">읽지 못했습니다.</div>'; return; }
+
+    if(rows.length === 0){ el.innerHTML = '<div class="list-empty">재고에서 찾지 못했습니다.</div>'; return; }
+    snMatchList = rows.filter(r=> r.o && !r.same);
+    const okN = rows.filter(r=> r.same).length;
+    const noN = rows.filter(r=> !r.o).length;
+
+    el.innerHTML = '<div style="font-weight:700;margin-bottom:6px;">결과 — '
+      + '<span style="color:#2e7d32;">같음 ' + okN + '</span>'
+      + (snMatchList.length ? ' / <span style="color:var(--danger);">다름 ' + snMatchList.length + '</span>' : '')
+      + (noN ? ' / <span style="color:#8a6d0b;">주문 없음 ' + noN + '</span>' : '')
+      + '</div>'
+      + '<div style="border:1px solid var(--line);max-height:380px;overflow-y:auto;">'
+      + '<table class="data-table" style="width:100%;"><thead><tr>'
+      + '<th style="width:34px;">맞춤</th><th>일련번호</th><th>주문의 모델</th><th>주문의 색상</th>'
+      + '<th>재고의 모델</th><th>재고의 색상</th><th>결과</th>'
+      + '</tr></thead><tbody>'
+      + rows.map(r=>{
+          const idx = snMatchList.indexOf(r);
+          const bg = !r.o ? '#fff8e1' : (r.same ? '#f4faf4' : '#fdecea');
+          return '<tr style="background:' + bg + ';">'
+            + '<td>' + (idx >= 0 ? '<input type="checkbox" class="sm-ck" value="'+idx+'" checked>'
+                                 : '<span style="color:var(--gray);">-</span>') + '</td>'
+            + '<td><b>' + comboEsc(r.it.serialNumber||"-") + '</b></td>'
+            + '<td' + (r.modelDiff ? ' style="color:var(--danger);"' : '') + '>' + comboEsc(r.o ? (r.o.systemModel||"-") : "-") + '</td>'
+            + '<td' + (r.colorDiff ? ' style="color:var(--danger);"' : '') + '>' + comboEsc(r.o ? (r.o.systemColor||"-") : "-") + '</td>'
+            + '<td style="color:#2e7d32;">' + comboEsc(r.it.systemModel||"-") + '</td>'
+            + '<td style="color:#2e7d32;">' + comboEsc(r.it.systemColor||"-") + '</td>'
+            + '<td>' + (!r.o ? '<span style="color:#8a6d0b;">' + comboEsc(r.why) + '</span>'
+                       : (r.same ? '<span style="color:#2e7d32;">같음</span>'
+                                 : '<span style="color:var(--danger);font-weight:700;">다름</span>')) + '</td></tr>';
+        }).join("")
+      + '</tbody></table></div>'
+      + (snMatchList.length
+          ? '<div style="margin-top:8px;">'
+            + '<button class="btn small" style="width:auto;" onclick="fixSnOrderMatch()">체크한 주문을 재고에 맞추기</button>'
+            + '<span style="font-size:11.5px;color:var(--gray);margin-left:8px;">판매요청·예약도 함께 맞춰지고 미입고 지표에 반영됩니다.</span></div>'
+          : '<div style="margin-top:8px;color:#2e7d32;font-size:12.5px;">다른 것이 없습니다.</div>');
+  };
+
+  window.fixSnOrderMatch = async function(){
+    const picked = Array.from(document.querySelectorAll(".sm-ck:checked"))
+      .map(c=> snMatchList[Number(c.value)]).filter(Boolean);
+    if(picked.length === 0){ alert("맞출 줄을 골라주세요."); return; }
+    if(!confirm("주문 품목 " + picked.length + "건을 재고에 맞춥니다.\n\n"
+      + picked.slice(0,12).map(r=> "  " + (r.it.serialNumber||"-") + "  "
+          + (r.o.systemModel||"-") + " " + (r.o.systemColor||"-")
+          + "  →  " + (r.it.systemModel||"-") + " " + (r.it.systemColor||"-")).join("\n")
+      + (picked.length > 12 ? "\n  ... 외 " + (picked.length-12) + "건" : "")
+      + "\n\n판매요청·예약도 함께 맞춰집니다. 진행할까요?")) return;
+    try{
+      for(let i=0; i<picked.length; i+=300){
+        const bt = writeBatch(db);
+        picked.slice(i, i+300).forEach(r=> bt.update(doc(db,"orders", r.o.id), {
+          systemModel: r.it.systemModel || "", baseModel: r.it.baseModel || "",
+          petName: r.it.petName || "", capacity: r.it.capacity || "",
+          modelId: r.it.modelId || null,
+          systemColor: r.it.systemColor || "", manufacturerColor: r.it.manufacturerColor || "",
+          sku: r.it.sku || ""
+        }));
+        await bt.commit();
+      }
+      // 판매요청·예약도 재고 기준으로 맞춥니다.
+      const byKey = {};
+      picked.forEach(r=>{
+        const k = JSON.stringify({ mc:r.it.manufacturerColor||"", sc:r.it.systemColor||"", sku:r.it.sku||"",
+          sm:r.it.systemModel||"", bm:r.it.baseModel||"", pn:r.it.petName||"", cap:r.it.capacity||"", mid:r.it.modelId||null });
+        (byKey[k] = byKey[k] || []).push(r.it.id);
+      });
+      for(const k of Object.keys(byKey)){
+        const v = JSON.parse(k);
+        await syncColorEverywhere(byKey[k], v.mc, v.sc, v.sku,
+          { systemModel:v.sm, baseModel:v.bm, petName:v.pn, capacity:v.cap, modelId:v.mid });
+      }
+    }catch(e){ alert("맞추지 못했습니다.\n" + ((e&&e.message)?e.message:String(e))); return; }
+    logAction("일련번호로 주문↔재고 맞춤", picked.length + "건");
+    alert(picked.length + "건을 맞췄습니다.\n\n주문 관리에서 미입고 현황을 확인해주세요.");
+    clearCache("orders"); clearCache("inventory"); clearDashCache();
+    runSnOrderMatch();
+  };
+
   // 「다름」인 줄 — 고칠 대상을 담아둡니다.
   let compareFixList = [];
 
@@ -30101,7 +30224,7 @@
     seenNewTag = lastSeenTag;    // 이 버전만 안 알립니다. 그 뒤에 또 올라오면 다시 알립니다.
   };
 
-  // 파일에 박힌 버전 글자를 읽습니다. (예: "파일 2026-08-09 v615")
+  // 파일에 박힌 버전 글자를 읽습니다. (예: "파일 2026-08-09 v616")
   function readBuildTag(text){
     const m = String(text||"").match(/파일\s*[\d-]+\s*v(\d+)/);
     return m ? m[0].trim() : "";
