@@ -387,7 +387,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v614</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v615</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -24735,22 +24735,44 @@
     const el = document.getElementById("datacheck-detail");
     if(!el) return;
     if(orderItemDiffCache.length === 0){ el.innerHTML = '<div class="list-empty">다른 것이 없습니다.</div>'; return; }
+    // 입고일로 좁혀 봅니다. 오늘 넣으신 것만 골라 고치실 수 있게요.
+    const dFrom = String((document.getElementById("oid-from")||{}).value||"").replace(/\D/g,"");
+    const dTo   = String((document.getElementById("oid-to")||{}).value||"").replace(/\D/g,"");
+    const view = orderItemDiffCache.filter(r=>{
+      if(!dFrom && !dTo) return true;
+      const d = String(r.it.inDate||"").replace(/\D/g,"");
+      if(!d) return false;
+      if(dFrom && d < dFrom) return false;
+      if(dTo && d > dTo) return false;
+      return true;
+    });
     el.innerHTML = '<div style="border:1px solid var(--navy);padding:10px 12px;margin-top:10px;">'
       + '<div style="font-weight:700;margin-bottom:4px;">주문과 재고의 모델·색상이 다른 건 — '
-      + orderItemDiffCache.length + '대</div>'
+      + view.length + '대'
+      + (view.length !== orderItemDiffCache.length ? ' <span style="font-weight:400;color:var(--gray);font-size:11.5px;">(전체 ' + orderItemDiffCache.length + '대 중)</span>' : '')
+      + '</div>'
       + '<div style="font-size:11.5px;color:var(--gray);line-height:1.7;margin-bottom:8px;">'
       + '도착 등록된 재고와 그 주문 품목이 서로 다릅니다.<br>'
       + '<b>재고 쪽이 맞다면</b> 아래 버튼으로 주문을 재고에 맞추실 수 있습니다. 그러면 <b>미입고 지표</b>도 함께 맞아집니다.</div>'
+      + '<div style="border:1px solid var(--line);background:#f7f9fc;padding:8px 10px;margin-bottom:8px;font-size:12px;">'
+      + '입고일 <input type="text" id="oid-from" maxlength="8" placeholder="20260814" value="' + comboEsc(dFrom) + '"'
+        + ' oninput="oidLater(this)" style="width:90px;height:24px;border:1px solid var(--line);padding:0 6px;font-size:12px;">'
+      + ' ~ <input type="text" id="oid-to" maxlength="8" placeholder="20260814" value="' + comboEsc(dTo) + '"'
+        + ' oninput="oidLater(this)" style="width:90px;height:24px;border:1px solid var(--line);padding:0 6px;font-size:12px;">'
+      + ' <button class="btn small secondary" style="width:auto;margin-left:4px;" onclick="oidToday()">오늘만</button>'
+      + ' <button class="btn small secondary" style="width:auto;margin-left:3px;" onclick="oidClear()">전체</button>'
+      + '</div>'
       + '<div style="max-height:340px;overflow-y:auto;border:1px solid var(--line);">'
       + '<table class="data-table" style="width:100%;"><thead><tr>'
       + '<th style="width:34px;"><input type="checkbox" id="oid-all" checked></th>'
-      + '<th>일련번호</th><th>주문일</th><th>주문의 모델</th><th>주문의 색상</th>'
+      + '<th>일련번호</th><th>입고일</th><th>주문일</th><th>주문의 모델</th><th>주문의 색상</th>'
       + '<th>재고의 모델</th><th>재고의 색상</th>'
       + '</tr></thead><tbody>'
-      + orderItemDiffCache.map((r,i)=>
+      + view.map(r=>
           '<tr style="background:#fdecea;">'
-          + '<td><input type="checkbox" class="oid-ck" value="'+i+'" checked></td>'
+          + '<td><input type="checkbox" class="oid-ck" value="'+orderItemDiffCache.indexOf(r)+'" checked></td>'
           + '<td>' + comboEsc(r.it.serialNumber||"-") + '</td>'
+          + '<td>' + comboEsc(r.it.inDate||"-") + '</td>' 
           + '<td>' + comboEsc(r.o.orderDate||"-") + '</td>'
           + '<td' + (r.modelDiff ? ' style="color:var(--danger);"' : '') + '>' + comboEsc(r.o.systemModel||"-") + '</td>'
           + '<td' + (r.colorDiff ? ' style="color:var(--danger);"' : '') + '>' + comboEsc(r.o.systemColor||"-") + '</td>'
@@ -24761,6 +24783,27 @@
       + '</div>';
     const all = document.getElementById("oid-all");
     if(all) all.onchange = ()=> el.querySelectorAll(".oid-ck").forEach(c=> c.checked = all.checked);
+  };
+
+  let oidTimer = null;
+  window.oidLater = function(el){
+    const id = el && el.id;
+    if(oidTimer) clearTimeout(oidTimer);
+    oidTimer = setTimeout(()=>{
+      showOrderItemDiffList();
+      const back = document.getElementById(id);
+      if(back){ back.focus(); try{ back.setSelectionRange(back.value.length, back.value.length); }catch(e){} }
+    }, 500);
+  };
+  window.oidToday = function(){
+    const f = document.getElementById("oid-from"), t = document.getElementById("oid-to");
+    if(f) f.value = todayStr(); if(t) t.value = todayStr();
+    showOrderItemDiffList();
+  };
+  window.oidClear = function(){
+    const f = document.getElementById("oid-from"), t = document.getElementById("oid-to");
+    if(f) f.value = ""; if(t) t.value = "";
+    showOrderItemDiffList();
   };
 
   window.fixOrderItemDiff = async function(){
@@ -30058,7 +30101,7 @@
     seenNewTag = lastSeenTag;    // 이 버전만 안 알립니다. 그 뒤에 또 올라오면 다시 알립니다.
   };
 
-  // 파일에 박힌 버전 글자를 읽습니다. (예: "파일 2026-08-09 v614")
+  // 파일에 박힌 버전 글자를 읽습니다. (예: "파일 2026-08-09 v615")
   function readBuildTag(text){
     const m = String(text||"").match(/파일\s*[\d-]+\s*v(\d+)/);
     return m ? m[0].trim() : "";
