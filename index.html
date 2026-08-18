@@ -387,7 +387,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v603</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v607</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -11840,7 +11840,10 @@
       // 품목 찾기 — 적어준 모델·색상으로 좁히고, 없으면 남은 품목 중 하나
       let cands = lines.filter(o=> remain[o.id] > 0);
       if(cands.length === 0){ bad.push({ label, reason:"이 주문에 남은 수량이 없습니다", raw:line }); return; }
+      // 적어주신 말 하나하나로 좁혀갑니다. 하나라도 못 맞추면 그냥 넘어가지 않고 막습니다.
+      let miss = null;
       rest.forEach(t=>{
+        if(miss) return;
         const tl = t.toLowerCase();
         const narrowed = cands.filter(o=>
           String(o.systemModel||"").toLowerCase() === tl ||
@@ -11848,11 +11851,32 @@
           String(o.systemColor||"").toLowerCase() === tl ||
           String(o.manufacturerColor||"").toLowerCase() === tl ||
           String(o.sku||"").toLowerCase() === tl);
-        if(narrowed.length > 0) cands = narrowed;
+        if(narrowed.length > 0){ cands = narrowed; return; }
+        // 숫자·기가수 같은 것은 그냥 넘어가고, 글자는 못 찾았다고 알려드립니다.
+        if(/^[0-9]+$/.test(t)) return;
+        miss = t;
       });
+      if(miss){
+        const left = [...new Set(lines.filter(o=> remain[o.id] > 0)
+          .map(o=> (o.systemColor || o.manufacturerColor || "-")))];
+        bad.push({ label,
+          reason: '「' + miss + '」와 맞는 품목이 이 주문에 없습니다 — 남은 색상: ' + (left.join(", ") || "없음"),
+          raw:line });
+        return;
+      }
       if(cands.length > 1 && rest.length === 0 && lines.filter(o=>remain[o.id]>0).length > 1){
         bad.push({ label, reason:"품목이 여러 개라 어느 것인지 모릅니다 — 모델·색상을 함께 적어주세요", raw:line });
         return;
+      }
+      // 색상을 안 적으셨는데 남은 품목의 색상이 여러 가지면 막습니다.
+      if(cands.length > 1){
+        const cs = [...new Set(cands.map(o=> (o.systemColor || o.manufacturerColor || "-")))];
+        if(cs.length > 1){
+          bad.push({ label,
+            reason: "색상을 알 수 없습니다 — 남은 색상: " + cs.join(", ") + " (일련번호 옆에 색상을 적어주세요)",
+            raw:line });
+          return;
+        }
       }
       const o = cands[0];
       // ★ 이미 재고에 들어온 일련번호는 모델이 달라도 막습니다. ★
@@ -21973,7 +21997,28 @@
         ms.onchange = ()=> recalcBatchLine(tr);
         cell(ms);
       }
-      cell(txt(l.systemColor || l.manufacturerColor || "-"));
+      // 색상 — 그 모델에 등록된 색상에서 고릅니다. (도착된 줄도 고칠 수 있습니다)
+      {
+        const m2 = (modelsCache||[]).find(x=>
+          modelDupKey(x.systemModel||"") === modelDupKey(l.systemModel||"")
+          || (l.modelId && x.id === l.modelId));
+        const cols = (m2 && m2.colors) ? m2.colors : [];
+        if(cols.length){
+          const cse = document.createElement("select");
+          cse.className = "be-color";
+          cse.style.cssText = "font-size:11.5px;padding:4px;width:110px;border:1px solid var(--line);box-sizing:border-box;";
+          const cur = String(l.systemColor || l.manufacturerColor || "");
+          let op = '<option value="">' + comboEsc(cur || "(색상 없음)") + ' — 그대로</option>';
+          cols.forEach(c=>{
+            const v = (c.manufacturerColor||"") + "|" + (c.systemColor||"") + "|" + (c.sku||"");
+            op += '<option value="' + comboEsc(v) + '">' + comboEsc(c.systemColor || c.manufacturerColor || "-") + '</option>';
+          });
+          cse.innerHTML = op;
+          cell(cse);
+        }else{
+          cell(txt(l.systemColor || l.manufacturerColor || "-"));
+        }
+      }
       // 통신사 — 잘못 들어간 경우 여기서 고칩니다. (잠긴 줄은 그대로 잠깁니다)
       {
         const cs = document.createElement("select");
@@ -22207,6 +22252,14 @@
         const cs = tr.querySelector(".be-carrier");
         if(cs && !cs.disabled) p.carrier = cs.value;
         // 수량 — 도착·매칭된 줄은 잠겨 있어 여기 안 옵니다.
+        // 색상을 바꿨으면 제조사색상·전산색상·SKU 를 함께 맞춥니다.
+        const ce = tr.querySelector(".be-color");
+        if(ce && ce.value){
+          const pr = String(ce.value).split("|");
+          p.manufacturerColor = pr[0]||"";
+          p.systemColor = pr[1]||"";
+          p.sku = pr[2]||"";
+        }
         // 모델을 바꿨으면 펫네임·모델명·전산모델명을 등록된 값으로 함께 맞춥니다.
         const me = tr.querySelector(".be-model");
         if(me && me.value){
@@ -22231,13 +22284,20 @@
         const useQty = (p.quantity != null) ? p.quantity : (Number(src.quantity)||0);
         newTotal += ((kind === "order" ? (p.purchasePrice||0) : (p.salePrice||0)) * useQty);
       }else{
-        // 잠긴 줄이라도 모델을 바꿨으면 그것만 저장합니다. (금액·수량은 그대로)
+        // 잠긴 줄이라도 모델·색상을 바꿨으면 그것만 저장합니다. (금액·수량은 그대로)
         const me0 = tr.querySelector(".be-model");
+        const ce0 = tr.querySelector(".be-color");
+        const p0 = {};
         if(me0 && me0.value){
           const m0 = (modelsCache||[]).find(x=> String(x.systemModel||"") === me0.value);
-          if(m0) perLine[lid] = { systemModel:m0.systemModel||"", baseModel:m0.baseModel||"",
-                                  petName:m0.petName||"", modelId:m0.id||null };
+          if(m0){ p0.systemModel = m0.systemModel||""; p0.baseModel = m0.baseModel||"";
+                  p0.petName = m0.petName||""; p0.modelId = m0.id||null; }
         }
+        if(ce0 && ce0.value){
+          const pr0 = String(ce0.value).split("|");
+          p0.manufacturerColor = pr0[0]||""; p0.systemColor = pr0[1]||""; p0.sku = pr0[2]||"";
+        }
+        if(Object.keys(p0).length) perLine[lid] = p0;
         newTotal += ((kind === "order" ? (Number(src.purchasePrice)||0) : (Number(src.salePrice)||0)) * (Number(src.quantity)||0));
       }
     });
@@ -22324,6 +22384,7 @@
       const priceChanged = Object.keys(perLine).filter(lid=>{
         const p = perLine[lid] || {};
         return p.listPrice != null || p.purchasePrice != null || p.systemModel != null
+            || p.systemColor != null
             || p.salePrice != null || p.saleDiscountAmt != null;
       });
       if(priceChanged.length){
@@ -22340,7 +22401,7 @@
             (kind === "order"
               ? "이 주문으로 이미 들어온 재고 "
               : "이 판매요청에 붙어 있는 재고 ") + itemTargets.length + "대가 있습니다.\n\n"
-            + "재고의 금액도 이번에 고친 값으로 함께 바꿀까요?\n\n"
+            + "재고의 모델·색상·금액도 이번에 고친 값으로 함께 바꿀까요?\n\n"
             + "  예   — 재고 금액이 " + (kind === "order" ? "주문" : "판매요청") + "과 같아집니다 (권합니다)\n"
             + "  아니오 — " + (kind === "order" ? "주문" : "판매요청") + "만 바뀌고 재고는 지금 값 그대로입니다");
         }
@@ -22380,6 +22441,11 @@
               patch.petName = t.p.petName || "";
               if(t.p.modelId != null) patch.modelId = t.p.modelId;
             }
+            if(t.p.systemColor != null){
+              patch.systemColor = t.p.systemColor;
+              patch.manufacturerColor = t.p.manufacturerColor || "";
+              if(t.p.sku != null) patch.sku = t.p.sku;
+            }
             if(t.p.listPrice != null) patch.listPrice = t.p.listPrice;
             if(t.p.purchasePrice != null) patch.purchasePrice = t.p.purchasePrice;
             // 판매 금액 — 판매요청에서 고친 값을 재고에도 옮깁니다.
@@ -22401,6 +22467,19 @@
           });
           await bt.commit();
         }
+        // 색상을 바꿨으면 그 재고와 이어진 다른 곳도 함께 맞춥니다.
+        try{
+          const byColor = {};
+          itemTargets.forEach(t=>{
+            if(t.p.systemColor == null) return;
+            const k = (t.p.manufacturerColor||"") + "|" + (t.p.systemColor||"") + "|" + (t.p.sku||"");
+            (byColor[k] = byColor[k] || []).push(t.iid);
+          });
+          for(const k of Object.keys(byColor)){
+            const pr = k.split("|");
+            await syncColorEverywhere(byColor[k], pr[0], pr[1], pr[2]);
+          }
+        }catch(e){}
         clearCache("inventory"); clearDashCache();
       }
     }catch(e){
@@ -28015,6 +28094,7 @@
   const BULK_EDIT_FIELDS = [
     { key:"source", label:"입고처", type:"names", collection:"inboundSources" },
     { key:"manufacturer", label:"제조사", type:"select", collection:"manufacturers" },
+    { key:"__color", label:"색상 (제조사·전산 함께)", type:"color" },
     { key:"carrier", label:"통신사", type:"select", collection:"carriers" },
     { key:"location", label:"위치", type:"select", collection:"locations" },
     { key:"status", label:"현재상태", type:"select", collection:"statusOptions" },
@@ -28080,6 +28160,33 @@
     const fieldDef = BULK_EDIT_FIELDS.find(f=>f.key===key);
     const wrap = document.getElementById("bulk-edit-value-wrap");
     if(!fieldDef) return;
+
+    // 색상 — 체크한 재고의 모델에 등록된 색상만 보여드립니다.
+    if(fieldDef.type === "color"){
+      const lb = document.getElementById("bulk-link-box");
+      if(lb) lb.style.display = "none";
+      await fetchModelsCache();
+      const ids0 = getSelectedInventoryIds();
+      const picked = (lastRenderedItems||[]).filter(it=> ids0.includes(it.id));
+      const models = [...new Set(picked.map(it=> modelDupKey(it.systemModel || it.baseModel || "")))];
+      let opts = "", note = "";
+      if(models.length > 1){
+        note = '<div style="color:var(--danger);font-size:11.5px;margin-top:4px;">'
+             + '고르신 재고에 모델이 ' + models.length + '가지 섞여 있습니다. 색상은 모델마다 다르니 한 모델씩 골라 바꿔주세요.</div>';
+      }else{
+        const m = modelsCache.find(x=> modelDupKey(x.systemModel||"") === models[0]
+                                     || modelDupKey(x.baseModel||"") === models[0]);
+        const cols = (m && m.colors) ? m.colors : [];
+        opts = cols.map(c=> '<option value="' + comboEsc((c.manufacturerColor||"") + "|" + (c.systemColor||"") + "|" + (c.sku||"")) + '">'
+              + comboEsc(c.systemColor || c.manufacturerColor || "-")
+              + (c.manufacturerColor && c.manufacturerColor !== c.systemColor ? " (제조사: " + comboEsc(c.manufacturerColor) + ")" : "")
+              + '</option>').join("");
+        if(!cols.length) note = '<div style="color:var(--danger);font-size:11.5px;margin-top:4px;">이 모델에 등록된 색상이 없습니다. 모델 등록에서 색상을 먼저 넣어주세요.</div>';
+      }
+      wrap.innerHTML = '<select id="bulk-edit-value">' + (opts || '<option value="">— 없음 —</option>') + '</select>' + note
+        + '<div style="color:var(--gray);font-size:11.5px;margin-top:4px;">제조사색상·전산색상·삼성모델명(SKU)이 함께 바뀝니다.</div>';
+      return;
+    }
 
     // 연동 계산이 있는 칸이면 선택 영역을 보여줍니다.
     const linkBox = document.getElementById("bulk-link-box");
@@ -28605,6 +28712,40 @@
       }
     }
 
+    // 색상 — 제조사색상·전산색상·SKU 를 함께 바꿉니다.
+    if(fieldDef.type === "color"){
+      const parts = String(newVal).split("|");
+      const mc = parts[0]||"", sc = parts[1]||"", sku = parts[2]||"";
+      const label = sc || mc || "-";
+      if(!confirm("고른 재고 " + ids.length + "대의 색상을 바꿉니다.\n\n"
+        + "  제조사색상  " + (mc||"-") + "\n"
+        + "  전산색상    " + (sc||"-") + "\n"
+        + "  삼성모델명  " + (sku||"-") + "\n\n"
+        + "이 작업은 이력에 남습니다. 진행할까요?")) return;
+      try{
+        for(let i=0; i<ids.length; i+=300){
+          const bt = writeBatch(db);
+          ids.slice(i, i+300).forEach(id=> bt.update(doc(db,"inventoryItems", id),
+            { manufacturerColor: mc, systemColor: sc, sku: sku }));
+          await bt.commit();
+        }
+      }catch(e){ alert("바꾸지 못했습니다.\n" + ((e&&e.message)?e.message:String(e))); return; }
+
+      // 이 재고가 붙어 있는 주문·판매요청·예약의 색상도 함께 맞춥니다.
+      let synced = {};
+      try{ synced = await syncColorEverywhere(ids, mc, sc, sku); }catch(e){}
+      const syncTxt = Object.keys(synced).map(k=> k + " " + synced[k] + "건").join(" / ");
+      logAction("재고 색상 일괄 변경", ids.length + "건 → " + label + (syncTxt ? " / " + syncTxt : ""));
+      clearDashCache(); clearCache("inventory");
+      clearInvSelectAll();
+      closeBulkChangeModal();
+      alert(ids.length + "건의 색상을 「" + label + "」로 바꿨습니다."
+        + (syncTxt ? "\n\n함께 바뀐 곳 — " + syncTxt : ""));
+      clearCache("orders");
+      loadInventoryList();
+      return;
+    }
+
     const isNumberField = fieldDef.type === "number";
     const parsedVal = isNumberField ? Number(newVal) : newVal;
 
@@ -28697,6 +28838,43 @@
       + "주문 " + ordFixed + "개 품목의 도착 수도 실제 재고 수로 다시 셌습니다.");
     loadInventoryList();
   };
+
+  // 재고와 이어진 모든 곳의 색상을 함께 맞춥니다.
+  //  주문 · 판매요청 · 예약  (재고 id 로 이어진 것만)
+  async function syncColorEverywhere(itemIds, mc, sc, sku){
+    const idSet = new Set(itemIds||[]);
+    if(idSet.size === 0) return {};
+    const patch = { manufacturerColor: mc || "", systemColor: sc || "" };
+    if(sku != null) patch.sku = sku || "";
+    const out = {};
+    const jobs = [
+      ["orders", "주문", o=> Array.isArray(o.linkedItemIds) ? o.linkedItemIds : []],
+      ["saleRequests", "판매요청", r=> Array.isArray(r.matchedItemIds) ? r.matchedItemIds : []],
+      ["reservations", "예약", r=> {
+        const a = Array.isArray(r.matchedItemIds) ? r.matchedItemIds : [];
+        const b = Array.isArray(r.allocatedItemIds) ? r.allocatedItemIds : [];
+        return a.concat(b, r.itemId ? [r.itemId] : []);
+      }]
+    ];
+    for(const [col, label, pick] of jobs){
+      try{
+        const snap = await getDocs(collection(db, col));
+        const hit = [];
+        snap.forEach(d=>{
+          const v = d.data();
+          if(v.status === "취소" || v.deleted === true) return;
+          if((pick(v)||[]).some(x=> idSet.has(x))) hit.push(d.id);
+        });
+        for(let i=0; i<hit.length; i+=300){
+          const bt = writeBatch(db);
+          hit.slice(i, i+300).forEach(id=> bt.update(doc(db, col, id), patch));
+          await bt.commit();
+        }
+        if(hit.length) out[label] = hit.length;
+      }catch(e){}
+    }
+    return out;
+  }
 
   // 지운·되돌린 재고가 붙어 있던 주문의 도착 수를 실제 재고 수로 다시 셉니다.
   //  살아 있는 재고만 셉니다. (삭제함 표시된 것은 뺍니다)
@@ -29417,7 +29595,7 @@
     seenNewTag = lastSeenTag;    // 이 버전만 안 알립니다. 그 뒤에 또 올라오면 다시 알립니다.
   };
 
-  // 파일에 박힌 버전 글자를 읽습니다. (예: "파일 2026-08-09 v603")
+  // 파일에 박힌 버전 글자를 읽습니다. (예: "파일 2026-08-09 v607")
   function readBuildTag(text){
     const m = String(text||"").match(/파일\s*[\d-]+\s*v(\d+)/);
     return m ? m[0].trim() : "";
