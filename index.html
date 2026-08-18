@@ -387,7 +387,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v611</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v612</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -24494,6 +24494,101 @@
   // 전산모델명과 모델명·기가수가 안 맞는 재고를 보여줍니다.
   let modelMismatchCache = [];
 
+  // 「다름」인 줄 — 고칠 대상을 담아둡니다.
+  let compareFixList = [];
+
+  // 적어주신 말로 어느 모델·색상이 맞는지 찾습니다.
+  //  못 찾으면 null 을 돌려주고, 그 줄은 손으로 고치시게 둡니다.
+  function findFixTarget(hints, it){
+    const words = (hints||[]).filter(t=> t && !/^[0-9]+$/.test(t));
+    if(words.length === 0) return null;
+    // 1) 모델 — 적어주신 말 중 등록된 모델과 맞는 것
+    let model = null;
+    for(const t of words){
+      const v = modelDupKey(t);
+      const m = modelsCache.find(x=> modelDupKey(x.systemModel) === v || modelDupKey(x.baseModel) === v);
+      if(m){ model = m; break; }
+    }
+    const useModel = model || findModelForItem(it);
+    if(!useModel) return null;
+    // 2) 색상 — 그 모델에 등록된 색상 중 맞는 것 (띄어쓴 이름도 붙여서 봅니다)
+    const cols = useModel.colors || [];
+    let color = null;
+    const joined = modelDupKey(words.join(""));
+    for(const c of cols){
+      const cs = modelDupKey(c.systemColor||""), cm = modelDupKey(c.manufacturerColor||"");
+      if(!cs && !cm) continue;
+      if(joined && (joined.includes(cs) && cs) ){ color = c; break; }
+      for(const t of words){
+        const v = modelDupKey(t);
+        if(v && (v === cs || v === cm)){ color = c; break; }
+      }
+      if(color) break;
+      // 두 낱말을 붙여서도 봅니다.
+      for(let i=0; i<words.length-1; i++){
+        const two = modelDupKey(words[i] + words[i+1]);
+        if(two && (two === cs || two === cm)){ color = c; break; }
+      }
+      if(color) break;
+    }
+    if(!model && !color) return null;
+    return { model: model || null, color: color || null };
+  }
+
+  window.fixCompareRows = async function(){
+    const picked = Array.from(document.querySelectorAll(".cf-ck:checked"))
+      .map(c=> compareFixList[Number(c.value)]).filter(Boolean);
+    if(picked.length === 0){ alert("고칠 줄을 골라주세요."); return; }
+    const lines = picked.slice(0,12).map(x=>
+      "  " + x.sn + "  "
+      + (x.want.model ? (x.from.systemModel||"-") + " → " + x.want.model.systemModel : (x.from.systemModel||"-"))
+      + "  /  "
+      + (x.want.color ? (x.from.systemColor||"-") + " → " + (x.want.color.systemColor || x.want.color.manufacturerColor)
+                      : (x.from.systemColor||"-"))).join("\n");
+    if(!confirm("재고 " + picked.length + "대를 적어주신 값으로 고칩니다.\n\n"
+      + lines + (picked.length > 12 ? "\n  ... 외 " + (picked.length-12) + "대" : "")
+      + "\n\n주문·판매요청·예약의 모델·색상도 함께 맞춰집니다.\n이 작업은 이력에 남습니다. 진행할까요?")) return;
+
+    try{
+      for(let i=0; i<picked.length; i+=300){
+        const bt = writeBatch(db);
+        picked.slice(i, i+300).forEach(x=>{
+          const p = {};
+          if(x.want.model){
+            p.systemModel = x.want.model.systemModel || "";
+            p.baseModel = x.want.model.baseModel || "";
+            p.petName = x.want.model.petName || "";
+            p.capacity = x.want.model.capacity || "";
+            p.modelId = x.want.model.id || null;
+          }
+          if(x.want.color){
+            p.systemColor = x.want.color.systemColor || "";
+            p.manufacturerColor = x.want.color.manufacturerColor || "";
+            if(x.want.color.sku != null) p.sku = x.want.color.sku || "";
+          }
+          if(Object.keys(p).length) bt.update(doc(db,"inventoryItems", x.id), p);
+        });
+        await bt.commit();
+      }
+      // 주문·판매요청·예약도 함께 맞춥니다.
+      const byKey = {};
+      picked.forEach(x=>{
+        if(!x.want.color) return;
+        const k = (x.want.color.manufacturerColor||"") + "|" + (x.want.color.systemColor||"") + "|" + (x.want.color.sku||"");
+        (byKey[k] = byKey[k] || []).push(x.id);
+      });
+      for(const k of Object.keys(byKey)){
+        const pr = k.split("|");
+        await syncColorEverywhere(byKey[k], pr[0], pr[1], pr[2]);
+      }
+    }catch(e){ alert("고치지 못했습니다.\n" + ((e&&e.message)?e.message:String(e))); return; }
+
+    logAction("붙여넣기 대조로 재고 정정", picked.length + "대");
+    alert(picked.length + "대를 고쳤습니다.\n\n다시 맞춰보기를 눌러 확인해주세요.");
+    clearCache("inventory"); clearCache("orders"); clearDashCache();
+    runCompareText();
+  };
+
   // 붙여넣은 원문과 실제 재고를 하나씩 맞춰봅니다. 자료는 바꾸지 않습니다.
   window.runCompareText = async function(){
     const raw = String((document.getElementById("dc-compare-text")||{}).value||"");
@@ -24531,15 +24626,16 @@
     }catch(e){ el.innerHTML = '<div style="color:var(--danger);">재고를 읽지 못했습니다.</div>'; return; }
 
     let same = 0, diff = 0, none = 0;
+    compareFixList = [];      // 「다름」인 줄 — 아래 버튼으로 고칩니다
     let h = '<div style="border:1px solid var(--line);max-height:420px;overflow-y:auto;">'
       + '<table class="data-table" style="width:100%;"><thead><tr>'
-      + '<th>줄</th><th>일련번호</th><th>적어주신 것</th><th>재고의 모델</th><th>재고의 색상</th><th>통신사</th><th>결과</th>'
+      + '<th style="width:34px;">고침</th><th>줄</th><th>일련번호</th><th>적어주신 것</th><th>재고의 모델</th><th>재고의 색상</th><th>통신사</th><th>결과</th>'
       + '</tr></thead><tbody>';
     rows.forEach(r=>{
       const list = found[r.sn] || [];
       if(list.length === 0){
         none++;
-        h += '<tr style="background:#fff8e1;"><td>' + r.no + '</td><td><b>' + comboEsc(r.sn) + '</b></td>'
+        h += '<tr style="background:#fff8e1;"><td>-</td><td>' + r.no + '</td><td><b>' + comboEsc(r.sn) + '</b></td>'
           + '<td>' + comboEsc(r.hints.join(" ")) + '</td>'
           + '<td colspan="3" style="color:var(--gray);">재고에 없습니다</td>'
           + '<td style="color:#8a6d0b;">없음</td></tr>';
@@ -24566,11 +24662,27 @@
         });
         const okRow = miss.length === 0;
         if(okRow) same++; else diff++;
+        // 「다름」이면 적어주신 말로 어느 모델·색상이 맞는지 찾아둡니다.
+        let fixIdx = -1;
+        if(!okRow){
+          const want = findFixTarget(r.hints, it);
+          if(want){
+            fixIdx = compareFixList.length;
+            compareFixList.push({ id: it.id, sn: r.sn, from: it, want });
+          }
+        }
         h += '<tr style="background:' + (okRow ? '#f4faf4' : '#fdecea') + ';">'
+          + '<td>' + (fixIdx >= 0
+              ? '<input type="checkbox" class="cf-ck" value="' + fixIdx + '" checked>'
+              : '<span style="color:var(--gray);">-</span>') + '</td>'
           + '<td>' + r.no + '</td><td><b>' + comboEsc(r.sn) + '</b></td>'
           + '<td>' + comboEsc(r.hints.join(" ")) + '</td>'
-          + '<td>' + comboEsc(docModelLabel(it)) + '</td>'
-          + '<td>' + comboEsc(it.systemColor || it.manufacturerColor || "-") + '</td>'
+          + '<td>' + comboEsc(docModelLabel(it))
+            + (fixIdx >= 0 && compareFixList[fixIdx].want.model
+                ? ' <span style="color:#2e7d32;">→ ' + comboEsc(compareFixList[fixIdx].want.model.systemModel) + '</span>' : '') + '</td>'
+          + '<td>' + comboEsc(it.systemColor || it.manufacturerColor || "-")
+            + (fixIdx >= 0 && compareFixList[fixIdx].want.color
+                ? ' <span style="color:#2e7d32;">→ ' + comboEsc(compareFixList[fixIdx].want.color.systemColor || compareFixList[fixIdx].want.color.manufacturerColor) + '</span>' : '') + '</td>'
           + '<td>' + comboEsc(it.carrier || "-") + '</td>'
           + '<td style="' + (okRow ? 'color:#2e7d32;' : 'color:var(--danger);font-weight:700;') + '">'
           + (okRow ? '같음' : '다름 — ' + comboEsc(miss.join(", "))) + '</td></tr>';
@@ -24582,9 +24694,15 @@
       + (diff ? ' / <span style="color:var(--danger);">다름 ' + diff + '</span>' : '')
       + (none ? ' / <span style="color:#8a6d0b;">재고에 없음 ' + none + '</span>' : '')
       + '</div>' + h
+      + (compareFixList.length
+          ? '<div style="margin-top:8px;">'
+            + '<button class="btn small" style="width:auto;" onclick="fixCompareRows()">체크한 줄을 적어주신 값으로 고치기 ('
+            + compareFixList.length + '건)</button>'
+            + '<span style="font-size:11.5px;color:var(--gray);margin-left:8px;">재고와 함께 주문·판매요청·예약도 맞춰집니다.</span></div>'
+          : '')
       + '<div style="font-size:11.5px;color:var(--gray);margin-top:6px;line-height:1.7;">'
-      + '<b>다름</b>으로 나온 줄은 재고 목록에서 그 일련번호를 찾아 <b>모델·색상</b>을 고쳐주세요.<br>'
-      + '이 화면은 <b>보여드리기만</b> 하고 자료를 바꾸지 않습니다.</div>';
+      + '<span style="color:#2e7d32;">초록 화살표</span>가 바뀔 값입니다. 확인하고 고쳐주세요.<br>'
+      + '화살표가 없는 「다름」 줄은 적어주신 말로 맞는 모델·색상을 못 찾은 것입니다. 그건 직접 고쳐주세요.</div>';
   };
 
   window.showModelMismatchList = function(){
@@ -29787,7 +29905,7 @@
     seenNewTag = lastSeenTag;    // 이 버전만 안 알립니다. 그 뒤에 또 올라오면 다시 알립니다.
   };
 
-  // 파일에 박힌 버전 글자를 읽습니다. (예: "파일 2026-08-09 v611")
+  // 파일에 박힌 버전 글자를 읽습니다. (예: "파일 2026-08-09 v612")
   function readBuildTag(text){
     const m = String(text||"").match(/파일\s*[\d-]+\s*v(\d+)/);
     return m ? m[0].trim() : "";
