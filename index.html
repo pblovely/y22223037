@@ -387,7 +387,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v612</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v614</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -22499,7 +22499,11 @@
           });
           for(const k of Object.keys(byColor)){
             const pr = k.split("|");
-            await syncColorEverywhere(byColor[k], pr[0], pr[1], pr[2]);
+            const one = itemTargets.find(t=> byColor[k].includes(t.iid));
+            const extra = (one && one.p && one.p.systemModel != null)
+              ? { systemModel:one.p.systemModel, baseModel:one.p.baseModel||"",
+                  petName:one.p.petName||"", modelId:one.p.modelId||null } : null;
+            await syncColorEverywhere(byColor[k], pr[0], pr[1], pr[2], extra);
           }
         }catch(e){}
         clearCache("inventory"); clearDashCache();
@@ -24571,15 +24575,34 @@
         await bt.commit();
       }
       // 주문·판매요청·예약도 함께 맞춥니다.
+      // 같은 값으로 바뀌는 것끼리 묶어 한 번에 옮깁니다. (모델까지 함께)
       const byKey = {};
       picked.forEach(x=>{
-        if(!x.want.color) return;
-        const k = (x.want.color.manufacturerColor||"") + "|" + (x.want.color.systemColor||"") + "|" + (x.want.color.sku||"");
+        const c = x.want.color, m = x.want.model;
+        const k = JSON.stringify({
+          mc: c ? (c.manufacturerColor||"") : null,
+          sc: c ? (c.systemColor||"") : null,
+          sku: c ? (c.sku||"") : null,
+          sm: m ? (m.systemModel||"") : null,
+          bm: m ? (m.baseModel||"") : null,
+          pn: m ? (m.petName||"") : null,
+          cap: m ? (m.capacity||"") : null,
+          mid: m ? (m.id||null) : null
+        });
         (byKey[k] = byKey[k] || []).push(x.id);
       });
       for(const k of Object.keys(byKey)){
-        const pr = k.split("|");
-        await syncColorEverywhere(byKey[k], pr[0], pr[1], pr[2]);
+        const v = JSON.parse(k);
+        const extra = (v.sm != null) ? { systemModel:v.sm, baseModel:v.bm, petName:v.pn, capacity:v.cap, modelId:v.mid } : null;
+        // 색상을 못 찾았으면 재고의 지금 색상을 그대로 씁니다. (색상을 지우지 않게)
+        let mc2 = v.mc, sc2 = v.sc, sku2 = v.sku;
+        if(mc2 == null){
+          const one = picked.find(x=> byKey[k].includes(x.id));
+          mc2 = one ? (one.from.manufacturerColor||"") : "";
+          sc2 = one ? (one.from.systemColor||"") : "";
+          sku2 = one ? (one.from.sku||"") : "";
+        }
+        await syncColorEverywhere(byKey[k], mc2, sc2, sku2, extra);
       }
     }catch(e){ alert("고치지 못했습니다.\n" + ((e&&e.message)?e.message:String(e))); return; }
 
@@ -24703,6 +24726,90 @@
       + '<div style="font-size:11.5px;color:var(--gray);margin-top:6px;line-height:1.7;">'
       + '<span style="color:#2e7d32;">초록 화살표</span>가 바뀔 값입니다. 확인하고 고쳐주세요.<br>'
       + '화살표가 없는 「다름」 줄은 적어주신 말로 맞는 모델·색상을 못 찾은 것입니다. 그건 직접 고쳐주세요.</div>';
+  };
+
+  // 주문과 재고의 모델·색상이 다른 건 — 재고에 맞춥니다.
+  let orderItemDiffCache = [];
+
+  window.showOrderItemDiffList = function(){
+    const el = document.getElementById("datacheck-detail");
+    if(!el) return;
+    if(orderItemDiffCache.length === 0){ el.innerHTML = '<div class="list-empty">다른 것이 없습니다.</div>'; return; }
+    el.innerHTML = '<div style="border:1px solid var(--navy);padding:10px 12px;margin-top:10px;">'
+      + '<div style="font-weight:700;margin-bottom:4px;">주문과 재고의 모델·색상이 다른 건 — '
+      + orderItemDiffCache.length + '대</div>'
+      + '<div style="font-size:11.5px;color:var(--gray);line-height:1.7;margin-bottom:8px;">'
+      + '도착 등록된 재고와 그 주문 품목이 서로 다릅니다.<br>'
+      + '<b>재고 쪽이 맞다면</b> 아래 버튼으로 주문을 재고에 맞추실 수 있습니다. 그러면 <b>미입고 지표</b>도 함께 맞아집니다.</div>'
+      + '<div style="max-height:340px;overflow-y:auto;border:1px solid var(--line);">'
+      + '<table class="data-table" style="width:100%;"><thead><tr>'
+      + '<th style="width:34px;"><input type="checkbox" id="oid-all" checked></th>'
+      + '<th>일련번호</th><th>주문일</th><th>주문의 모델</th><th>주문의 색상</th>'
+      + '<th>재고의 모델</th><th>재고의 색상</th>'
+      + '</tr></thead><tbody>'
+      + orderItemDiffCache.map((r,i)=>
+          '<tr style="background:#fdecea;">'
+          + '<td><input type="checkbox" class="oid-ck" value="'+i+'" checked></td>'
+          + '<td>' + comboEsc(r.it.serialNumber||"-") + '</td>'
+          + '<td>' + comboEsc(r.o.orderDate||"-") + '</td>'
+          + '<td' + (r.modelDiff ? ' style="color:var(--danger);"' : '') + '>' + comboEsc(r.o.systemModel||"-") + '</td>'
+          + '<td' + (r.colorDiff ? ' style="color:var(--danger);"' : '') + '>' + comboEsc(r.o.systemColor||"-") + '</td>'
+          + '<td style="color:#2e7d32;font-weight:700;">' + comboEsc(r.it.systemModel||"-") + '</td>'
+          + '<td style="color:#2e7d32;font-weight:700;">' + comboEsc(r.it.systemColor||"-") + '</td></tr>').join("")
+      + '</tbody></table></div>'
+      + '<div style="margin-top:8px;"><button class="btn small" style="width:auto;" onclick="fixOrderItemDiff()">체크한 주문을 재고에 맞추기</button></div>'
+      + '</div>';
+    const all = document.getElementById("oid-all");
+    if(all) all.onchange = ()=> el.querySelectorAll(".oid-ck").forEach(c=> c.checked = all.checked);
+  };
+
+  window.fixOrderItemDiff = async function(){
+    const picked = Array.from(document.querySelectorAll(".oid-ck:checked"))
+      .map(c=> orderItemDiffCache[Number(c.value)]).filter(Boolean);
+    if(picked.length === 0){ alert("맞출 건을 골라주세요."); return; }
+    if(!confirm("주문 품목 " + picked.length + "건을 재고에 맞춥니다.\n\n"
+      + picked.slice(0,10).map(r=> "  " + (r.it.serialNumber||"-") + "  "
+          + (r.o.systemModel||"-") + " " + (r.o.systemColor||"-")
+          + "  →  " + (r.it.systemModel||"-") + " " + (r.it.systemColor||"-")).join("\n")
+      + (picked.length > 10 ? "\n  ... 외 " + (picked.length-10) + "건" : "")
+      + "\n\n미입고 지표도 함께 맞아집니다. 진행할까요?")) return;
+    try{
+      for(let i=0; i<picked.length; i+=300){
+        const bt = writeBatch(db);
+        picked.slice(i, i+300).forEach(r=> bt.update(doc(db,"orders", r.oid), {
+          systemModel: r.it.systemModel || "",
+          baseModel: r.it.baseModel || "",
+          petName: r.it.petName || "",
+          capacity: r.it.capacity || "",
+          modelId: r.it.modelId || null,
+          systemColor: r.it.systemColor || "",
+          manufacturerColor: r.it.manufacturerColor || "",
+          sku: r.it.sku || ""
+        }));
+        await bt.commit();
+      }
+    }catch(e){ alert("맞추지 못했습니다.\n" + ((e&&e.message)?e.message:String(e))); return; }
+    // 판매요청·예약도 재고 기준으로 함께 맞춥니다.
+    try{
+      const byKey = {};
+      picked.forEach(r=>{
+        const k = JSON.stringify({
+          mc:r.it.manufacturerColor||"", sc:r.it.systemColor||"", sku:r.it.sku||"",
+          sm:r.it.systemModel||"", bm:r.it.baseModel||"", pn:r.it.petName||"",
+          cap:r.it.capacity||"", mid:r.it.modelId||null });
+        (byKey[k] = byKey[k] || []).push(r.iid);
+      });
+      for(const k of Object.keys(byKey)){
+        const v = JSON.parse(k);
+        await syncColorEverywhere(byKey[k], v.mc, v.sc, v.sku,
+          { systemModel:v.sm, baseModel:v.bm, petName:v.pn, capacity:v.cap, modelId:v.mid });
+      }
+    }catch(e){}
+    logAction("주문 품목을 재고에 맞춤", picked.length + "건");
+    alert(picked.length + "건을 맞췄습니다.\n\n판매요청·예약도 함께 맞췄습니다.");
+    clearCache("orders"); clearCache("inventory"); clearDashCache();
+    document.getElementById("datacheck-detail").innerHTML = "";
+    runDataCheck();
   };
 
   window.showModelMismatchList = function(){
@@ -25276,6 +25383,27 @@
         issues.push({ n:"같은 모델·일련번호가 여러 건", cnt:dupKeys.length, unit:"남는 " + dupExtra + "건",
           why:"모델과 일련번호가 둘 다 같으면 같은 단말기입니다. 모델이 다르면 다른 단말기라 세지 않습니다.",
           fix: dupKeys.length ? "showDupSerialList()" : null, fixLabel:"확인하고 정리" });
+      }
+
+      // ⓪-D 주문 품목과 그 재고의 모델·색상이 다른 건
+      {
+        const rows = [];
+        Object.keys(items).forEach(iid=>{
+          const it = items[iid];
+          if(it.deleted === true) return;
+          const oid = it.orderId;
+          if(!oid) return;
+          const o = orders[oid];
+          if(!o || o.status === "취소") return;
+          const cSame = modelDupKey(o.systemColor||"") === modelDupKey(it.systemColor||"");
+          const mSame = modelDupKey(o.systemModel||"") === modelDupKey(it.systemModel||"");
+          if(cSame && mSame) return;
+          rows.push({ oid, iid, o, it, colorDiff:!cSame, modelDiff:!mSame });
+        });
+        orderItemDiffCache = rows;
+        issues.push({ n:"주문과 재고의 모델·색상이 다른 건", cnt:rows.length, unit:"대",
+          why:"도착 등록된 재고와 그 주문 품목의 모델·색상이 다릅니다. 재고 쪽이 맞으면 주문을 재고에 맞출 수 있습니다.",
+          fix: rows.length ? "showOrderItemDiffList()" : null, fixLabel:"확인하고 맞추기" });
       }
 
       // ⓪-C 전산모델명과 모델명·기가수가 서로 안 맞는 재고
@@ -29151,12 +29279,37 @@
 
   // 재고와 이어진 모든 곳의 색상을 함께 맞춥니다.
   //  주문 · 판매요청 · 예약  (재고 id 로 이어진 것만)
-  async function syncColorEverywhere(itemIds, mc, sc, sku){
+  //  extra 를 주면 모델(전산모델명·모델명·펫네임·기가수·모델번호)까지 함께 옮깁니다.
+  async function syncColorEverywhere(itemIds, mc, sc, sku, extra){
     const idSet = new Set(itemIds||[]);
     if(idSet.size === 0) return {};
     const patch = { manufacturerColor: mc || "", systemColor: sc || "" };
     if(sku != null) patch.sku = sku || "";
+    if(extra && typeof extra === "object"){
+      ["systemModel","baseModel","petName","capacity","modelId"].forEach(k=>{
+        if(extra[k] !== undefined) patch[k] = extra[k];
+      });
+    }
     const out = {};
+
+    // 재고에 적힌 orderId 로 주문 품목을 바로 찾습니다.
+    //  linkedItemIds 가 비어 있어도 이 길로 찾아집니다.
+    try{
+      const oids = new Set();
+      for(const iid of idSet){
+        const sn = await getDoc(doc(db,"inventoryItems", iid));
+        if(sn.exists() && sn.data().orderId) oids.add(sn.data().orderId);
+      }
+      if(oids.size){
+        const arr = [...oids];
+        for(let i=0; i<arr.length; i+=300){
+          const bt = writeBatch(db);
+          arr.slice(i, i+300).forEach(id=> bt.update(doc(db,"orders", id), patch));
+          await bt.commit();
+        }
+        out["주문"] = arr.length;
+      }
+    }catch(e){}
     const jobs = [
       ["orders", "주문", o=> Array.isArray(o.linkedItemIds) ? o.linkedItemIds : []],
       ["saleRequests", "판매요청", r=> Array.isArray(r.matchedItemIds) ? r.matchedItemIds : []],
@@ -29180,7 +29333,7 @@
           hit.slice(i, i+300).forEach(id=> bt.update(doc(db, col, id), patch));
           await bt.commit();
         }
-        if(hit.length) out[label] = hit.length;
+        if(hit.length) out[label] = Math.max(out[label]||0, hit.length);
       }catch(e){}
     }
     return out;
@@ -29905,7 +30058,7 @@
     seenNewTag = lastSeenTag;    // 이 버전만 안 알립니다. 그 뒤에 또 올라오면 다시 알립니다.
   };
 
-  // 파일에 박힌 버전 글자를 읽습니다. (예: "파일 2026-08-09 v612")
+  // 파일에 박힌 버전 글자를 읽습니다. (예: "파일 2026-08-09 v614")
   function readBuildTag(text){
     const m = String(text||"").match(/파일\s*[\d-]+\s*v(\d+)/);
     return m ? m[0].trim() : "";
