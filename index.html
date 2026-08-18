@@ -387,7 +387,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v624</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v627</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -22174,8 +22174,7 @@
       // 색상 — 그 모델에 등록된 색상에서 고릅니다. (도착된 줄도 고칠 수 있습니다)
       {
         const m2 = (modelsCache||[]).find(x=>
-          modelDupKey(x.systemModel||"") === modelDupKey(l.systemModel||"")
-          || (l.modelId && x.id === l.modelId));
+          modelDupKey(x.systemModel||"") === modelDupKey(l.systemModel||""));
         const cols = (m2 && m2.colors) ? m2.colors : [];
         if(cols.length){
           const cse = document.createElement("select");
@@ -22224,9 +22223,9 @@
         // 출고가 — 모델 등록과 다르면 빨갛게 알려드립니다.
         {
           const lpEl = inp("be-listprice", l.listPrice, "85px");
+          // 전산모델명만 보고 찾습니다. (기가수가 비어 있어도 됩니다)
           const m3 = (modelsCache||[]).find(x=>
-            modelDupKey(x.systemModel||"") === modelDupKey(l.systemModel||"")
-            || (l.modelId && x.id === l.modelId));
+            modelDupKey(x.systemModel||"") === modelDupKey(l.systemModel||""));
           const want = m3 ? (Number(m3.priceIncVat)||0) : 0;
           const cur = Number(l.listPrice)||0;
           if(want && cur !== want){
@@ -24713,7 +24712,7 @@
   // 같은 일련번호인데 모델이 다른 재고 — 잘못 들어간 쪽을 골라 지웁니다.
   let crossSnCache = [];
 
-  // 전산모델명과 모델명·기가수가 안 맞는 재고를 보여줍니다.
+  // 모델명·기가수가 모델 등록과 다른 재고를 보여줍니다.
   let modelMismatchCache = [];
 
   // 일련번호로 그 재고와 주문 품목을 대조합니다.
@@ -25313,28 +25312,64 @@
     if(!el) return;
     if(modelMismatchCache.length === 0){ el.innerHTML = '<div class="list-empty">안 맞는 것이 없습니다.</div>'; return; }
     el.innerHTML = '<div style="border:1px solid var(--navy);padding:10px 12px;margin-top:10px;">'
-      + '<div style="font-weight:700;margin-bottom:4px;">전산모델명과 모델명·기가수가 안 맞는 재고 — '
+      + '<div style="font-weight:700;margin-bottom:4px;">모델명·기가수가 모델 등록과 다른 재고 — '
       + modelMismatchCache.length + '대</div>'
       + '<div style="font-size:11.5px;color:var(--gray);line-height:1.7;margin-bottom:8px;">'
-      + '전산모델명은 <b>모델명 + 기가수</b>여야 합니다. 안 맞으면 다른 모델로 잘못 들어갔을 수 있습니다.<br>'
-      + '재고 목록에서 그 건을 찾아 <b>모델을 다시 골라</b>주세요.</div>'
+      + '<b>전산모델명이 기준</b>입니다. 맞추면 그 전산모델명으로 등록된 모델을 찾아<br>'
+      + '<b>모델명·기가수·펫네임</b>을 그 모델 값으로 맞춥니다. 전산모델명·색상·금액은 건드리지 않습니다.</div>'
       + '<div style="max-height:340px;overflow-y:auto;border:1px solid var(--line);">'
       + '<table class="data-table" style="width:100%;"><thead><tr>'
-      + '<th>일련번호</th><th>전산모델명</th><th>모델명</th><th>기가수</th><th>이래야 맞음</th>'
-      + '<th>색상</th><th>통신사</th><th>입고일</th><th>상태</th>'
+      + '<th style="width:34px;"><input type="checkbox" id="mm-all" checked></th>'
+      + '<th>일련번호</th><th>전산모델명 (기준)</th><th>지금 모델명</th><th>지금 기가수</th>'
+      + '<th>맞출 모델명</th><th>맞출 기가수</th><th>색상</th><th>입고일</th>'
       + '</tr></thead><tbody>'
-      + modelMismatchCache.map(r=>
-          '<tr style="background:#fdecea;">'
+      + modelMismatchCache.map((r,i)=>{
+          const m = (modelsCache||[]).find(x=> modelDupKey(x.systemModel||"") === modelDupKey(r.sys||""));
+          return '<tr style="background:' + (m ? '#fdecea' : '#fff8e1') + ';">'
+          + '<td>' + (m ? '<input type="checkbox" class="mm-ck" value="'+i+'" checked>' : '<span style="color:var(--gray);">-</span>') + '</td>'
           + '<td>' + comboEsc(r.it.serialNumber||"-") + '</td>'
           + '<td><b>' + comboEsc(r.sys||"-") + '</b></td>'
           + '<td>' + comboEsc(r.base||"-") + '</td>'
           + '<td>' + comboEsc(r.cap||"-") + '</td>'
-          + '<td style="color:#2e7d32;font-weight:700;">' + comboEsc(r.want||"-") + '</td>'
+          + '<td style="color:#2e7d32;font-weight:700;">' + comboEsc(m ? (m.baseModel||"-") : "모델 등록에 없음") + '</td>'
+          + '<td style="color:#2e7d32;font-weight:700;">' + comboEsc(m ? (m.capacity||"-") : "-") + '</td>'
           + '<td>' + comboEsc(r.it.systemColor || r.it.manufacturerColor || "-") + '</td>'
-          + '<td>' + comboEsc(r.it.carrier||"-") + '</td>'
-          + '<td>' + comboEsc(r.it.inDate||"-") + '</td>'
-          + '<td>' + comboEsc(r.it.status||"-") + '</td></tr>').join("")
-      + '</tbody></table></div></div>';
+          + '<td>' + comboEsc(r.it.inDate||"-") + '</td></tr>';
+        }).join("")
+      + '</tbody></table></div>'
+      + '<div style="margin-top:8px;"><button class="btn small" style="width:auto;" onclick="fixModelMismatch()">체크한 건 전산모델명 기준으로 맞추기</button></div>'
+      + '</div>';
+    const all = document.getElementById("mm-all");
+    if(all) all.onchange = ()=> el.querySelectorAll(".mm-ck").forEach(c=> c.checked = all.checked);
+  };
+
+  window.fixModelMismatch = async function(){
+    const picked = Array.from(document.querySelectorAll(".mm-ck:checked"))
+      .map(c=> modelMismatchCache[Number(c.value)]).filter(Boolean);
+    if(picked.length === 0){ alert("맞출 건을 골라주세요."); return; }
+    if(!confirm("전산모델명만 맞춥니다. (모델명·기가수·색상·금액은 그대로)\n\n"
+      + picked.slice(0,12).map(r=> "  " + (r.it.serialNumber||"-") + "  "
+          + (r.sys||"-") + " → " + r.want).join("\n")
+      + (picked.length > 12 ? "\n  ... 외 " + (picked.length-12) + "대" : "")
+      + "\n\n모두 " + picked.length + "대입니다. 진행할까요?")) return;
+    try{
+      for(let i=0; i<picked.length; i+=300){
+        const bt = writeBatch(db);
+        picked.slice(i, i+300).forEach(r=>{
+          const p = { systemModel: r.want };
+          // 그 이름의 모델이 등록돼 있으면 모델번호도 이어둡니다.
+          const m = (modelsCache||[]).find(x=> modelDupKey(x.systemModel||"") === modelDupKey(r.want));
+          if(m) p.modelId = m.id;
+          bt.update(doc(db,"inventoryItems", r.id), p);
+        });
+        await bt.commit();
+      }
+    }catch(e){ alert("맞추지 못했습니다.\n" + ((e&&e.message)?e.message:String(e))); return; }
+    logAction("전산모델명 맞추기", picked.length + "대");
+    alert(picked.length + "대의 전산모델명을 맞췄습니다.");
+    clearCache("inventory"); clearDashCache();
+    document.getElementById("datacheck-detail").innerHTML = "";
+    runDataCheck();
   };
 
   window.showCrossSnList = function(){
@@ -25888,7 +25923,9 @@
         Object.keys(orders).forEach(oid=>{
           const o = orders[oid];
           if(o.status === "취소") return;
-          const m = findModelForItem(o);
+          // 전산모델명만 보고 찾습니다. (기가수가 비어 있어도 됩니다)
+          const key = modelDupKey(o.systemModel||"");
+          const m = key ? (modelsCache||[]).find(x=> modelDupKey(x.systemModel||"") === key) : null;
           if(!m) return;
           const want = Number(m.priceIncVat)||0;
           const cur = Number(o.listPrice)||0;
@@ -25943,7 +25980,7 @@
           fix: rows.length ? "showOrderItemDiffList()" : null, fixLabel:"확인하고 맞추기" });
       }
 
-      // ⓪-C 전산모델명과 모델명·기가수가 서로 안 맞는 재고
+      // ⓪-C 모델명·기가수가 모델 등록과 다른 재고
       //  "SM-F976N 512" 를 적었는데 256 으로 들어간 것 같은 경우를 찾습니다.
       {
         const rows = [];
@@ -25951,19 +25988,19 @@
           const it = items[id];
           if(it.deleted === true) return;
           const sys = modelDupKey(it.systemModel||"");
-          const base = modelDupKey(it.baseModel||"");
-          const cap = normalizeCapacity(it.capacity);
-          if(!sys || !base) return;
-          // 전산모델명은 「모델명 + 기가수」 여야 합니다.
-          const want = base + (cap || "");
-          if(sys === want) return;
-          if(!cap && sys === base) return;      // 기가수가 없는 모델은 그대로
-          rows.push({ id, it, sys:it.systemModel, base:it.baseModel, cap:it.capacity, want });
+          if(!sys) return;
+          // 전산모델명이 기준입니다. 그 이름으로 등록된 모델과 견줍니다.
+          const m = (modelsCache||[]).find(x=> modelDupKey(x.systemModel||"") === sys);
+          if(!m) return;                         // 등록에 없는 모델은 여기서 보지 않습니다
+          const bSame = modelDupKey(it.baseModel||"") === modelDupKey(m.baseModel||"");
+          const cSame = normalizeCapacity(it.capacity) === normalizeCapacity(m.capacity);
+          if(bSame && cSame) return;
+          rows.push({ id, it, sys:it.systemModel, base:it.baseModel, cap:it.capacity, m });
         });
         modelMismatchCache = rows;
-        issues.push({ n:"전산모델명과 모델명·기가수가 안 맞는 재고", cnt:rows.length, unit:"대",
-          why:"전산모델명은 「모델명 + 기가수」여야 합니다. 안 맞으면 다른 모델로 잘못 들어갔을 수 있습니다.",
-          fix: rows.length ? "showModelMismatchList()" : null, fixLabel:"확인하기" });
+        issues.push({ n:"모델명·기가수가 모델 등록과 다른 재고", cnt:rows.length, unit:"대",
+          why:"전산모델명으로 등록된 모델과 모델명·기가수가 다릅니다. 전산모델명 기준으로 맞출 수 있습니다.",
+          fix: rows.length ? "showModelMismatchList()" : null, fixLabel:"확인하고 맞추기" });
       }
 
       // ⓪-B 같은 일련번호가 여러 건 (모델이 달라도)
@@ -30595,7 +30632,7 @@
     seenNewTag = lastSeenTag;    // 이 버전만 안 알립니다. 그 뒤에 또 올라오면 다시 알립니다.
   };
 
-  // 파일에 박힌 버전 글자를 읽습니다. (예: "파일 2026-08-09 v624")
+  // 파일에 박힌 버전 글자를 읽습니다. (예: "파일 2026-08-09 v627")
   function readBuildTag(text){
     const m = String(text||"").match(/파일\s*[\d-]+\s*v(\d+)/);
     return m ? m[0].trim() : "";
