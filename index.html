@@ -387,7 +387,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v633</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v634</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -29899,85 +29899,106 @@
   function renderOrderDaily(elId, batches, byBatch){
     const el = document.getElementById(elId);
     if(!el) return;
-    const days = {};
-    const daysLines = {};   // 날짜별 주문 품목 목록 (펼쳤을 때 보여줍니다)
-    Object.keys(byBatch).forEach(bid=>{
-      const b = batches[bid];
-      if(!b || b.status === "취소") return;
-      const d = String(b.orderDate||"").trim() || "(날짜 없음)";
-      if(!days[d]) days[d] = { qty:0, list:0, cost:0, sources:{}, carriers:{}, credit:0, cash:0 };
-      if(!daysLines[d]) daysLines[d] = [];
-      (byBatch[bid]||[]).forEach(o=>{
-        if(o.status === "취소") return;
-        const q = Number(o.quantity)||0;
-        if(!q) return;
-        const lp = Number(o.listPrice)||0;
-        const pp = Number(o.purchasePrice)||0
-          || (lp - (Number(o.preDiscountAmt)||0) - (Number(o.otherDiscountAmt)||0));
-        days[d].qty += q;
-        days[d].list += lp * q;
-        days[d].cost += pp * q;
-        const src = String(b.source||"-");
-        days[d].sources[src] = (days[d].sources[src]||0) + q;
-        const car = String(b.carrier||o.carrier||"-");
-        days[d].carriers[car] = (days[d].carriers[car]||0) + q;
-        if(b.paymentMethod === "b2b_credit") days[d].credit += pp * q; else days[d].cash += pp * q;
-        // 펼쳐서 볼 목록입니다. 원본은 건드리지 않고 복사본에 매입처·통신사만 채워둡니다.
-        daysLines[d].push(Object.assign({}, o, { carrier: car, _source: src, _unitCost: pp }));
+    const lineStore = {};   // 펼침용 — 표별·날짜별 주문 품목 목록
+
+    // 표 하나를 만듭니다. onlyCredit 이면 삼성전자 여신으로 결제한 주문만 셉니다.
+    function buildTable(pfx, title, note, onlyCredit){
+      const days = {};
+      Object.keys(byBatch).forEach(bid=>{
+        const b = batches[bid];
+        if(!b || b.status === "취소") return;
+        if(onlyCredit && b.paymentMethod !== "b2b_credit") return;
+        const d = String(b.orderDate||"").trim() || "(날짜 없음)";
+        if(!days[d]) days[d] = { qty:0, list:0, cost:0, sources:{}, carriers:{}, credit:0, cash:0, lines:[] };
+        (byBatch[bid]||[]).forEach(o=>{
+          if(o.status === "취소") return;
+          const q = Number(o.quantity)||0;
+          if(!q) return;
+          const lp = Number(o.listPrice)||0;
+          const pp = Number(o.purchasePrice)||0
+            || (lp - (Number(o.preDiscountAmt)||0) - (Number(o.otherDiscountAmt)||0));
+          days[d].qty += q;
+          days[d].list += lp * q;
+          days[d].cost += pp * q;
+          const src = String(b.source||"-");
+          days[d].sources[src] = (days[d].sources[src]||0) + q;
+          const car = String(b.carrier||o.carrier||"-");
+          days[d].carriers[car] = (days[d].carriers[car]||0) + q;
+          if(b.paymentMethod === "b2b_credit") days[d].credit += pp * q; else days[d].cash += pp * q;
+          // 펼쳐서 볼 목록입니다. 원본은 건드리지 않고 복사본에 매입처·통신사만 채워둡니다.
+          days[d].lines.push(Object.assign({}, o, { carrier: car, _source: src, _unitCost: pp }));
+        });
       });
-    });
-    const keys = Object.keys(days).sort((a,b)=> b.localeCompare(a));   // 최근 날짜 먼저
-    if(keys.length === 0){ el.innerHTML = ""; return; }
-    const show = orderDailyAll ? keys : keys.slice(0, 7);
-    let tQ=0, tL=0, tC=0, tCr=0;
-    keys.forEach(k=>{ tQ+=days[k].qty; tL+=days[k].list; tC+=days[k].cost; tCr+=days[k].credit; });
-    let h = '<div style="font-size:12.5px;font-weight:700;margin-bottom:5px;">날짜별 주문 총금액 '
-      + '<span style="color:var(--gray);font-weight:400;font-size:11.5px;">— 도착 여부와 상관없이 주문한 것 전부</span>'
-      + (keys.length > 7 ? ' <a href="javascript:void(0)" onclick="toggleOrderDaily()" style="font-weight:400;font-size:11.5px;margin-left:6px;">'
-          + (orderDailyAll ? "최근 7일만" : "전체 " + keys.length + "일 보기") + '</a>' : '')
-      + '</div>'
-      + '<div style="border:1px solid var(--line);max-height:300px;overflow-y:auto;">'
-      + '<table class="data-table" style="width:100%;"><thead><tr>'
-      + '<th>주문일</th><th>매입처</th><th>통신사</th><th class="ta-right">대수</th>'
-      + '<th class="ta-right">출고가 합계</th><th class="ta-right">입고가 합계</th>'
-      + '<th class="ta-right">여신</th><th class="ta-right">일반</th>'
-      + '</tr></thead><tbody>';
-    const top = obj => Object.keys(obj).sort((a,b)=> obj[b]-obj[a])
-      .map(k=> k + " " + obj[k]).slice(0,3).join(" · ");
-    show.forEach((k, ki)=>{
-      const d = days[k];
-      const pk = "od" + ki;
-      h += '<tr><td><a href="javascript:void(0)" class="od-day" data-key="' + pk + '" data-day="' + comboEsc(k) + '"'
-        + ' style="font-weight:700;text-decoration:none;" title="누르면 그날 주문 내역이 펼쳐집니다.">▶ ' + comboEsc(k) + '</a></td>'
-        + '<td style="font-size:11.5px;">' + comboEsc(top(d.sources)) + '</td>'
-        + '<td style="font-size:11.5px;">' + comboEsc(top(d.carriers)) + '</td>'
-        + '<td class="ta-right" style="font-weight:700;">' + d.qty.toLocaleString() + '</td>'
-        + '<td class="ta-right">' + Math.round(d.list).toLocaleString() + '</td>'
-        + '<td class="ta-right">' + Math.round(d.cost).toLocaleString() + '</td>'
-        + '<td class="ta-right" style="color:#6a1b9a;">' + (d.credit ? Math.round(d.credit).toLocaleString() : "-") + '</td>'
-        + '<td class="ta-right">' + (d.cash ? Math.round(d.cash).toLocaleString() : "-") + '</td></tr>';
-      h += '<tr class="od-panel" data-key="' + pk + '" style="display:none;background:#fafafa;">'
-        + '<td colspan="8" style="padding:10px 12px;">'
-        + '<div style="margin-bottom:7px;">'
-        + '<button class="btn small od-tab" data-mode="sum" style="width:auto;margin-right:5px;">모델별 요약</button>'
-        + '<button class="btn small od-tab" data-mode="list" style="width:auto;">전체 리스트</button>'
+      const keys = Object.keys(days).sort((a,b)=> b.localeCompare(a));   // 최근 날짜 먼저
+      if(keys.length === 0){
+        return '<div style="font-size:12.5px;font-weight:700;margin-bottom:5px;">' + title + '</div>'
+          + '<div style="border:1px solid var(--line);background:#f7f7f7;color:var(--gray);padding:8px 11px;font-size:12.5px;">'
+          + '해당하는 주문이 없습니다.</div>';
+      }
+      const show = orderDailyAll ? keys : keys.slice(0, 7);
+      let tQ=0, tL=0, tC=0, tCr=0;
+      keys.forEach(k=>{ tQ+=days[k].qty; tL+=days[k].list; tC+=days[k].cost; tCr+=days[k].credit; });
+      const cols = onlyCredit ? 6 : 8;   // 여신 표는 「여신·일반」 칸이 필요 없습니다.
+      let h = '<div style="font-size:12.5px;font-weight:700;margin-bottom:5px;">' + title + ' '
+        + '<span style="color:var(--gray);font-weight:400;font-size:11.5px;">— ' + note + '</span>'
+        + (keys.length > 7 ? ' <a href="javascript:void(0)" onclick="toggleOrderDaily()" style="font-weight:400;font-size:11.5px;margin-left:6px;">'
+            + (orderDailyAll ? "최근 7일만" : "전체 " + keys.length + "일 보기") + '</a>' : '')
         + '</div>'
-        + '<div class="od-sum-wrap"><div id="od-sum-' + pk + '"></div></div>'
-        + '<div class="od-list" style="display:none;"></div>'
-        + '</td></tr>';
-    });
-    h += '<tr style="background:#fff;font-weight:700;border-top:2px solid var(--navy);">'
-      + '<td colspan="3">합계 (' + keys.length + '일)</td>'
-      + '<td class="ta-right">' + tQ.toLocaleString() + '</td>'
-      + '<td class="ta-right">' + Math.round(tL).toLocaleString() + '</td>'
-      + '<td class="ta-right">' + Math.round(tC).toLocaleString() + '</td>'
-      + '<td class="ta-right" style="color:#6a1b9a;">' + Math.round(tCr).toLocaleString() + '</td>'
-      + '<td class="ta-right">' + Math.round(tC - tCr).toLocaleString() + '</td></tr>'
-      + '</tbody></table></div>'
+        + '<div style="border:1px solid var(--line);max-height:300px;overflow:auto;">'
+        + '<table class="data-table" style="width:auto;"><thead><tr>'
+        + '<th>주문일</th><th>매입처</th><th>통신사</th><th class="ta-right">대수</th>'
+        + '<th class="ta-right">출고가 합계</th><th class="ta-right">입고가 합계</th>'
+        + (onlyCredit ? '' : '<th class="ta-right">여신</th><th class="ta-right">일반</th>')
+        + '</tr></thead><tbody>';
+      const top = obj => Object.keys(obj).sort((a,b)=> obj[b]-obj[a])
+        .map(k=> k + " " + obj[k]).slice(0,3).join(" · ");
+      show.forEach((k, ki)=>{
+        const d = days[k];
+        const pk = pfx + ki;
+        lineStore[pk] = d.lines;
+        h += '<tr><td style="white-space:nowrap;"><a href="javascript:void(0)" class="od-day" data-key="' + pk + '" data-day="' + comboEsc(k) + '"'
+          + ' style="font-weight:700;text-decoration:none;" title="누르면 그날 주문 내역이 펼쳐집니다.">▶ ' + comboEsc(k) + '</a></td>'
+          + '<td style="font-size:11.5px;white-space:nowrap;">' + comboEsc(top(d.sources)) + '</td>'
+          + '<td style="font-size:11.5px;white-space:nowrap;">' + comboEsc(top(d.carriers)) + '</td>'
+          + '<td class="ta-right" style="font-weight:700;">' + d.qty.toLocaleString() + '</td>'
+          + '<td class="ta-right">' + Math.round(d.list).toLocaleString() + '</td>'
+          + '<td class="ta-right">' + Math.round(d.cost).toLocaleString() + '</td>'
+          + (onlyCredit ? ''
+              : '<td class="ta-right" style="color:#6a1b9a;">' + (d.credit ? Math.round(d.credit).toLocaleString() : "-") + '</td>'
+                + '<td class="ta-right">' + (d.cash ? Math.round(d.cash).toLocaleString() : "-") + '</td>')
+          + '</tr>';
+        h += '<tr class="od-panel" data-key="' + pk + '" style="display:none;background:#fafafa;">'
+          + '<td colspan="' + cols + '" style="padding:10px 12px;">'
+          + '<div style="margin-bottom:7px;">'
+          + '<button class="btn small od-tab" data-mode="sum" style="width:auto;margin-right:5px;">모델별 요약</button>'
+          + '<button class="btn small od-tab" data-mode="list" style="width:auto;">전체 리스트</button>'
+          + '</div>'
+          + '<div class="od-sum-wrap"><div id="od-sum-' + pk + '"></div></div>'
+          + '<div class="od-list" style="display:none;"></div>'
+          + '</td></tr>';
+      });
+      h += '<tr style="background:#fff;font-weight:700;border-top:2px solid var(--navy);">'
+        + '<td colspan="3">합계 (' + keys.length + '일)</td>'
+        + '<td class="ta-right">' + tQ.toLocaleString() + '</td>'
+        + '<td class="ta-right">' + Math.round(tL).toLocaleString() + '</td>'
+        + '<td class="ta-right">' + Math.round(tC).toLocaleString() + '</td>'
+        + (onlyCredit ? ''
+            : '<td class="ta-right" style="color:#6a1b9a;">' + Math.round(tCr).toLocaleString() + '</td>'
+              + '<td class="ta-right">' + Math.round(tC - tCr).toLocaleString() + '</td>')
+        + '</tr></tbody></table></div>';
+      return h;
+    }
+
+    el.innerHTML = '<div style="display:flex;gap:18px;align-items:flex-start;flex-wrap:wrap;">'
+      + '<div style="flex:0 1 auto;">'
+      + buildTable("oda", "날짜별 주문 총금액", "도착 여부와 상관없이 주문한 것 전부 · 삼성전자 여신 포함", false)
+      + '</div>'
+      + '<div style="flex:0 1 auto;">'
+      + buildTable("odc", "날짜별 주문 총금액 (삼성전자 여신)", "삼성전자 여신으로 결제한 주문만", true)
+      + '</div></div>'
       + '<div style="color:var(--gray);font-size:11.5px;margin-top:4px;line-height:1.7;">'
       + '<b>출고가 합계</b> — 할인을 빼지 않은 정가 × 주문 대수입니다.<br>'
       + '<b>입고가 합계</b> — 실제로 낼 금액입니다. 입고가가 비어 있으면 출고가에서 할인을 뺀 값으로 셉니다.</div>';
-    el.innerHTML = h;
 
     // 날짜를 누르면 그날 주문 내역이 아래로 펼쳐집니다.
     el.querySelectorAll(".od-day").forEach(a=>{
@@ -29990,9 +30011,9 @@
         a.textContent = (open ? "▶ " : "▼ ") + day;
         if(open || tr.dataset.done === "1") return;
         tr.dataset.done = "1";
-        renderPendingArrival("od-sum-" + pk, daysLines[day] || [],
+        renderPendingArrival("od-sum-" + pk, lineStore[pk] || [],
           day + " 주문 내역", "도착 여부와 상관없이 주문한 것 전부", false, true);
-        tr.querySelector(".od-list").innerHTML = orderDayListHtml(daysLines[day] || []);
+        tr.querySelector(".od-list").innerHTML = orderDayListHtml(lineStore[pk] || []);
       };
     });
     // 「모델별 요약」 / 「전체 리스트」 바꿔 보기
