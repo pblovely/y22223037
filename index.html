@@ -387,7 +387,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v636</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v638</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -12049,21 +12049,33 @@
       if(cands.length === 0){ bad.push({ label, reason:"이 주문에 남은 수량이 없습니다", raw:line }); return; }
       // 적어주신 말 하나하나로 좁혀갑니다. 하나라도 못 맞추면 그냥 넘어가지 않고 막습니다.
       let miss = null;
-      rest.forEach(t=>{
-        if(miss) return;
-        const tl = t.toLowerCase();
-        const narrowed = cands.filter(o=>
-          String(o.systemModel||"").toLowerCase() === tl ||
-          String(o.baseModel||"").toLowerCase() === tl ||
-          String(o.systemColor||"").toLowerCase() === tl ||
-          String(o.manufacturerColor||"").toLowerCase() === tl ||
-          String(o.sku||"").toLowerCase() === tl ||
-          colorAliases(o).has(tl));
-        if(narrowed.length > 0){ cands = narrowed; return; }
+      const hitOne = (o, tl)=>
+        String(o.systemModel||"").toLowerCase() === tl ||
+        String(o.baseModel||"").toLowerCase() === tl ||
+        String(o.systemColor||"").toLowerCase() === tl ||
+        String(o.manufacturerColor||"").toLowerCase() === tl ||
+        String(o.sku||"").toLowerCase() === tl ||
+        colorAliases(o).has(tl);
+      for(let i=0; i<rest.length && !miss; i++){
+        const t = rest[i];
+        let narrowed = cands.filter(o=> hitOne(o, t.toLowerCase()));
+        if(narrowed.length === 0){
+          // 「바이올렛 쉐도우」처럼 색상 이름이 띄어쓰기로 나뉘어 들어온 경우,
+          //  뒤 낱말을 최대 두 개까지 붙여서 다시 찾아봅니다.
+          let joined = t;
+          for(let j=i+1; j<rest.length && j<=i+2; j++){
+            joined += rest[j];
+            const noSpace   = joined.toLowerCase();                        // 바이올렛쉐도우
+            const withSpace = rest.slice(i, j+1).join(" ").toLowerCase();   // 바이올렛 쉐도우
+            const nn = cands.filter(o=> hitOne(o, noSpace) || hitOne(o, withSpace));
+            if(nn.length > 0){ narrowed = nn; i = j; break; }
+          }
+        }
+        if(narrowed.length > 0){ cands = narrowed; continue; }
         // 숫자·기가수 같은 것은 그냥 넘어가고, 글자는 못 찾았다고 알려드립니다.
-        if(/^[0-9]+$/.test(t)) return;
+        if(/^[0-9]+$/.test(t)) continue;
         miss = t;
-      });
+      }
       if(miss){
         const left = [...new Set(lines.filter(o=> remain[o.id] > 0)
           .map(o=> (o.systemColor || o.manufacturerColor || "-")))];
@@ -29904,9 +29916,7 @@
 
     // 날짜별로 주문 품목을 모읍니다. (취소된 묶음·품목은 뺍니다)
     const dayQty = {};      // 날짜 → 대수
-    const allLines = [];    // 고른 날짜의 주문 품목 전부
-    const creditLines = []; // 그중 삼성전자 여신으로 결제한 것
-    const sel = orderDailySel || "";
+    const dayRows = {};     // 날짜 → 주문 품목 줄
     Object.keys(byBatch).forEach(bid=>{
       const b = batches[bid];
       if(!b || b.status === "취소") return;
@@ -29916,22 +29926,28 @@
         const q = Number(o.quantity)||0;
         if(!q) return;
         dayQty[d] = (dayQty[d]||0) + q;
-        if(sel && sel !== d) return;
         const lp = Number(o.listPrice)||0;
         const pp = Number(o.purchasePrice)||0
           || (lp - (Number(o.preDiscountAmt)||0) - (Number(o.otherDiscountAmt)||0));
         // 원본은 건드리지 않고 복사본에 통신사·매입처를 채워둡니다.
         const row = Object.assign({}, o, {
-          carrier: String(b.carrier||o.carrier||"-"), _source: String(b.source||"-"), _unitCost: pp });
-        allLines.push(row);
-        if(b.paymentMethod === "b2b_credit") creditLines.push(row);
+          carrier: String(b.carrier||o.carrier||"-"), _source: String(b.source||"-"), _unitCost: pp,
+          _credit: (b.paymentMethod === "b2b_credit") });
+        (dayRows[d] = dayRows[d] || []).push(row);
       });
     });
     const days = Object.keys(dayQty).sort((a,b)=> b.localeCompare(a));   // 최근 날짜 먼저
     const totalQty = days.reduce((n,d)=> n + dayQty[d], 0);
 
+    // 아직 한 번도 안 고르셨으면 가장 최근 주문일을 기본으로 잡습니다.
+    if(orderDailySel === null) orderDailySel = days.length ? days[0] : "";
     // 고른 날짜가 목록에 없으면 전체로 되돌립니다.
-    if(sel && days.indexOf(sel) < 0) orderDailySel = "";
+    if(orderDailySel && days.indexOf(orderDailySel) < 0) orderDailySel = "";
+
+    const sel = orderDailySel || "";
+    const picked = sel ? (dayRows[sel] || []) : days.reduce((a,d)=> a.concat(dayRows[d]||[]), []);
+    const allLines = picked;                              // 고른 날짜의 주문 품목 전부
+    const creditLines = picked.filter(r=> r._credit);      // 그중 삼성전자 여신으로 결제한 것
 
     let head = '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px;">'
       + '<span style="font-size:12.5px;font-weight:700;">주문 현황</span>'
@@ -30012,7 +30028,7 @@
       + '</tbody></table></div>';
     return h;
   }
-  let orderDailySel = "";          // 주문 현황에서 고른 주문일 ("" 이면 전체)
+  let orderDailySel = null;        // 주문 현황에서 고른 주문일 (null = 아직 안 고름 → 최근 주문일, "" = 전체)
   let orderDailySrc = { elId:"", batches:{}, byBatch:{} };
 
   // 재고와 이어진 모든 곳의 색상을 함께 맞춥니다.
