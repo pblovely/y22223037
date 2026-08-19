@@ -387,7 +387,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v628</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v631</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -9563,9 +9563,11 @@
   // ---------- 미입고 현황 ----------
   //  아직 안 들어온 수량만 모델(행) × 통신사(열)로 보여줍니다.
   //  다른 화면에 붙이려면 그 화면에 빈 칸을 만들고 renderPendingArrival("칸id", 주문품목목록) 을 부르면 됩니다.
-  function renderPendingArrival(elId, allLines, title, note, note2){
+  //  countAll 을 true 로 주면 도착 여부를 가리지 않고 주문 수량 전부를 셉니다.
+  function renderPendingArrival(elId, allLines, title, note, note2, countAll){
     const el = document.getElementById(elId);
     if(!el) return;
+    const qLab = countAll ? "주문" : "미입고";
     // 취소된 품목은 빼고, 아직 안 들어온 수량만 셉니다.
     const grid = {};           // grid[모델][통신사] = 수량
     const amtByModel = {};     // 모델별 미입고 금액 (입고가 기준)
@@ -9576,7 +9578,8 @@
     let total = 0, totalAmt = 0, totalList = 0;
     (allLines||[]).forEach(o=>{
       if(o.status === "취소") return;
-      const left = (Number(o.quantity)||0) - (Number(o.fulfilledCount)||0);
+      const left = countAll ? (Number(o.quantity)||0)
+                            : ((Number(o.quantity)||0) - (Number(o.fulfilledCount)||0));
       if(left <= 0) return;
       const model = docModelLabel(o) || "-";
       const car = (o.carrier || "미지정").trim();
@@ -9605,7 +9608,7 @@
     });
     if(total === 0){
       el.innerHTML = '<div style="border:1px solid var(--line);background:#f4faf4;color:#2e7d32;padding:8px 11px;font-size:12.5px;">'
-        + (title || "미입고") + ' 없음 — 해당하는 미입고 물량이 없습니다.</div>';
+        + (title || qLab) + ' 없음 — 해당하는 ' + qLab + ' 물량이 없습니다.</div>';
       return;
     }
     // 통신사 순서는 사이트 설정의 순서를 따릅니다.
@@ -9627,9 +9630,9 @@
       + '<thead><tr><th style="text-align:left;">모델</th>'
       + carriers.map(c=>'<th class="ta-right">'+comboEsc(c)+'</th>').join("")
       + '<th class="ta-right" style="border-left:2px solid var(--navy);">합계</th>'
-      + '<th class="ta-right" style="border-left:2px solid var(--navy);">미입고 금액<br>'
+      + '<th class="ta-right" style="border-left:2px solid var(--navy);">' + qLab + ' 금액<br>'
       + '<span style="font-weight:400;font-size:10.5px;color:var(--gray);">출고가</span></th>'
-      + '<th class="ta-right">미입고 금액<br>'
+      + '<th class="ta-right">' + qLab + ' 금액<br>'
       + '<span style="font-weight:400;font-size:10.5px;color:var(--gray);">입고가</span></th></tr></thead><tbody>';
     models.forEach((m, mi)=>{
       let rowSum = 0;
@@ -9673,7 +9676,7 @@
       + (note2 === false ? '' :
           '<div style="color:var(--gray);font-size:11.5px;margin-top:4px;line-height:1.7;">'
           + '<b>출고가</b> — 할인을 빼지 않은 정가 그대로입니다. 출고가가 비어 있는 품목은 0으로 셉니다.<br>'
-          + '<b>입고가</b> — 입고가 × 미입고 수량입니다. 입고가가 비어 있는 품목은 출고가에서 할인을 뺀 값으로 계산합니다.</div>');
+          + '<b>입고가</b> — 입고가 × ' + qLab + ' 수량입니다. 입고가가 비어 있는 품목은 출고가에서 할인을 뺀 값으로 계산합니다.</div>');
     el.innerHTML = html;
     // 모델 줄의 ▶ 를 누르면 색상 줄이 펼쳐집니다.
     el.querySelectorAll(".pa-toggle").forEach(a=>{
@@ -11997,6 +12000,43 @@
       }
     }catch(e){}
 
+    // 색상 짝 — 모델 등록에 「제조사색상 크림 = 전산색상 화이트」처럼 짝지어 둔 것을
+    //  같은 색으로 봅니다. 주문에 한쪽 이름만 저장돼 있어도 반대쪽 이름으로 찾을 수 있습니다.
+    const colorAliasCache = {};
+    function colorAliases(o){
+      const key = String(o.id||"") + "|" + String(o.systemModel||"")
+                + "|" + String(o.systemColor||"") + "|" + String(o.manufacturerColor||"");
+      if(colorAliasCache[key]) return colorAliasCache[key];
+      const set = new Set();
+      const add = v=>{ const t = String(v||"").trim().toLowerCase(); if(t) set.add(t); };
+      const m = (modelsCache||[]).find(x=>
+        modelDupKey(x.systemModel||"") === modelDupKey(o.systemModel||""));
+      const cols = ((m && m.colors) ? m.colors : []);
+      // SKU 는 색상마다 하나씩일 때만 짝의 근거로 씁니다.
+      //  여러 색상이 같은 SKU 를 쓰거나 SKU 자리에 모델명이 들어가 있으면 서로 다른 색이 섞입니다.
+      const skuCnt = {};
+      cols.forEach(c=>{
+        const k = String(c.sku||"").trim().toLowerCase();
+        if(k) skuCnt[k] = (skuCnt[k]||0) + 1;
+      });
+      const okSku = v=>{
+        const k = String(v||"").trim().toLowerCase();
+        if(!k) return false;
+        if(skuCnt[k] > 1) return false;
+        return modelDupKey(k) !== modelDupKey(m ? (m.systemModel||"") : (o.systemModel||""));
+      };
+      add(o.systemColor); add(o.manufacturerColor);
+      if(okSku(o.sku)) add(o.sku);
+      cols.forEach(c=>{
+        const vals = [c.manufacturerColor, c.systemColor]
+          .map(v=> String(v||"").trim().toLowerCase()).filter(Boolean);
+        if(okSku(c.sku)) vals.push(String(c.sku).trim().toLowerCase());
+        if(vals.some(v=> set.has(v))) vals.forEach(v=> set.add(v));
+      });
+      colorAliasCache[key] = set;
+      return set;
+    }
+
     const ok = [], bad = [], skip = [];
     const seen = new Set();
     entries.forEach(ent=>{
@@ -12017,7 +12057,8 @@
           String(o.baseModel||"").toLowerCase() === tl ||
           String(o.systemColor||"").toLowerCase() === tl ||
           String(o.manufacturerColor||"").toLowerCase() === tl ||
-          String(o.sku||"").toLowerCase() === tl);
+          String(o.sku||"").toLowerCase() === tl ||
+          colorAliases(o).has(tl));
         if(narrowed.length > 0){ cands = narrowed; return; }
         // 숫자·기가수 같은 것은 그냥 넘어가고, 글자는 못 찾았다고 알려드립니다.
         if(/^[0-9]+$/.test(t)) return;
@@ -12028,7 +12069,7 @@
           .map(o=> (o.systemColor || o.manufacturerColor || "-")))];
         bad.push({ label,
           reason: '「' + miss + '」와 맞는 품목이 이 주문에 없습니다 — 남은 색상: ' + (left.join(", ") || "없음"),
-          raw:line });
+          raw:line, hi:miss });
         return;
       }
       if(cands.length > 1 && rest.length === 0 && lines.filter(o=>remain[o.id]>0).length > 1){
@@ -12053,17 +12094,17 @@
         bad.push({ label,
           reason: "이미 재고에 있는 일련번호입니다 — " + u.model + " · " + u.carrier
                 + " · 입고 " + u.inDate + "  (이 주문 품목은 " + (o.systemModel||"-") + " · " + (o.carrier||"-") + ")",
-          raw:line });
+          raw:line, hi:serial });
         return;
       }
       const mKey = modelDupKey(o.systemModel||"");
       const seenKey = mKey + "|" + serial;
       if(seen.has(seenKey)){
-        skip.push({ label, reason:"붙여넣기 안에 같은 모델·일련번호가 또 있습니다", raw:line }); return;
+        skip.push({ label, reason:"붙여넣기 안에 같은 모델·일련번호가 또 있습니다", raw:line, hi:serial }); return;
       }
       seen.add(seenKey);
       if(already[serial] && already[serial].has(mKey)){
-        skip.push({ label, reason:"이미 재고에 등록된 일련번호입니다 (" + (o.systemModel||"-") + ")", raw:line }); return;
+        skip.push({ label, reason:"이미 재고에 등록된 일련번호입니다 (" + (o.systemModel||"-") + ")", raw:line, hi:serial }); return;
       }
       remain[o.id] -= 1;
       ok.push({ label, serial, order:o });
@@ -12076,11 +12117,11 @@
     if(skip.length){
       h += '<div style="border:1px solid #e0c46c;background:#fff8e1;padding:8px 10px;margin-bottom:10px;max-height:160px;overflow-y:auto;">'
         + '<b style="color:#8a6d0b;">이미 들어와 있어 빼둔 줄 '+skip.length+'개</b> <span style="color:var(--gray);">— 등록하지 않습니다. 남은 수량도 깎지 않습니다.</span><br>'
-        + skip.map(b=>'· '+comboEsc(b.label)+' — '+comboEsc(b.reason)+'<br><span style="color:var(--gray);font-size:11px;">'+comboEsc(b.raw)+'</span>').join('<br>') + '</div>';
+        + skip.map(b=>'· '+comboEsc(b.label)+' — '+comboEsc(b.reason)+'<br><span style="color:var(--gray);font-size:11px;">'+hiRawText(b.raw, b.hi)+'</span>').join('<br>') + '</div>';
     }
     if(bad.length){
       h += '<div style="border:1px solid var(--danger);background:#fdecea;padding:8px 10px;margin-bottom:10px;max-height:180px;overflow-y:auto;">'
-        + bad.map(b=>'· '+comboEsc(b.label)+' — '+comboEsc(b.reason)+'<br><span style="color:var(--gray);font-size:11px;">'+comboEsc(b.raw)+'</span>').join('<br>') + '</div>';
+        + bad.map(b=>'· '+comboEsc(b.label)+' — '+comboEsc(b.reason)+'<br><span style="color:var(--gray);font-size:11px;">'+hiRawText(b.raw, b.hi)+'</span>').join('<br>') + '</div>';
     }
     if(ok.length){
       h += '<div style="border:1px solid var(--line);max-height:260px;overflow-y:auto;margin-bottom:10px;">'
@@ -29859,11 +29900,13 @@
     const el = document.getElementById(elId);
     if(!el) return;
     const days = {};
+    const daysLines = {};   // 날짜별 주문 품목 목록 (펼쳤을 때 보여줍니다)
     Object.keys(byBatch).forEach(bid=>{
       const b = batches[bid];
       if(!b || b.status === "취소") return;
       const d = String(b.orderDate||"").trim() || "(날짜 없음)";
       if(!days[d]) days[d] = { qty:0, list:0, cost:0, sources:{}, carriers:{}, credit:0, cash:0 };
+      if(!daysLines[d]) daysLines[d] = [];
       (byBatch[bid]||[]).forEach(o=>{
         if(o.status === "취소") return;
         const q = Number(o.quantity)||0;
@@ -29879,6 +29922,8 @@
         const car = String(b.carrier||o.carrier||"-");
         days[d].carriers[car] = (days[d].carriers[car]||0) + q;
         if(b.paymentMethod === "b2b_credit") days[d].credit += pp * q; else days[d].cash += pp * q;
+        // 펼쳐서 볼 목록입니다. 원본은 건드리지 않고 복사본에 매입처·통신사만 채워둡니다.
+        daysLines[d].push(Object.assign({}, o, { carrier: car, _source: src, _unitCost: pp }));
       });
     });
     const keys = Object.keys(days).sort((a,b)=> b.localeCompare(a));   // 최근 날짜 먼저
@@ -29899,9 +29944,11 @@
       + '</tr></thead><tbody>';
     const top = obj => Object.keys(obj).sort((a,b)=> obj[b]-obj[a])
       .map(k=> k + " " + obj[k]).slice(0,3).join(" · ");
-    show.forEach(k=>{
+    show.forEach((k, ki)=>{
       const d = days[k];
-      h += '<tr><td><b>' + comboEsc(k) + '</b></td>'
+      const pk = "od" + ki;
+      h += '<tr><td><a href="javascript:void(0)" class="od-day" data-key="' + pk + '" data-day="' + comboEsc(k) + '"'
+        + ' style="font-weight:700;text-decoration:none;" title="누르면 그날 주문 내역이 펼쳐집니다.">▶ ' + comboEsc(k) + '</a></td>'
         + '<td style="font-size:11.5px;">' + comboEsc(top(d.sources)) + '</td>'
         + '<td style="font-size:11.5px;">' + comboEsc(top(d.carriers)) + '</td>'
         + '<td class="ta-right" style="font-weight:700;">' + d.qty.toLocaleString() + '</td>'
@@ -29909,6 +29956,15 @@
         + '<td class="ta-right">' + Math.round(d.cost).toLocaleString() + '</td>'
         + '<td class="ta-right" style="color:#6a1b9a;">' + (d.credit ? Math.round(d.credit).toLocaleString() : "-") + '</td>'
         + '<td class="ta-right">' + (d.cash ? Math.round(d.cash).toLocaleString() : "-") + '</td></tr>';
+      h += '<tr class="od-panel" data-key="' + pk + '" style="display:none;background:#fafafa;">'
+        + '<td colspan="8" style="padding:10px 12px;">'
+        + '<div style="margin-bottom:7px;">'
+        + '<button class="btn small od-tab" data-mode="sum" style="width:auto;margin-right:5px;">모델별 요약</button>'
+        + '<button class="btn small od-tab" data-mode="list" style="width:auto;">전체 리스트</button>'
+        + '</div>'
+        + '<div class="od-sum-wrap"><div id="od-sum-' + pk + '"></div></div>'
+        + '<div class="od-list" style="display:none;"></div>'
+        + '</td></tr>';
     });
     h += '<tr style="background:#fff;font-weight:700;border-top:2px solid var(--navy);">'
       + '<td colspan="3">합계 (' + keys.length + '일)</td>'
@@ -29922,6 +29978,75 @@
       + '<b>출고가 합계</b> — 할인을 빼지 않은 정가 × 주문 대수입니다.<br>'
       + '<b>입고가 합계</b> — 실제로 낼 금액입니다. 입고가가 비어 있으면 출고가에서 할인을 뺀 값으로 셉니다.</div>';
     el.innerHTML = h;
+
+    // 날짜를 누르면 그날 주문 내역이 아래로 펼쳐집니다.
+    el.querySelectorAll(".od-day").forEach(a=>{
+      a.onclick = ()=>{
+        const pk = a.dataset.key, day = a.dataset.day;
+        const tr = el.querySelector('tr.od-panel[data-key="' + pk + '"]');
+        if(!tr) return;
+        const open = tr.style.display !== "none";
+        tr.style.display = open ? "none" : "";
+        a.textContent = (open ? "▶ " : "▼ ") + day;
+        if(open || tr.dataset.done === "1") return;
+        tr.dataset.done = "1";
+        renderPendingArrival("od-sum-" + pk, daysLines[day] || [],
+          day + " 주문 내역", "도착 여부와 상관없이 주문한 것 전부", false, true);
+        tr.querySelector(".od-list").innerHTML = orderDayListHtml(daysLines[day] || []);
+      };
+    });
+    // 「모델별 요약」 / 「전체 리스트」 바꿔 보기
+    el.querySelectorAll(".od-tab").forEach(btn=>{
+      btn.onclick = ()=>{
+        const box = btn.closest("td");
+        const mode = btn.dataset.mode;
+        box.querySelector(".od-sum-wrap").style.display = (mode === "sum") ? "" : "none";
+        box.querySelector(".od-list").style.display     = (mode === "list") ? "" : "none";
+        box.querySelectorAll(".od-tab").forEach(b=>{
+          b.style.opacity = (b.dataset.mode === mode) ? "1" : "0.5";
+        });
+      };
+    });
+    el.querySelectorAll(".od-panel").forEach(tr=>{
+      const b = tr.querySelector('.od-tab[data-mode="list"]');
+      if(b) b.style.opacity = "0.5";
+    });
+  }
+
+  // 날짜별 주문 총금액에서 「전체 리스트」로 보여줄 품목 줄 목록입니다.
+  function orderDayListHtml(lines){
+    const rows = (lines||[]).filter(o=> o.status !== "취소" && (Number(o.quantity)||0) > 0);
+    if(rows.length === 0) return '<div style="color:var(--gray);font-size:12px;">품목이 없습니다.</div>';
+    rows.sort((a,b)=> String(docModelLabel(a)).localeCompare(String(docModelLabel(b)))
+      || String(a.systemColor||a.manufacturerColor||"").localeCompare(String(b.systemColor||b.manufacturerColor||"")));
+    let tQ=0, tL=0, tC=0;
+    let h = '<div style="border:1px solid var(--line);max-height:320px;overflow-y:auto;">'
+      + '<table class="data-table" style="width:auto;"><thead><tr>'
+      + '<th style="text-align:left;">모델</th><th style="text-align:left;">색상</th><th>통신사</th>'
+      + '<th class="ta-right">수량</th><th class="ta-right">출고가</th><th class="ta-right">입고가</th>'
+      + '<th class="ta-right">출고가 합계</th><th class="ta-right">입고가 합계</th>'
+      + '</tr></thead><tbody>';
+    rows.forEach(o=>{
+      const q  = Number(o.quantity)||0;
+      const lp = Number(o.listPrice)||0;
+      const pp = Number(o._unitCost)||0;
+      tQ += q; tL += lp*q; tC += pp*q;
+      h += '<tr><td style="text-align:left;white-space:nowrap;">' + comboEsc(docModelLabel(o) || "-") + '</td>'
+        + '<td style="text-align:left;white-space:nowrap;">' + comboEsc(o.systemColor || o.manufacturerColor || "-") + '</td>'
+        + '<td>' + comboEsc(o.carrier || "-") + '</td>'
+        + '<td class="ta-right" style="font-weight:700;">' + q.toLocaleString() + '</td>'
+        + '<td class="ta-right">' + (lp ? lp.toLocaleString() : "-") + '</td>'
+        + '<td class="ta-right">' + (pp ? Math.round(pp).toLocaleString() : "-") + '</td>'
+        + '<td class="ta-right">' + Math.round(lp*q).toLocaleString() + '</td>'
+        + '<td class="ta-right">' + Math.round(pp*q).toLocaleString() + '</td></tr>';
+    });
+    h += '<tr style="background:#fff;font-weight:700;border-top:2px solid var(--navy);">'
+      + '<td colspan="3" style="text-align:left;">합계 (' + rows.length + '줄)</td>'
+      + '<td class="ta-right">' + tQ.toLocaleString() + '</td><td></td><td></td>'
+      + '<td class="ta-right">' + Math.round(tL).toLocaleString() + '</td>'
+      + '<td class="ta-right">' + Math.round(tC).toLocaleString() + '</td></tr>'
+      + '</tbody></table></div>';
+    return h;
   }
   let orderDailyAll = false;
   window.toggleOrderDaily = function(){ orderDailyAll = !orderDailyAll; loadOrderList(); };
@@ -30137,6 +30262,21 @@
   // ---------- 검색되는 드롭다운(콤보박스) ----------
   // 기존 <select>는 그대로 두고 화면에만 입력칸을 덮어씌워, 값을 읽는 기존 코드는 전부 그대로 동작합니다.
   function comboEsc(t){ return String(t==null?"":t).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;"); }
+
+  // 원문 줄에서 문제가 된 글자만 노란색으로 칠해 보여줍니다.
+  //  tok을 안 주면 그냥 원문 그대로 나옵니다.
+  function hiRawText(raw, tok){
+    const s = comboEsc(raw);
+    if(!tok) return s;
+    const t = comboEsc(String(tok));
+    if(!t) return s;
+    const i = s.toLowerCase().indexOf(t.toLowerCase());
+    if(i < 0) return s;
+    return s.slice(0, i)
+      + '<mark style="background:#ffe14d;color:#000;padding:0 2px;border-radius:2px;font-weight:700;">'
+      + s.slice(i, i + t.length) + '</mark>'
+      + s.slice(i + t.length);
+  }
 
   window.initSearchableSelect = function(selectId, placeholder){
     const sel = document.getElementById(selectId);
