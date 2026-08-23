@@ -387,7 +387,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v640</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v643</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -3009,7 +3009,7 @@
         <button class="no-print" onclick="closeOrderDetailModal()" style="position:absolute;top:12px;right:12px;background:none;border:1px solid var(--navy);width:26px;height:26px;cursor:pointer;font-size:13px;">✕</button>
         <div style="display:flex;justify-content:space-between;align-items:flex-start;">
           <h3 style="margin-top:0;margin-bottom:4px;" id="order-detail-heading">주문 요청서</h3>
-          <span class="no-print btn-row" style="margin-right:34px;"><button class="btn small secondary" style="width:auto;" id="order-po-btn" onclick="openPoFromDetail()">삼성전자 발주서</button><button class="btn small secondary" style="width:auto;" id="order-bulkarr-btn" onclick="toggleBulkArrival()">도착 일괄 등록</button><button class="btn small danger" style="width:auto;" id="order-allcancel-btn" title="이 주문에 도착 등록된 재고를 전부 되돌립니다. 재고는 지워지고 도착 수는 0이 됩니다." onclick="cancelAllArrivals()">도착 전체 취소</button><button class="btn small secondary" style="width:auto;" onclick="printOrderDetail()">인쇄 / PDF 저장</button></span>
+          <span class="no-print btn-row" style="margin-right:34px;"><button class="btn small secondary" style="width:auto;" id="order-po-btn" onclick="openPoFromDetail()">삼성전자 발주서</button><button class="btn small secondary" style="width:auto;" id="order-bulkarr-btn" onclick="toggleBulkArrival()">도착 일괄 등록</button><button class="btn small secondary" style="width:auto;" id="order-allinv-btn" title="이 주문에 붙은 재고를 한 번에 모두 보여줍니다." onclick="showAllOrderItems()">붙은 재고 전체</button><button class="btn small danger" style="width:auto;" id="order-allcancel-btn" title="이 주문에 도착 등록된 재고를 전부 되돌립니다. 재고는 지워지고 도착 수는 0이 됩니다." onclick="cancelAllArrivals()">도착 전체 취소</button><button class="btn small secondary" style="width:auto;" onclick="printOrderDetail()">인쇄 / PDF 저장</button></span>
         </div>
         <p class="desc" id="order-detail-title"></p>
         <div id="bulk-arrival-box" class="no-print" style="display:none;border:1px solid var(--navy);background:#f4f7fb;padding:12px 14px;margin-bottom:12px;">
@@ -9636,6 +9636,7 @@
     let html = '<div style="font-size:12.5px;font-weight:700;margin-bottom:5px;">' + (title || "미입고 현황") + ' '
       + '<span style="color:var(--gray);font-weight:400;font-size:11.5px;">— ' + (note || "아직 안 들어온 수량만") + '</span>'
       + (hasColor ? ' <a href="javascript:void(0)" class="pa-all" data-open="0" style="font-weight:400;font-size:11.5px;margin-left:6px;">색상별 펼치기</a>' : '')
+      + (countAll ? ' <a href="javascript:void(0)" class="pa-nb-all" data-open="0" style="font-weight:400;font-size:11.5px;margin-left:6px;">미입고 펼치기</a>' : '')
       + '</div>'
       + '<div style="overflow-x:auto;"><table class="data-table" style="width:auto;">'
       + '<thead><tr><th style="text-align:left;">모델</th>'
@@ -9713,6 +9714,16 @@
           + '<b>출고가</b> — 할인을 빼지 않은 정가 그대로입니다. 출고가가 비어 있는 품목은 0으로 셉니다.<br>'
           + '<b>입고가</b> — 입고가 × ' + qLab + ' 수량입니다. 입고가가 비어 있는 품목은 출고가에서 할인을 뺀 값으로 계산합니다.</div>');
     el.innerHTML = html;
+    // 미입고 두 칸은 처음에 접어둡니다. 표마다 따로 폅니다.
+    el.querySelectorAll(".pa-nb").forEach(c=> c.style.display = "none");
+    { const nbA = el.querySelector(".pa-nb-all");
+      if(nbA) nbA.onclick = ()=>{
+        const open = nbA.dataset.open === "1";
+        el.querySelectorAll(".pa-nb").forEach(c=> c.style.display = open ? "none" : "");
+        nbA.dataset.open = open ? "0" : "1";
+        nbA.textContent = open ? "미입고 펼치기" : "미입고 접기";
+      };
+    }
     // 모델 줄의 ▶ 를 누르면 색상 줄이 펼쳐집니다.
     el.querySelectorAll(".pa-toggle").forEach(a=>{
       a.onclick = ()=>{
@@ -10195,6 +10206,130 @@
       + '<div style="font-size:11.5px;color:var(--gray);margin-top:6px;line-height:1.7;">'
       + '<b>다름</b>인 재고는 이 품목에 잘못 붙은 것입니다. '
       + '데이터 점검의 <b>「일련번호로 주문↔재고 맞추기」</b>에 그 일련번호를 넣어 정리하세요.</div>'
+      + '</div>';
+  };
+
+  // 이 주문의 모든 품목에 붙은 재고를 한 번에 보여줍니다. (품목마다 하나씩 누를 필요 없음)
+  window.showAllOrderItems = async function(){
+    const box = document.getElementById("order-detail-pending");
+    if(!box || !currentPoBatch) return;
+    const lines = (currentPoBatch.lines || []).filter(o=> o.status !== "취소");
+    if(lines.length === 0){ box.innerHTML = '<div class="list-empty">품목이 없습니다.</div>'; return; }
+    box.innerHTML = '<div style="color:var(--gray);font-size:12.5px;">붙은 재고를 읽는 중입니다...</div>';
+    const rows = [];
+    try{
+      for(const o of lines){
+        const items = [];
+        const snap = await getDocs(query(collection(db,"inventoryItems"), where("orderId","==", o.id)));
+        snap.forEach(d=>{ const v = d.data(); if(v.deleted !== true) items.push({ id:d.id, ...v }); });
+        rows.push({ o, items });
+      }
+    }catch(e){ box.innerHTML = '<div style="color:var(--danger);">읽지 못했습니다.</div>'; return; }
+
+    // ── 재고 목록과 대조합니다. 같은 입고일의 재고만 읽어 비교합니다. ──
+    const inDates = [...new Set(rows.reduce((a,r)=> a.concat(r.items.map(it=> String(it.inDate||"").trim())), [])
+      .filter(Boolean))];
+    let sameDayInv = [];
+    try{
+      if(cacheOn("inventory") && dataCache.inventory){
+        sameDayInv = dataCache.inventory.filter(it=> it.deleted !== true
+          && inDates.indexOf(String(it.inDate||"").trim()) >= 0);
+      }else{
+        for(const d of inDates){
+          const snap = await getDocs(query(collection(db,"inventoryItems"), where("inDate","==", d)));
+          snap.forEach(x=>{ const v = x.data(); if(v.deleted !== true) sameDayInv.push({ id:x.id, ...v }); });
+        }
+      }
+    }catch(e){ sameDayInv = []; }
+
+    // ① 이 주문 안에서 같은 일련번호가 두 품목 이상에 붙은 것
+    const seenHere = {};
+    rows.forEach(r=> r.items.forEach(it=>{
+      const k = normSerial(it.serialNumber);
+      if(!k) return;
+      (seenHere[k] = seenHere[k] || []).push({ line:r.o, it });
+    }));
+    const dupHere = Object.keys(seenHere).filter(k=> seenHere[k].length > 1);
+
+    // ② 재고 목록 자체에 같은 일련번호가 두 건 이상 (중복 등록)
+    const cntInv = {};
+    sameDayInv.forEach(it=>{ const k = normSerial(it.serialNumber); if(k) cntInv[k] = (cntInv[k]||0) + 1; });
+    const mineSet = new Set(Object.keys(seenHere));
+    const dupInv = Object.keys(cntInv).filter(k=> cntInv[k] > 1 && mineSet.has(k));
+
+    // ③ 같은 입고일·같은 모델·색상·통신사인데 이 주문에 안 붙어 있는 재고 (붙일 후보)
+    const lineKey = o => modelDupKey(o.systemModel||"") + "|" + modelDupKey(o.systemColor||"") + "|" + String(o.carrier||"").toUpperCase();
+    const wantKeys = new Set(lines.map(lineKey));
+    const attached = new Set();
+    rows.forEach(r=> r.items.forEach(it=> attached.add(it.id)));
+    const loose = sameDayInv.filter(it=>
+      !attached.has(it.id)
+      && wantKeys.has(modelDupKey(it.systemModel||"") + "|" + modelDupKey(it.systemColor||"") + "|" + String(it.carrier||"").toUpperCase()));
+
+    let nQty=0, nFul=0, nInv=0, nBad=0, nGap=0;
+    let h = "";
+    rows.forEach(r=>{
+      const o = r.o;
+      const oM = modelDupKey(o.systemModel||""), oC = modelDupKey(o.systemColor||"");
+      const qty = Number(o.quantity)||0, ful = Number(o.fulfilledCount)||0, inv = r.items.length;
+      const bad = r.items.filter(it=> modelDupKey(it.systemModel||"") !== oM || modelDupKey(it.systemColor||"") !== oC).length;
+      nQty += qty; nFul += ful; nInv += inv; nBad += bad;
+      if(ful !== inv) nGap++;
+      h += '<div style="border:1px solid var(--line);margin-bottom:6px;">'
+        + '<div style="background:#f7f7f7;padding:6px 9px;font-size:12.5px;font-weight:700;">'
+        + comboEsc(o.systemModel||"-") + ' · ' + comboEsc(o.systemColor||"-") + ' · ' + comboEsc(o.carrier||"-")
+        + ' <span style="font-weight:400;">— 주문 ' + qty + '대 · 도착 수 ' + ful + '대 · 실제 붙은 재고 ' + inv + '대</span>'
+        + (ful !== inv ? ' <span style="color:var(--danger);font-weight:700;">도착 수와 재고 수가 다릅니다</span>' : '')
+        + (bad ? ' <span style="color:var(--danger);font-weight:700;">다른 재고 ' + bad + '대</span>' : '')
+        + '</div>'
+        + '<table class="data-table" style="width:auto;"><thead><tr>'
+        + '<th>일련번호</th><th>재고의 모델</th><th>재고의 색상</th><th>통신사</th><th>입고일</th><th>상태</th><th>맞나</th>'
+        + '</tr></thead><tbody>'
+        + (inv ? r.items.map(it=>{
+            const ok = modelDupKey(it.systemModel||"") === oM && modelDupKey(it.systemColor||"") === oC;
+            return '<tr style="background:' + (ok ? '#f4faf4' : '#fdecea') + ';">'
+              + '<td style="white-space:nowrap;"><b>' + comboEsc(it.serialNumber||"-") + '</b></td>'
+              + '<td style="white-space:nowrap;">' + comboEsc(it.systemModel||"-") + '</td>'
+              + '<td style="white-space:nowrap;">' + comboEsc(it.systemColor||"-") + '</td>'
+              + '<td>' + comboEsc(it.carrier||"-") + '</td>'
+              + '<td>' + comboEsc(it.inDate||"-") + '</td>'
+              + '<td>' + comboEsc(it.status||"-") + '</td>'
+              + '<td style="' + (ok ? 'color:#2e7d32;' : 'color:var(--danger);font-weight:700;') + '">'
+              + (ok ? '맞음' : '다름') + '</td></tr>';
+          }).join("") : '<tr><td colspan="7" class="list-empty">붙은 재고가 없습니다.</td></tr>')
+        + '</tbody></table></div>';
+    });
+    box.innerHTML = '<div style="border:1px solid var(--navy);padding:9px 11px;margin-bottom:8px;">'
+      + '<div style="font-weight:700;margin-bottom:6px;">붙은 재고 전체 — 품목 ' + rows.length + '개 · '
+      + '주문 ' + nQty + '대 · 도착 수 ' + nFul + '대 · 실제 재고 ' + nInv + '대</div>'
+      + ((nGap || nBad)
+          ? '<div style="border:1px solid var(--danger);background:#fdecea;padding:6px 9px;margin-bottom:6px;font-size:12px;line-height:1.7;">'
+            + (nGap ? '<b>도착 수와 실제 재고 수가 다른 품목 ' + nGap + '개</b><br>' : '')
+            + (nBad ? '<b>이 품목과 다른 재고 ' + nBad + '대</b>가 붙어 있습니다.' : '')
+            + '</div>'
+          : '<div style="border:1px solid #2e7d32;background:#f4faf4;color:#2e7d32;padding:6px 9px;margin-bottom:6px;font-size:12px;">'
+            + '도착 수와 실제 재고가 모두 일치합니다.</div>')
+      + '<div style="border:1px solid var(--line);padding:7px 9px;margin-bottom:8px;font-size:12px;line-height:1.8;">'
+      + '<b>재고 목록과 대조</b> — 입고일 ' + (inDates.join(" · ") || "-") + ' 재고 ' + sameDayInv.length + '건과 맞춰봤습니다.<br>'
+      + (dupHere.length
+          ? '<span style="color:var(--danger);font-weight:700;">① 이 주문 안에서 같은 일련번호가 두 품목에 붙음 — '
+            + dupHere.length + '개</span>: ' + dupHere.slice(0,20).map(comboEsc).join(", ") + '<br>'
+          : '① 이 주문 안 일련번호 중복 없음<br>')
+      + (dupInv.length
+          ? '<span style="color:var(--danger);font-weight:700;">② 재고 목록에 같은 일련번호가 두 건 이상 — '
+            + dupInv.length + '개</span>: ' + dupInv.slice(0,20).map(comboEsc).join(", ") + '<br>'
+          : '② 재고 목록에 중복 등록된 일련번호 없음<br>')
+      + (loose.length
+          ? '<span style="color:#e65100;font-weight:700;">③ 같은 입고일에 모델·색상·통신사가 같은데 이 주문에 안 붙은 재고 — '
+            + loose.length + '대</span><br>'
+            + '<span style="color:var(--gray);">' + loose.slice(0,30).map(it=>
+                comboEsc(it.serialNumber||"-") + "(" + comboEsc(it.systemColor||"-") + ")").join(", ") + '</span>'
+          : '③ 같은 입고일에 이 주문에 안 붙은 같은 품목 재고 없음')
+      + '</div>'
+      + h
+      + '<div style="font-size:11.5px;color:var(--gray);margin-top:2px;line-height:1.7;">'
+      + '<b>다름</b>인 재고는 잘못 붙은 것입니다. 데이터 점검의 <b>「일련번호로 주문↔재고 맞추기」</b>로 정리하세요.<br>'
+      + '<b>도착 수와 재고 수가 다른 품목</b>은 데이터 점검의 <b>「도착 수가 재고와 다른 주문」</b>에서 맞출 수 있습니다.</div>'
       + '</div>';
   };
 
@@ -11035,7 +11170,7 @@
       a.onclick = ()=> showOrderLineItems(a.dataset.odItems);
     });
     renderOrderSaleLink(batchId, lines);
-    currentPoBatch = { batchId, b };
+    currentPoBatch = { batchId, b, lines };
     const poBtn2 = document.getElementById("order-po-btn");
     if(poBtn2) poBtn2.style.display = "";
     const baBtn2 = document.getElementById("order-bulkarr-btn");
@@ -29993,8 +30128,6 @@
       + days.map(d=> '<option value="' + comboEsc(d) + '"' + (orderDailySel === d ? ' selected' : '') + '>'
           + comboEsc(d) + ' (' + dayQty[d].toLocaleString() + '대)</option>').join("")
       + '</select>'
-      + '<button class="btn small secondary" id="od-nb-btn" style="width:auto;">'
-      + (orderDailyHideNb ? "미입고 보이기" : "미입고 숨기기") + '</button>'
       + '<button class="btn small secondary" id="od-list-btn" style="width:auto;">전체 리스트</button>'
       + '</div>';
 
@@ -30010,16 +30143,6 @@
       "주문 현황" + tag, "도착 여부와 상관없이 주문한 것 전부", undefined, true);
     renderPendingArrival("od-credit-box", creditLines,
       "주문 현황 (여신결제)" + tag, "삼성전자 여신으로 산 것만", false, true);
-
-    // 미입고 두 칸 보이기/숨기기
-    const applyNb = ()=>{
-      el.querySelectorAll(".pa-nb").forEach(c=> c.style.display = orderDailyHideNb ? "none" : "");
-      const b = document.getElementById("od-nb-btn");
-      if(b) b.textContent = orderDailyHideNb ? "미입고 보이기" : "미입고 숨기기";
-    };
-    applyNb();
-    { const nbtn = document.getElementById("od-nb-btn");
-      if(nbtn) nbtn.onclick = ()=>{ orderDailyHideNb = !orderDailyHideNb; applyNb(); }; }
 
     // 날짜를 바꾸면 그 날짜만 다시 셉니다.
     const dsel = document.getElementById("od-date-sel");
@@ -30077,7 +30200,6 @@
   }
   let orderDailySel = null;        // 주문 현황에서 고른 주문일 (null = 아직 안 고름 → 최근 주문일, "" = 전체)
   let orderDailySrc = { elId:"", batches:{}, byBatch:{} };
-  let orderDailyHideNb = true;     // 주문 현황의 미입고 두 칸 — 처음에는 접어둡니다
 
   // 재고와 이어진 모든 곳의 색상을 함께 맞춥니다.
   //  주문 · 판매요청 · 예약  (재고 id 로 이어진 것만)
