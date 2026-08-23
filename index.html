@@ -387,7 +387,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v647</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v648</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -7581,6 +7581,8 @@
       // 새로 등록할 때만 도착 수를 올립니다. 수정 저장에서는 올리지 않습니다.
       if(currentOrderLinkId && !editingItemId){
         await advanceOrderFulfillment(currentOrderLinkId, newItemRef.id);
+        // 올린 뒤 실제 재고 수로 다시 셉니다. 예전에 어긋나 있었어도 여기서 맞춰집니다.
+        try{ await resyncOrdersForItems([newItemRef.id]); }catch(e){}
       }
 
       loadInventoryList();
@@ -12487,17 +12489,23 @@
     bulkArrSaving = false;
 
     // 무엇이 들어갔는지 이력에 남깁니다. (나중에 추적할 수 있게)
+    // 도착 수를 실제 재고 수로 다시 셉니다. 예전에 어긋나 있었어도 여기서 맞춰집니다.
+    let autoFixed = 0;
+    try{ autoFixed = await resyncOrdersForItems(newItems.map(x=> x.id)); }catch(e){}
+
     {
       const b0 = currentPoBatch ? currentPoBatch.b : null;
       const detail = (b0 ? ((b0.source||"-") + " " + (b0.orderDate||"-") + " " + (b0.carrier||"-") + " / ") : "")
         + made + "대"
         + (soldCnt ? " / 판매처리 " + soldCnt + "대" : "")
         + (newItems.length ? " / 일련번호 " + newItems.slice(0,12).map(x=> x.serialNumber || x.sn || "-").join(",")
-            + (newItems.length > 12 ? " 외 " + (newItems.length-12) : "") : "");
+            + (newItems.length > 12 ? " 외 " + (newItems.length-12) : "") : "")
+        + (autoFixed ? " / 도착 수 " + autoFixed + "개 품목 실제 재고 수로 다시 셈" : "");
       logAction("도착 일괄 등록", detail);
     }
     clearDashCache(); clearCache("inventory");
-    alert(made + "대를 도착 등록했습니다." + (soldCnt ? "\n그중 " + soldCnt + "대는 판매처리했습니다." : ""));
+    alert(made + "대를 도착 등록했습니다." + (soldCnt ? "\n그중 " + soldCnt + "대는 판매처리했습니다." : "")
+      + (autoFixed ? "\n\n도착 수가 실제 재고와 달랐던 품목 " + autoFixed + "개를 실제 재고 수로 맞췄습니다." : ""));
     bulkArrRows = [];
     document.getElementById("bulk-arrival-box").style.display = "none";
     loadOrderList();
