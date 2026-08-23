@@ -387,7 +387,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v658</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v665</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -702,6 +702,7 @@
           <h3 style="margin:0;">예약 목록 <span class="info-tip" title="등록한 예약을 한 줄씩 보여줍니다. 수정·삭제·배정을 여기서 하세요.">ⓘ</span></h3>
           <span class="btn-row" style="display:inline-flex;align-items:center;">
           <button class="btn small secondary" style="width:auto;" onclick="openResvBulkAlloc()">일괄매칭</button>
+          <button class="btn small secondary" style="width:auto;" onclick="resvSelectedToOrder()" title="체크한 구매 예약을 한 주문으로 묶어 주문 등록창에 채웁니다.">선택 주문으로</button>
           <button class="btn small secondary" style="width:auto;" onclick="createQuotationFromSelected()">견적서</button>
           <button class="btn small secondary" style="width:auto;" onclick="toggleQuotationList()">견적서 조회</button>
           <span style="position:relative;">
@@ -10428,6 +10429,17 @@
     }catch(e){ alert("재고를 읽지 못했습니다."); return; }
 
     const sold = items.filter(x=> x.status === "판매" || x.status === "개통");
+    // 지워지면 되살릴 수 없으므로, 다시 판매처리하실 수 있게 내용을 먼저 담아둡니다.
+    const soldMemo = sold.map(x=> ({
+      serial: String(x.serialNumber||""),
+      dest: String(x.destination||""),
+      price: Number(x.salePrice)||0,
+      discAmt: Number(x.saleDiscountAmt)||0,
+      outDate: String(x.outDate||""),
+      model: String(x.systemModel||""),
+      color: String(x.systemColor||x.manufacturerColor||""),
+      status: String(x.status||"")
+    }));
     if(!confirm("이 주문의 도착을 전부 되돌립니다.\n\n"
       + "  " + (b.source||"-") + " · " + (b.orderDate||"-") + " · " + (b.carrier||"-") + "\n"
       + "  품목 " + done.length + "개 · 재고 " + items.length + "대\n\n"
@@ -10480,12 +10492,90 @@
       }
     }catch(e){ alert("되돌리지 못했습니다.\n" + ((e&&e.message)?e.message:String(e))); return; }
 
+    // ④ 매칭이 하나도 안 남은 판매요청은 껍데기로 남습니다. 함께 취소할지 여쭙습니다.
+    let srCancelled = 0, batchCancelled = 0;
+    try{
+      const emptyIds = [];
+      for(const sid of Object.keys(srDocs)){
+        const sd = await getDoc(doc(db,"saleRequests", sid));
+        if(!sd.exists()) continue;
+        const sr = sd.data();
+        if(sr.status === "취소") continue;
+        if((Number(sr.fulfilledCount)||0) > 0) continue;   // 다른 재고가 아직 붙어 있으면 둡니다
+        emptyIds.push({ id:sid, sr });
+      }
+      if(emptyIds.length){
+        const lines = emptyIds.slice(0,10).map(x=> "  " + (x.sr.destination||"-") + " "
+          + (x.sr.systemModel||"-") + " " + (Number(x.sr.quantity)||0) + "대").join("\n");
+        if(confirm("붙어 있던 재고가 모두 지워져 매칭이 0이 된 판매요청이 "
+          + emptyIds.length + "건 있습니다.\n\n" + lines
+          + (emptyIds.length > 10 ? "\n  ... 외 " + (emptyIds.length-10) + "건" : "")
+          + "\n\n이 판매요청도 함께 취소할까요?\n\n"
+          + "· 취소하면 판매 관리에서 <취소>로 표시됩니다\n"
+          + "· 입금요청이 걸려 있으면 그 요청은 따로 확인하셔야 합니다")){
+          const touched = new Set();
+          for(const x of emptyIds){
+            await updateDoc(doc(db,"saleRequests", x.id), { status:"취소" });
+            srCancelled++;
+            if(x.sr.batchId) touched.add(x.sr.batchId);
+          }
+          // 묶음 안의 줄이 모두 취소면 묶음도 취소로 바꿉니다.
+          for(const bid of touched){
+            const ls = await getDocs(query(collection(db,"saleRequests"), where("batchId","==", bid)));
+            let alive = 0;
+            ls.forEach(d=>{ if(d.data().status !== "취소") alive++; });
+            if(alive === 0){
+              await updateDoc(doc(db,"saleRequestBatches", bid), { status:"취소" });
+              batchCancelled++;
+            }
+          }
+        }
+      }
+    }catch(e){}
+
     logAction("도착 전체 취소", (b.source||"-") + " " + (b.orderDate||"-")
       + " / 품목 " + done.length + "개 · 재고 " + items.length + "대"
-      + (srReleased ? " / 판매요청 매칭 " + srReleased + "건 해제" : ""));
+      + (srReleased ? " / 판매요청 매칭 " + srReleased + "건 해제" : "")
+      + (srCancelled ? " / 판매요청 " + srCancelled + "건 취소" : "")
+      + (batchCancelled ? " / 판매요청 묶음 " + batchCancelled + "건 취소" : ""));
     alert("되돌렸습니다.\n\n  재고 " + items.length + "대 지움\n  품목 " + done.length + "개 도착 0으로"
       + (srReleased ? "\n  판매요청 매칭 " + srReleased + "건 해제" : "")
+      + (srCancelled ? "\n  판매요청 " + srCancelled + "건 취소" : "")
+      + (batchCancelled ? "\n  판매요청 묶음 " + batchCancelled + "건 취소" : "")
       + "\n\n이제 <수정>에서 모델·색상을 고치신 뒤 다시 도착 등록해주세요.");
+    // 판매·개통돼 있던 재고는 다시 등록한 뒤 판매처리를 새로 하셔야 합니다.
+    //  무엇을 다시 해야 하는지 화면에 남겨둡니다. (알림만으로는 사라져서 못 보십니다)
+    if(soldMemo.length){
+      cancelledSoldMemo = soldMemo;
+      const box = document.getElementById("order-detail-pending");
+      if(box){
+        const dests = [...new Set(soldMemo.map(x=> x.dest).filter(Boolean))];
+        box.innerHTML = '<div style="border:2px solid var(--danger);background:#fdecea;padding:10px 12px;margin-bottom:8px;">'
+          + '<div style="font-weight:700;color:var(--danger);margin-bottom:6px;">'
+          + '판매처리가 되어 있던 재고 ' + soldMemo.length + '대가 함께 지워졌습니다 — 다시 등록한 뒤 판매처리를 새로 해주세요</div>'
+          + '<table class="data-table" style="width:auto;"><thead><tr>'
+          + '<th>일련번호</th><th>모델</th><th>색상</th><th>판매처</th>'
+          + '<th class="ta-right">판매가</th><th class="ta-right">판매할인</th><th>출고일</th><th>상태</th>'
+          + '</tr></thead><tbody>'
+          + soldMemo.map(x=> '<tr>'
+              + '<td style="white-space:nowrap;"><b>' + comboEsc(x.serial||"-") + '</b></td>'
+              + '<td style="white-space:nowrap;">' + comboEsc(x.model||"-") + '</td>'
+              + '<td style="white-space:nowrap;">' + comboEsc(x.color||"-") + '</td>'
+              + '<td style="white-space:nowrap;">' + comboEsc(x.dest||"-") + '</td>'
+              + '<td class="ta-right">' + (x.price ? x.price.toLocaleString() : "-") + '</td>'
+              + '<td class="ta-right">' + (x.discAmt ? x.discAmt.toLocaleString() : "-") + '</td>'
+              + '<td>' + comboEsc(x.outDate||"-") + '</td>'
+              + '<td>' + comboEsc(x.status||"-") + '</td></tr>').join("")
+          + '</tbody></table>'
+          + '<div style="margin-top:8px;">'
+          + '<button class="btn small" style="width:auto;" onclick="reSaleFromCancelled()">판매처리 창에 넣기</button>'
+          + '<span style="font-size:11.5px;color:var(--gray);margin-left:8px;">'
+          + '도착 등록을 먼저 하신 뒤 눌러주세요. 일련번호와 판매가가 채워진 채로 열립니다.'
+          + (dests.length === 1 ? ' 판매처는 <b>' + comboEsc(dests[0]) + '</b> 입니다.' : ' 판매처가 여러 곳입니다: ' + comboEsc(dests.join(", ")))
+          + '</span></div></div>';
+      }
+    }
+
     clearCache("inventory"); clearCache("orders"); clearDashCache();
     // 창은 그대로 두고 안쪽만 다시 그립니다. (다시 열 필요 없게)
     try{
@@ -10495,6 +10585,24 @@
       await openOrderBatchDetailModal(batchId, b);
     }catch(e){ closeOrderDetailModal(); }
     loadOrderList();
+  };
+
+  // 도착 취소로 지워진 판매 건을 다시 판매처리할 수 있게 붙여넣기 창에 채워 넣습니다.
+  let cancelledSoldMemo = [];
+  window.reSaleFromCancelled = function(){
+    if(!cancelledSoldMemo.length){ alert("다시 판매처리할 내용이 없습니다."); return; }
+    const text = cancelledSoldMemo
+      .map(x=> x.serial + (x.price ? "\t" + x.price : ""))
+      .filter(t=> String(t).trim() !== "")
+      .join("\n");
+    openPasteSaleModal();
+    const ta = document.getElementById("paste-sale-textarea");
+    if(ta) ta.value = text;
+    const dates = [...new Set(cancelledSoldMemo.map(x=> x.outDate).filter(Boolean))];
+    alert("판매처리 창에 " + cancelledSoldMemo.length + "대를 넣었습니다.\n\n"
+      + "· 재고가 다시 등록돼 있어야 찾을 수 있습니다\n"
+      + "· 통신사·판매처·출고일을 확인하고 분석하기를 눌러주세요"
+      + (dates.length === 1 ? "\n· 지웠을 때 출고일: " + dates[0] : ""));
   };
 
   window.openPoFromDetail = function(){
@@ -11108,9 +11216,29 @@
     const o = snap.data();
     editingOrderLine = { id: orderId, batchId: o.batchId, data: o };
 
+    // 예약에서 넘어온 품목이면 어느 예약인지 보여줍니다. (수정해도 연결은 그대로 유지됩니다)
+    let resvNote = "";
+    if(o.fromReservationId){
+      try{
+        const rs = await getDoc(doc(db,"reservations", o.fromReservationId));
+        if(rs.exists()){
+          const r = rs.data();
+          resvNote = '<br><span style="color:#2e7d32;font-weight:700;">예약과 연결됨</span>'
+            + '<span style="color:var(--gray);"> — ' + comboEsc(r.destination||"-")
+            + " · " + comboEsc(r.requestDate||"-")
+            + " · " + comboEsc(r.systemModel||"-")
+            + " " + comboEsc(r.systemColor || r.manufacturerColor || "-")
+            + " · 예약 " + (Number(r.orderedQty)||0) + "대"
+            + " (고쳐도 연결은 그대로입니다)</span>";
+        }else{
+          resvNote = '<br><span style="color:var(--danger);font-weight:700;">연결된 예약이 삭제되었습니다</span>';
+        }
+      }catch(e){}
+    }
     document.getElementById("ole-desc").innerHTML =
       comboEsc(docModelLabel(o)) + " · " + comboEsc(o.capacity||"-") + " · " + comboEsc(o.carrier||"-")
-      + "<br><span style=\"color:var(--gray);\">도착 " + (o.fulfilledCount||0) + "/" + (o.quantity||0) + " · 상태 " + comboEsc(o.status||"-") + "</span>";
+      + "<br><span style=\"color:var(--gray);\">도착 " + (o.fulfilledCount||0) + "/" + (o.quantity||0) + " · 상태 " + comboEsc(o.status||"-") + "</span>"
+      + resvNote;
 
     const destSel = document.getElementById("ole-dest");
     destSel.innerHTML = '<option value="">해당없음</option>';
@@ -20293,6 +20421,8 @@
   let resvCarrier = "LG";       // 기본 LG
 
   let resvListFilter = "all";   // all | sale | buy
+  let resvStatDate = "";        // 예약 지표에서 고른 주문일 ("" 이면 전체)
+  window.onResvStatDate = function(v){ resvStatDate = v || ""; loadReservationTable(); };
   let resvStateFilter = "all";  // all | open(배정 없음) | part(일부) | done(완료)
   window.setResvStateFilter = function(f){
     resvStateFilter = f;
@@ -21848,6 +21978,7 @@
   }
 
   function renderResvValidation(results, targetElId){
+    const isBuy = (resvKind === "buy");
     const ok = results.filter(r=>r.ok);
     const bad = results.filter(r=>!r.ok);
     resvPendingRows = ok.map(r=>r.data);
@@ -21858,12 +21989,34 @@
     }
     if(ok.length){
       html += '<div style="border:1px solid var(--line);max-height:200px;overflow-y:auto;margin-bottom:10px;">'
-        + '<table class="data-table" style="min-width:620px;"><thead><tr><th>거래처</th><th>모델</th><th>색상</th><th class="ta-right">수량</th><th class="ta-right">판매가</th></tr></thead><tbody>'
-        + ok.map(r=>'<tr><td>'+comboEsc(r.data.destination)+'</td><td>'+comboEsc(docModelLabel(r.data))+'</td>'
-            + '<td>'+comboEsc(r.data.systemColor||r.data.manufacturerColor||"-")+'</td>'
-            + '<td class="ta-right">'+r.data.orderedQty+'</td>'
-            + '<td class="ta-right">'+(r.data.salePrice!=null ? r.data.salePrice.toLocaleString() : '<span style="color:var(--danger);">미입력</span>')+'</td></tr>').join("")
+        + '<table class="data-table" style="width:auto;"><thead><tr><th>거래처</th><th>모델</th><th>색상</th>'
+        + '<th class="ta-right">수량</th><th class="ta-right">출고가</th>'
+        + (isBuy ? '<th class="ta-right">선할인</th><th class="ta-right">타할인</th><th class="ta-right">입고가</th>'
+                 : '<th class="ta-right">판매가</th>')
+        + '</tr></thead><tbody>'
+        + ok.map(r=>{
+            const d = r.data;
+            const q = Number(d.orderedQty)||0;
+            const L = Number(d.listPrice)||0;
+            const pre = Number(d.preDiscountAmt)||0;      // 합계 기준 금액
+            const oth = Number(d.otherDiscountAmt)||0;
+            const money = v=> v ? Math.round(v).toLocaleString() : '<span style="color:var(--gray);">-</span>';
+            return '<tr><td style="white-space:nowrap;">'+comboEsc(d.destination)+'</td>'
+              + '<td style="white-space:nowrap;">'+comboEsc(docModelLabel(d))+'</td>'
+              + '<td style="white-space:nowrap;">'+comboEsc(d.systemColor||d.manufacturerColor||"-")+'</td>'
+              + '<td class="ta-right">'+q+'</td>'
+              + '<td class="ta-right">'+money(L)+'</td>'
+              + (isBuy
+                  ? '<td class="ta-right">'+money(pre)+(d.preDiscountPct!=null?' <span style="color:var(--gray);font-size:10.5px;">'+d.preDiscountPct+'%</span>':'')+'</td>'
+                    + '<td class="ta-right">'+money(oth)+(d.otherDiscountPct!=null?' <span style="color:var(--gray);font-size:10.5px;">'+d.otherDiscountPct+'%</span>':'')+'</td>'
+                    + '<td class="ta-right" style="font-weight:700;">'+money(L*q - pre)+'</td>'
+                  : '<td class="ta-right">'+(d.salePrice!=null ? d.salePrice.toLocaleString() : '<span style="color:var(--danger);">미입력</span>')+'</td>')
+              + '</tr>';
+          }).join("")
         + '</tbody></table></div>'
+        + (isBuy ? '<div style="color:var(--gray);font-size:11.5px;margin-bottom:8px;line-height:1.7;">'
+            + '<b>선할인·타할인</b> — 줄마다 (출고가 × 수량 × %) 로 계산한 금액입니다. 건별 등록과 같은 값입니다.<br>'
+            + '<b>입고가</b> — 출고가 합계에서 선할인을 뺀 금액입니다. (타할인은 나중에 여신으로 반영)</div>' : '')
         + '<button class="btn small" style="width:auto;" onclick="submitResvBulk()">정상 '+ok.length+'건 일괄 등록</button>';
     }
     document.getElementById(targetElId).innerHTML = html;
@@ -22085,6 +22238,92 @@
   };
 
   // 체크한 예약을 하나의 견적서로 만듭니다. (같은 거래처만)
+  // 체크한 구매 예약을 한 주문으로 묶어 주문 등록창에 채웁니다. (등록은 직접 하십니다)
+  //  삼성전자 발주서처럼 여러 품목을 한 번에 요청해야 할 때 씁니다.
+  window.resvSelectedToOrder = async function(){
+    const checked = Array.from(document.querySelectorAll(".resv-row-cb:checked"));
+    if(checked.length === 0){ alert("주문으로 넘길 예약을 먼저 체크해주세요."); return; }
+
+    const picked = [];
+    for(const c of checked){
+      const sn = await getDoc(doc(db,"reservations", c.dataset.id));
+      if(!sn.exists()) continue;
+      const r = { id:c.dataset.id, ...sn.data() };
+      if(r.kind !== "buy"){ alert("구매 예약만 주문으로 넘길 수 있습니다.\n판매 예약이 섞여 있습니다."); return; }
+      const remain = Math.max(0, (Number(r.orderedQty)||0) - (Number(r.allocatedQty)||0));
+      if(remain <= 0) continue;
+      picked.push({ r, remain });
+    }
+    if(picked.length === 0){ alert("남은 수량이 있는 구매 예약이 없습니다."); return; }
+
+    const sources = [...new Set(picked.map(x=> String(x.r.destination||"").trim()))];
+    if(sources.length > 1){
+      alert("매입처가 여러 개입니다. 주문은 매입처 하나씩 넣습니다.\n\n고른 매입처: " + sources.join(", "));
+      return;
+    }
+    const carriers = [...new Set(picked.map(x=> String(x.r.carrier||"").trim()))];
+    if(carriers.length > 1){
+      alert("통신사가 여러 개입니다. 주문은 통신사 하나씩 넣습니다.\n\n고른 통신사: " + carriers.join(", "));
+      return;
+    }
+
+    await fetchModelsCache();
+    await openOrderModal();
+    const ss = document.getElementById("order-source-select");
+    if(ss && sources[0]){ ss.value = sources[0]; syncSearchableSelect("order-source-select"); }
+    const cs0 = document.getElementById("order-carrier-select");
+    if(cs0 && carriers[0]) cs0.value = carriers[0];
+    const dEl = document.getElementById("order-date-input");
+    if(dEl) dEl.value = todayStr();
+
+    document.getElementById("order-lines-body").innerHTML = "";
+    let made = 0, sumQty = 0;
+    for(const { r, remain } of picked){
+      const m = modelsCache.find(x=> x.id === r.modelId)
+        || modelsCache.find(x=> String(x.systemModel||"") === String(r.systemModel||""));
+      if(!m) continue;
+      await addOrderLine();
+      const trs = document.querySelectorAll("#order-lines-body tr");
+      const tr = trs[trs.length-1];
+      if(!tr) continue;
+      const ms = tr.querySelector(".ol-model");
+      if(ms){
+        ms.value = m.id;
+        if(ms.id) syncSearchableSelect(ms.id);
+        await onOrderLineModelChange(tr);
+      }
+      const cs = tr.querySelector(".ol-color");
+      if(cs){
+        const idx = (m.colors||[]).findIndex(c=>
+          (r.sku && c.sku === r.sku)
+          || (c.systemColor === r.systemColor && c.manufacturerColor === r.manufacturerColor)
+          || (r.systemColor && c.systemColor === r.systemColor));
+        if(idx >= 0) cs.value = String(idx);
+      }
+      const cr = tr.querySelector(".ol-carrier");
+      if(cr && r.carrier) cr.value = r.carrier;
+      const q = tr.querySelector(".ol-qty");
+      if(q) q.value = remain;
+      const lp = tr.querySelector(".ol-listprice");
+      if(lp && r.listPrice) lp.value = r.listPrice;
+      const setIf = (sel, v)=>{ const el = tr.querySelector(sel); if(el && v != null && v !== "") el.value = v; };
+      setIf(".ol-prediscountamt",   r.preDiscountAmt);
+      setIf(".ol-prediscountpct",   r.preDiscountPct);
+      setIf(".ol-otherdiscountamt", r.otherDiscountAmt);
+      setIf(".ol-otherdiscountpct", r.otherDiscountPct);
+      tr.dataset.resvId = r.id;
+      if(typeof recalcOrderLinePurchasePrice === "function") recalcOrderLinePurchasePrice(tr);
+      if(typeof updateOrderLineTotalDiscount === "function") updateOrderLineTotalDiscount(tr);
+      if(typeof updateOrderLineSubtotal === "function") updateOrderLineSubtotal(tr);
+      made++; sumQty += remain;
+    }
+    if(typeof recalcOrderTotal === "function") recalcOrderTotal();
+
+    alert("예약 " + made + "건을 한 주문으로 넣었습니다.\n\n"
+      + "  " + sources[0] + " · " + (carriers[0]||"-") + " · 모두 " + sumQty + "대\n\n"
+      + "조건이 달라진 게 있으면 고친 뒤 등록해주세요.\n등록은 아직 안 됐습니다.");
+  };
+
   window.createQuotationFromSelected = async function(){
     const checked = Array.from(document.querySelectorAll(".resv-row-cb:checked"));
     if(checked.length === 0){ alert("견적서에 담을 예약을 먼저 체크해주세요."); return; }
@@ -27393,7 +27632,12 @@
       '<th><input type="checkbox" id="resv-check-all" onclick="toggleAllResvRows(this)" title="전체 선택"></th>' +
       '<th>#</th><th>구분</th><th>통신사</th><th>요청일</th><th>거래처</th><th>모델 (전산모델명/펫네임)</th><th>색상</th>' +
       '<th class="ta-right">예약</th><th class="ta-right">배정</th><th class="ta-right">잔여</th>' +
-      '<th class="ta-right">출고가</th><th class="ta-right">판매가</th><th class="ta-right">예약금액</th>' +
+      '<th class="ta-right">출고가</th>' +
+      '<th class="ta-right">선할인</th><th class="ta-right">선할인%</th>' +
+      '<th class="ta-right">타할인</th><th class="ta-right">타할인%</th>' +
+      '<th class="ta-right">입고가</th><th class="ta-right">입고금액</th>' +
+      '<th class="ta-right">출고가금액</th>' +
+      '<th class="ta-right">판매가</th><th class="ta-right">예약금액</th>' +
       '<th class="ta-right">관리</th></tr></thead><tbody>';
 
     // 기본 정렬 — 거래처 → 모델명 낮은 숫자 → 기가수 낮은 순
@@ -27434,6 +27678,30 @@
                 : remain)
             : '<span style="color:#2e7d32;font-weight:700;">완료</span>')+'</td>' +
         '<td class="ta-right">'+fmt(r.listPrice)+'</td>' +
+        // 매입(구매) 예약의 할인·입고가 — 판매 예약이면 「-」 로 둡니다.
+        (function(){
+          const isBuyRow = (r.kind === "buy");
+          const L = Number(r.listPrice)||0;
+          const q = ordered;
+          const pre = Number(r.preDiscountAmt)||0;      // 합계 기준 금액
+          const oth = Number(r.otherDiscountAmt)||0;
+          const listAmt = L * q;
+          const inAmt = listAmt - pre;                  // 실제 낼 금액 (타할인은 나중에 여신 반영)
+          const inUnit = q ? Math.round(inAmt / q) : 0; // 대당 입고가
+          const dash = '<span style="color:var(--gray);">-</span>';
+          const money = v => v ? Math.round(v).toLocaleString() : dash;
+          const pct = v => (v!=null && v!=="") ? (Number(v).toFixed(2) + "%") : dash;
+          // 판매 예약은 매입 칸 6개를 「-」 로 두고 출고가금액만 채웁니다. (칸 수는 머리글과 같아야 합니다)
+          if(!isBuyRow) return ('<td class="ta-right">' + dash + '</td>').repeat(6)
+            + '<td class="ta-right">'+(listAmt?listAmt.toLocaleString():dash)+'</td>';
+          return '<td class="ta-right">'+money(pre)+'</td>'
+            + '<td class="ta-right" style="color:var(--gray);">'+pct(r.preDiscountPct)+'</td>'
+            + '<td class="ta-right">'+money(oth)+'</td>'
+            + '<td class="ta-right" style="color:var(--gray);">'+pct(r.otherDiscountPct)+'</td>'
+            + '<td class="ta-right" style="font-weight:700;">'+money(inUnit)+'</td>'
+            + '<td class="ta-right" style="font-weight:700;">'+money(inAmt)+'</td>'
+            + '<td class="ta-right">'+(listAmt?listAmt.toLocaleString():dash)+'</td>';
+        })() +
         '<td class="ta-right">'+fmt(sale)+'</td>' +
         '<td class="ta-right">'+(amount!=null ? amount.toLocaleString() : '<span style="color:var(--gray);">-</span>')+'</td>' +
         '<td class="ta-right">' +
@@ -27603,6 +27871,26 @@
         logAutoFix("예약 배정 수량", detail);
       }
     }catch(e){}
+
+    // 주문일(요청일) 고르는 칸을 채웁니다. 배정 수량은 거르지 않고 언제나 지금 기준입니다.
+    {
+      const dsel = document.getElementById("resv-stat-date");
+      if(dsel){
+        const dayQty = {};
+        rows.forEach(r=>{
+          const d = String(r.requestDate||"").trim() || "(날짜 없음)";
+          dayQty[d] = (dayQty[d]||0) + (Number(r.orderedQty)||Number(r.quantity)||0);
+        });
+        const days = Object.keys(dayQty).sort((a,b)=> b.localeCompare(a));
+        if(resvStatDate && days.indexOf(resvStatDate) < 0) resvStatDate = "";
+        const total = days.reduce((n,d)=> n + dayQty[d], 0);
+        dsel.innerHTML = '<option value=""' + (resvStatDate ? '' : ' selected') + '>전체 ('
+            + days.length + '일 · ' + total.toLocaleString() + '대)</option>'
+          + days.map(d=> '<option value="' + comboEsc(d) + '"' + (resvStatDate === d ? ' selected' : '') + '>'
+              + comboEsc(d) + ' (' + dayQty[d].toLocaleString() + '대)</option>').join("");
+      }
+      if(resvStatDate) rows = rows.filter(r=> (String(r.requestDate||"").trim() || "(날짜 없음)") === resvStatDate);
+    }
 
     if(resvListFilter === "sale") rows = rows.filter(r=> r.kind !== "buy");
     if(resvListFilter === "buy")  rows = rows.filter(r=> r.kind === "buy");
