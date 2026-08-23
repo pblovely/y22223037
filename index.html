@@ -387,7 +387,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v648</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v649</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -10285,11 +10285,14 @@
         + (bad ? ' <span style="color:var(--danger);font-weight:700;">다른 재고 ' + bad + '대</span>' : '')
         + '</div>'
         + '<table class="data-table" style="width:auto;"><thead><tr>'
+        + '<th style="width:26px;"></th>'
         + '<th>일련번호</th><th>재고의 모델</th><th>재고의 색상</th><th>통신사</th><th>입고일</th><th>상태</th><th>맞나</th>'
         + '</tr></thead><tbody>'
         + (inv ? r.items.map(it=>{
             const ok = modelDupKey(it.systemModel||"") === oM && modelDupKey(it.systemColor||"") === oC;
             return '<tr style="background:' + (ok ? '#f4faf4' : '#fdecea') + ';">'
+              + '<td><input type="checkbox" class="ai-ck" data-item="' + comboEsc(it.id)
+                + '" data-line="' + comboEsc(o.id) + '" data-sn="' + comboEsc(it.serialNumber||"") + '"></td>'
               + '<td style="white-space:nowrap;"><b>' + comboEsc(it.serialNumber||"-") + '</b></td>'
               + '<td style="white-space:nowrap;">' + comboEsc(it.systemModel||"-") + '</td>'
               + '<td style="white-space:nowrap;">' + comboEsc(it.systemColor||"-") + '</td>'
@@ -10298,7 +10301,7 @@
               + '<td>' + comboEsc(it.status||"-") + '</td>'
               + '<td style="' + (ok ? 'color:#2e7d32;' : 'color:var(--danger);font-weight:700;') + '">'
               + (ok ? '맞음' : '다름') + '</td></tr>';
-          }).join("") : '<tr><td colspan="7" class="list-empty">붙은 재고가 없습니다.</td></tr>')
+          }).join("") : '<tr><td colspan="8" class="list-empty">붙은 재고가 없습니다.</td></tr>')
         + '</tbody></table></div>';
     });
     box.innerHTML = '<div style="border:1px solid var(--navy);padding:9px 11px;margin-bottom:8px;">'
@@ -10330,9 +10333,58 @@
       + '</div>'
       + h
       + '<div style="font-size:11.5px;color:var(--gray);margin-top:2px;line-height:1.7;">'
+      + '<div style="margin:8px 0;">'
+      + '<button class="btn small danger" style="width:auto;" onclick="detachOrderItems()">고른 재고를 이 주문에서 떼기</button>'
+      + '<span style="font-size:11.5px;color:var(--gray);margin-left:8px;">재고는 그대로 두고 <b>주문 연결만</b> 끊습니다. 도착 수가 줄고 미입고가 늘어납니다.</span>'
+      + '</div>'
       + '<b>다름</b>인 재고는 잘못 붙은 것입니다. 데이터 점검의 <b>「일련번호로 주문↔재고 맞추기」</b>로 정리하세요.<br>'
       + '<b>도착 수와 재고 수가 다른 품목</b>은 데이터 점검의 <b>「도착 수가 재고와 다른 주문」</b>에서 맞출 수 있습니다.</div>'
       + '</div>';
+  };
+
+  // 고른 재고를 주문에서 뗍니다. 재고는 지우지 않고 연결만 끊습니다.
+  window.detachOrderItems = async function(){
+    if(!hasPerm(currentUserPerms, "cancelDelete")){ alert("권한이 없습니다."); return; }
+    const cks = Array.from(document.querySelectorAll(".ai-ck:checked"));
+    if(cks.length === 0){ alert("뗄 재고를 골라주세요."); return; }
+    const picked = cks.map(c=> ({ itemId:c.dataset.item, lineId:c.dataset.line, sn:c.dataset.sn }));
+    if(!confirm("고른 재고 " + picked.length + "대를 이 주문에서 뗍니다.\n\n"
+      + picked.slice(0,12).map(x=> "  " + (x.sn||"-")).join("\n")
+      + (picked.length > 12 ? "\n  ... 외 " + (picked.length-12) + "대" : "")
+      + "\n\n· 재고는 그대로 남습니다 (지워지지 않습니다)\n"
+      + "· 그 주문 품목의 도착 수가 줄고 미입고가 늘어납니다\n\n진행할까요?")) return;
+
+    const byLine = {};
+    picked.forEach(x=> (byLine[x.lineId] = byLine[x.lineId] || []).push(x.itemId));
+    let done = 0;
+    try{
+      for(let i=0; i<picked.length; i+=300){
+        const bt = writeBatch(db);
+        picked.slice(i, i+300).forEach(x=> bt.update(doc(db,"inventoryItems", x.itemId), { orderId: null }));
+        await bt.commit();
+      }
+      for(const lid of Object.keys(byLine)){
+        const os = await getDoc(doc(db,"orders", lid));
+        if(!os.exists()) continue;
+        const o = os.data();
+        const keep = (Array.isArray(o.linkedItemIds) ? o.linkedItemIds : [])
+          .filter(iid=> byLine[lid].indexOf(iid) < 0);
+        const qty = Number(o.quantity)||0;
+        await updateDoc(doc(db,"orders", lid), {
+          linkedItemIds: keep, fulfilledCount: keep.length,
+          status: (qty && keep.length >= qty) ? "도착완료" : (keep.length > 0 ? "부분도착" : "주문중")
+        });
+        done += byLine[lid].length;
+      }
+    }catch(e){ alert("떼지 못했습니다.\n" + ((e && e.message) ? e.message : String(e))); return; }
+
+    logAction("재고를 주문에서 뗌", done + "대 / 일련번호 "
+      + picked.slice(0,12).map(x=> x.sn || "-").join(",")
+      + (picked.length > 12 ? " 외 " + (picked.length-12) : ""));
+    alert(done + "대를 주문에서 뗐습니다.\n\n재고는 그대로 있습니다.");
+    clearCache("orders"); clearCache("inventory"); clearDashCache();
+    loadOrderList();
+    showAllOrderItems();
   };
 
   // 이 주문의 도착을 전부 되돌립니다. 재고는 지워지고 도착 수는 0이 됩니다.
