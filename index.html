@@ -387,7 +387,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v649</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v655</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -3253,6 +3253,10 @@
           <div class="stack-row"><label id="resv-dest-label">거래처 (판매처)</label><select id="resv-dest-select"><option value="">선택</option></select></div>
           <div class="stack-row"><label>예약(주문) 수량</label><input type="number" id="resv-order-qty-input" value="1"></div>
           <div class="stack-row"><label>출고가 <span class="info-tip" title="모델을 고르면 모델 등록의 출고가(VAT포함)를 자동으로 가져옵니다. 필요하면 직접 고칠 수 있습니다.">ⓘ</span></label><input type="number" id="resv-listprice-input" oninput="onResvListPriceInput()" placeholder="모델을 고르면 자동으로 채워집니다"></div>
+          <div class="stack-row resv-buy-only"><label>선할인 <span class="info-tip" title="매입 시 미리 빼주는 할인입니다. 여신 차감·이체 금액의 기준이 됩니다. 금액이나 %% 중 하나만 넣으면 나머지가 계산됩니다.">ⓘ</span></label><input type="number" id="resv-prediscountamt-input" oninput="onResvBuyDisc('pre','amt')" placeholder="예: 74074"></div>
+          <div class="stack-row resv-buy-only"><label>선할인%</label><input type="number" step="0.01" id="resv-prediscountpct-input" oninput="onResvBuyDisc('pre','pct')" placeholder="예: 0.20"></div>
+          <div class="stack-row resv-buy-only"><label>타할인 <span class="info-tip" title="나중에 여신으로 반영되는 할인입니다. 이체 금액에는 빠지지 않습니다.">ⓘ</span></label><input type="number" id="resv-otherdiscountamt-input" oninput="onResvBuyDisc('other','amt')" placeholder="예: 500000"></div>
+          <div class="stack-row resv-buy-only"><label>타할인%</label><input type="number" step="0.01" id="resv-otherdiscountpct-input" oninput="onResvBuyDisc('other','pct')" placeholder="예: 2.14"></div>
           <div class="stack-row"><label>판매할인 <span class="info-tip" title="정액 또는 %를 넣으면 나머지와 판매가가 자동으로 계산됩니다.">ⓘ</span></label><input type="number" id="resv-salediscountamt-input" oninput="onResvSaleDiscountAmtInput()" placeholder="예: 100000"></div>
           <div class="stack-row"><label>판매할인%</label><input type="number" step="0.01" id="resv-salediscountpct-input" oninput="onResvSaleDiscountPctInput()" placeholder="예: 4.00"></div>
           <div class="stack-row"><label>선입금 <span class="info-tip" title="배정 전에 미리 받은 금액입니다. 배정할 때 자동으로 입금완료로 반영됩니다. 전액을 받았으면 전체 금액을, 일부만 받았으면 그만큼 적어주세요.">ⓘ</span></label><input type="number" id="resv-prepaid-input" placeholder="미리 받은 금액 (선택)"></div>
@@ -3417,10 +3421,13 @@
       <div style="background:#fff;border:2px solid var(--navy);max-width:680px;width:96%;max-height:90vh;overflow-y:auto;padding:22px;position:relative;">
         <button onclick="closeResvPasteModal()" style="position:absolute;top:12px;right:12px;background:none;border:1px solid var(--navy);width:26px;height:26px;cursor:pointer;font-size:13px;">✕</button>
         <h3 style="margin-top:0;margin-bottom:4px;">예약 텍스트로 붙여넣기 등록</h3>
-        <p class="desc">엑셀에서 복사한 내용을 그대로 붙여넣으세요. 한 줄에 하나씩, 탭 또는 쉼표로 구분합니다.<br>
-          순서: <b>거래처 · 전산모델명 · 색상 · 수량 · 판매가</b> (색상·판매가는 비워도 됩니다)</p>
+        <p class="desc">엑셀에서 복사한 내용을 그대로 붙여넣으세요. 한 줄에 하나씩, <b>탭·쉼표·띄어쓰기</b>로 구분합니다.<br>
+          순서: <b>거래처 · 전산모델명 · 색상 · 수량 · 판매가</b> (색상·판매가는 비워도 됩니다)<br>
+          <span id="resv-paste-kind-note" style="color:var(--navy);font-weight:700;"></span></p>
         <div class="stack-form" style="margin-bottom:10px;">
           <div class="stack-row"><label>요청일</label><input type="text" id="resv-paste-date-input" placeholder="예: 20260726" maxlength="8" inputmode="numeric"></div>
+          <div class="stack-row resv-paste-buy-only"><label>선할인% <span class="info-tip" title="붙여넣은 모든 줄에 똑같이 넣습니다. 줄마다 출고가 × 수량으로 금액을 계산해 저장하므로 건별 등록과 결과가 같습니다.">ⓘ</span></label><input type="number" step="0.01" id="resv-paste-prepct" placeholder="예: 0.20"></div>
+          <div class="stack-row resv-paste-buy-only"><label>타할인%</label><input type="number" step="0.01" id="resv-paste-otherpct" placeholder="예: 2.14"></div>
         </div>
         <textarea id="resv-paste-text" rows="8" style="width:100%;border:1px solid #c7c7c7;padding:8px;font-size:12.5px;font-family:inherit;box-sizing:border-box;" placeholder="더퓨처랩&#9;SM-F976N512&#9;그레이&#9;5&#9;2500000&#10;태화&#9;SM-F776N256&#9;&#9;3&#9;"></textarea>
         <button class="btn small" style="width:auto;margin-top:10px;" onclick="analyzeResvPaste()">검증</button>
@@ -15996,8 +16003,11 @@
       if(to && d && d > to) return false;
       return true;
     };
+    // 아직 붙이지 않은 입금(미배분)을 맨 위로 올립니다. 먼저 반영하셔야 하는 돈이라서요.
+    const unmatchedFirst = (r)=> (String(r.stateLabel||"") === "미배분" || String(r.status||"") === "미배분") ? 0 : 1;
     const view = rows.filter(r=> kindOk(r) && stateOk(r) && condOk(r))
-                     .sort((a,b)=> String(b.date).localeCompare(String(a.date)));
+                     .sort((a,b)=> unmatchedFirst(a) - unmatchedFirst(b)
+                                || String(b.date).localeCompare(String(a.date)));
 
     let sDone=0, sLeftOut=0, sLeftIn=0, holdOut=0, holdIn=0;
     rows.forEach(r=>{
@@ -20227,6 +20237,10 @@
     document.getElementById("resv-prepaid-input").value = "";
     document.getElementById("resv-prepaid-date-input").value = "";
     document.getElementById("resv-salediscountamt-input").value = "";
+    ["resv-prediscountamt-input","resv-prediscountpct-input",
+     "resv-otherdiscountamt-input","resv-otherdiscountpct-input"].forEach(id=>{
+      const el = document.getElementById(id); if(el) el.value = "";
+    });
     document.getElementById("resv-salediscountpct-input").value = "";
     document.getElementById("resv-result-msg").style.display = "none";
     editingReservationId = null;
@@ -20315,6 +20329,37 @@
     // 금액 라벨도 구분에 맞춰 안내
     const pl = document.getElementById("resv-price-label");
     if(pl) pl.textContent = (k==="buy") ? "입고가 (선택)" : "판매가 (선택)";
+    // 선할인·타할인은 매입(구매) 예약에서만 씁니다.
+    document.querySelectorAll(".resv-buy-only").forEach(el=>{
+      el.style.display = (k==="buy") ? "" : "none";
+    });
+  };
+
+  //  칸에 적힌 값을 숫자로 읽습니다. 비어 있으면 null 입니다.
+  function resvNum(id, fix){
+    const el = document.getElementById(id);
+    const v = el ? String(el.value||"").trim() : "";
+    if(v === "") return null;
+    const n = Number(v);
+    if(!isFinite(n)) return null;
+    return fix ? Number(n.toFixed(fix)) : n;
+  }
+
+  // 선할인·타할인 — 금액이나 %% 중 하나만 넣으면 나머지를 채웁니다. 기준은 출고가 × 수량입니다.
+  window.onResvBuyDisc = function(which, from){
+    const list = Number((document.getElementById("resv-listprice-input")||{}).value) || 0;
+    const qty  = Number((document.getElementById("resv-order-qty-input")||{}).value) || 0;
+    const base = list * qty;
+    const aEl = document.getElementById("resv-" + which + "discountamt-input");
+    const pEl = document.getElementById("resv-" + which + "discountpct-input");
+    if(!aEl || !pEl || !(base > 0)) return;
+    if(from === "amt"){
+      const a = Number(aEl.value);
+      pEl.value = (aEl.value === "" || !(a > 0)) ? "" : Number(((a / base) * 100).toFixed(2));
+    }else{
+      const p = Number(pEl.value);
+      aEl.value = (pEl.value === "" || !(p > 0)) ? "" : Math.round(base * p / 100);
+    }
   };
   window.setResvCarrier = function(c){
     resvCarrier = c;
@@ -20341,6 +20386,10 @@
     document.getElementById("resv-prepaid-input").value = r.prepaidAmount || "";
     document.getElementById("resv-prepaid-date-input").value = r.prepaidDate || "";
     document.getElementById("resv-salediscountamt-input").value = r.saleDiscountAmt || "";
+    document.getElementById("resv-prediscountamt-input").value   = r.preDiscountAmt   || "";
+    document.getElementById("resv-prediscountpct-input").value   = r.preDiscountPct   || "";
+    document.getElementById("resv-otherdiscountamt-input").value = r.otherDiscountAmt || "";
+    document.getElementById("resv-otherdiscountpct-input").value = r.otherDiscountPct || "";
     document.getElementById("resv-salediscountpct-input").value = r.saleDiscountPct || "";
     await setResvKind(r.kind === "buy" ? "buy" : "sale");
     setResvCarrier(r.carrier || "LG");
@@ -20465,6 +20514,11 @@
       listPrice: listPriceVal,
       saleDiscountAmt: saleDiscAmtRaw ? Number(saleDiscAmtRaw) : null,
       saleDiscountPct: saleDiscPctRaw ? Number(Number(saleDiscPctRaw).toFixed(2)) : null,
+      // 매입(구매) 예약의 할인 — 배정해서 주문으로 넘길 때 그대로 쓰입니다.
+      preDiscountAmt:   resvNum("resv-prediscountamt-input"),
+      preDiscountPct:   resvNum("resv-prediscountpct-input", 2),
+      otherDiscountAmt: resvNum("resv-otherdiscountamt-input"),
+      otherDiscountPct: resvNum("resv-otherdiscountpct-input", 2),
       manufacturerColor: colorObj ? (colorObj.manufacturerColor||"") : "",
       systemColor: colorObj ? (colorObj.systemColor||"") : "",
       sku: colorObj ? (colorObj.sku||"") : "",
@@ -21662,6 +21716,13 @@
     document.getElementById("resv-paste-text").value = "";
     document.getElementById("resv-paste-result").innerHTML = "";
     document.getElementById("resv-paste-date-input").value = todayStr();
+    ["resv-paste-prepct","resv-paste-otherpct"].forEach(id=>{
+      const el = document.getElementById(id); if(el) el.value = "";
+    });
+    // 선할인·타할인 칸은 구매 예약에서만 씁니다.
+    document.querySelectorAll(".resv-paste-buy-only").forEach(el=>{
+      el.style.display = (resvKind === "buy") ? "" : "none";
+    });
     resvPendingRows = [];
     document.getElementById("resv-paste-modal-overlay").style.display = "flex";
   };
@@ -21691,7 +21752,8 @@
     const salePrice = salePriceRaw ? Number(salePriceRaw) : null;
 
     if(!destination) errs.push("거래처 비어있음");
-    else if(!destNames.includes(destination)) errs.push("등록되지 않은 거래처('"+destination+"') — 업체정보에서 판매처로 먼저 등록해주세요");
+    else if(!destNames.includes(destination)) errs.push("등록되지 않은 거래처('"+destination+"') — 업체정보에서 "
+      + (resvKind === "buy" ? "매입처" : "판매처") + "로 먼저 등록해주세요");
     if(!sysModel) errs.push("전산모델명 비어있음");
     if(qty <= 0) errs.push("예약수량이 1 이상이어야 함");
 
@@ -21713,7 +21775,14 @@
       manufacturerColor: colorObj ? (colorObj.manufacturerColor||"") : "",
       systemColor: colorObj ? (colorObj.systemColor||"") : "",
       sku: colorObj ? (colorObj.sku||"") : "",
-      destination, orderedQty: qty, allocatedQty: 0, requestDate, salePrice
+      destination, orderedQty: qty, allocatedQty: 0, requestDate, salePrice,
+      kind: resvKind, carrier: resvCarrier,
+      // 선할인·타할인 — %만 받아 줄마다 (출고가 × 수량) 으로 금액을 계산합니다.
+      //  건별 등록과 저장 형태·계산식을 똑같이 맞춥니다.
+      preDiscountPct:   (raw.prePct   != null) ? raw.prePct   : null,
+      preDiscountAmt:   (raw.prePct   != null) ? Math.round((model.priceIncVat||0) * qty * raw.prePct   / 100) : null,
+      otherDiscountPct: (raw.otherPct != null) ? raw.otherPct : null,
+      otherDiscountAmt: (raw.otherPct != null) ? Math.round((model.priceIncVat||0) * qty * raw.otherPct / 100) : null
     }};
   }
 
@@ -21758,6 +21827,12 @@
   };
 
   window.analyzeResvPaste = async function(){
+    document.querySelectorAll(".resv-paste-buy-only").forEach(el=>{
+      el.style.display = (resvKind === "buy") ? "" : "none";
+    });
+    { const note = document.getElementById("resv-paste-kind-note");
+      if(note) note.textContent = "지금 구분: " + (resvKind === "buy" ? "구매 (거래처 = 매입처)" : "판매 (거래처 = 판매처)")
+        + " · 통신사 " + resvCarrier + " — 창을 열기 전 위쪽에서 바꾸실 수 있습니다."; }
     const el = document.getElementById("resv-paste-result");
     const text = document.getElementById("resv-paste-text").value;
     const baseDate = (document.getElementById("resv-paste-date-input").value||"").replace(/\D/g,"") || todayStr();
@@ -21765,12 +21840,24 @@
     if(lines.length===0){ el.innerHTML = '<span style="color:var(--danger);">붙여넣을 내용이 없습니다.</span>'; return; }
     el.innerHTML = "검증 중...";
     await fetchModelsCache();
-    const destNames = await fetchNamesList("outboundDestinations");
+    // 구매 예약이면 매입처, 판매 예약이면 판매처 목록으로 맞춰봅니다.
+    const destNames = await fetchNamesList(resvKind === "buy" ? "inboundSources" : "outboundDestinations");
+    // 선할인·타할인은 모든 줄에 똑같이 넣습니다. (구매 예약에서만)
+    const prePctRaw   = String((document.getElementById("resv-paste-prepct")||{}).value || "").trim();
+    const otherPctRaw = String((document.getElementById("resv-paste-otherpct")||{}).value || "").trim();
+    const buyDisc = (resvKind === "buy")
+      ? { prePct: prePctRaw === "" ? null : Number(Number(prePctRaw).toFixed(2)),
+          otherPct: otherPctRaw === "" ? null : Number(Number(otherPctRaw).toFixed(2)) }
+      : { prePct:null, otherPct:null };
     const results = lines.map((line, i)=>{
-      const c = line.split(/\t|,/).map(x=>x.trim());
+      // 탭·쉼표로 나누고, 그래도 한 칸이면 띄어쓰기로 나눕니다.
+      let c = line.split(/\t|,/).map(x=>x.trim()).filter(x=> x !== "");
+      if(c.length < 2) c = line.split(/\s{2,}/).map(x=>x.trim()).filter(x=> x !== "");
+      if(c.length < 2) c = line.split(/\s+/).map(x=>x.trim()).filter(x=> x !== "");
       return validateResvRow({
         requestDate: baseDate, destination: c[0], systemModel: c[1],
-        color: c[2], qty: c[3], salePrice: c[4]
+        color: c[2], qty: c[3], salePrice: c[4],
+        prePct: buyDisc.prePct, otherPct: buyDisc.otherPct
       }, destNames, (i+1)+"번째 줄");
     });
     renderResvValidation(results, "resv-paste-result");
@@ -27291,7 +27378,10 @@
         '<td class="ta-right">' +
           (quoted
             ? '<button class="btn small secondary" style="width:auto;" data-resv-quote="'+r.quotationId+'">견적서 보기</button>'
-            : '<button class="btn small secondary" style="width:auto;" data-resv-edit2="'+r.id+'">수정</button>' +
+            : ((r.kind === "buy" && remain > 0)
+                 ? '<button class="btn small" style="width:auto;" data-resv-toorder="'+r.id+'" title="이 예약 내용을 주문 등록창에 채워서 엽니다. 확인하고 고친 뒤 등록하세요.">주문으로</button>'
+                 : '')
+              + '<button class="btn small secondary" style="width:auto;" data-resv-edit2="'+r.id+'">수정</button>' +
               '<button class="btn small danger" style="width:auto;" data-resv-del2="'+r.id+'">삭제</button>') +
         '</td></tr>';
     });
@@ -27303,7 +27393,81 @@
     el.querySelectorAll('[data-resv-del2]').forEach(b=> b.onclick = ()=> deleteReservation(b.dataset.resvDel2));
     el.querySelectorAll('[data-resv-alloc]').forEach(b=> b.onclick = ()=> adjustReservationAllocation(b.dataset.resvAlloc));
     el.querySelectorAll('[data-resv-quote]').forEach(b=> b.onclick = ()=> openQuotationView(b.dataset.resvQuote));
+    el.querySelectorAll('[data-resv-toorder]').forEach(b=> b.onclick = ()=> resvToOrderModal(b.dataset.resvToorder));
   }
+
+  // 구매 예약을 주문 등록창으로 넘깁니다.
+  //  값을 채워만 두고 등록은 하지 않습니다 — 눈으로 확인하고 조건이 바뀐 게 있으면 고쳐서 등록하세요.
+  window.resvToOrderModal = async function(id){
+    const snap = await getDoc(doc(db,"reservations", id));
+    if(!snap.exists()){ alert("이미 삭제된 예약입니다."); return; }
+    const r = { id, ...snap.data() };
+    if(r.kind !== "buy"){ alert("구매 예약만 주문으로 넘길 수 있습니다."); return; }
+    const ordered = Number(r.orderedQty)||0;
+    const allocated = Number(r.allocatedQty)||0;
+    const remain = Math.max(0, ordered - allocated);
+    if(remain <= 0){ alert("남은 수량이 없습니다."); return; }
+
+    await fetchModelsCache();
+    const m = modelsCache.find(x=> x.id === r.modelId)
+      || modelsCache.find(x=> String(x.systemModel||"") === String(r.systemModel||""));
+    if(!m){ alert("모델을 찾지 못했습니다. 모델 등록을 확인해주세요."); return; }
+
+    await openOrderModal();
+    // 머리부 — 매입처·주문일
+    const ss = document.getElementById("order-source-select");
+    if(ss && r.destination){ ss.value = r.destination; syncSearchableSelect("order-source-select"); }
+    const dEl = document.getElementById("order-date-input");
+    if(dEl) dEl.value = todayStr();
+
+    // 품목 한 줄 만들고 예약 내용을 채웁니다.
+    document.getElementById("order-lines-body").innerHTML = "";
+    await addOrderLine();
+    const trs = document.querySelectorAll("#order-lines-body tr");
+    const tr = trs[trs.length-1];
+    if(!tr){ alert("주문 줄을 만들지 못했습니다."); return; }
+
+    const ms = tr.querySelector(".ol-model");
+    if(ms){
+      ms.value = m.id;
+      if(ms.id) syncSearchableSelect(ms.id);
+      await onOrderLineModelChange(tr);          // 색상 목록·출고가 채우기
+    }
+    const cs = tr.querySelector(".ol-color");
+    if(cs){
+      const idx = (m.colors||[]).findIndex(c=>
+        (r.sku && c.sku === r.sku)
+        || (c.systemColor === r.systemColor && c.manufacturerColor === r.manufacturerColor)
+        || (r.systemColor && c.systemColor === r.systemColor));
+      if(idx >= 0) cs.value = String(idx);
+    }
+    const cr = tr.querySelector(".ol-carrier");
+    if(cr && r.carrier) cr.value = r.carrier;
+    const q = tr.querySelector(".ol-qty");
+    if(q) q.value = remain;
+    const lp = tr.querySelector(".ol-listprice");
+    if(lp && r.listPrice) lp.value = r.listPrice;
+
+    // 예약에 적어둔 선할인·타할인을 그대로 넣습니다.
+    const setIf = (sel, v)=>{ const el = tr.querySelector(sel); if(el && v != null && v !== "") el.value = v; };
+    setIf(".ol-prediscountamt",   r.preDiscountAmt);
+    setIf(".ol-prediscountpct",   r.preDiscountPct);
+    setIf(".ol-otherdiscountamt", r.otherDiscountAmt);
+    setIf(".ol-otherdiscountpct", r.otherDiscountPct);
+
+    if(typeof recalcOrderLinePurchasePrice === "function") recalcOrderLinePurchasePrice(tr);
+    if(typeof updateOrderLineTotalDiscount === "function") updateOrderLineTotalDiscount(tr);
+    if(typeof updateOrderLineSubtotal === "function") updateOrderLineSubtotal(tr);
+    if(typeof recalcOrderTotal === "function") recalcOrderTotal();
+
+    alert("예약 내용을 주문 등록창에 넣었습니다.\n\n"
+      + "  " + (r.destination||"-") + " · " + (m.systemModel||"-")
+      + " · " + (r.systemColor || r.manufacturerColor || "-") + " · " + remain + "대\n"
+      + "  출고가 " + (Number(r.listPrice)||0).toLocaleString()
+      + (r.preDiscountAmt ? " · 선할인 " + Number(r.preDiscountAmt).toLocaleString() : "")
+      + (r.otherDiscountAmt ? " · 타할인 " + Number(r.otherDiscountAmt).toLocaleString() : "") + "\n\n"
+      + "조건이 달라진 게 있으면 고친 뒤 등록해주세요.\n등록은 아직 안 됐습니다.");
+  };
 
   // 예약의 배정 수량은 저장값을 믿지 않고 판매요청에서 그때그때 셉니다.
   // 이렇게 하면 숫자가 어긋날 일이 없습니다.
@@ -34569,6 +34733,17 @@
     resultEl.innerHTML = html;
     loadInventoryList();
     loadSaleRequestList();
+
+    // 끝났다고 알려드리고 창을 닫습니다. 못 찾은 것이 있으면 확인하시도록 창을 열어둡니다.
+    alert(sold + "건 판매처리했습니다."
+      + (madeReq ? "\n판매요청 " + madeReq + "건을 한 묶음으로 만들었습니다." : "\n판매가가 없어 판매요청은 안 만들었습니다.")
+      + (notFound.length ? "\n\n재고를 못 찾아 처리 안 된 일련번호 " + notFound.length + "개가 있습니다.\n창에서 확인해주세요." : ""));
+    if(notFound.length === 0){
+      document.getElementById("paste-sale-textarea").value = "";
+      document.getElementById("paste-sale-analysis").innerHTML = "";
+      pasteSaleCache = { key:"", allMap:null };
+      closePasteSaleModal();
+    }
   };
 
   window.handleExcelUpload = async function(){
