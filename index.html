@@ -387,7 +387,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v643</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v645</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -34250,6 +34250,10 @@
     return { dataRows, contextLines };
   }
 
+  let pasteSaleCarrier = "LG";        // 텍스트 판매처리에서 고른 통신사 (기본 LG)
+  let pasteSaleCache = { key:"", allMap:null };   // 같은 일련번호 목록이면 다시 읽지 않습니다
+  window.onPasteSaleCarrier = function(v){ pasteSaleCarrier = v || "LG"; window.analyzePasteSale(); };
+
   window.analyzePasteSale = async function(){
     const text = document.getElementById("paste-sale-textarea").value;
     try{ await fetchModelsCache(); }catch(e){}   // 모델·색상 칸을 건너뛰려면 목록이 필요합니다.
@@ -34272,19 +34276,69 @@
 
     // 보유중 재고에서 일련번호 매칭 확인
     const serials = dataRows.map(r=>r.serial);
-    const foundMap = {};
-    for(let i=0;i<serials.length;i+=30){
-      const chunk = serials.slice(i,i+30);
-      const s = await getDocs(query(collection(db,"inventoryItems"), where("serialNumber","in", chunk)));
-      s.forEach(d=>{ foundMap[d.data().serialNumber] = { id:d.id, ...d.data() }; });
+    const foundMap = {};    // 일련번호 → 판매처리할 재고 한 대
+    let allMap = {};        // 일련번호 → 찾은 재고 전부 (통신사만 다른 중복도 담깁니다)
+    const cacheKey = serials.join(",");
+    if(pasteSaleCache.key === cacheKey && pasteSaleCache.allMap){
+      allMap = pasteSaleCache.allMap;          // 통신사만 바꿨을 때는 다시 읽지 않습니다
+    }else{
+      for(let i=0;i<serials.length;i+=30){
+        const chunk = serials.slice(i,i+30);
+        const s = await getDocs(query(collection(db,"inventoryItems"), where("serialNumber","in", chunk)));
+        s.forEach(d=>{
+          const v = d.data();
+          if(v.deleted === true) return;
+          (allMap[v.serialNumber] = allMap[v.serialNumber] || []).push({ id:d.id, ...v });
+        });
+      }
+      pasteSaleCache = { key: cacheKey, allMap };
     }
+    const car = pasteSaleCarrier || "LG";
+    const otherMap = {};   // 고른 통신사엔 없고 다른 통신사에 있는 것
+    Object.keys(allMap).forEach(k=>{
+      const mine = allMap[k].filter(x=> String(x.carrier||"").toUpperCase() === car);
+      if(mine.length){
+        foundMap[k] = mine.find(x=> x.status !== "판매" && x.status !== "개통") || mine[0];
+      }else{
+        otherMap[k] = [...new Set(allMap[k].map(x=> String(x.carrier||"-")))];
+      }
+    });
+    // 같은 일련번호가 두 건 이상인 것 — 통신사가 다르면 특히 위험합니다.
+    const dupList = dataRows.map(r=>r.serial).filter((k,i,a)=> a.indexOf(k)===i)
+      .filter(k=> (allMap[k]||[]).filter(x=> String(x.carrier||"").toUpperCase() === car).length > 1);
+    const missList = dataRows.map(r=>r.serial).filter((k,i,a)=> a.indexOf(k)===i)
+      .filter(k=> otherMap[k]);
 
     let html = '<div style="background:#fff;border:1px solid var(--line);padding:10px;margin-bottom:12px;font-size:12.5px;">';
     html += '<b>파악한 정보</b> — 확인 후 등록해주세요.<br>';
     html += '인식된 일련번호: <b>'+dataRows.length+'개</b> · 나머지 줄: '+(contextLines.length>0 ? contextLines.map(l=>'"'+l+'"').join(", ") : "없음");
     html += '</div>';
 
+    // 같은 일련번호가 재고에 여러 건 있으면 먼저 알려드립니다.
+    if(dupList.length){
+      html += '<div style="border:1px solid var(--danger);background:#fdecea;padding:9px 11px;margin-bottom:12px;font-size:12.5px;line-height:1.8;">'
+        + '<b>같은 일련번호가 재고에 두 건 이상 있습니다 — ' + dupList.length + '개</b><br>'
+        + '<span style="color:var(--gray);">아래 목록에서 어느 것을 판매처리할지 확인하세요. '
+        + '통신사가 다르면 한쪽은 잘못 등록된 것입니다.</span><br>'
+        + dupList.slice(0,20).map(k=> '<b>' + comboEsc(k) + '</b> : '
+            + (allMap[k]||[]).map(x=> comboEsc(x.carrier||"-") + " · " + comboEsc(x.systemModel||"-")
+                + " · " + comboEsc(x.systemColor||"-") + " · " + comboEsc(x.status||"-")).join(" &nbsp;/&nbsp; ")).join("<br>")
+        + '</div>';
+    }
+
+    if(missList.length){
+      html += '<div style="border:1px solid var(--danger);background:#fdecea;padding:9px 11px;margin-bottom:12px;font-size:12.5px;line-height:1.8;">'
+        + '<b>' + comboEsc(car) + '에는 없습니다 — ' + missList.length + '개</b><br>'
+        + missList.slice(0,20).map(k=> '<b>' + comboEsc(k) + '</b> → '
+            + comboEsc((otherMap[k]||[]).join(", ")) + '에 있습니다').join("<br>")
+        + '<br><span style="color:var(--gray);">위 통신사 칸을 바꾸시면 그 통신사 재고로 다시 맞춰봅니다.</span>'
+        + '</div>';
+    }
+
     html += '<div class="stack-form">';
+    html += '<div class="stack-row"><label>통신사</label><select id="paste-sale-carrier-select" onchange="onPasteSaleCarrier(this.value)">'
+      + ["LG","SK","KT"].map(c=> '<option value="'+c+'"'+(c===car?' selected':'')+'>'+c+'</option>').join("")
+      + '</select> <span style="color:var(--gray);font-size:11.5px;margin-left:6px;">고른 통신사의 재고만 판매처리합니다.</span></div>';
     html += '<div class="stack-row"><label>판매처</label><select id="paste-sale-dest-select"></select></div>';
     html += '<div class="stack-row"><label>출고일</label><input type="text" id="paste-sale-outdate-input" maxlength="8" inputmode="numeric" value="'+(matchedDate||todayStr())+'"></div>';
     html += '<div class="stack-row"><label>판매할인 <span class="info-tip" title="모든 줄에 똑같이 넣습니다. 금액이나 %% 중 하나만 넣으시면 나머지는 알아서 계산합니다. 안 넣으시면 할인 없이 판매가 그대로 들어갑니다.">ⓘ</span></label>'
@@ -34294,16 +34348,22 @@
     html += '</div>';
 
     html += '<p class="desc" style="margin-top:10px;margin-bottom:4px;font-weight:700;color:var(--navy);">인식된 품목 미리보기</p>';
-    html += '<div style="overflow-x:auto;border:1px solid var(--line);max-height:260px;overflow-y:auto;"><table class="data-table"><thead><tr><th>일련번호</th><th>모델 (전산모델명)</th><th class="ta-right">판매가</th><th class="ta-right">할인 뒤</th><th>상태</th></tr></thead><tbody id="paste-sale-preview-body">';
+    html += '<div style="overflow-x:auto;border:1px solid var(--line);max-height:260px;overflow-y:auto;"><table class="data-table"><thead><tr><th>일련번호</th><th>모델 (전산모델명)</th><th>통신사</th><th class="ta-right">판매가</th><th class="ta-right">할인 뒤</th><th>상태</th></tr></thead><tbody id="paste-sale-preview-body">';
     dataRows.forEach((r,ri)=>{
       const it = foundMap[r.serial];
       const p = (r.price != null) ? Number(r.price) : (it && it.listPrice ? Number(it.listPrice) : 0);
       html += '<tr'+(it?'':' style="color:var(--danger);"')+'>' +
         '<td>'+r.serial+'</td>' +
         '<td>'+(it ? comboEsc(docModelLabel(it)) : '-')+'</td>' +
+        '<td'+((dupList.indexOf(r.serial)>=0)?' style="color:var(--danger);font-weight:700;"':'')+'>'
+          +(it ? comboEsc(it.carrier||"-") : '-')
+          +((dupList.indexOf(r.serial)>=0)
+              ? ' (중복 '+(allMap[r.serial]||[]).filter(x=> String(x.carrier||"").toUpperCase()===car).length+'건)' : '')+'</td>' +
         '<td class="ta-right">'+(r.price!=null?r.price.toLocaleString():(it&&it.listPrice?Number(it.listPrice).toLocaleString()+'(출고가)':'-'))+'</td>' +
         '<td class="ta-right" data-ps-final="'+ri+'">'+(p?p.toLocaleString():'<span style="color:var(--gray);">-</span>')+'</td>' +
-        '<td>'+(it ? (it.status==='판매'?'이미 판매됨':'✓ 보유중') : '재고를 찾을 수 없음')+'</td>' +
+        '<td>'+(it ? (it.status==='판매'?'이미 판매됨':'✓ 보유중')
+                   : (otherMap[r.serial] ? comboEsc(car)+'에는 없습니다 ('+comboEsc(otherMap[r.serial].join(", "))+'에 있음)'
+                                         : '재고를 찾을 수 없음'))+'</td>' +
         '</tr>';
     });
     html += '</tbody></table></div>';
@@ -34315,7 +34375,7 @@
     analysisEl.dataset.rows = JSON.stringify(dataRows.map(r=>{
       const it = foundMap[r.serial];
       const p = (r.price != null) ? Number(r.price) : (it && it.listPrice ? Number(it.listPrice) : null);
-      return { ...r, price: p };
+      return { ...r, price: p, itemId: it ? it.id : null };
     }));
 
     const destSel = document.getElementById("paste-sale-dest-select");
@@ -34370,10 +34430,12 @@
     let sold = 0; const notFound = [];
     const madeLines = [];   // 판매요청으로 묶을 품목들
     for(const r of dataRows){
-      const snap = await getDocs(query(collection(db,"inventoryItems"), where("serialNumber","==",r.serial)));
-      if(snap.empty){ notFound.push(r.serial); continue; }
-      const itemDoc = snap.docs[0];
-      const it = itemDoc.data();
+      // 분석할 때 고른 그 재고를 그대로 씁니다. (통신사가 다른 같은 일련번호를 건드리지 않습니다)
+      if(!r.itemId){ notFound.push(r.serial); continue; }
+      const itemDoc = { id: r.itemId };
+      const snap0 = await getDoc(doc(db,"inventoryItems", r.itemId));
+      if(!snap0.exists()){ notFound.push(r.serial); continue; }
+      const it = snap0.data();
       const patch = { destination: dest, status:"판매", outDate };
       const salePrice = r.price!=null ? r.price : it.listPrice;
       if(salePrice){
