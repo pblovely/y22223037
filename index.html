@@ -387,7 +387,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v665</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v667</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -10440,9 +10440,28 @@
       color: String(x.systemColor||x.manufacturerColor||""),
       status: String(x.status||"")
     }));
+    // 도착 수와 실제 재고가 다르면 그것부터 알려드립니다.
+    //  「취소했는데 재고가 없다」 같은 일이 조용히 지나가지 않게 합니다.
+    const doneQty = done.reduce((n,o)=> n + (Number(o.fulfilledCount)||0), 0);
+    const ghost = doneQty - items.length;      // 도착 수에는 있는데 실제 재고가 없는 수
+    const ghostLines = done.map(o=>{
+      const real = items.filter(x=> x.lineId === o.id).length;
+      return { o, real, ful: Number(o.fulfilledCount)||0 };
+    }).filter(x=> x.ful !== x.real);
+    let ghostMsg = "";
+    if(ghost !== 0 || ghostLines.length){
+      ghostMsg = "\n※ 도착 수와 실제 재고가 다릅니다 — 도착 " + doneQty + "대 / 실제 재고 " + items.length + "대"
+        + (ghost > 0 ? " (재고 없는 " + ghost + "대)" : (ghost < 0 ? " (연결 안 된 재고 " + (-ghost) + "대)" : ""))
+        + "\n   " + ghostLines.slice(0,6).map(x=>
+            (x.o.systemModel||"-") + " " + (x.o.systemColor||x.o.manufacturerColor||"-")
+            + " : 도착 " + x.ful + " / 재고 " + x.real).join("\n   ")
+        + (ghostLines.length > 6 ? "\n   ... 외 " + (ghostLines.length-6) + "품목" : "")
+        + "\n   되돌리면 도착 수가 0이 되어 이 차이도 함께 정리됩니다.\n";
+    }
     if(!confirm("이 주문의 도착을 전부 되돌립니다.\n\n"
       + "  " + (b.source||"-") + " · " + (b.orderDate||"-") + " · " + (b.carrier||"-") + "\n"
-      + "  품목 " + done.length + "개 · 재고 " + items.length + "대\n\n"
+      + "  품목 " + done.length + "개 · 도착 수 " + doneQty + "대 · 실제 재고 " + items.length + "대\n"
+      + ghostMsg + "\n"
       + (sold.length ? "※ 그중 " + sold.length + "대는 판매·개통된 재고입니다. 함께 지워집니다.\n\n" : "")
       + "되돌린 재고는 지워지고 도착 수는 0이 됩니다.\n"
       + "판매요청 매칭도 함께 풀립니다.\n\n되돌릴 수 없습니다. 진행할까요?")) return;
@@ -10539,6 +10558,7 @@
       + (srCancelled ? " / 판매요청 " + srCancelled + "건 취소" : "")
       + (batchCancelled ? " / 판매요청 묶음 " + batchCancelled + "건 취소" : ""));
     alert("되돌렸습니다.\n\n  재고 " + items.length + "대 지움\n  품목 " + done.length + "개 도착 0으로"
+      + (ghost > 0 ? "\n  재고가 없던 " + ghost + "대분 도착 수도 함께 정리했습니다" : "")
       + (srReleased ? "\n  판매요청 매칭 " + srReleased + "건 해제" : "")
       + (srCancelled ? "\n  판매요청 " + srCancelled + "건 취소" : "")
       + (batchCancelled ? "\n  판매요청 묶음 " + batchCancelled + "건 취소" : "")
@@ -11284,6 +11304,7 @@
     const done = Number(data.fulfilledCount)||0;
     if(qty < done){ msg("이미 도착 등록된 수량("+done+")보다 적게 줄일 수 없습니다.", true); return; }
 
+    let creditMoved = null;      // 여신 차감액이 바뀌면 얼마→얼마인지 담아둡니다
     const L = oleNum("ole-listprice");
     const patch = {
       quantity: qty,
@@ -11307,20 +11328,42 @@
       if(batchId){
         const lineSnap = await getDocs(query(collection(db,"orders"), where("batchId","==",batchId)));
         let total = 0;
+        const liveLines = [];
         lineSnap.forEach(d=>{
           const l = d.data();
           if(l.status === "취소") return;
+          liveLines.push(l);
           total += (Number(l.purchasePrice)||0) * (Number(l.quantity)||0);
         });
         await updateDoc(doc(db,"orderBatches", batchId), { depositRequired: total });
+
+        // 여신 차감액도 그 자리에서 다시 맞춥니다. (주문 관리를 열 때까지 기다리지 않게)
+        try{
+          const bs = await getDoc(doc(db,"orderBatches", batchId));
+          if(bs.exists()){
+            const bb = bs.data();
+            const isCredit = bb.paymentMethod === "b2b_credit" && bb.status !== "취소";
+            const want = isCredit ? creditFromLines(bb.source, liveLines) : 0;
+            const led = await getDocs(query(collection(db,"b2bLedger"), where("fromOrderBatchId","==", batchId)));
+            let now = 0, cnt = 0;
+            led.forEach(d=>{ now += (Number(d.data().amount)||0); cnt++; });
+            if(now !== want || cnt > 1){
+              await replaceB2BOrderUse(batchId, want, bb.depositPaidDate || bb.orderDate || todayStr(), bb.source || "-");
+              creditMoved = { from: now, to: want };
+            }
+          }
+        }catch(e){}
       }
     }catch(e){
       msg("<b>저장에 실패했습니다.</b><br>" + comboEsc((e && e.message) ? e.message : String(e)), true);
       return;
     }
     logAction("주문 품목 수정", docModelLabel(data) + " / 수량 " + qty
-      + (patch.purchasePrice ? " / 입고가 " + patch.purchasePrice.toLocaleString() : ""));
-    msg("저장되었습니다. 주문금액 합계도 다시 계산했습니다.", false);
+      + (patch.purchasePrice ? " / 입고가 " + patch.purchasePrice.toLocaleString() : "")
+      + (creditMoved ? " / 여신 차감 " + creditMoved.from.toLocaleString() + "→" + creditMoved.to.toLocaleString() : ""));
+    msg("저장되었습니다. 주문금액 합계도 다시 계산했습니다."
+      + (creditMoved ? "<br><b>여신 차감액도 " + creditMoved.from.toLocaleString()
+          + " → " + creditMoved.to.toLocaleString() + " 로 바꿨습니다.</b>" : ""), false);
     loadOrderList();
     // 요청서를 닫지 않고 그 자리에서 다시 그립니다. (다음 품목을 이어서 수정하기 위함)
     setTimeout(async ()=>{
