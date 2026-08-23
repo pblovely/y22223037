@@ -387,7 +387,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v667</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v668</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -2749,9 +2749,20 @@
 
     <!-- ===== 관리자: 이력 ===== -->
     <div id="tab-logs" class="tab-panel">
-      <div class="card" style="max-width:800px;">
+      <div class="card" style="max-width:1200px;">
         <h3>활동 이력</h3>
-        <p class="desc">관리자·팀원 조작이 자동으로 기록됩니다. 최근 100건까지 표시합니다.</p>
+        <p class="desc">관리자·팀원 조작이 자동으로 기록됩니다. 최근 500건까지 읽어 옵니다.
+          줄을 누르면 상세 내용이 펼쳐지고, 금액이 바뀐 기록은 <b>전 → 후</b>가 함께 보입니다.</p>
+        <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:8px;">
+          <input type="text" id="log-search" placeholder="찾을 말 (예: 여신, 취소, 삼성전자스타)" style="width:260px;height:28px;border:1px solid var(--line);padding:0 8px;font-size:12.5px;box-sizing:border-box;"
+            onkeydown="if(event.key==='Enter') loadLogs()">
+          <input type="text" id="log-from" placeholder="시작일 20260801" maxlength="8" inputmode="numeric" style="width:130px;height:28px;border:1px solid var(--line);padding:0 8px;font-size:12.5px;box-sizing:border-box;">
+          <input type="text" id="log-to" placeholder="종료일 20260831" maxlength="8" inputmode="numeric" style="width:130px;height:28px;border:1px solid var(--line);padding:0 8px;font-size:12.5px;box-sizing:border-box;">
+          <button class="btn small" style="width:auto;" onclick="loadLogs()">조회</button>
+          <button class="btn small secondary" style="width:auto;" onclick="clearLogSearch()">비우기</button>
+          <button class="btn small secondary" style="width:auto;" onclick="downloadLogsExcel()">엑셀다운</button>
+          <span id="log-count" style="font-size:12px;color:var(--gray);"></span>
+        </div>
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
           <label style="font-size:13px;display:flex;align-items:center;gap:6px;">
             <input type="checkbox" id="log-select-all" onclick="toggleAllLogs(this)"> 전체 선택
@@ -35699,6 +35710,57 @@
     }
   }
 
+  let logRowsCache = [];   // 지금 화면에 걸러진 이력 (엑셀다운에 씁니다)
+
+  // 긴 내용은 한 줄로 줄여 보여줍니다. (누르면 전체가 펼쳐집니다)
+  function logDetailShort(t){
+    const s0 = String(t||"");
+    return comboEsc(s0.length > 90 ? (s0.slice(0,90) + " …") : s0);
+  }
+  // 「25,765,371→25,260,378」 같은 금액 변화가 있으면 전·후·차이를 표로 뽑아 보여줍니다.
+  function logMoveTable(t){
+    const s0 = String(t||"");
+    const re = /([0-9][0-9,]*)\s*(?:→|->)\s*([0-9][0-9,]*)/g;
+    const rows = [];
+    let m;
+    while((m = re.exec(s0))){
+      const a = Number(String(m[1]).replace(/,/g,""));
+      const b = Number(String(m[2]).replace(/,/g,""));
+      if(!isFinite(a) || !isFinite(b)) continue;
+      rows.push({ a, b, d: b - a });
+    }
+    if(rows.length === 0) return "";
+    return '<table class="data-table" style="width:auto;margin-bottom:6px;"><thead><tr>'
+      + '<th class="ta-right">전</th><th class="ta-right">후</th><th class="ta-right">차이</th></tr></thead><tbody>'
+      + rows.map(r=> '<tr><td class="ta-right">' + r.a.toLocaleString() + '</td>'
+          + '<td class="ta-right">' + r.b.toLocaleString() + '</td>'
+          + '<td class="ta-right" style="font-weight:700;color:' + (r.d < 0 ? 'var(--danger)' : '#2e7d32') + ';">'
+          + (r.d > 0 ? "+" : "") + r.d.toLocaleString() + '</td></tr>').join("")
+      + '</tbody></table>';
+  }
+  window.clearLogSearch = function(){
+    ["log-search","log-from","log-to"].forEach(id=>{ const e = document.getElementById(id); if(e) e.value = ""; });
+    loadLogs();
+  };
+  // 지금 걸러진 이력을 엑셀로 내려받습니다. (금액 변화가 있으면 전·후·차이 칸도 함께)
+  window.downloadLogsExcel = function(){
+    if(!logRowsCache.length){ alert("내려받을 이력이 없습니다."); return; }
+    const rows = [["일시","사용자","아이디","작업","내용","전","후","차이"]];
+    logRowsCache.forEach(l=>{
+      const t = (l.createdAt && l.createdAt.toDate) ? l.createdAt.toDate().toLocaleString("ko-KR") : "";
+      const s0 = String(l.detail||"");
+      const m = s0.match(/([0-9][0-9,]*)\s*(?:→|->)\s*([0-9][0-9,]*)/);
+      const a = m ? Number(String(m[1]).replace(/,/g,"")) : "";
+      const b = m ? Number(String(m[2]).replace(/,/g,"")) : "";
+      rows.push([t, l.actorName||"", l.actorUsername||"", l.action||"", s0,
+                 a === "" ? "" : a, b === "" ? "" : b, (a === "" || b === "") ? "" : (b - a)]);
+    });
+    const ws = XLSX.utils.aoa_to_sheet(rows);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "이력");
+    XLSX.writeFile(wb, "이력_" + todayStr() + ".xlsx");
+  };
+
   async function loadLogs(){
     const listEl = document.getElementById("log-list");
     listEl.innerHTML = '<div class="list-empty">불러오는 중...</div>';
@@ -35707,7 +35769,34 @@
       if(snap.empty){ listEl.innerHTML = '<div class="list-empty">아직 기록된 활동이 없습니다.</div>'; return; }
       listEl.innerHTML = "";
       document.getElementById("log-select-all").checked = false;
-      const allDocs = snap.docs;
+      // 찾을 말·기간으로 거릅니다. (읽어온 500건 안에서 거르므로 읽기 비용은 그대로입니다)
+      const q = String((document.getElementById("log-search")||{}).value || "").trim().toLowerCase();
+      const from = String((document.getElementById("log-from")||{}).value || "").replace(/\D/g,"");
+      const to   = String((document.getElementById("log-to")||{}).value || "").replace(/\D/g,"");
+      const dayOf = (l)=>{
+        const dt = (l.createdAt && l.createdAt.toDate) ? l.createdAt.toDate() : null;
+        if(!dt) return "";
+        return String(dt.getFullYear()) + String(dt.getMonth()+1).padStart(2,"0") + String(dt.getDate()).padStart(2,"0");
+      };
+      let allDocs = snap.docs.filter(d=>{
+        const l = d.data();
+        if(q){
+          const hay = [l.action, l.detail, l.actorName, l.actorUsername].map(v=> String(v||"").toLowerCase()).join(" ");
+          if(hay.indexOf(q) < 0) return false;
+        }
+        const dd = dayOf(l);
+        if(from && dd && dd < from) return false;
+        if(to && dd && dd > to) return false;
+        return true;
+      });
+      logRowsCache = allDocs.map(d=> ({ id:d.id, ...d.data() }));
+      const cntEl = document.getElementById("log-count");
+      if(cntEl) cntEl.textContent = (q||from||to) ? (allDocs.length + " / " + snap.docs.length + "건") : (allDocs.length + "건");
+      if(allDocs.length === 0){
+        listEl.innerHTML = '<div class="list-empty">조건에 맞는 기록이 없습니다.</div>';
+        listEl.prepend(renderPaginationBar("logs", 0, loadLogs));
+        return;
+      }
       const { pageItems, startIndex } = paginateSlice(allDocs, "logs");
       pageItems.forEach((d, i)=>{
         const rowNum = startIndex + i + 1;
@@ -35715,11 +35804,18 @@
         const t = l.createdAt && l.createdAt.toDate ? l.createdAt.toDate().toLocaleString("ko-KR") : "-";
         const row = document.createElement("div");
         row.className = "list-row"; row.style.display="flex"; row.style.alignItems="flex-start"; row.style.gap="10px";
+        const detail = String(l.detail||"");
         row.innerHTML =
           '<input type="checkbox" class="log-check" data-id="'+d.id+'" style="margin-top:3px;">' +
           '<span style="color:var(--gray);font-size:12px;width:28px;flex-shrink:0;">'+rowNum+'.</span>' +
-          '<div style="flex:1;"><div style="font-size:12px;color:var(--gray);margin-bottom:2px;">'+t+' · '+(l.actorName||"-")+'('+(l.actorUsername||"-")+')</div>' +
-          '<div style="font-size:13.5px;"><b>'+(l.action||"")+'</b> '+(l.detail||"")+'</div></div>';
+          '<div style="flex:1;cursor:pointer;" class="log-body"><div style="font-size:12px;color:var(--gray);margin-bottom:2px;">'+t+' · '+(l.actorName||"-")+'('+(l.actorUsername||"-")+')</div>' +
+          '<div style="font-size:13.5px;"><b>'+comboEsc(l.action||"")+'</b> '+logDetailShort(detail)+'</div>' +
+          '<div class="log-more" style="display:none;margin-top:6px;border:1px solid var(--line);background:#fafafa;padding:8px 10px;font-size:12.5px;line-height:1.8;white-space:pre-wrap;word-break:break-all;">'
+            + logMoveTable(detail) + comboEsc(detail) + '</div>' +
+          '</div>';
+        const body = row.querySelector(".log-body");
+        const more = row.querySelector(".log-more");
+        if(body && more) body.onclick = ()=>{ more.style.display = (more.style.display === "none") ? "" : "none"; };
         listEl.appendChild(row);
       });
       listEl.prepend(renderPaginationBar("logs", allDocs.length, loadLogs));
