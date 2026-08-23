@@ -387,7 +387,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v668</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v671</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -743,8 +743,12 @@
       <!-- 지표 -->
       <div class="card" style="max-width:1500px;">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
-          <h3 style="margin:0;">예약 지표 <span class="info-tip" title="모델·색상 × 거래처 기준 집계입니다. 잔여 = 예약 − 배정.">ⓘ</span></h3>
-          <button class="btn small secondary" style="width:auto;" onclick="toggleResvStats()">접기/펼치기</button>
+          <h3 style="margin:0;">예약 지표 <span class="info-tip" title="모델·색상 × 거래처 기준 집계입니다. 잔여 = 예약 − 배정. 배정은 언제나 지금 시점 기준입니다.">ⓘ</span></h3>
+          <span style="display:inline-flex;align-items:center;gap:6px;">
+            <span style="font-size:11.5px;">주문일</span>
+            <select id="resv-stat-date" onchange="onResvStatDate(this.value)" style="height:26px;border:1px solid var(--line);font-size:12px;"></select>
+            <button class="btn small secondary" style="width:auto;" onclick="toggleResvStats()">접기/펼치기</button>
+          </span>
         </div>
         <div id="reservation-stat-cards" class="dash-cards" style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-start;margin-bottom:14px;"></div>
         <div id="resv-dest-cards" style="margin-bottom:14px;"></div>
@@ -2769,7 +2773,6 @@
           </label>
           <button class="btn small danger" onclick="deleteSelectedLogs()">선택 삭제</button>
         </div>
-        <div style="margin-bottom:8px;"><span id="dl-logs"></span></div>
         <div id="log-list"></div>
       </div>
     </div>
@@ -3021,7 +3024,7 @@
         <button class="no-print" onclick="closeOrderDetailModal()" style="position:absolute;top:12px;right:12px;background:none;border:1px solid var(--navy);width:26px;height:26px;cursor:pointer;font-size:13px;">✕</button>
         <div style="display:flex;justify-content:space-between;align-items:flex-start;">
           <h3 style="margin-top:0;margin-bottom:4px;" id="order-detail-heading">주문 요청서</h3>
-          <span class="no-print btn-row" style="margin-right:34px;"><button class="btn small secondary" style="width:auto;" id="order-po-btn" onclick="openPoFromDetail()">삼성전자 발주서</button><button class="btn small secondary" style="width:auto;" id="order-bulkarr-btn" onclick="toggleBulkArrival()">도착 일괄 등록</button><button class="btn small secondary" style="width:auto;" id="order-allinv-btn" title="이 주문에 붙은 재고를 한 번에 모두 보여줍니다." onclick="showAllOrderItems()">붙은 재고 전체</button><button class="btn small danger" style="width:auto;" id="order-allcancel-btn" title="이 주문에 도착 등록된 재고를 전부 되돌립니다. 재고는 지워지고 도착 수는 0이 됩니다." onclick="cancelAllArrivals()">도착 전체 취소</button><button class="btn small secondary" style="width:auto;" onclick="printOrderDetail()">인쇄 / PDF 저장</button></span>
+          <span class="no-print btn-row" style="margin-right:34px;"><button class="btn small secondary" style="width:auto;" id="order-po-btn" onclick="openPoFromDetail()">삼성전자 발주서</button><button class="btn small secondary" style="width:auto;" id="order-bulkarr-btn" onclick="toggleBulkArrival()">도착 일괄 등록</button><button class="btn small secondary" style="width:auto;" id="order-credit-btn" title="이 주문의 여신 차감액이 어떻게 나온 값인지 품목별로 보여주고, 원장과 다르면 맞출 수 있습니다." onclick="showOrderCreditCalc()">여신 계산 보기</button><button class="btn small secondary" style="width:auto;" id="order-allinv-btn" title="이 주문에 붙은 재고를 한 번에 모두 보여줍니다." onclick="showAllOrderItems()">붙은 재고 전체</button><button class="btn small danger" style="width:auto;" id="order-allcancel-btn" title="이 주문에 도착 등록된 재고를 전부 되돌립니다. 재고는 지워지고 도착 수는 0이 됩니다." onclick="cancelAllArrivals()">도착 전체 취소</button><button class="btn small secondary" style="width:auto;" onclick="printOrderDetail()">인쇄 / PDF 저장</button></span>
         </div>
         <p class="desc" id="order-detail-title"></p>
         <div id="bulk-arrival-box" class="no-print" style="display:none;border:1px solid var(--navy);background:#f4f7fb;padding:12px 14px;margin-bottom:12px;">
@@ -10374,6 +10377,101 @@
       + '<b>다름</b>인 재고는 잘못 붙은 것입니다. 데이터 점검의 <b>「일련번호로 주문↔재고 맞추기」</b>로 정리하세요.<br>'
       + '<b>도착 수와 재고 수가 다른 품목</b>은 데이터 점검의 <b>「도착 수가 재고와 다른 주문」</b>에서 맞출 수 있습니다.</div>'
       + '</div>';
+  };
+
+  // 이 주문의 여신 차감액이 어떻게 나온 값인지 품목별로 펼쳐 보여줍니다.
+  //  원장 금액과 다르면 그 자리에서 원장을 주문 기준으로 맞출 수 있습니다.
+  window.showOrderCreditCalc = async function(){
+    const box = document.getElementById("order-detail-pending");
+    if(!box || !currentPoBatch) return;
+    const { batchId, b } = currentPoBatch;
+    const lines = (currentPoBatch.lines || []).filter(o=> o.status !== "취소");
+    box.innerHTML = '<div style="color:var(--gray);font-size:12.5px;">여신 기록을 읽는 중입니다...</div>';
+
+    let ledSum = 0, ledCnt = 0;
+    try{
+      const led = await getDocs(query(collection(db,"b2bLedger"), where("fromOrderBatchId","==", batchId)));
+      led.forEach(d=>{ ledSum += (Number(d.data().amount)||0); ledCnt++; });
+    }catch(e){}
+
+    const want = creditFromLines(b.source, lines);
+    const isCredit = (b.paymentMethod === "b2b_credit" && b.status !== "취소");
+
+    let listSum = 0, preSum = 0, useSum = 0;
+    const rowsHtml = lines.map(o=>{
+      const q = Number(o.quantity)||0;
+      const L = Number(o.listPrice)||0;
+      const pre = Number(o.preDiscountAmt)||0;
+      const unit = L ? (L - pre) : ((Number(o.purchasePrice)||0) + (Number(o.otherDiscountAmt)||0));
+      listSum += L * q; preSum += pre * q; useSum += unit * q;
+      return '<tr><td style="white-space:nowrap;">' + comboEsc(docModelLabel(o)) + '</td>'
+        + '<td style="white-space:nowrap;">' + comboEsc(o.systemColor || o.manufacturerColor || "-") + '</td>'
+        + '<td>' + comboEsc(o.carrier||"-") + '</td>'
+        + '<td class="ta-right">' + q + '</td>'
+        + '<td class="ta-right">' + (L ? L.toLocaleString() : "-") + '</td>'
+        + '<td class="ta-right">' + (pre ? pre.toLocaleString() : "-") + '</td>'
+        + '<td class="ta-right">' + (unit ? unit.toLocaleString() : "-") + '</td>'
+        + '<td class="ta-right" style="font-weight:700;">' + Math.round(unit*q).toLocaleString() + '</td></tr>';
+    }).join("");
+
+    const gap = want - ledSum;
+    box.innerHTML = '<div style="border:1px solid var(--navy);padding:9px 11px;margin-bottom:8px;">'
+      + '<div style="font-weight:700;margin-bottom:6px;">여신 계산 보기 — ' + comboEsc(b.source||"-")
+      + ' · ' + comboEsc(b.orderDate||"-") + ' · ' + (isCredit ? "삼성 여신결제" : "일반결제") + '</div>'
+      + (isCredit
+          ? ((gap === 0 && ledCnt <= 1)
+              ? '<div style="border:1px solid #2e7d32;background:#f4faf4;color:#2e7d32;padding:6px 9px;margin-bottom:8px;font-size:12.5px;">'
+                + '주문과 여신 원장이 일치합니다. (' + want.toLocaleString() + ')</div>'
+              : '<div style="border:1px solid var(--danger);background:#fdecea;padding:7px 9px;margin-bottom:8px;font-size:12.5px;line-height:1.8;">'
+                + '<b>주문 기준 ' + want.toLocaleString() + ' / 여신 원장 ' + ledSum.toLocaleString()
+                + ' — 차이 ' + (gap>0?"+":"") + gap.toLocaleString() + '</b>'
+                + (ledCnt > 1 ? '<br>원장에 이 주문 기록이 ' + ledCnt + '건 있습니다. 하나로 정리됩니다.' : '')
+                + '<br><button class="btn small" style="width:auto;margin-top:6px;" onclick="fixOrderCreditCalc()">여신 원장을 주문 기준으로 맞추기</button>'
+                + '</div>')
+          : '<div style="color:var(--gray);font-size:12.5px;margin-bottom:8px;">여신결제 주문이 아닙니다.</div>')
+      + '<table class="data-table" style="width:auto;"><thead><tr>'
+      + '<th>모델</th><th>색상</th><th>통신사</th><th class="ta-right">수량</th>'
+      + '<th class="ta-right">출고가</th><th class="ta-right">선할인</th>'
+      + '<th class="ta-right">대당 여신</th><th class="ta-right">여신 금액</th>'
+      + '</tr></thead><tbody>' + rowsHtml
+      + '<tr style="background:#fff;font-weight:700;border-top:2px solid var(--navy);">'
+      + '<td colspan="3">합계 (' + lines.length + '품목)</td>'
+      + '<td class="ta-right">' + lines.reduce((n,o)=> n + (Number(o.quantity)||0), 0) + '</td>'
+      + '<td class="ta-right">' + Math.round(listSum).toLocaleString() + '</td>'
+      + '<td class="ta-right">' + Math.round(preSum).toLocaleString() + '</td>'
+      + '<td></td><td class="ta-right">' + Math.round(useSum).toLocaleString() + '</td></tr>'
+      + '</tbody></table>'
+      + '<div style="font-size:11.5px;color:var(--gray);margin-top:6px;line-height:1.7;">'
+      + '<b>대당 여신</b> = 출고가 − 선할인. <b>여신 금액</b> = 대당 여신 × 수량.<br>'
+      + '매입처의 「할인 계산 기준」이 합계·공급가면 마지막에 한 번 더 맞춰 계산합니다 — 그 결과가 <b>주문 기준 '
+      + want.toLocaleString() + '</b> 입니다.</div>'
+      + '</div>';
+  };
+
+  // 여신 원장을 주문 기준 금액으로 맞춥니다.
+  window.fixOrderCreditCalc = async function(){
+    if(!currentPoBatch) return;
+    const { batchId, b } = currentPoBatch;
+    const lines = (currentPoBatch.lines || []).filter(o=> o.status !== "취소");
+    const want = creditFromLines(b.source, lines);
+    let ledSum = 0;
+    try{
+      const led = await getDocs(query(collection(db,"b2bLedger"), where("fromOrderBatchId","==", batchId)));
+      led.forEach(d=>{ ledSum += (Number(d.data().amount)||0); });
+    }catch(e){}
+    if(!confirm("여신 원장을 주문 기준으로 맞춥니다.\n\n"
+      + "  지금 원장 " + ledSum.toLocaleString() + "\n"
+      + "  주문 기준 " + want.toLocaleString() + "\n"
+      + "  차이 " + (want-ledSum > 0 ? "+" : "") + (want-ledSum).toLocaleString()
+      + "\n\n진행할까요?")) return;
+    try{
+      await replaceB2BOrderUse(batchId, want, b.depositPaidDate || b.orderDate || todayStr(), b.source || "-");
+    }catch(e){ alert("맞추지 못했습니다.\n" + ((e&&e.message)?e.message:String(e))); return; }
+    logAction("여신 차감액 주문 기준으로 맞춤", (b.source||"-") + " " + (b.orderDate||"-")
+      + " / " + ledSum.toLocaleString() + "→" + want.toLocaleString());
+    alert("맞췄습니다.\n\n  " + ledSum.toLocaleString() + " → " + want.toLocaleString());
+    clearCache("orders"); clearDashCache();
+    showOrderCreditCalc();
   };
 
   // 고른 재고를 주문에서 뗍니다. 재고는 지우지 않고 연결만 끊습니다.
@@ -35821,7 +35919,8 @@
       listEl.prepend(renderPaginationBar("logs", allDocs.length, loadLogs));
     }catch(err){ listEl.innerHTML = '<div class="list-empty">이력을 불러오지 못했습니다: '+err.message+'</div>'; }
   
-    addDownloadBtn("dl-logs", "log-list", "이력"); addViewCfgBtn("dl-logs", "log-list");
+    // 이력은 위쪽 「엑셀다운」(downloadLogsExcel) 하나만 씁니다.
+    //  예전 공용 다운로드는 화면에 그려진 표만 담겨서 헷갈리므로 뺐습니다.
   }
   window.toggleAllLogs = function(masterCb){
     document.querySelectorAll(".log-check").forEach(cb=> cb.checked = masterCb.checked);
