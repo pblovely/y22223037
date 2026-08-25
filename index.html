@@ -387,7 +387,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v677</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v678</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -3461,8 +3461,11 @@
             </span>
           </div>
           <div class="stack-row"><label>요청일</label><input type="text" id="resv-paste-date-input" placeholder="예: 20260726" maxlength="8" inputmode="numeric"></div>
-          <div class="stack-row resv-paste-buy-only"><label>선할인% <span class="info-tip" title="붙여넣은 모든 줄에 똑같이 넣습니다. 줄마다 출고가 × 수량으로 금액을 계산해 저장하므로 건별 등록과 결과가 같습니다.">ⓘ</span></label><input type="number" step="0.01" id="resv-paste-prepct" placeholder="예: 0.20"></div>
-          <div class="stack-row resv-paste-buy-only"><label>타할인%</label><input type="number" step="0.01" id="resv-paste-otherpct" placeholder="예: 2.14"></div>
+          <div class="stack-row resv-paste-buy-only"><label>선할인 <span class="info-tip" title="대당 금액입니다. 금액을 넣으면 %가, %를 넣으면 금액이 자동으로 채워집니다. 줄마다 출고가가 다르면 %만 쓰세요.">ⓘ</span></label><input type="number" id="resv-paste-preamt" placeholder="대당 금액 (예: 5062)" oninput="onResvPasteDisc('pre','amt')"></div>
+          <div class="stack-row resv-paste-buy-only"><label>선할인%</label><input type="number" step="0.01" id="resv-paste-prepct" placeholder="예: 0.20" oninput="onResvPasteDisc('pre','pct')"></div>
+          <div class="stack-row resv-paste-buy-only"><label>타할인</label><input type="number" id="resv-paste-otheramt" placeholder="대당 금액 (예: 54166)" oninput="onResvPasteDisc('other','amt')"></div>
+          <div class="stack-row resv-paste-buy-only"><label>타할인%</label><input type="number" step="0.01" id="resv-paste-otherpct" placeholder="예: 2.14" oninput="onResvPasteDisc('other','pct')"></div>
+          <div class="stack-row resv-paste-buy-only"><label></label><span id="resv-paste-disc-note" style="font-size:11.5px;color:var(--navy);padding:5px 2px;"></span></div>
         </div>
         <textarea id="resv-paste-text" rows="8" style="width:100%;border:1px solid #c7c7c7;padding:8px;font-size:12.5px;font-family:inherit;box-sizing:border-box;" placeholder="더퓨처랩&#9;SM-F976N512&#9;그레이&#9;5&#9;2500000&#10;태화&#9;SM-F776N256&#9;&#9;3&#9;"></textarea>
         <button class="btn small" style="width:auto;margin-top:10px;" onclick="analyzeResvPaste()">검증</button>
@@ -22114,7 +22117,8 @@
 
   // ================= 예약 일괄등록 (엑셀 / 텍스트) =================
   const RESV_TEMPLATE_HEADERS = ["요청일","거래처","전산모델명","색상","예약수량","판매가"];
-  let resvPendingRows = [];   // 검증을 통과한 등록 대기 목록
+  let resvPendingRows = [];
+  let resvPasteFixedAmt = { pre:null, other:null };   // 붙여넣기 창에서 금액만 넣으셨을 때 씁니다 (대당 금액)   // 검증을 통과한 등록 대기 목록
 
   window.openResvExcelModal = function(){
     document.getElementById("resv-excel-file-input").value = "";
@@ -22124,6 +22128,44 @@
   };
   window.closeResvExcelModal = function(){ document.getElementById("resv-excel-modal-overlay").style.display = "none"; };
   // 붙여넣기 창 안에서 구분을 바꿉니다. 바꾸면 거래처 목록·할인칸·안내문이 함께 바뀝니다.
+  // 붙여넣기 창의 선할인·타할인 — 금액을 넣으면 %가, %를 넣으면 금액이 채워집니다.
+  //  붙여넣은 줄들의 출고가가 모두 같을 때만 환산합니다. (다르면 %만 쓰시는 게 맞습니다)
+  window.onResvPasteDisc = function(which, from){
+    const amtEl = document.getElementById("resv-paste-" + which + "amt");
+    const pctEl = document.getElementById("resv-paste-" + which + "pct");
+    const note  = document.getElementById("resv-paste-disc-note");
+    if(!amtEl || !pctEl) return;
+
+    // 붙여넣은 글에서 전산모델명을 찾아 출고가를 모읍니다.
+    const text = String((document.getElementById("resv-paste-text")||{}).value || "");
+    const prices = [];
+    text.split(/\r?\n/).map(x=>x.trim()).filter(Boolean).forEach(line=>{
+      let c = line.split(/\t|,/).map(x=>x.trim()).filter(Boolean);
+      if(c.length < 2) c = line.split(/\s{2,}/).map(x=>x.trim()).filter(Boolean);
+      if(c.length < 2) c = line.split(/\s+/).map(x=>x.trim()).filter(Boolean);
+      const key = modelDupKey(c[1] || "");
+      const m = (modelsCache||[]).find(x=> modelDupKey(x.systemModel||"") === key);
+      const p = m ? (Number(m.priceIncVat)||0) : 0;
+      if(p > 0) prices.push(p);
+    });
+    const same = prices.length > 0 && prices.every(v=> v === prices[0]);
+    if(!same){
+      if(note) note.textContent = prices.length
+        ? "줄마다 출고가가 달라 금액↔% 환산을 못 합니다. %로 넣으시면 줄마다 알맞게 계산됩니다."
+        : "모델을 알아본 뒤 환산해 드립니다. 먼저 붙여넣어 주세요.";
+      return;
+    }
+    const L = prices[0];
+    if(note) note.textContent = "출고가 " + L.toLocaleString() + " 기준 (대당)";
+    if(from === "amt"){
+      const a = amtEl.value;
+      pctEl.value = (a === "" || !(Number(a) > 0)) ? "" : Number(((Number(a) / L) * 100).toFixed(2));
+    }else{
+      const p = pctEl.value;
+      amtEl.value = (p === "" || !(Number(p) > 0)) ? "" : Math.round(L * Number(p) / 100);
+    }
+  };
+
   window.setResvPasteKind = function(k){
     resvKind = k;
     ["sale","buy"].forEach(x=>{
@@ -22152,7 +22194,7 @@
     document.getElementById("resv-paste-text").value = "";
     document.getElementById("resv-paste-result").innerHTML = "";
     document.getElementById("resv-paste-date-input").value = todayStr();
-    ["resv-paste-prepct","resv-paste-otherpct"].forEach(id=>{
+    ["resv-paste-prepct","resv-paste-otherpct","resv-paste-preamt","resv-paste-otheramt"].forEach(id=>{
       const el = document.getElementById(id); if(el) el.value = "";
     });
     // 목록에서 「구매」·「판매」를 보고 계셨으면 그 구분으로 열어드립니다.
@@ -22215,10 +22257,16 @@
       kind: resvKind, carrier: resvCarrier,
       // 선할인·타할인 — %만 받아 줄마다 (출고가 × 수량) 으로 금액을 계산합니다.
       //  건별 등록과 저장 형태·계산식을 똑같이 맞춥니다.
-      preDiscountPct:   (raw.prePct   != null) ? raw.prePct   : null,
-      preDiscountAmt:   (raw.prePct   != null) ? Math.round((model.priceIncVat||0) * qty * raw.prePct   / 100) : null,
-      otherDiscountPct: (raw.otherPct != null) ? raw.otherPct : null,
-      otherDiscountAmt: (raw.otherPct != null) ? Math.round((model.priceIncVat||0) * qty * raw.otherPct / 100) : null
+      preDiscountPct:   (raw.prePct   != null) ? raw.prePct
+                        : ((resvPasteFixedAmt && resvPasteFixedAmt.pre && (model.priceIncVat||0))
+                            ? Number(((resvPasteFixedAmt.pre / model.priceIncVat) * 100).toFixed(2)) : null),
+      preDiscountAmt:   (raw.prePct   != null) ? Math.round((model.priceIncVat||0) * qty * raw.prePct   / 100)
+                        : ((resvPasteFixedAmt && resvPasteFixedAmt.pre) ? resvPasteFixedAmt.pre * qty : null),
+      otherDiscountPct: (raw.otherPct != null) ? raw.otherPct
+                        : ((resvPasteFixedAmt && resvPasteFixedAmt.other && (model.priceIncVat||0))
+                            ? Number(((resvPasteFixedAmt.other / model.priceIncVat) * 100).toFixed(2)) : null),
+      otherDiscountAmt: (raw.otherPct != null) ? Math.round((model.priceIncVat||0) * qty * raw.otherPct / 100)
+                        : ((resvPasteFixedAmt && resvPasteFixedAmt.other) ? resvPasteFixedAmt.other * qty : null)
     }};
   }
 
@@ -22302,8 +22350,13 @@
     // 구매 예약이면 매입처, 판매 예약이면 판매처 목록으로 맞춰봅니다.
     const destNames = await fetchNamesList(resvKind === "buy" ? "inboundSources" : "outboundDestinations");
     // 선할인·타할인은 모든 줄에 똑같이 넣습니다. (구매 예약에서만)
-    const prePctRaw   = String((document.getElementById("resv-paste-prepct")||{}).value || "").trim();
-    const otherPctRaw = String((document.getElementById("resv-paste-otherpct")||{}).value || "").trim();
+    let prePctRaw   = String((document.getElementById("resv-paste-prepct")||{}).value || "").trim();
+    let otherPctRaw = String((document.getElementById("resv-paste-otherpct")||{}).value || "").trim();
+    // %는 비우고 금액만 넣으셨으면, 줄마다 출고가로 %를 내어 씁니다.
+    const preAmtRaw   = String((document.getElementById("resv-paste-preamt")||{}).value || "").trim();
+    const otherAmtRaw = String((document.getElementById("resv-paste-otheramt")||{}).value || "").trim();
+    resvPasteFixedAmt = { pre: (prePctRaw === "" && preAmtRaw !== "") ? Number(preAmtRaw) : null,
+                          other: (otherPctRaw === "" && otherAmtRaw !== "") ? Number(otherAmtRaw) : null };
     const buyDisc = (resvKind === "buy")
       ? { prePct: prePctRaw === "" ? null : Number(Number(prePctRaw).toFixed(2)),
           otherPct: otherPctRaw === "" ? null : Number(Number(otherPctRaw).toFixed(2)) }
