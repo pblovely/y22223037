@@ -387,7 +387,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v678</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v679</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -3461,11 +3461,7 @@
             </span>
           </div>
           <div class="stack-row"><label>요청일</label><input type="text" id="resv-paste-date-input" placeholder="예: 20260726" maxlength="8" inputmode="numeric"></div>
-          <div class="stack-row resv-paste-buy-only"><label>선할인 <span class="info-tip" title="대당 금액입니다. 금액을 넣으면 %가, %를 넣으면 금액이 자동으로 채워집니다. 줄마다 출고가가 다르면 %만 쓰세요.">ⓘ</span></label><input type="number" id="resv-paste-preamt" placeholder="대당 금액 (예: 5062)" oninput="onResvPasteDisc('pre','amt')"></div>
-          <div class="stack-row resv-paste-buy-only"><label>선할인%</label><input type="number" step="0.01" id="resv-paste-prepct" placeholder="예: 0.20" oninput="onResvPasteDisc('pre','pct')"></div>
-          <div class="stack-row resv-paste-buy-only"><label>타할인</label><input type="number" id="resv-paste-otheramt" placeholder="대당 금액 (예: 54166)" oninput="onResvPasteDisc('other','amt')"></div>
-          <div class="stack-row resv-paste-buy-only"><label>타할인%</label><input type="number" step="0.01" id="resv-paste-otherpct" placeholder="예: 2.14" oninput="onResvPasteDisc('other','pct')"></div>
-          <div class="stack-row resv-paste-buy-only"><label></label><span id="resv-paste-disc-note" style="font-size:11.5px;color:var(--navy);padding:5px 2px;"></span></div>
+          <div class="stack-row"><label>거래처 <span class="info-tip" title="붙여넣은 줄에 거래처를 안 적었으면 여기서 고른 곳으로 넣습니다. 줄 맨 앞에 거래처를 적으셨으면 그 값이 우선합니다.">ⓘ</span></label><select id="resv-paste-dest"><option value="">(줄에 적은 대로)</option></select></div>
         </div>
         <textarea id="resv-paste-text" rows="8" style="width:100%;border:1px solid #c7c7c7;padding:8px;font-size:12.5px;font-family:inherit;box-sizing:border-box;" placeholder="더퓨처랩&#9;SM-F976N512&#9;그레이&#9;5&#9;2500000&#10;태화&#9;SM-F776N256&#9;&#9;3&#9;"></textarea>
         <button class="btn small" style="width:auto;margin-top:10px;" onclick="analyzeResvPaste()">검증</button>
@@ -22118,7 +22114,8 @@
   // ================= 예약 일괄등록 (엑셀 / 텍스트) =================
   const RESV_TEMPLATE_HEADERS = ["요청일","거래처","전산모델명","색상","예약수량","판매가"];
   let resvPendingRows = [];
-  let resvPasteFixedAmt = { pre:null, other:null };   // 붙여넣기 창에서 금액만 넣으셨을 때 씁니다 (대당 금액)   // 검증을 통과한 등록 대기 목록
+  let resvPasteFixedAmt = { pre:null, other:null };   // 붙여넣기 창에서 금액만 넣으셨을 때 씁니다 (대당 금액)
+  let resvPasteKeepDisc = { preAmt:"", prePct:"", otherAmt:"", otherPct:"" };   // 다시 그릴 때 되살릴 값   // 검증을 통과한 등록 대기 목록
 
   window.openResvExcelModal = function(){
     document.getElementById("resv-excel-file-input").value = "";
@@ -22166,8 +22163,21 @@
     }
   };
 
+  //  거래처 목록을 구분에 맞게 채웁니다. (구매면 매입처, 판매면 판매처)
+  async function fillResvPasteDest(){
+    const sel = document.getElementById("resv-paste-dest");
+    if(!sel) return;
+    const cur = sel.value;
+    let names = [];
+    try{ names = await fetchNamesList(resvKind === "buy" ? "inboundSources" : "outboundDestinations"); }catch(e){}
+    sel.innerHTML = '<option value="">(줄에 적은 대로)</option>'
+      + names.map(n=> '<option value="' + comboEsc(n) + '">' + comboEsc(n) + '</option>').join("");
+    if(cur && names.indexOf(cur) >= 0) sel.value = cur;
+  }
+
   window.setResvPasteKind = function(k){
     resvKind = k;
+    fillResvPasteDest();
     ["sale","buy"].forEach(x=>{
       const b = document.getElementById("rp-kind-"+x);
       if(b) b.className = "btn small" + (x===k ? "" : " secondary");
@@ -22275,6 +22285,14 @@
     const ok = results.filter(r=>r.ok);
     const bad = results.filter(r=>!r.ok);
     resvPendingRows = ok.map(r=>r.data);
+    // 다시 그린 칸에 방금 넣으신 값을 되살립니다.
+    setTimeout(()=>{
+      const K = resvPasteKeepDisc || {};
+      const put = (id, v)=>{ const el = document.getElementById(id); if(el && v !== "" && v != null) el.value = v; };
+      put("resv-paste-preamt", K.preAmt); put("resv-paste-prepct", K.prePct);
+      put("resv-paste-otheramt", K.otherAmt); put("resv-paste-otherpct", K.otherPct);
+      if(typeof window.onResvPasteDisc === "function") window.onResvPasteDisc("pre", K.prePct !== "" ? "pct" : "amt");
+    }, 0);
     let html = '<div style="font-weight:700;margin-bottom:8px;">검증 결과 — 정상 '+ok.length+'건 / 오류 '+bad.length+'건</div>';
     if(bad.length){
       html += '<div style="border:1px solid var(--danger);background:#fdecea;padding:8px 10px;margin-bottom:10px;max-height:180px;overflow-y:auto;">'
@@ -22307,7 +22325,18 @@
               + '</tr>';
           }).join("")
         + '</tbody></table></div>'
-        + (isBuy ? '<div style="color:var(--gray);font-size:11.5px;margin-bottom:8px;line-height:1.7;">'
+        + (isBuy ? '<div style="border:1px solid var(--navy);background:#f4f7fb;padding:9px 11px;margin-bottom:10px;">'
+            + '<b>선할인 · 타할인 넣기</b> <span style="color:var(--gray);font-size:11.5px;">모델을 알아봤으니 이제 넣으시면 됩니다. 금액↔% 는 서로 자동으로 채워집니다.</span>'
+            + '<div style="display:flex;gap:0;flex-wrap:wrap;align-items:center;margin-top:6px;">'
+            + '<input type="number" id="resv-paste-preamt" placeholder="선할인 (대당)" oninput="onResvPasteDisc(\'pre\',\'amt\')" style="width:120px;height:28px;border:1px solid var(--line);padding:0 6px;font-size:12.5px;box-sizing:border-box;">'
+            + '<input type="number" step="0.01" id="resv-paste-prepct" placeholder="선할인%" oninput="onResvPasteDisc(\'pre\',\'pct\')" style="width:95px;height:28px;border:1px solid var(--line);padding:0 6px;font-size:12.5px;margin-left:-1px;box-sizing:border-box;">'
+            + '<input type="number" id="resv-paste-otheramt" placeholder="타할인 (대당)" oninput="onResvPasteDisc(\'other\',\'amt\')" style="width:120px;height:28px;border:1px solid var(--line);padding:0 6px;font-size:12.5px;margin-left:-1px;box-sizing:border-box;">'
+            + '<input type="number" step="0.01" id="resv-paste-otherpct" placeholder="타할인%" oninput="onResvPasteDisc(\'other\',\'pct\')" style="width:95px;height:28px;border:1px solid var(--line);padding:0 6px;font-size:12.5px;margin-left:-1px;box-sizing:border-box;">'
+            + '<button class="btn small secondary" style="width:auto;margin-left:6px;" onclick="analyzeResvPaste()">다시 계산</button>'
+            + '</div>'
+            + '<div id="resv-paste-disc-note" style="font-size:11.5px;color:var(--navy);margin-top:5px;"></div>'
+            + '</div>'
+            + '<div style="color:var(--gray);font-size:11.5px;margin-bottom:8px;line-height:1.7;">'
             + '<b>선할인·타할인</b> — 줄마다 (출고가 × 수량 × %) 로 계산한 금액입니다. 건별 등록과 같은 값입니다.<br>'
             + '<b>입고가</b> — 출고가 합계에서 선할인을 뺀 금액입니다. (타할인은 나중에 여신으로 반영)</div>' : '')
         + '<button class="btn small" style="width:auto;" onclick="submitResvBulk()">정상 '+ok.length+'건 일괄 등록</button>';
@@ -22350,11 +22379,19 @@
     // 구매 예약이면 매입처, 판매 예약이면 판매처 목록으로 맞춰봅니다.
     const destNames = await fetchNamesList(resvKind === "buy" ? "inboundSources" : "outboundDestinations");
     // 선할인·타할인은 모든 줄에 똑같이 넣습니다. (구매 예약에서만)
-    let prePctRaw   = String((document.getElementById("resv-paste-prepct")||{}).value || "").trim();
-    let otherPctRaw = String((document.getElementById("resv-paste-otherpct")||{}).value || "").trim();
+    // 검증 결과를 다시 그리면 칸이 새로 만들어지므로, 넣으신 값을 담아뒀다가 되살립니다.
+    const keepDisc = {
+      preAmt:   String((document.getElementById("resv-paste-preamt")||{}).value || "").trim(),
+      prePct:   String((document.getElementById("resv-paste-prepct")||{}).value || "").trim(),
+      otherAmt: String((document.getElementById("resv-paste-otheramt")||{}).value || "").trim(),
+      otherPct: String((document.getElementById("resv-paste-otherpct")||{}).value || "").trim()
+    };
+    resvPasteKeepDisc = keepDisc;
+    let prePctRaw   = keepDisc.prePct;
+    let otherPctRaw = keepDisc.otherPct;
     // %는 비우고 금액만 넣으셨으면, 줄마다 출고가로 %를 내어 씁니다.
-    const preAmtRaw   = String((document.getElementById("resv-paste-preamt")||{}).value || "").trim();
-    const otherAmtRaw = String((document.getElementById("resv-paste-otheramt")||{}).value || "").trim();
+    const preAmtRaw   = keepDisc.preAmt;
+    const otherAmtRaw = keepDisc.otherAmt;
     resvPasteFixedAmt = { pre: (prePctRaw === "" && preAmtRaw !== "") ? Number(preAmtRaw) : null,
                           other: (otherPctRaw === "" && otherAmtRaw !== "") ? Number(otherAmtRaw) : null };
     const buyDisc = (resvKind === "buy")
@@ -22366,6 +22403,9 @@
       let c = line.split(/\t|,/).map(x=>x.trim()).filter(x=> x !== "");
       if(c.length < 2) c = line.split(/\s{2,}/).map(x=>x.trim()).filter(x=> x !== "");
       if(c.length < 2) c = line.split(/\s+/).map(x=>x.trim()).filter(x=> x !== "");
+      // 줄 맨 앞이 등록된 거래처가 아니면, 위에서 고른 거래처를 앞에 붙입니다.
+      const pickDest = String((document.getElementById("resv-paste-dest")||{}).value || "").trim();
+      if(pickDest && c.length && destNames.indexOf(c[0]) < 0) c = [pickDest].concat(c);
       return validateResvRow({
         requestDate: baseDate, destination: c[0], systemModel: c[1],
         color: c[2], qty: c[3], salePrice: c[4],
