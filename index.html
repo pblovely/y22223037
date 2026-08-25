@@ -387,7 +387,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v676</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v677</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -702,6 +702,7 @@
           <h3 style="margin:0;">예약 목록 <span class="info-tip" title="등록한 예약을 한 줄씩 보여줍니다. 수정·삭제·배정을 여기서 하세요.">ⓘ</span></h3>
           <span class="btn-row" style="display:inline-flex;align-items:center;">
           <button class="btn small secondary" style="width:auto;" onclick="openResvBulkAlloc()">일괄매칭</button>
+          <button class="btn small secondary" style="width:auto;" onclick="resvSelectedToPo()" title="체크한 구매 예약으로 삼성전자 발주서를 만듭니다. 주문 등록 없이도 바로 뽑을 수 있습니다.">삼성전자 발주서</button>
           <button class="btn small secondary" style="width:auto;" onclick="resvSelectedToOrder()" title="체크한 구매 예약을 한 주문으로 묶어 주문 등록창에 채웁니다.">선택 주문으로</button>
           <button class="btn small secondary" style="width:auto;" onclick="createQuotationFromSelected()">견적서</button>
           <button class="btn small secondary" style="width:auto;" onclick="toggleQuotationList()">견적서 조회</button>
@@ -22482,6 +22483,50 @@
   };
 
   // 체크한 예약을 하나의 견적서로 만듭니다. (같은 거래처만)
+  // 체크한 구매 예약으로 삼성전자 발주서를 만듭니다.
+  //  주문으로 넘기기 전에도 발주서를 먼저 보내실 수 있게, 주문과 같은 양식으로 뽑습니다.
+  window.resvSelectedToPo = async function(){
+    const checked = Array.from(document.querySelectorAll(".resv-row-cb:checked"));
+    if(checked.length === 0){ alert("발주서에 담을 예약을 먼저 체크해주세요."); return; }
+
+    const picked = [];
+    for(const c of checked){
+      const sn = await getDoc(doc(db,"reservations", c.dataset.id));
+      if(!sn.exists()) continue;
+      const r = { id:c.dataset.id, ...sn.data() };
+      if(r.kind !== "buy"){ alert("구매 예약만 발주서를 만들 수 있습니다.\n판매 예약이 섞여 있습니다."); return; }
+      const remain = Math.max(0, (Number(r.orderedQty)||0) - (Number(r.allocatedQty)||0));
+      if(remain <= 0) continue;
+      picked.push({ r, remain });
+    }
+    if(picked.length === 0){ alert("남은 수량이 있는 구매 예약이 없습니다."); return; }
+
+    const sources = [...new Set(picked.map(x=> String(x.r.destination||"").trim()))];
+    if(sources.length > 1){
+      alert("매입처가 여러 개입니다. 발주서는 매입처 하나씩 만듭니다.\n\n고른 매입처: " + sources.join(", "));
+      return;
+    }
+    // 발주서 만드는 함수가 쓰는 모양으로 품목을 맞춰 담습니다.
+    const lines = picked.map(({ r, remain })=> ({
+      status: "",
+      systemModel: r.systemModel || "",
+      baseModel: r.baseModel || "",
+      petName: r.petName || "",
+      systemColor: r.systemColor || "",
+      manufacturerColor: r.manufacturerColor || "",
+      carrier: r.carrier || "",
+      quantity: remain,
+      listPrice: Number(r.listPrice)||0
+    }));
+    const dates = [...new Set(picked.map(x=> String(x.r.requestDate||"").trim()).filter(Boolean))];
+    orderBatchLinesCache["__resv_po__"] = lines;
+    await openPoSheet("__resv_po__", {
+      orderDate: (dates.length === 1 ? dates[0] : todayStr()),
+      source: sources[0],
+      carrier: (picked[0] && picked[0].r.carrier) || ""
+    });
+  };
+
   // 체크한 구매 예약을 한 주문으로 묶어 주문 등록창에 채웁니다. (등록은 직접 하십니다)
   //  삼성전자 발주서처럼 여러 품목을 한 번에 요청해야 할 때 씁니다.
   window.resvSelectedToOrder = async function(){
