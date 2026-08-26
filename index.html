@@ -387,7 +387,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v686</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v687</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -3275,9 +3275,9 @@
           <div class="stack-row"><label id="resv-dest-label">거래처 (판매처)</label><select id="resv-dest-select"><option value="">선택</option></select></div>
           <div class="stack-row"><label>예약(주문) 수량</label><input type="number" id="resv-order-qty-input" value="1" oninput="onResvBaseChange()"></div>
           <div class="stack-row"><label>출고가 <span class="info-tip" title="모델을 고르면 모델 등록의 출고가(VAT포함)를 자동으로 가져옵니다. 필요하면 직접 고칠 수 있습니다.">ⓘ</span></label><input type="number" id="resv-listprice-input" oninput="onResvListPriceInput();onResvBaseChange();" placeholder="모델을 고르면 자동으로 채워집니다"></div>
-          <div class="stack-row resv-buy-only"><label>선할인 <span class="info-tip" title="매입 시 미리 빼주는 할인입니다. 여신 차감·이체 금액의 기준이 됩니다. 금액이나 %% 중 하나만 넣으면 나머지가 계산됩니다.">ⓘ</span></label><input type="number" id="resv-prediscountamt-input" oninput="onResvBuyDisc('pre','amt')" placeholder="예: 74074"></div>
+          <div class="stack-row resv-buy-only"><label>선할인 <span class="info-tip" title="대당 금액입니다. 금액이나 %% 중 하나만 넣으면 나머지가 계산됩니다. 저장은 수량을 곱한 합계로 담깁니다.">ⓘ</span></label><input type="number" id="resv-prediscountamt-input" oninput="onResvBuyDisc('pre','amt')" placeholder="대당 금액 (예: 5062)"></div>
           <div class="stack-row resv-buy-only"><label>선할인%</label><input type="number" step="0.01" id="resv-prediscountpct-input" oninput="onResvBuyDisc('pre','pct')" placeholder="예: 0.20"></div>
-          <div class="stack-row resv-buy-only"><label>타할인 <span class="info-tip" title="나중에 여신으로 반영되는 할인입니다. 이체 금액에는 빠지지 않습니다.">ⓘ</span></label><input type="number" id="resv-otherdiscountamt-input" oninput="onResvBuyDisc('other','amt')" placeholder="예: 500000"></div>
+          <div class="stack-row resv-buy-only"><label>타할인 <span class="info-tip" title="대당 금액입니다. 나중에 여신으로 반영되는 할인이라 이체 금액에는 빠지지 않습니다.">ⓘ</span></label><input type="number" id="resv-otherdiscountamt-input" oninput="onResvBuyDisc('other','amt')" placeholder="대당 금액 (예: 54166)"></div>
           <div class="stack-row resv-buy-only"><label>타할인%</label><input type="number" step="0.01" id="resv-otherdiscountpct-input" oninput="onResvBuyDisc('other','pct')" placeholder="예: 2.14"></div>
           <div class="stack-row"><label>판매할인 <span class="info-tip" title="정액 또는 %를 넣으면 나머지와 판매가가 자동으로 계산됩니다.">ⓘ</span></label><input type="number" id="resv-salediscountamt-input" oninput="onResvSaleDiscountAmtInput()" placeholder="예: 100000"></div>
           <div class="stack-row"><label>판매할인%</label><input type="number" step="0.01" id="resv-salediscountpct-input" oninput="onResvSaleDiscountPctInput()" placeholder="예: 4.00"></div>
@@ -20730,7 +20730,9 @@
   function resvDiscAmt(which, listPrice, qty){
     const pct = resvNum("resv-" + which + "discountpct-input", 2);
     if(pct != null) return Math.round((Number(listPrice)||0) * (Number(qty)||0) * pct / 100);
-    return resvNum("resv-" + which + "discountamt-input");
+    // 화면에는 대당 금액을 적으시고, 저장은 합계로 담습니다. (예약 자료는 합계 기준입니다)
+    const per = resvNum("resv-" + which + "discountamt-input");
+    return (per == null) ? null : Math.round(per * (Number(qty)||0));
   }
 
   //  칸에 적힌 값을 숫자로 읽습니다. 비어 있으면 null 입니다.
@@ -20757,9 +20759,9 @@
 
   // 선할인·타할인 — 금액이나 %% 중 하나만 넣으면 나머지를 채웁니다. 기준은 출고가 × 수량입니다.
   window.onResvBuyDisc = function(which, from){
+    // 금액 칸은 「대당 금액」입니다. 붙여넣기 등록·주문 등록과 같은 기준입니다.
     const list = Number((document.getElementById("resv-listprice-input")||{}).value) || 0;
-    const qty  = Number((document.getElementById("resv-order-qty-input")||{}).value) || 0;
-    const base = list * qty;
+    const base = list;
     const aEl = document.getElementById("resv-" + which + "discountamt-input");
     const pEl = document.getElementById("resv-" + which + "discountpct-input");
     if(!aEl || !pEl || !(base > 0)) return;
@@ -20796,10 +20798,15 @@
     document.getElementById("resv-prepaid-input").value = r.prepaidAmount || "";
     document.getElementById("resv-prepaid-date-input").value = r.prepaidDate || "";
     document.getElementById("resv-salediscountamt-input").value = r.saleDiscountAmt || "";
-    document.getElementById("resv-prediscountamt-input").value   = r.preDiscountAmt   || "";
-    document.getElementById("resv-prediscountpct-input").value   = r.preDiscountPct   || "";
-    document.getElementById("resv-otherdiscountamt-input").value = r.otherDiscountAmt || "";
-    document.getElementById("resv-otherdiscountpct-input").value = r.otherDiscountPct || "";
+    // 저장은 합계, 화면은 대당입니다. 수량으로 나눠 보여줍니다.
+    {
+      const q0 = Number(r.orderedQty)||0;
+      const per = v=> (v == null || v === "" || !q0) ? "" : Math.round(Number(v) / q0);
+      document.getElementById("resv-prediscountamt-input").value   = per(r.preDiscountAmt);
+      document.getElementById("resv-prediscountpct-input").value   = r.preDiscountPct   || "";
+      document.getElementById("resv-otherdiscountamt-input").value = per(r.otherDiscountAmt);
+      document.getElementById("resv-otherdiscountpct-input").value = r.otherDiscountPct || "";
+    }
     document.getElementById("resv-salediscountpct-input").value = r.saleDiscountPct || "";
     await setResvKind(r.kind === "buy" ? "buy" : "sale");
     setResvCarrier(r.carrier || "LG");
