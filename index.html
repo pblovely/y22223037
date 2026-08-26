@@ -387,7 +387,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v687</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v688</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -13401,15 +13401,26 @@
     }
     if(!(rate > 0)) return unitSum;
 
-    // 공급가 기준 — 삼성전자가 세금계산서를 내는 방식입니다.
-    //   공급가 = 버림( 출고가 합계 ÷ 1.1 × (1 − 할인율) )
-    //   세액   = 버림( 공급가 × 10% )
-    //   합계   = 공급가 + 세액
-    //  계산서 세 장으로 확인했습니다. (202204·202607 정확히 일치)
+    // 공급가 기준 — 삼성전자 B2B(DPS) 주문금액 내역과 같은 방식입니다.
+    //  단말기 「1대」로 먼저 계산하고 마지막에 수량을 곱합니다.
+    //   ① 공급단가       = 반올림( 출고가 ÷ 1.1 )
+    //   ② 여신에누리     = 반올림( 공급단가 × 할인율 )
+    //   ③ 에누리후공급가 = ① − ②
+    //   ④ 부가세         = 반올림( ③ × 10% )
+    //   ⑤ 대당 매입가격  = ③ + ④
+    //   ⑥ 여신 차감액    = ⑤ × 수량
+    //  DPS 화면 7건과 1원도 틀리지 않게 맞췄습니다. (2026-08-26 확인)
     if(c.discountBase === "supply"){
-      const supply = Math.floor(listSum / 1.1 * (1 - rate / 100));
-      const vat = Math.floor(supply * 0.1);
-      return supply + vat;
+      return (lines||[]).reduce((n,l)=>{
+        const L = Number(l.listPrice)||0;
+        const q = Number(l.quantity)||0;
+        if(!L || !q) return n;
+        const supplyUnit = Math.round(L / 1.1);
+        const enuri = Math.round(supplyUnit * rate / 100);
+        const after = supplyUnit - enuri;
+        const vat = Math.round(after * 0.1);
+        return n + (after + vat) * q;
+      }, 0);
     }
     return listSum - Math.round(listSum * rate / 100);
   }
