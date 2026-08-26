@@ -387,7 +387,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v680</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v682</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -22424,7 +22424,29 @@
 
   window.submitResvBulk = async function(){
     if(resvPendingRows.length===0){ alert("등록할 내용이 없습니다."); return; }
-    if(!confirm(resvPendingRows.length+"건을 예약으로 등록하시겠습니까?")) return;
+    // 등록 직전에 할인 칸을 다시 읽어 담습니다. (「다시 계산」을 안 누르셔도 반영되게)
+    {
+      const num = id=>{ const v = String((document.getElementById(id)||{}).value || "").trim();
+        return (v === "" || !isFinite(Number(v))) ? null : Number(v); };
+      const prePct = num("resv-paste-prepct"), preAmt = num("resv-paste-preamt");
+      const othPct = num("resv-paste-otherpct"), othAmt = num("resv-paste-otheramt");
+      resvPendingRows = resvPendingRows.map(d=>{
+        const q = Number(d.orderedQty)||0;
+        const L = Number(d.listPrice)||0;
+        const calc = (pct, amt)=>{
+          if(pct != null && pct > 0) return { pct: pct, amt: Math.round(L * q * pct / 100) };
+          if(amt != null && amt > 0) return { pct: L ? Number(((amt / L) * 100).toFixed(2)) : null, amt: amt * q };
+          return { pct: null, amt: null };
+        };
+        const pre = calc(prePct, preAmt), oth = calc(othPct, othAmt);
+        return { ...d,
+          preDiscountPct: pre.pct, preDiscountAmt: pre.amt,
+          otherDiscountPct: oth.pct, otherDiscountAmt: oth.amt };
+      });
+    }
+    const sumPre = resvPendingRows.reduce((n,d)=> n + (Number(d.preDiscountAmt)||0), 0);
+    if(!confirm(resvPendingRows.length + "건을 예약으로 등록하시겠습니까?"
+      + (sumPre ? "\n\n선할인 합계 " + Math.round(sumPre).toLocaleString() : "\n\n선할인 없음"))) return;
     try{
       for(let i=0; i<resvPendingRows.length; i+=300){
         const batch = writeBatch(db);
@@ -28048,7 +28070,7 @@
       const sale = (r.salePrice==null || r.salePrice==="") ? null : Number(r.salePrice);
       const amount = sale ? sale * ordered : null;
       const quoted = !!r.quotationId;   // 견적서 발행된 예약은 잠깁니다
-      html += '<tr'+(quoted ? ' style="background:#f3f4f8;color:var(--gray);"' : (remain<=0 ? ' style="background:#fff;color:var(--gray);"' : ''))+'>' +
+      html += '<tr data-resv-row="'+r.id+'"'+(quoted ? ' style="background:#f3f4f8;color:var(--gray);"' : (remain<=0 ? ' style="background:#fff;color:var(--gray);"' : ''))+'>' +
         '<td>'+(quoted
           ? '<span title="견적서 발행됨" style="color:var(--navy);">🔒</span>'
           : '<input type="checkbox" class="resv-row-cb" data-id="'+r.id+'" data-dest="'+comboEsc(r.destination||"")+'">')+'</td>' +
@@ -28108,6 +28130,16 @@
     el.prepend(renderPaginationBar("reservations", rows.length, loadReservationList));
     applyCustomTabLabels();   // 저장해 둔 글씨 크기·색상을 표에 다시 적용
     el.querySelectorAll('[data-resv-edit2]').forEach(b=> b.onclick = ()=> editReservation(b.dataset.resvEdit2));
+    // 줄을 두 번 누르면 수정 창이 열립니다. (관리 칸까지 가로로 밀지 않아도 되게)
+    el.querySelectorAll('[data-resv-row]').forEach(tr=>{
+      tr.style.cursor = "pointer";
+      tr.title = "두 번 누르면 수정 창이 열립니다.";
+      tr.ondblclick = (ev)=>{
+        const t = ev.target;
+        if(t && (t.tagName === "INPUT" || t.tagName === "BUTTON" || t.tagName === "A" || t.tagName === "SELECT")) return;
+        editReservation(tr.dataset.resvRow);
+      };
+    });
     el.querySelectorAll('[data-resv-del2]').forEach(b=> b.onclick = ()=> deleteReservation(b.dataset.resvDel2));
     el.querySelectorAll('[data-resv-alloc]').forEach(b=> b.onclick = ()=> adjustReservationAllocation(b.dataset.resvAlloc));
     el.querySelectorAll('[data-resv-quote]').forEach(b=> b.onclick = ()=> openQuotationView(b.dataset.resvQuote));
@@ -30160,6 +30192,38 @@
     // 거래처마다 타할인을 넣은 곳과 안 넣은 곳이 섞여 있습니다.
     //  타할인이 0인데 장려금을 받았다면 「받을 금액」을 셀 기준이 없습니다. 0으로 두지 않고 그 사실을 알려줍니다.
     const noRebateBase = (pendingRebate === 0 && clubIncentiveTotal > 0);
+    // 아직 주문으로 넘기지 않은 구매 예약이 여신에서 얼마나 나갈 예정인지 보여줍니다.
+    //  예약을 고치면 이 값도 그때그때 다시 계산됩니다. (저장해두는 값이 아닙니다)
+    {
+      let resvCredit = 0, resvQty = 0, resvCnt = 0;
+      try{
+        const rs = await getDocs(collection(db,"reservations"));
+        rs.forEach(d=>{
+          const r = d.data();
+          if(r.kind !== "buy") return;
+          if(r.status === "취소") return;
+          const dest = String(r.destination||"").trim();
+          if(creditCos.length && creditCos.indexOf(dest) < 0) return;   // 삼성여신 대상 거래처만
+          if(b2bPartnerPick && dest !== b2bPartnerPick) return;    // 거래처를 고르셨으면 그것만
+          const remain = Math.max(0, (Number(r.orderedQty)||0) - (Number(r.allocatedQty)||0));
+          if(remain <= 0) return;
+          const qty = Number(r.orderedQty)||0;
+          const unitPre = qty ? ((Number(r.preDiscountAmt)||0) / qty) : 0;   // 예약은 합계로 담깁니다
+          resvCredit += creditFromLines(dest, [{
+            listPrice: Number(r.listPrice)||0, quantity: remain,
+            preDiscountAmt: unitPre, preDiscountPct: r.preDiscountPct
+          }]);
+          resvQty += remain; resvCnt++;
+        });
+      }catch(e){}
+      html += statCard("예약 여신 예정액",
+        resvCredit ? Math.round(resvCredit).toLocaleString() : "0",
+        resvCredit ? "#6a1b9a" : "var(--gray)",
+        resvCnt ? ("아직 주문 안 한 구매 예약 " + resvCnt + "건 · " + resvQty.toLocaleString() + "대"
+                   + (b2bPartnerPick ? " · " + comboEsc(b2bPartnerPick) : ""))
+                : "아직 주문 안 한 구매 예약이 없습니다");
+    }
+
     html += statCard("클럽장려금 받을 금액 (3개월 뒤)",
       noRebateBase ? "기준 없음" : (notYet > 0 ? notYet : 0).toLocaleString(),
       noRebateBase ? "var(--gray)" : "#b8860b",
