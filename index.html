@@ -387,7 +387,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v682</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v683</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -22717,10 +22717,13 @@
       if(q) q.value = remain;
       const lp = tr.querySelector(".ol-listprice");
       if(lp && r.listPrice) lp.value = r.listPrice;
+      // 예약은 할인을 「합계 금액」으로 담고, 주문 줄은 「대당 금액」을 씁니다. 나눠서 넣습니다.
       const setIf = (sel, v)=>{ const el = tr.querySelector(sel); if(el && v != null && v !== "") el.value = v; };
-      setIf(".ol-prediscountamt",   r.preDiscountAmt);
+      const qAll = Number(r.orderedQty)||0;
+      const perUnit = v=> (v == null || v === "" || !qAll) ? null : Math.round(Number(v) / qAll);
+      setIf(".ol-prediscountamt",   perUnit(r.preDiscountAmt));
       setIf(".ol-prediscountpct",   r.preDiscountPct);
-      setIf(".ol-otherdiscountamt", r.otherDiscountAmt);
+      setIf(".ol-otherdiscountamt", perUnit(r.otherDiscountAmt));
       setIf(".ol-otherdiscountpct", r.otherDiscountPct);
       tr.dataset.resvId = r.id;
       if(typeof recalcOrderLinePurchasePrice === "function") recalcOrderLinePurchasePrice(tr);
@@ -28200,10 +28203,13 @@
     tr.dataset.resvId = r.id;      // 이 줄이 어느 예약에서 왔는지 남겨둡니다
 
     // 예약에 적어둔 선할인·타할인을 그대로 넣습니다.
+    // 예약은 할인을 「합계 금액」으로 담고, 주문 줄은 「대당 금액」을 씁니다. 나눠서 넣습니다.
     const setIf = (sel, v)=>{ const el = tr.querySelector(sel); if(el && v != null && v !== "") el.value = v; };
-    setIf(".ol-prediscountamt",   r.preDiscountAmt);
+    const qAll2 = Number(r.orderedQty)||0;
+    const perUnit2 = v=> (v == null || v === "" || !qAll2) ? null : Math.round(Number(v) / qAll2);
+    setIf(".ol-prediscountamt",   perUnit2(r.preDiscountAmt));
     setIf(".ol-prediscountpct",   r.preDiscountPct);
-    setIf(".ol-otherdiscountamt", r.otherDiscountAmt);
+    setIf(".ol-otherdiscountamt", perUnit2(r.otherDiscountAmt));
     setIf(".ol-otherdiscountpct", r.otherDiscountPct);
 
     if(typeof recalcOrderLinePurchasePrice === "function") recalcOrderLinePurchasePrice(tr);
