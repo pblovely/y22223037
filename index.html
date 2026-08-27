@@ -387,7 +387,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v700</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v701</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -2700,6 +2700,14 @@
           <span id="dl-loancost"></span>
         </div>
         <div id="lc-move" style="display:none;font-size:12.5px;margin-bottom:8px;"></div>
+        <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:8px;">
+          <input type="text" id="lc-search" placeholder="적요·대출명·대상·은행으로 찾기" style="width:230px;height:28px;border:1px solid var(--line);padding:0 8px;font-size:12.5px;box-sizing:border-box;" onkeydown="if(event.key==='Enter') loadLoanCostList()">
+          <input type="text" id="lc-from" placeholder="시작일 20220101" maxlength="8" inputmode="numeric" style="width:130px;height:28px;border:1px solid var(--line);padding:0 8px;font-size:12.5px;box-sizing:border-box;">
+          <input type="text" id="lc-to" placeholder="종료일 20221231" maxlength="8" inputmode="numeric" style="width:130px;height:28px;border:1px solid var(--line);padding:0 8px;font-size:12.5px;box-sizing:border-box;">
+          <button class="btn small" style="width:auto;" onclick="loadLoanCostList()">조회</button>
+          <button class="btn small secondary" style="width:auto;" onclick="clearLoanCostSearch()">비우기</button>
+          <span id="lc-count" style="font-size:12px;color:var(--gray);"></span>
+        </div>
         <div id="loancost-cards" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px;"></div>
         <div id="loancost-list"></div>
       </div>
@@ -15334,6 +15342,11 @@
 
   // 여신 장부에 잘못 들어간 대출비용을 대출비용 장부로 옮깁니다.
   //  여신 화면에서 사라지고 대출비용에만 남습니다. 금액은 그대로입니다.
+  window.clearLoanCostSearch = function(){
+    ["lc-search","lc-from","lc-to"].forEach(id=>{ const e = document.getElementById(id); if(e) e.value = ""; });
+    loadLoanCostList();
+  };
+
   window.moveLegacyLoanCost = async function(){
     if(!hasPerm(currentUserPerms, "paymentProcess")){ alert("권한이 없습니다."); return; }
     const CATS = ["b2b_fee_payment","b2b_fee_mp","b2b_interest"];
@@ -15420,6 +15433,27 @@
           : "";
       } }
     rows.sort((a,b)=> String(b.date||"").localeCompare(String(a.date||"")));
+
+    // 찾을 말·기간으로 거릅니다. 카드 금액도 걸러진 것만 셉니다.
+    {
+      const q = String((document.getElementById("lc-search")||{}).value || "").trim().toLowerCase();
+      const from = String((document.getElementById("lc-from")||{}).value || "").replace(/\D/g,"");
+      const to   = String((document.getElementById("lc-to")||{}).value || "").replace(/\D/g,"");
+      const before = rows.length;
+      rows = rows.filter(r=>{
+        if(q){
+          const hay = [r.loanCode, r.loanName, r.partner, r.bank, r.memo, CATS[r.category]]
+            .map(v=> String(v||"").toLowerCase()).join(" ");
+          if(hay.indexOf(q) < 0) return false;
+        }
+        const d = String(r.date||"").replace(/\D/g,"");
+        if(from && d && d < from) return false;
+        if(to && d && d > to) return false;
+        return true;
+      });
+      const cEl = document.getElementById("lc-count");
+      if(cEl) cEl.textContent = (q||from||to) ? (rows.length + " / " + before + "건") : (rows.length + "건");
+    }
 
     if(cardEl){
       const sum = k => rows.filter(r=> r.category===k).reduce((n,r)=> n + (Number(r.amount)||0), 0);
