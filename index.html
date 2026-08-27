@@ -387,7 +387,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v711</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v712</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -31663,6 +31663,8 @@
     if(!confirm(msg)) return;
 
     let linkedCount = 0;
+    // 바뀌기 전 값을 모아 이력에 「전 → 후」로 남깁니다. (몇 가지 값이 있었는지도 함께)
+    const beforeSet = {};
     for(const id of ids){
       const it = lastRenderedItems.find(x=>x.id===id);
       const patch = { [key]: parsedVal };
@@ -31675,9 +31677,19 @@
         if(key === "purchasePrice" && it && it.salePrice) patch.profit = Number(it.salePrice) - parsedVal;
         if(key === "salePrice" && it && it.purchasePrice) patch.profit = parsedVal - Number(it.purchasePrice);
       }
+      { const bv = it ? it[key] : null;
+        const bk = (bv == null || bv === "") ? "(없음)" : String(bv);
+        beforeSet[bk] = (beforeSet[bk]||0) + 1; }
       await updateDoc(doc(db,"inventoryItems", id), patch);
     }
-    logAction("재고 일괄 변경", fieldDef.label+" → "+newVal+" ("+ids.length+"건"+(useLink?" / 연동계산 "+linkedCount+"건":" / 연동 없음")+")");
+    // 전 → 후. 바뀌기 전 값이 여러 가지면 많은 것부터 몇 개만 적습니다.
+    const beforeTxt = Object.keys(beforeSet)
+      .sort((a,b)=> beforeSet[b] - beforeSet[a])
+      .slice(0,4)
+      .map(v=> v + (beforeSet[v] > 1 ? "(" + beforeSet[v] + "건)" : ""))
+      .join(", ") + (Object.keys(beforeSet).length > 4 ? " 외" : "");
+    logAction("재고 일괄 변경", fieldDef.label + " " + beforeTxt + " → " + newVal
+      + " (" + ids.length + "건" + (useLink ? " / 연동계산 " + linkedCount + "건" : " / 연동 없음") + ")");
     clearInvSelectAll();
     closeBulkChangeModal();
     loadInventoryList();
