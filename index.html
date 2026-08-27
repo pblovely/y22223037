@@ -387,7 +387,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v749</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v751</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -3627,6 +3627,8 @@
           <div class="stack-row"><label>주문일</label><input type="text" id="item-orderdate-input" placeholder="예: 20260724" maxlength="8" inputmode="numeric"></div>
           <div class="stack-row"><label>입고일</label><input type="text" id="item-indate-input" placeholder="예: 20260724" maxlength="8" inputmode="numeric"></div>
           <div class="stack-row"><label>판매예정일 (선택)</label><input type="text" id="item-expectedsaledate-input" placeholder="예: 20260724" maxlength="8" inputmode="numeric"></div>
+          <div class="stack-row"><label>반품일 (선택) <span class="info-tip" title="삼성전자로 되돌려 보낸 날입니다. 상태를 「반품」으로 두었을 때 씁니다.">ⓘ</span></label><input type="text" id="item-returndate-input" placeholder="예: 20220920" maxlength="8" inputmode="numeric"></div>
+          <div class="stack-row"><label>여신복구일 (선택) <span class="info-tip" title="반품한 뒤 여신이 실제로 되돌아온 날입니다. 여신 거래 내역의 「반품 (여신복구)」 거래일자와 맞추면 됩니다.">ⓘ</span></label><input type="text" id="item-creditreturndate-input" placeholder="예: 20221005" maxlength="8" inputmode="numeric"></div>
           <div class="stack-row"><label>출고일 (선택)</label><input type="text" id="item-outdate-input" placeholder="예: 20260724" maxlength="8" inputmode="numeric"></div>
           <div class="stack-row"><label>개통일 (선택) <span class="info-tip" title="포피플에서 직접 개통한 날입니다. 상태를 개통으로 바꿀 때 함께 적어주세요.">ⓘ</span></label><input type="text" id="item-activatedate-input" placeholder="예: 20260724" maxlength="8" inputmode="numeric"></div>
           <div class="stack-row"><label>입고처</label><select id="item-source-select"><option value="">선택</option></select></div>
@@ -3868,6 +3870,8 @@
     { key:"purchaseDiscount", label:"선할인%", get:it=> discPctFmt(preDiscountPctOf(it)), getRaw:it=> discRaw(preDiscountPctOf(it)) },
     { key:"otherDiscountAmt", label:"타할인", get:it=> discFmt(it.otherDiscountAmt), getRaw:it=> discRaw(it.otherDiscountAmt) },
     // 삼성전자는 공급가(VAT 뺀 금액)에 할인율을 곱합니다. 그 기준으로 환산한 값입니다.
+    { key:"returnDate", label:"반품일", get:it=> it.returnDate || "-", getRaw:it=> it.returnDate || "-" },
+    { key:"creditReturnDate", label:"여신복구일", get:it=> it.creditReturnDate || "-", getRaw:it=> it.creditReturnDate || "-" },
     { key:"samsungPct", label:"삼성기준 할인%",
       get:it=>{
         const L = Number(it.listPrice)||0, buy = Number(it.purchasePrice)||0;
@@ -7446,6 +7450,8 @@
     document.getElementById("item-otherdiscountpct-input").value = it.otherDiscountPct || "";
     updateTotalDiscountDisplay();
     document.getElementById("item-clawback-row").style.display = (it.subsidyStatus==="환수") ? "flex" : "none";
+    { const e = document.getElementById("item-returndate-input"); if(e) e.value = it.returnDate || ""; }
+    { const e = document.getElementById("item-creditreturndate-input"); if(e) e.value = it.creditReturnDate || ""; }
     currentOrderLinkId = it.orderId || null;
     updateProfitDisplay();
 
@@ -7622,6 +7628,8 @@
       subsidyAccrualMonth: subsidyAccrualMonth||null,
       note1: document.getElementById("item-note1-input").value.trim(),
       note2: document.getElementById("item-note2-input").value.trim(),
+      returnDate: (document.getElementById("item-returndate-input")||{}).value || "",
+      creditReturnDate: (document.getElementById("item-creditreturndate-input")||{}).value || "",
       orderId: currentOrderLinkId||null,
       profit, imei, status, orderDate, inDate, expectedSaleDate, outDate, activateDate
     };
@@ -30263,6 +30271,20 @@
       + (v.taxDate ? "  계산서   " + v.taxDate + " · " + won(v.taxAmount) + "\n" : ""));
   };
 
+  //  반품 건의 「여신복구일」을 넣습니다. 여신 장부의 거래일자가 그날로 바뀝니다.
+  window.setReturnCreditDate = async function(id, cur){
+    const v = prompt("여신이 되돌아온 날을 넣어주세요. (8자리)\n\n비우면 지웁니다.", cur || todayStr());
+    if(v == null) return;
+    const d = String(v).replace(/\D/g,"");
+    if(d && d.length !== 8){ alert("8자리로 넣어주세요. (예: 20221005)"); return; }
+    try{
+      await updateDoc(doc(db,"b2bLedger", id), { date: d, creditReturnDate: d });
+    }catch(e){ alert("바꾸지 못했습니다.\n" + ((e&&e.message)?e.message:String(e))); return; }
+    logAction("반품 여신복구일 " + (d ? "입력" : "지움"), (cur||"-") + " → " + (d||"-"));
+    clearCache("loan");
+    loadB2BTab();
+  };
+
   // ---------- 여신 기록에 통장 잇기 ----------
   //  여신 장부에 직접 넣은 선입금·현금담보는 통장 기록이 없습니다.
   //  실제로 통장에서 나간 돈이면 여기서 이어두면 통장 대사도 맞습니다.
@@ -30991,11 +31013,15 @@
           '<td class="ta-right"'+(e.category==="adjust" ? ' style="font-weight:700;color:'+((Number(e.amount)||0)<0?"var(--danger)":"#1565c0")+';"' : '')+'>'
             +((e.category==="adjust" && (Number(e.amount)||0)>0) ? "+" : "")+Number(e.amount).toLocaleString()+'</td>' +
           // 통장에서 나간 기록과 이어져 있으면 여기서 바로 볼 수 있습니다.
-          '<td>' + (e.fromBankDepositId
+        // 반품 건은 통장이 아니라 「여신복구일」을 여기서 넣습니다.
+        '<td>' + (e.category === "return_credit"
+          ? '<button class="btn small secondary" style="width:auto;" title="여신이 실제로 되돌아온 날을 넣습니다" onclick="setReturnCreditDate(\''+e.id+'\',\''+comboEsc(e.date||"")+'\')">'
+            + (e.date ? comboEsc(e.date) : '<span style="color:var(--danger);">복구일 넣기</span>') + '</button>'
+          : (e.fromBankDepositId
               ? '<button class="btn small secondary" style="width:auto;" title="이 여신 충전이 통장에서 어떻게 나갔는지 봅니다" onclick="showLedgerBankInfo(\''+e.fromBankDepositId+'\')">통장 보기</button>'
           : ((!e.noBankLink && (e.category === "deposit" || e.category === "collateral_cash"))
                   ? '<button class="btn small secondary" style="width:auto;color:#8a6d0b;" title="통장에서 나간 기록을 이어둡니다" onclick="openLedgerBankLink(\''+e.id+'\')">통장 잇기</button>'
-                  : '<span style="color:var(--gray);">-</span>')) + '</td>' +
+                  : '<span style="color:var(--gray);">-</span>'))) + '</td>' +
           // 이 주문사용이 어느 세금계산서에 묶였는지 보여줍니다.
           '<td style="white-space:nowrap;">' + (function(){
               const bc = e.fromOrderBatchId ? batchCol[e.fromOrderBatchId] : null;
