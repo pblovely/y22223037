@@ -387,7 +387,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v756</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v760</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -3184,6 +3184,13 @@
           <div class="stack-row"><label>주문일</label><input type="text" id="order-date-input" placeholder="예: 20260724" maxlength="8" inputmode="numeric"></div>
           <div class="stack-row"><label>도착예정일 (선택)</label><input type="text" id="order-expected-date-input" placeholder="예: 20260731" maxlength="8" inputmode="numeric"></div>
           <div class="stack-row"><label>입금예정일 <span class="info-tip" title="이 주문 대금을 언제까지 보내기로 했는지 적어주세요. 출금요청에 그대로 따라갑니다.">ⓘ</span></label><input type="text" id="order-paydue-input" placeholder="예: 20260731" maxlength="8" inputmode="numeric"></div>
+          <div class="stack-row"><label>할인 계산 기준 <span class="info-tip" title="업체정보에 저장해둔 기준이 자동으로 들어옵니다. 이 주문에서만 다르게 하려면 바꾸세요. 저장한 설정은 안 바뀝니다.">ⓘ</span></label>
+            <select id="order-base-select" onchange="onOrderBaseChange()">
+              <option value="unit">대당 (출고가에 걸기)</option>
+              <option value="total">합계 (출고가 합계에 한 번)</option>
+              <option value="supply">공급가 기준 (삼성전자 방식)</option>
+            </select>
+          </div>
           <div class="stack-row"><label>입고처</label><select id="order-source-select" onchange="onOrderSourceChange()"><option value="">선택</option></select></div>
           <div id="order-source-note" style="display:none;font-size:12px;padding:7px 10px;margin:0 0 6px 0;border:1px solid var(--navy);background:#f4f7fb;line-height:1.7;"></div>
           <div class="stack-row"><label>통신사</label><select id="order-carrier-select"></select></div>
@@ -3299,9 +3306,16 @@
           <div class="stack-row"><label>요청일</label><input type="text" id="resv-date-input" placeholder="예: 20260724" maxlength="8" inputmode="numeric"></div>
           <div class="stack-row"><label>모델 (전산모델명)</label><select id="resv-model-select" onchange="onResvModelChange()"><option value="">모델을 선택하세요</option></select></div>
           <div class="stack-row"><label>색상</label><select id="resv-color-select"><option value="">모델을 먼저 선택하세요</option></select></div>
-          <div class="stack-row"><label id="resv-dest-label">거래처 (판매처)</label><select id="resv-dest-select"><option value="">선택</option></select></div>
+          <div class="stack-row"><label id="resv-dest-label">거래처 (판매처)</label><select id="resv-dest-select" onchange="onResvDestChange()"><option value="">선택</option></select></div>
           <div class="stack-row"><label>예약(주문) 수량</label><input type="number" id="resv-order-qty-input" value="1" oninput="onResvBaseChange()"></div>
           <div class="stack-row"><label>출고가 <span class="info-tip" title="모델을 고르면 모델 등록의 출고가(VAT포함)를 자동으로 가져옵니다. 필요하면 직접 고칠 수 있습니다.">ⓘ</span></label><input type="number" id="resv-listprice-input" oninput="onResvListPriceInput();onResvBaseChange();" placeholder="모델을 고르면 자동으로 채워집니다"></div>
+          <div class="stack-row resv-buy-only"><label>할인 계산 기준 <span class="info-tip" title="거래처에 저장해둔 기준이 자동으로 들어옵니다. 이 예약에서만 다르게 하려면 바꾸세요.">ⓘ</span></label>
+            <select id="resv-base-select" onchange="onResvBaseChange()">
+              <option value="unit">대당 (출고가에 걸기)</option>
+              <option value="total">합계 (출고가 합계에 한 번)</option>
+              <option value="supply">공급가 기준 (삼성전자 방식)</option>
+            </select>
+          </div>
           <div class="stack-row resv-buy-only"><label>선할인 <span class="info-tip" title="대당 금액입니다. 금액이나 %% 중 하나만 넣으면 나머지가 계산됩니다. 저장은 수량을 곱한 합계로 담깁니다.">ⓘ</span></label><input type="number" id="resv-prediscountamt-input" oninput="onResvBuyDisc('pre','amt')" placeholder="대당 금액 (예: 5062)"></div>
           <div class="stack-row resv-buy-only"><label>선할인%</label><input type="number" step="0.01" id="resv-prediscountpct-input" oninput="onResvBuyDisc('pre','pct')" placeholder="예: 0.20"></div>
           <div class="stack-row resv-buy-only"><label>타할인 <span class="info-tip" title="대당 금액입니다. 나중에 여신으로 반영되는 할인이라 이체 금액에는 빠지지 않습니다.">ⓘ</span></label><input type="number" id="resv-otherdiscountamt-input" oninput="onResvBuyDisc('other','amt')" placeholder="대당 금액 (예: 54166)"></div>
@@ -3488,6 +3502,13 @@
             </span>
           </div>
           <div class="stack-row"><label>요청일</label><input type="text" id="resv-paste-date-input" placeholder="예: 20260726" maxlength="8" inputmode="numeric"></div>
+          <div class="stack-row resv-paste-buy-only"><label>할인 계산 기준 <span class="info-tip" title="거래처에 저장해둔 기준이 자동으로 들어옵니다. 이 등록에서만 다르게 하려면 바꾸세요.">ⓘ</span></label>
+            <select id="resv-paste-base" onchange="onResvPasteDisc('pre','pct')">
+              <option value="unit">대당 (출고가에 걸기)</option>
+              <option value="total">합계 (출고가 합계에 한 번)</option>
+              <option value="supply">공급가 기준 (삼성전자 방식)</option>
+            </select>
+          </div>
           <div class="stack-row"><label>거래처 <span class="info-tip" title="붙여넣은 줄에 거래처를 안 적었으면 여기서 고른 곳으로 넣습니다. 줄 맨 앞에 거래처를 적으셨으면 그 값이 우선합니다.">ⓘ</span></label><select id="resv-paste-dest"><option value="">(줄에 적은 대로)</option></select></div>
         </div>
         <textarea id="resv-paste-text" rows="8" style="width:100%;border:1px solid #c7c7c7;padding:8px;font-size:12.5px;font-family:inherit;box-sizing:border-box;" placeholder="더퓨처랩&#9;SM-F976N512&#9;그레이&#9;5&#9;2500000&#10;태화&#9;SM-F776N256&#9;&#9;3&#9;"></textarea>
@@ -7211,12 +7232,28 @@
   function pctFromAmt(amtRaw, listPrice){
     if(amtRaw === "" || amtRaw == null) return "";
     if(!listPrice) return "";
-    return ((Number(amtRaw)/listPrice)*100).toFixed(2);
+    const B = discBase(listPrice);
+    return B ? ((Number(amtRaw)/B)*100).toFixed(2) : "";
+  }
+  //  업체정보에 저장한 기준으로 계산 밑금액을 냅니다. (공급가면 VAT 제외)
+  window.baseByCompany = function(companyName, listPrice, override){
+    const L = Number(listPrice)||0;
+    const b = override || (function(){
+      const c = (companiesCache||[]).find(x=> String(x.name||"").trim() === String(companyName||"").trim());
+      return (c && (c.discountBase === "total" || c.discountBase === "supply")) ? c.discountBase : "unit";
+    })();
+    return (b === "supply") ? L/1.1 : L;
+  };
+
+  //  할인 기준이 「공급가」면 VAT를 뺀 금액에 %를 겁니다. (삼성전자 방식)
+  function discBase(listPrice){
+    const b = (currentOrderSourceInfo && currentOrderSourceInfo.base) || "";
+    return (b === "supply") ? (Number(listPrice)||0)/1.1 : (Number(listPrice)||0);
   }
   function amtFromPct(pctRaw, listPrice){
     if(pctRaw === "" || pctRaw == null) return "";
     if(!listPrice) return "";
-    return Math.round(listPrice * Number(pctRaw)/100);
+    return Math.round(discBase(listPrice) * Number(pctRaw)/100);
   }
 
   function updateTotalDiscountDisplay(){
@@ -8363,12 +8400,28 @@
   //  프로그램이 몰래 바꾸지 않습니다. 화면에 알려주고 비어 있는 칸만 채웁니다.
   window.currentOrderSourceInfo = null;
 
+  //  이 주문에서만 기준을 바꿉니다. 업체정보에 저장한 값은 그대로입니다.
+  window.onOrderBaseChange = function(){
+    const v = String((document.getElementById("order-base-select")||{}).value||"unit");
+    if(currentOrderSourceInfo) currentOrderSourceInfo.base = v;
+    // 줄마다 금액을 다시 계산합니다.
+    document.querySelectorAll("#order-lines-body tr").forEach(tr=>{
+      const p = tr.querySelector(".ol-prediscountpct");
+      if(p && String(p.value||"").trim() !== "" && typeof onOrderLinePrePctInput === "function") onOrderLinePrePctInput(tr);
+      const o = tr.querySelector(".ol-otherdiscountpct");
+      if(o && String(o.value||"").trim() !== "" && typeof onOrderLineOtherPctInput === "function") onOrderLineOtherPctInput(tr);
+    });
+    if(typeof recalcOrderTotal === "function") recalcOrderTotal();
+  };
+
   window.onOrderSourceChange = function(){
     const name = String((document.getElementById("order-source-select")||{}).value||"").trim();
     const c = (companiesCache||[]).find(x=> String(x.name||"").trim() === name) || null;
     const rate = c && c.cashRate !== "" && c.cashRate != null ? Number(c.cashRate) : null;
     const base = (c && (c.discountBase === "total" || c.discountBase === "supply")) ? c.discountBase : "unit";
     currentOrderSourceInfo = c ? { name, rate, base } : null;
+    // 업체정보에 저장해둔 기준을 칸에 넣어둡니다. 이 주문에서만 바꾸실 수 있습니다.
+    { const bs = document.getElementById("order-base-select"); if(bs) bs.value = base; }
 
     const el = document.getElementById("order-source-note");
     if(el){
@@ -21410,6 +21463,15 @@
 
   // 수량이나 출고가를 고치면 선할인·타할인 금액을 그 기준으로 다시 계산합니다.
   //  %가 적혀 있으면 %를 기준으로 삼습니다. (금액만 있으면 %를 다시 냅니다)
+  //  거래처를 고르면 그 업체에 저장해둔 할인 기준을 칸에 넣어줍니다.
+  window.onResvDestChange = function(){
+    const name = String((document.getElementById("resv-dest-select")||{}).value||"").trim();
+    const c = (companiesCache||[]).find(x=> String(x.name||"").trim() === name);
+    const bs = document.getElementById("resv-base-select");
+    if(bs) bs.value = (c && (c.discountBase === "total" || c.discountBase === "supply")) ? c.discountBase : "unit";
+    if(typeof onResvBaseChange === "function") onResvBaseChange();
+  };
+
   window.onResvBaseChange = function(){
     ["pre","other"].forEach(w=>{
       const p = document.getElementById("resv-" + w + "discountpct-input");
@@ -21424,7 +21486,10 @@
   window.onResvBuyDisc = function(which, from){
     // 금액 칸은 「대당 금액」입니다. 붙여넣기 등록·주문 등록과 같은 기준입니다.
     const list = Number((document.getElementById("resv-listprice-input")||{}).value) || 0;
-    const base = list;
+    // 거래처(매입처)에 저장해둔 기준을 따릅니다. 「기준」 칸에서 바꾸실 수 있습니다.
+    const ov = String((document.getElementById("resv-base-select")||{}).value||"") || null;
+    const dest = String((document.getElementById("resv-dest-select")||{}).value||"").trim();
+    const base = baseByCompany(dest, list, ov);
     const aEl = document.getElementById("resv-" + which + "discountamt-input");
     const pEl = document.getElementById("resv-" + which + "discountpct-input");
     if(!aEl || !pEl || !(base > 0)) return;
@@ -22829,8 +22894,11 @@
         : "모델을 알아본 뒤 환산해 드립니다. 먼저 붙여넣어 주세요.";
       return;
     }
-    const L = prices[0];
-    if(note) note.textContent = "출고가 " + L.toLocaleString() + " 기준 (대당)";
+    const L0 = prices[0];
+    const ov2 = String((document.getElementById("resv-paste-base")||{}).value||"") || null;
+    const dest2 = String((document.getElementById("resv-paste-dest")||{}).value||"").trim();
+    const L = baseByCompany(dest2, L0, ov2);
+    if(note) note.textContent = (L === L0 ? "출고가 " : "공급가 ") + Math.round(L).toLocaleString() + " 기준 (대당)";
     if(from === "amt"){
       const a = amtEl.value;
       pctEl.value = (a === "" || !(Number(a) > 0)) ? "" : Number(((Number(a) / L) * 100).toFixed(2));
@@ -22850,6 +22918,9 @@
     sel.innerHTML = '<option value="">(줄에 적은 대로)</option>'
       + names.map(n=> '<option value="' + comboEsc(n) + '">' + comboEsc(n) + '</option>').join("");
     if(cur && names.indexOf(cur) >= 0) sel.value = cur;
+    { const c = (companiesCache||[]).find(x=> String(x.name||"").trim() === String(sel.value||"").trim());
+      const bs = document.getElementById("resv-paste-base");
+      if(bs) bs.value = (c && (c.discountBase === "total" || c.discountBase === "supply")) ? c.discountBase : "unit"; }
     initSearchableSelect("resv-paste-dest", "거래처를 입력하면 목록이 나옵니다");
     syncSearchableSelect("resv-paste-dest");
   }
@@ -30316,7 +30387,8 @@
     const d = String(v).replace(/\D/g,"");
     if(d && d.length !== 8){ alert("8자리로 넣어주세요. (예: 20221005)"); return; }
     try{
-      await updateDoc(doc(db,"b2bLedger", id), { date: d, creditReturnDate: d });
+      // 거래일자(반품일)는 그대로 두고, 여신복구일만 따로 담습니다.
+      await updateDoc(doc(db,"b2bLedger", id), { creditReturnDate: d });
     }catch(e){ alert("바꾸지 못했습니다.\n" + ((e&&e.message)?e.message:String(e))); return; }
     logAction("반품 여신복구일 " + (d ? "입력" : "지움"), (cur||"-") + " → " + (d||"-"));
     clearCache("loan");
@@ -31053,8 +31125,10 @@
           // 통장에서 나간 기록과 이어져 있으면 여기서 바로 볼 수 있습니다.
         // 반품 건은 통장이 아니라 「여신복구일」을 여기서 넣습니다.
         '<td>' + (e.category === "return_credit"
-          ? '<button class="btn small secondary" style="width:auto;" title="여신이 실제로 되돌아온 날을 넣습니다" onclick="setReturnCreditDate(\''+e.id+'\',\''+comboEsc(e.creditReturnDate||"")+'\')">' + (e.creditReturnDate ? comboEsc(e.creditReturnDate) : '<span style="color:var(--danger);">복구일 넣기</span>') + '</button>'
-            + (e.date ? comboEsc(e.date) : '<span style="color:var(--danger);">복구일 넣기</span>') + '</button>'
+          ? (e.creditReturnDate
+              ? '<span style="color:#2e7d32;font-weight:700;">' + comboEsc(e.creditReturnDate) + '</span>'
+                + ' <a href="javascript:void(0)" style="font-size:10.5px;color:var(--gray);" title="여신복구일을 고칩니다" onclick="setReturnCreditDate(\''+e.id+'\',\''+comboEsc(e.creditReturnDate)+'\')">고치기</a>'
+              : '<button class="btn small secondary" style="width:auto;color:#8a6d0b;" title="여신이 실제로 되돌아온 날을 넣습니다. 거래일자(반품일)는 그대로 둡니다." onclick="setReturnCreditDate(\''+e.id+'\',\'\')">복구일 넣기</button>')
           : (e.fromBankDepositId
               ? '<button class="btn small secondary" style="width:auto;" title="이 여신 충전이 통장에서 어떻게 나갔는지 봅니다" onclick="showLedgerBankInfo(\''+e.fromBankDepositId+'\')">통장 보기</button>'
           : ((!e.noBankLink && (e.category === "deposit" || e.category === "collateral_cash"))
