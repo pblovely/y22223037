@@ -387,7 +387,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v737</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v742</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -1625,7 +1625,8 @@
               <th>업체명 (표시용)</th>
               <th>사업자명 (정식)</th>
               <th>구분</th>
-              <th>할인 기준</th>
+              <th>매입 할인</th>
+              <th>매출 할인</th>
               <th>사업자번호</th>
               <th>대표자</th>
               <th>업태/종목</th>
@@ -1661,10 +1662,17 @@
           </div>
           <div class="stack-row"><label>현금할인율 <span class="info-tip" title="이 매입처에서 늘 붙는 선할인율입니다. 주문 등록에서 매입처를 고르면 각 줄에 자동으로 채워집니다. 비워두면 채우지 않습니다.">ⓘ</span></label>
             <input type="number" id="co-cashrate-input" step="0.01" placeholder="예: 0.3  (비우면 자동으로 안 채움)"></div>
-          <div class="stack-row"><label>할인 계산 기준 <span class="info-tip" title="대당 = 단말기 한 대의 출고가에 할인율을 걸고 원 단위로 반올림합니다. 합계 = 주문 전체 출고가 합계에 할인율을 한 번 겁니다. 삼성전자유통은 합계 기준으로 확인됐습니다.">ⓘ</span></label>
+          <div class="stack-row"><label>매입 할인 기준 <span class="info-tip" title="대당 = 단말기 한 대의 출고가에 할인율을 걸고 원 단위로 반올림합니다. 합계 = 주문 전체 출고가 합계에 할인율을 한 번 겁니다. 삼성전자유통은 합계 기준으로 확인됐습니다.">ⓘ</span></label>
             <select id="co-discbase-input">
               <option value="unit">대당 (한 대씩 계산 후 반올림)</option>
               <option value="total">합계 (주문 전체 합계에 한 번)</option>
+              <option value="supply">공급가 기준 (삼성전자 방식)</option>
+            </select>
+          </div>
+          <div class="stack-row"><label>매출 할인 기준 <span class="info-tip" title="이 업체에 팔 때 판매할인%를 어디에 곱할지 정합니다. 대부분 거래처는 출고가(VAT 포함)에 곱하고, 삼성전자처럼 공급가에 곱하는 곳만 「공급가 기준」으로 두세요.">ⓘ</span></label>
+            <select id="co-salebase-input">
+              <option value="unit">대당 (출고가에 걸기)</option>
+              <option value="total">합계 (출고가 합계에 한 번)</option>
               <option value="supply">공급가 기준 (삼성전자 방식)</option>
             </select>
           </div>
@@ -7785,10 +7793,16 @@
     bodyEl.innerHTML = "";
     const { pageItems, startIndex } = paginateSlice(arr, "companies");
     pageItems.forEach((c, i)=>{
-      const roles = [];
-      if(c.isSource) roles.push('<span style="background:var(--navy);color:#fff;font-size:10.5px;padding:1px 6px;">매입처</span>');
-      if(c.isDest)   roles.push('<span style="background:#1565c0;color:#fff;font-size:10.5px;padding:1px 6px;">판매처</span>');
-      if(c.isCreditTarget) roles.push('<span style="background:#2e7d32;color:#fff;font-size:10.5px;padding:1px 6px;">여신</span>');
+      // 구분 — 매입처는 왼쪽, 판매처는 오른쪽. 여신은 그 아래 줄에 둡니다.
+      const roleCell = '<div style="display:flex;justify-content:space-between;gap:8px;white-space:nowrap;">'
+        + '<span>' + (c.isSource
+            ? '<span style="background:var(--navy);color:#fff;font-size:10.5px;padding:1px 6px;">매입처</span>' : '') + '</span>'
+        + '<span>' + (c.isDest
+            ? '<span style="background:#1565c0;color:#fff;font-size:10.5px;padding:1px 6px;">판매처</span>' : '') + '</span>'
+        + '</div>'
+        + (c.isCreditTarget
+            ? '<div style="margin-top:2px;"><span style="background:#2e7d32;color:#fff;font-size:10.5px;padding:1px 6px;">여신</span></div>' : '')
+        + ((!c.isSource && !c.isDest) ? '<div style="color:var(--danger);">미지정</div>' : '');
       const tr = document.createElement("tr");
       tr.innerHTML =
         '<td style="color:var(--gray);">'+(startIndex+i+1)+'</td>' +
@@ -7796,16 +7810,21 @@
           + (c.needsReview ? ' <span style="background:#fdecea;border:1px solid var(--danger);color:var(--danger);font-size:10px;padding:0 4px;">검수</span>' : '')
           + '</td>' +
         '<td>'+(c.bizName ? comboEsc(c.bizName) : '<span style="color:var(--gray);">-</span>')+'</td>' +
-        '<td>'+(roles.length ? roles.join(" ") : '<span style="color:var(--danger);">미지정</span>')+'</td>' +
-        '<td style="white-space:nowrap;">' + (function(){
-          const base = String(c.discountBase||"");
+        '<td>' + roleCell + '</td>' +
+        (function(){
+          //  대당·합계는 둘 다 출고가(VAT 포함) 기준입니다. 공급가만 삼성전자 방식입니다.
+          const lab = (base)=> base === "supply" ? '<span style="color:#2e7d32;font-weight:700;">공급가</span>'
+                    : base === "total"  ? '<span style="color:var(--navy);">합계 (출고가)</span>'
+                    : base === "unit"   ? '<span style="color:var(--navy);">대당 (출고가)</span>'
+                    : '<span style="color:var(--gray);">미지정</span>';
           const rate = (c.cashRate === "" || c.cashRate == null) ? null : Number(c.cashRate);
-          const lab = base === "supply" ? '<span style="color:#2e7d32;font-weight:700;">공급가</span>'
-                    : base === "total"  ? '<span style="color:var(--navy);">합계</span>'
-                    : base === "unit"   ? '<span style="color:var(--navy);">대당</span>'
-                    : '<span style="color:var(--gray);">출고가</span>';
-          return lab + (rate != null ? ' <span style="color:var(--gray);font-size:11px;">' + rate + '%</span>' : '');
-        })() + '</td>' +
+          return '<td style="white-space:nowrap;">'
+              + (c.isSource ? lab(String(c.discountBase||""))
+                  + (rate != null ? ' <span style="color:var(--gray);font-size:11px;">' + rate + '%</span>' : '')
+                : '<span style="color:var(--gray);">-</span>') + '</td>'
+            + '<td style="white-space:nowrap;">'
+              + (c.isDest ? lab(String(c.saleDiscountBase||"")) : '<span style="color:var(--gray);">-</span>') + '</td>';
+        })() +
         '<td>'+(c.bizNumber ? comboEsc(c.bizNumber) : '<span style="color:var(--danger);">미입력</span>')+'</td>' +
         '<td>'+comboEsc(c.ceoName||"-")+'</td>' +
         '<td>'+comboEsc([c.bizType,c.bizItem].filter(Boolean).join(" / ")||"-")+'</td>' +
@@ -7878,6 +7897,8 @@
     { const e = document.getElementById("co-is-credit"); if(e) e.checked = c.isCreditTarget === true; }
     { const e = document.getElementById("co-discbase-input");
       if(e){ e.value = (c.discountBase === "total" || c.discountBase === "supply") ? c.discountBase : "unit"; e.disabled = !!readOnly; } }
+    { const e = document.getElementById("co-salebase-input");
+      if(e){ e.value = (c.saleDiscountBase === "total" || c.saleDiscountBase === "supply") ? c.saleDiscountBase : "unit"; e.disabled = !!readOnly; } }
     document.getElementById("company-modal-title").textContent = readOnly ? "업체 보기" : (companyId ? "업체 수정" : "업체 등록");
     // 읽기 전용이면 저장 버튼을 감춥니다.
     const saveBtn = document.querySelector('#company-modal-overlay button[onclick="submitCompany()"]');
@@ -7979,6 +8000,8 @@
     payload.isCreditTarget = !!(document.getElementById("co-is-credit")||{}).checked;
     { const v = (document.getElementById("co-discbase-input")||{}).value;
       payload.discountBase = (v === "total" || v === "supply") ? v : "unit"; }
+    { const v = (document.getElementById("co-salebase-input")||{}).value;
+      payload.saleDiscountBase = (v === "total" || v === "supply") ? v : "unit"; }
 
     if(!payload.name){
       showModelMsg("co-result-msg", "업체명은 반드시 입력해주세요.", true);
@@ -13685,6 +13708,8 @@
         // 고치는 중이면, 지금 물려 있는 계산서는 남은 금액이 0이어도 목록에 남깁니다.
         //  안 그러면 수정할 때 그 연결이 지워집니다.
         const avail = cols.map(c=> ({ ...c, left:(Number(c.amount)||0) - (used[c.id]||0) }))
+          // 기한이 끝난 계산서는 더 못 씁니다. (이미 물려 있던 것만 남깁니다)
+          .filter(c=> !c.expired || (editingLoanId && String(c.id) === String(editingLoanColId||"")))
           .filter(c=> c.left > 0 || (editingLoanId && String(c.id) === String(editingLoanColId||"")))
           .sort((a,b)=> String(a.month||"").localeCompare(String(b.month||"")));
         loanColCands = avail;                  // 대상을 바꿀 때 다시 거르려고 담아둡니다
@@ -30937,7 +30962,7 @@
           // 통장에서 나간 기록과 이어져 있으면 여기서 바로 볼 수 있습니다.
           '<td>' + (e.fromBankDepositId
               ? '<button class="btn small secondary" style="width:auto;" title="이 여신 충전이 통장에서 어떻게 나갔는지 봅니다" onclick="showLedgerBankInfo(\''+e.fromBankDepositId+'\')">통장 보기</button>'
-              : ((e.category === "deposit" || e.category === "collateral_cash")
+          : ((!e.noBankLink && (e.category === "deposit" || e.category === "collateral_cash"))
                   ? '<button class="btn small secondary" style="width:auto;color:#8a6d0b;" title="통장에서 나간 기록을 이어둡니다" onclick="openLedgerBankLink(\''+e.id+'\')">통장 잇기</button>'
                   : '<span style="color:var(--gray);">-</span>')) + '</td>' +
           // 이 주문사용이 어느 세금계산서에 묶였는지 보여줍니다.
@@ -31068,6 +31093,8 @@
     { key:"__salePriceFromBuy", label:"판매가 = 입고가로 맞추기", type:"same" },
     // 삼성전자로 되돌려 보내는 반품. 재고를 「반품」으로 두고 여신을 되돌려 받습니다.
     { key:"__returnToSamsung", label:"삼성 반품 (여신 환입)", type:"return" },
+    // 업체 기준이 바뀌었을 때 한 번 눌러 금액을 전부 다시 계산합니다. (%는 그대로)
+    { key:"__recalcAll", label:"할인 금액 전부 다시 계산", type:"recalc" },
     { key:"orderDate", label:"주문일", type:"text" },
     { key:"inDate", label:"입고일", type:"text" },
     { key:"expectedSaleDate", label:"판매예정일", type:"text" },
@@ -31161,6 +31188,16 @@
     }else{
       linkBox.style.display = "none";
       linkDesc.innerHTML = "";
+    }
+    if(fieldDef.type === "recalc"){
+      wrap.innerHTML = '<span style="font-size:12.5px;color:var(--navy);">'
+        + '고른 재고의 <b>선할인·타할인 금액과 입고가</b>를 업체 기준으로 다시 계산합니다.<br>'
+        + '<span style="color:var(--gray);">%는 적어두신 값 그대로 두고 금액만 맞춥니다. '
+        + '입고동일 재고는 판매가·판매요청까지, 붙어 있는 주문 품목도 함께 맞춥니다.</span></span>'
+        + '<input type="hidden" id="bulk-edit-value" value="=다시계산">';
+      const lb = document.getElementById("bulk-link-box");
+      if(lb) lb.style.display = "none";
+      return;
     }
     if(fieldDef.type === "return"){
       wrap.innerHTML = '<span style="font-size:12.5px;color:var(--navy);">'
@@ -31293,7 +31330,11 @@
     const buyBase  = baseOf(it.source);          // 매입처 기준 (선할인·타할인)
     //  「판매가 = 입고가」로 맞춰둔 재고는 매입 조건 그대로 넘기는 것이라
     //  판매할인%도 매입처 기준으로 냅니다. (삼성 매입분이면 공급가 기준)
-    const saleBase = (it.salePriceFollowsBuy === true) ? buyBase : baseOf(it.destination);
+    const baseOfSale = (name)=>{
+      const c = (companiesCache||[]).find(x=> String(x.name||"").trim() === String(name||"").trim());
+      return (c && c.saleDiscountBase === "supply") ? (L/1.1) : L;
+    };
+    const saleBase = (it.salePriceFollowsBuy === true) ? buyBase : baseOfSale(it.destination);
     const pct = (amt) => L ? Number(((amt/L)*100).toFixed(2)) : null;
     const amt = (r)   => L ? Math.round(L * num(r) / 100) : null;
     const bAmt = (r)  => buyBase  ? Math.round(buyBase  * num(r) / 100) : null;
@@ -31758,6 +31799,66 @@
       }
     }
 
+    // 할인 금액 전부 다시 계산 — 업체 기준(공급가/출고가)에 맞춰 금액만 다시 냅니다.
+    if(fieldDef.type === "recalc"){
+      const list = ids.map(id=> (lastRenderedItems||[]).find(x=> x.id === id)).filter(Boolean);
+      if(list.length === 0){ alert("고른 재고가 없습니다."); return; }
+      const baseFor = (name, L)=>{
+        const c = (companiesCache||[]).find(x=> String(x.name||"").trim() === String(name||"").trim());
+        return (c && c.discountBase === "supply") ? (L/1.1) : L;
+      };
+      const preview = list.slice(0,4).map(it=>{
+        const L = Number(it.listPrice)||0, B = baseFor(it.source, L);
+        const pp = Number(it.purchaseDiscount)||0, op = Number(it.otherDiscountPct)||0;
+        const np = Math.round(B*pp/100), no = Math.round(B*op/100);
+        return "  " + (it.serialNumber||"-") + " : 입고가 "
+          + (Number(it.purchasePrice)||0).toLocaleString() + " → " + (L-np-no).toLocaleString();
+      }).join("\n");
+      if(!confirm("고른 재고 " + list.length + "대의 할인 금액을 다시 계산합니다.\n\n"
+        + preview + (list.length > 4 ? "\n  ... 외 " + (list.length-4) + "대" : "")
+        + "\n\n%는 그대로 두고 금액만 바꿉니다.\n진행할까요?")) return;
+
+      let n1=0, n2=0, n3=0;
+      try{
+        const seenOrder = new Set();
+        for(const it of list){
+          const L = Number(it.listPrice)||0;
+          if(!L) continue;
+          const B = baseFor(it.source, L);
+          const pp = Number(it.purchaseDiscount)||0, op = Number(it.otherDiscountPct)||0;
+          const np = Math.round(B*pp/100), no = Math.round(B*op/100);
+          const buy = L - np - no;
+          const patch = { purchaseDiscountAmt: np, otherDiscountAmt: no, purchasePrice: buy };
+          if(it.salePriceFollowsBuy === true){
+            patch.salePrice = buy; patch.saleDiscountAmt = L - buy; patch.profit = 0;
+          }
+          await updateDoc(doc(db,"inventoryItems", it.id), patch);
+          n1++;
+          if(it.salePriceFollowsBuy === true && it.saleRequestId){
+            await updateDoc(doc(db,"saleRequests", it.saleRequestId),
+              { salePrice: buy, saleDiscountAmt: L - buy });
+            n2++;
+          }
+          if(it.orderId && !seenOrder.has(it.orderId)){
+            seenOrder.add(it.orderId);
+            await updateDoc(doc(db,"orders", it.orderId), {
+              preDiscountAmt: np, otherDiscountAmt: no, purchasePrice: buy });
+            n3++;
+          }
+        }
+      }catch(e){ alert("다시 계산하지 못했습니다.\n" + ((e&&e.message)?e.message:String(e))); return; }
+
+      logAction("재고 일괄 변경", "할인 금액 전부 다시 계산 (" + n1 + "건"
+        + (n2 ? " / 판매요청 " + n2 + "건" : "") + (n3 ? " / 주문 품목 " + n3 + "건" : "") + ")");
+      clearCache("inventory"); clearCache("saleRequests"); clearCache("orders"); clearCache("loan"); clearDashCache();
+      clearInvSelectAll();
+      closeBulkChangeModal();
+      alert("다시 계산했습니다.\n\n  재고 " + n1 + "대"
+        + (n2 ? "\n  판매요청 " + n2 + "건" : "") + (n3 ? "\n  주문 품목 " + n3 + "건" : ""));
+      loadInventoryList();
+      return;
+    }
+
     // 삼성 반품 — 재고를 「반품」으로 두고 여신을 되돌려 받습니다.
     if(fieldDef.type === "return"){
       const picked = ids.map(id=> (lastRenderedItems||[]).find(x=> x.id === id)).filter(Boolean);
@@ -31811,7 +31912,7 @@
           if(!(amt > 0)) continue;
           await addDoc(collection(db,"b2bLedger"), {
             date: rday, category: "deposit", amount: amt,
-            partner: src, source: src, isReturnCredit: true,
+            partner: src, source: src, isReturnCredit: true, noBankLink: true,
             memo: "반품 여신 환입: " + src + " (" 
               + targets.filter(x=> (String(x.source||"").trim()||"(미지정)") === src).length + "대)",
             isReturn: true,
