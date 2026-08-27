@@ -387,7 +387,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v689</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v692</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -14786,18 +14786,44 @@
             + '<span style="color:var(--gray);">계산서를 <b>수정</b>해 이 주문들을 체크하시거나, 다음 계산서에 담으시면 됩니다. '
             + '실수로 여신결제로 등록된 주문이면 주문 수정에서 결제방식을 고쳐주세요.</span></div>'
           : '')
-      + '<table class="data-table" style="width:100%;"><thead><tr>'
-      + '<th>주문일</th><th>모델</th><th class="ta-right">수량</th><th class="ta-right">여신차감</th><th>계산서</th>'
+      + '<table class="data-table" style="width:auto;"><thead><tr>'
+      + '<th>주문일</th><th>모델</th><th class="ta-right">수량</th><th class="ta-right">여신차감<br>'
+      + '<span style="font-weight:400;font-size:10.5px;color:var(--gray);">장부에 적힌 값</span></th>'
+      + '<th class="ta-right">삼성 방식<br><span style="font-weight:400;font-size:10.5px;color:var(--gray);">대당 계산</span></th>'
+      + '<th class="ta-right">차이</th><th>계산서</th>'
       + '</tr></thead><tbody>'
-      + list.slice().sort((a,b)=> String(a.orderDate||"").localeCompare(String(b.orderDate||""))).map(b=>
-          '<tr' + (b.collateralId ? '' : ' style="background:#fdecea;"') + '>'
-          + '<td>' + comboEsc(b.orderDate||"-") + '</td>'
-          + '<td>' + comboEsc(b.models||"-") + '</td>'
-          + '<td class="ta-right">' + (Number(b.qty)||0).toLocaleString() + '</td>'
-          + '<td class="ta-right">' + (Number(b.credit)||0).toLocaleString() + '</td>'
-          + '<td>' + (b.collateralId ? '<span style="color:#2e7d32;">묶임</span>'
-                                     : '<span style="color:var(--danger);font-weight:700;">안 묶임</span>') + '</td></tr>').join("")
-      + '</tbody></table></div>';
+      + (function(){
+          const sorted = list.slice().sort((a,b)=> String(a.orderDate||"").localeCompare(String(b.orderDate||"")));
+          let wantSum = 0, gapSum = 0;
+          const body = sorted.map(b=>{
+            const want = (b.lines && b.lines.length) ? creditFromLines(b.source || co, b.lines) : 0;
+            const gap = want ? (want - (Number(b.credit)||0)) : 0;
+            wantSum += want; gapSum += gap;
+            return '<tr' + (b.collateralId ? '' : ' style="background:#fdecea;"') + '>'
+              + '<td>' + comboEsc(b.orderDate||"-") + '</td>'
+              + '<td>' + comboEsc(b.models||"-") + '</td>'
+              + '<td class="ta-right">' + (Number(b.qty)||0).toLocaleString() + '</td>'
+              + '<td class="ta-right">' + (Number(b.credit)||0).toLocaleString() + '</td>'
+              + '<td class="ta-right">' + (want ? want.toLocaleString() : '<span style="color:var(--gray);">-</span>') + '</td>'
+              + '<td class="ta-right" style="font-weight:700;color:' + (gap ? 'var(--danger)' : '#2e7d32') + ';">'
+              + (want ? ((gap > 0 ? "+" : "") + gap.toLocaleString()) : "-") + '</td>'
+              + '<td>' + (b.collateralId ? '<span style="color:#2e7d32;">묶임</span>'
+                                         : '<span style="color:var(--danger);font-weight:700;">안 묶임</span>') + '</td></tr>';
+          }).join("");
+          return body
+            + '<tr style="background:#fff;font-weight:700;border-top:2px solid var(--navy);">'
+            + '<td colspan="3">합계</td>'
+            + '<td class="ta-right">' + sum.toLocaleString() + '</td>'
+            + '<td class="ta-right">' + wantSum.toLocaleString() + '</td>'
+            + '<td class="ta-right" style="color:' + (gapSum ? 'var(--danger)' : '#2e7d32') + ';">'
+            + (gapSum > 0 ? "+" : "") + gapSum.toLocaleString() + '</td><td></td></tr>';
+        })()
+      + '</tbody></table>'
+      + '<div style="font-size:11.5px;color:var(--gray);margin-top:6px;line-height:1.7;">'
+      + '<b>삼성 방식</b> — 공급단가(출고가÷1.1 반올림) → 에누리 → 부가세 반올림 → 대당 매입가격 × 수량.<br>'
+      + '차이가 있으면 <b>주문 관리를 한 번 열어</b> 여신을 다시 계산하시면 장부가 삼성 방식으로 맞춰집니다.<br>'
+      + '그래도 남으면 그 주문의 <b>출고가·선할인</b>이 삼성과 다른 것입니다.</div>'
+      + '</div>';
   };
 
   window.loadCollateralList = async function(){
@@ -14844,7 +14870,12 @@
         if(!months[k]) months[k] = { month:ym, company:co, qty:0, cost:0, credit:0, batches:[] };
         months[k].batches.push({ id:b.id, orderDate:b.orderDate||"", qty,
           credit: Number(b.creditUsed != null ? b.creditUsed : b.depositRequired)||0,
-          collateralId: b.collateralId || "", models: [...new Set(lines.map(o=> String(o.systemModel||o.baseModel||"-")))].slice(0,4).join("·") });
+          collateralId: b.collateralId || "", source: co,
+          // 삼성 방식으로 다시 계산해 보려고 줄 내용을 함께 담아둡니다.
+          lines: lines.map(o=> ({ listPrice:Number(o.listPrice)||0, quantity:Number(o.quantity)||0,
+            preDiscountAmt:Number(o.preDiscountAmt)||0, preDiscountPct:o.preDiscountPct,
+            purchasePrice:Number(o.purchasePrice)||0, otherDiscountAmt:Number(o.otherDiscountAmt)||0 })),
+          models: [...new Set(lines.map(o=> String(o.systemModel||o.baseModel||"-")))].slice(0,4).join("·") });
         months[k].qty    += qty;
         months[k].cost   += Number(b.depositRequired)||0;
         months[k].credit += Number(b.creditUsed != null ? b.creditUsed : b.depositRequired)||0;
@@ -14857,23 +14888,29 @@
     loans.forEach(L=>{ if(L.collateralId) usedBy[L.collateralId] = (usedBy[L.collateralId]||0) + (Number(L.principal)||0); });
 
     // ③ 월 묶음과 계산서를 짝지어 한 줄로 만듭니다.
+    // 한 달에 계산서가 여러 장 나올 수 있습니다. 같은 달·같은 매입처면 모두 모읍니다.
     const colByKey = {};
-    cols.forEach(c=>{ colByKey[String(c.month||"") + "|" + String(c.company||"").trim()] = c; });
+    cols.forEach(c=>{
+      const k = String(c.month||"") + "|" + String(c.company||"").trim();
+      (colByKey[k] = colByKey[k] || []).push(c);
+    });
+    Object.keys(colByKey).forEach(k=> colByKey[k].sort((a,b)=> String(a.issueDate||"").localeCompare(String(b.issueDate||""))));
+    const sumCols = arr=> (arr||[]).reduce((n,c)=> n + (Number(c.amount)||0), 0);
+    const sumUsed = arr=> (arr||[]).reduce((n,c)=> n + (usedBy[c.id]||0), 0);
 
     const rows = [];
     Object.keys(months).forEach(k=>{
       const m = months[k];
-      const c = colByKey[k] || null;
-      rows.push({ key:k, ...m, col:c,
-        colAmt: c ? (Number(c.amount)||0) : 0,
-        used: c ? (usedBy[c.id]||0) : 0 });
+      const arr = colByKey[k] || [];
+      rows.push({ key:k, ...m, cols:arr, col:(arr[0] || null),
+        colAmt: sumCols(arr), used: sumUsed(arr) });
     });
     // 주문은 없는데 계산서만 등록한 것도 함께 보여줍니다. (예전 건 입력분)
-    cols.forEach(c=>{
-      const k = String(c.month||"") + "|" + String(c.company||"").trim();
+    Object.keys(colByKey).forEach(k=>{
       if(months[k]) return;
-      rows.push({ key:k, month:c.month||"", company:c.company||"", qty:0, cost:0, credit:0,
-        col:c, colAmt:Number(c.amount)||0, used: usedBy[c.id]||0 });
+      const arr = colByKey[k]; const c0 = arr[0];
+      rows.push({ key:k, month:c0.month||"", company:c0.company||"", qty:0, cost:0, credit:0,
+        cols:arr, col:c0, colAmt: sumCols(arr), used: sumUsed(arr) });
     });
     rows.forEach(r=>{ r.left = r.colAmt - r.used; });
     rows.sort((a,b)=> String(b.month||"").localeCompare(String(a.month||""))
@@ -14915,7 +14952,7 @@
       tC += r.colAmt; tU += r.used;
       const done = !!r.col && r.left <= 0;
       const diff = r.col && r.qty > 0 ? (r.colAmt - r.credit) : 0;
-      const colAdj = (r.col && adjByCol[r.col.id]) ? adjByCol[r.col.id] : 0;
+      const colAdj = (r.cols||[]).reduce((n,c)=> n + (adjByCol[c.id]||0), 0);
       const freeAdj = adjFreeByCo[String(r.company||"").trim()] || 0;
       // 아직 안 맞춘 차이 = 계산서와 여신차감의 차이 + 이미 넣은 조정
       //  (조정은 부호가 반대로 들어가므로 더하면 남은 양이 됩니다)
@@ -14930,9 +14967,13 @@
         + '<td class="ta-right">'+(r.credit ? r.credit.toLocaleString() : "-")+'</td>'
         + '<td>' + (r.col
             ? '<span style="color:#2e7d32;font-weight:700;">발행완료</span>'
+              + (((r.cols||[]).length > 1) ? ' <span style="color:var(--navy);font-size:10.5px;font-weight:700;">' + r.cols.length + '장</span>' : '')
             : '<span style="color:var(--danger);font-weight:700;">미발행</span>') + '</td>'
-        + '<td>'+comboEsc(r.col ? (r.col.issueDate||"-") : "-")+'</td>'
-        + '<td class="ta-right"><b>'+(r.colAmt ? r.colAmt.toLocaleString() : "-")+'</b></td>'
+        + '<td style="white-space:nowrap;">' + ((r.cols||[]).length ? r.cols.map(c=> comboEsc(c.issueDate||"-")).join("<br>") : "-") + '</td>'
+        + '<td class="ta-right" style="white-space:nowrap;">'
+          + (((r.cols||[]).length > 1)
+              ? r.cols.map(c=> '<span style="color:var(--gray);font-size:11px;">' + (Number(c.amount)||0).toLocaleString() + '</span>').join("<br>") + '<br><b>' + r.colAmt.toLocaleString() + '</b>'
+              : '<b>'+(r.colAmt ? r.colAmt.toLocaleString() : "-")+'</b>') + '</td>'
         + '<td class="ta-right" style="white-space:nowrap;">'
           + (diff
               ? '<span style="color:var(--danger);font-weight:700;">' + (diff>0?"+":"") + diff.toLocaleString() + '</span>'
@@ -14948,17 +14989,19 @@
           + (r.col ? r.left.toLocaleString() : "-") + '</td>'
         + (canDo ? '<td class="ta-right" style="white-space:nowrap;">'
             + (r.col
-                ? '<button class="btn small secondary" style="width:auto;" data-col-edit="'+r.col.id+'">수정</button>'
+                ? (r.cols||[]).map(c=> '<button class="btn small secondary" style="width:auto;margin-left:2px;" data-col-edit="'+c.id+'" title="'+comboEsc(c.issueDate||"")+' · '+(Number(c.amount)||0).toLocaleString()+'">수정' + (((r.cols||[]).length > 1) ? ' ' + comboEsc(String(c.issueDate||"").slice(4)) : '') + '</button>').join("")
                   // 아직 안 맞춘 만큼만 채웁니다. 계산서에 안 이어진 조정도 함께 셉니다.
                   //  (안 그러면 이미 넣은 조정을 못 보고 또 채워 두 번 빠집니다)
                   + (needAdj ? '<button class="btn small secondary" style="width:auto;margin-left:4px;"'
                       + ' title="아직 안 맞춘 차이 ' + needAdj.toLocaleString() + ' 만큼 여신을 조정합니다"'
                       + ' data-col-adj="'+comboEsc(r.company)+'|'+needAdj+'|'+r.col.id+'">'
                       + ((colAdj || freeAdj) ? '조정 더하기' : '여신 조정') + '</button>' : '')
-                  + '<button class="btn small secondary" style="width:auto;margin-left:4px;"'
-                      + ' title="이 계산서를 담보로 실행한 B2B 대출을 이어둡니다"'
-                      + ' data-col-loan="'+r.col.id+'">대출 잇기</button>'
-                  + '<button class="btn small danger" style="width:auto;margin-left:4px;" data-col-del="'+r.col.id+'">삭제</button>'
+                  + (r.cols||[]).map(c=> '<button class="btn small secondary" style="width:auto;margin-left:2px;"'
+                      + ' title="' + comboEsc(c.issueDate||"") + ' 계산서를 담보로 실행한 B2B 대출을 이어둡니다"'
+                      + ' data-col-loan="'+c.id+'">대출 잇기'
+                      + (((r.cols||[]).length > 1) ? ' ' + comboEsc(String(c.issueDate||"").slice(4)) : '') + '</button>').join("")
+                  + (r.cols||[]).map(c=> '<button class="btn small danger" style="width:auto;margin-left:2px;" data-col-del="'+c.id+'" title="'+comboEsc(c.issueDate||"")+' 삭제">삭제' + (((r.cols||[]).length > 1) ? ' ' + comboEsc(String(c.issueDate||"").slice(4)) : '') + '</button>').join("")
+                  + '<button class="btn small" style="width:auto;margin-left:4px;" title="이 달에 계산서를 한 장 더 넣습니다" data-col-new="'+comboEsc(r.month)+'|'+comboEsc(r.company)+'|'+Math.max(0, r.credit - r.colAmt)+'">계산서 추가</button>'
                 : '<button class="btn small" style="width:auto;" data-col-new="'+comboEsc(r.month)+'|'+comboEsc(r.company)+'|'+r.credit+'">계산서 등록</button>')
             + '</td>' : '')
         + '</tr>';
