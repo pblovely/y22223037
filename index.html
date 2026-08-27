@@ -387,7 +387,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v709</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v711</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -10094,6 +10094,7 @@
         ? '<button class="btn small danger" style="width:auto;" title="취소된 주문을 완전히 지웁니다" data-del-batch="'+r.id+'">삭제</button>' : '');
 
     listEl.innerHTML = renderListTable("order", rows, actions);
+    foldActionColumn("order-list");
     bindRowActions("order-list");
 
     // 버튼 동작을 연결합니다.
@@ -13849,8 +13850,35 @@
         });
       }catch(e){ msg("저장에 실패했습니다. " + comboEsc((e&&e.message)||String(e)), true); return; }
 
-      // 이 대출에서 나온 이자·수수료 기록의 대출명·적요·은행·대상도 함께 바꿔둡니다.
-      //  안 바꾸면 대출비용 목록에 옛 이름이 남습니다.
+      // 이 대출에서 나온 기록들의 대출명·적요·은행·대상을 모두 함께 바꿔둡니다.
+      //  ① 대출비용(이자·수수료) ② 여신 장부의 대출 실행 ③ 통장 내역
+      //  한 곳이라도 빠지면 화면마다 이름이 달라 보입니다.
+      let ledFixed = 0, bankFixed = 0;
+      try{
+        const ls2 = await getDocs(query(collection(db,"b2bLedger"), where("fromLoanId","==", editingLoanId)));
+        const bt3 = writeBatch(db);
+        ls2.forEach(d=>{
+          bt3.update(doc(db,"b2bLedger", d.id), {
+            partner: partnerE, source: partnerE, bank: bankE,
+            memo: "대출 실행: " + bankE + (codeE ? " · " + codeE : "") + " · " + name
+          });
+          ledFixed++;
+        });
+        if(ledFixed) await bt3.commit();
+      }catch(e){}
+      try{
+        const bs2 = await getDocs(query(collection(db,"bankDeposits"), where("fromLoanId","==", editingLoanId)));
+        const bt4 = writeBatch(db);
+        bs2.forEach(d=>{
+          bt4.update(doc(db,"bankDeposits", d.id), {
+            payer: partnerE, company: partnerE,
+            memo: "B2B 대출 실행: " + bankE + (codeE ? " · " + codeE : "") + " · " + name
+          });
+          bankFixed++;
+        });
+        if(bankFixed) await bt4.commit();
+      }catch(e){}
+
       let costFixed = 0;
       try{
         const cs = await getDocs(query(collection(db,"b2bLoanCost"), where("fromLoanId","==", editingLoanId)));
@@ -13869,7 +13897,10 @@
       }catch(e){}
 
       logAction("B2B 대출 수정", (codeE ? "[" + codeE + "] " : "") + name
-        + (costFixed ? " / 이자·수수료 기록 " + costFixed + "건 함께 수정" : "")
+        + (costFixed ? " / 이자·수수료 " + costFixed + "건" : "")
+        + (ledFixed ? " / 여신 장부 " + ledFixed + "건" : "")
+        + (bankFixed ? " / 통장 " + bankFixed + "건" : "")
+        + ((costFixed||ledFixed||bankFixed) ? " 함께 수정" : "")
         + " / " + splitTerm + "개월" + (splitExts ? " + 연장 " + splitExts[0].days + "일" : "")
         + " / 만기 " + (splitDue||"-") + " / 원금 " + principal.toLocaleString());
       editingLoanId = null;
@@ -14037,6 +14068,7 @@
     });
     h += '</tbody></table></div><div id="loan-detail-area" style="margin-top:10px;"></div>';
     el.innerHTML = h;
+    foldActionColumn("loan-list");
     bindRowActions("loan-list");
     el.querySelectorAll("[data-loan-sched]").forEach(b=> b.onclick = ()=> openLoanSchedule(b.dataset.loanSched));
     el.querySelectorAll("[data-loan-pay]").forEach(b=> b.onclick = ()=> addLoanPayment(b.dataset.loanPay));
@@ -15617,6 +15649,7 @@
       + '<td></td></tr>';
     h += '</tbody></table></div>';
     listEl.innerHTML = h;
+    foldActionColumn("loancost-list");
     bindRowActions("loancost-list");
     listEl.querySelectorAll("[data-lc-del]").forEach(b=>{
       b.onclick = ()=> deleteLoanCostEntry(b.dataset.lcDel, b.dataset.lcLegacy === "1");
@@ -29327,6 +29360,7 @@
         ? '<button class="btn small danger" style="width:auto;" data-del-sr="'+r.id+'">삭제</button>' : '');
 
     listEl.innerHTML = renderListTable("sale", rows, actions);
+    foldActionColumn("sale-request-list");
     bindRowActions("sale-request-list");
 
     listEl.querySelectorAll('[data-detail]').forEach(btn=>{
@@ -34399,6 +34433,8 @@
     listEl.appendChild(table);
     listEl.prepend(renderPaginationBar("inventory", items.length, loadInventoryList, false));
     applyCustomTabLabels();
+    // 줄을 누르면 관리 버튼이 아래로 펼쳐집니다. (다른 목록과 같게)
+    foldActionColumn("inventory-list");
     syncInvPageSizeSelect();
   }
 
@@ -35613,6 +35649,7 @@
     });
     h += '</tbody></table></div>';
     listEl.innerHTML = h;
+    foldActionColumn("activation-list");
     bindRowActions("activation-list");
     listEl.querySelectorAll("[data-act-sub]").forEach(b=> b.onclick = ()=> setPublicSubsidy(b.dataset.actSub));
     listEl.querySelectorAll("[data-act-hist]").forEach(b=> b.onclick = ()=> openItemHistory(b.dataset.actHist));
