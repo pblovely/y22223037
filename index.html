@@ -387,7 +387,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v735</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v736</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -29091,6 +29091,23 @@
       return h + '</tr>';
     };
     html += pctRow();
+
+    // 삼성전자는 공급가(VAT 뺀 금액)에 할인율을 곱합니다. 그 기준으로 환산한 줄입니다.
+    const sPctRow = ()=>{
+      const calc = c => (c.listAmt ? ((c.listAmt - c.saleAmt) / (c.listAmt/1.1) * 100) : null);
+      let h = '<tr style="background:#fff;"><td style="font-weight:700;color:#2e7d32;">삼성전자기준 할인% '
+        + '<span style="color:var(--gray);font-weight:400;font-size:11px;">(출고가−판매가) ÷ 공급가</span></td>';
+      const gv = calc({ listAmt:grandListAmt, saleAmt:grandSaleAmt });
+      h += '<td class="ta-right" colspan="3" style="'+SEP+TOT+'font-weight:700;color:#2e7d32;">'
+        + (gv==null ? '-' : gv.toFixed(2)+'%') + '</td>';
+      destKeys.forEach((dk, idx)=>{
+        const v = calc(colTotals[idx]);
+        h += '<td class="ta-right" colspan="3" style="'+SEP+'font-weight:700;color:#2e7d32;">'
+          + (v==null ? '-' : v.toFixed(2)+'%') + '</td>';
+      });
+      return h + '</tr>';
+    };
+    html += sPctRow();
 
     html += '</tbody></table></div>';
     html += '<p class="desc" style="margin-top:10px;">모델 바로 오른쪽이 <b>전체 합계</b>이고, 그 뒤로 업체별 칸이 굵은 세로선으로 구분됩니다. 아래 세 줄은 <b>업체별 금액</b>입니다. 표 위에서 <b>마우스 오른쪽 버튼</b>을 누르면 글씨 크기와 색상을 바꿀 수 있습니다. 수정·배정은 위 <b>예약 목록</b>에서 하세요.</p>';
