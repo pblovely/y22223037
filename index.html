@@ -387,7 +387,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v751</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v755</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -1181,6 +1181,7 @@
           <div class="stack-row"><label>금액</label><input type="number" id="col-amount" placeholder="숫자만" oninput="refreshCollateralShare()"></div>
           <div class="stack-row"><label>메모 (선택)</label><input type="text" id="col-memo" placeholder="선택"></div>
         </div>
+        <div id="col-return-note" style="font-size:12px;margin-top:8px;"></div>
         <div style="font-weight:700;font-size:12.5px;margin-top:10px;margin-bottom:4px;">이 계산서에 넣을 주문</div>
         <div id="col-orders" style="font-size:12px;"></div>
         <div id="col-ord-note" style="font-size:11.5px;line-height:1.7;margin-top:4px;"></div>
@@ -14620,7 +14621,24 @@
 
 
 
+  let colReturnSum = { amount:0, count:0 };   // 그 달 반품(여신복구) 합계
   window.renderCollateralOrders = async function(){
+    // 반품(여신복구) 합계를 먼저 담아둡니다. 아래 계산에서 씁니다.
+    colReturnSum = { amount:0, count:0 };
+    try{
+      const m0 = String((document.getElementById("col-month")||{}).value||"").replace(/\D/g,"").slice(0,6);
+      const co0 = String((document.getElementById("col-company")||{}).value||"").trim();
+      if(m0 && co0){
+        const rs = await getDocs(query(collection(db,"b2bLedger"), where("category","==","return_credit")));
+        rs.forEach(d=>{
+          const e = d.data();
+          if(String(e.date||"").replace(/\D/g,"").slice(0,6) !== m0) return;
+          if(String(e.partner || e.source || "").trim() !== co0) return;
+          colReturnSum.amount += (Number(e.amount)||0);
+          colReturnSum.count++;
+        });
+      }
+    }catch(e){}
     const box = document.getElementById("col-orders");
     if(!box) return;
     const company = String((document.getElementById("col-company")||{}).value||"").trim();
@@ -14688,12 +14706,20 @@
       const note = document.getElementById("col-ord-note");
       if(picked.length === 0){ if(note) note.innerHTML = ""; return; }
       // 계산서 한 장을 통째로 계산합니다. (주문별로 나눠 더하면 몇 원씩 어긋납니다)
+      // 그 달에 여신복구가 끝난 반품은 계산서 금액에서 빼야 딱 맞습니다. (미리 담아둔 값)
+      const retSum = colReturnSum.amount || 0, retCnt = colReturnSum.count || 0;
+      { const el0 = document.getElementById("col-return-note");
+        if(el0) el0.innerHTML = retCnt
+          ? '<span style="color:var(--danger);font-weight:700;">반품(여신복구) ' + retCnt + '건 −'
+            + Math.round(retSum).toLocaleString() + '</span> <span style="color:var(--gray);">를 뺀 금액입니다.</span>'
+          : ''; }
+
       const listSum = picked.reduce((n,x)=> n + x.listSum, 0);
       // 고른 주문의 품목 줄을 모두 모아 삼성 방식(대당)으로 계산합니다.
       const allLines = picked.reduce((a,x)=> a.concat((orderBatchLinesCache[x.batchId]||[]).filter(o=> o.status !== "취소")), []);
       const whole = invoiceCreditTotal(company, listSum, allLines);
       const sumEach = picked.reduce((n,x)=> n + x.credit, 0);
-      document.getElementById("col-amount").value = (whole != null) ? whole : sumEach;
+      document.getElementById("col-amount").value = ((whole != null) ? whole : sumEach) - Math.round(retSum);
       // 저장하면 각 주문이 얼마가 되는지 미리 보여줍니다.
       {
         const total = Number((document.getElementById("col-amount")||{}).value) || 0;
@@ -31015,7 +31041,7 @@
           // 통장에서 나간 기록과 이어져 있으면 여기서 바로 볼 수 있습니다.
         // 반품 건은 통장이 아니라 「여신복구일」을 여기서 넣습니다.
         '<td>' + (e.category === "return_credit"
-          ? '<button class="btn small secondary" style="width:auto;" title="여신이 실제로 되돌아온 날을 넣습니다" onclick="setReturnCreditDate(\''+e.id+'\',\''+comboEsc(e.date||"")+'\')">'
+          ? '<button class="btn small secondary" style="width:auto;" title="여신이 실제로 되돌아온 날을 넣습니다" onclick="setReturnCreditDate(\''+e.id+'\',\''+comboEsc(e.creditReturnDate||"")+'\')">' + (e.creditReturnDate ? comboEsc(e.creditReturnDate) : '<span style="color:var(--danger);">복구일 넣기</span>') + '</button>'
             + (e.date ? comboEsc(e.date) : '<span style="color:var(--danger);">복구일 넣기</span>') + '</button>'
           : (e.fromBankDepositId
               ? '<button class="btn small secondary" style="width:auto;" title="이 여신 충전이 통장에서 어떻게 나갔는지 봅니다" onclick="showLedgerBankInfo(\''+e.fromBankDepositId+'\')">통장 보기</button>'
