@@ -387,7 +387,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v712</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v713</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -31586,16 +31586,28 @@
     let newVal = valEl.value;
     if(newVal === ""){ alert("적용할 값을 입력해주세요."); return; }
 
-    // 판매요청에 묶인 재고는 판매 관련 값을 여기서 바꿀 수 없습니다.
+    // 판매요청에 묶인 재고 — 재고만 바꾸면 판매요청 금액과 어긋납니다.
+    //  판매금액에 해당하는 값은 판매요청까지 함께 바꿀지 여쭙고, 함께 바꿉니다.
+    let saleLinkedIds = [];
     if(SALE_LOCKED_FIELDS.includes(key)){
       const locked = findSaleLinked(ids);
       if(locked.length > 0){
-        alert("고르신 재고 중 " + locked.length + "대가 판매요청에 묶여 있습니다.\n\n"
+        // 금액 계열은 함께 바꿀 수 있습니다. 상태·판매처·출고일은 흐름이 얽혀 있어 막습니다.
+        const SYNCABLE = ["salePrice", "saleDiscountAmt", "saleDiscount"];
+        if(!SYNCABLE.includes(key)){
+          alert("고르신 재고 중 " + locked.length + "대가 판매요청에 묶여 있습니다.\n\n"
+            + locked.slice(0,5).map(x=> "· " + (x.serialNumber||"-") + " " + (x.destination||"")).join("\n")
+            + (locked.length > 5 ? "\n... 외 " + (locked.length-5) + "대" : "")
+            + "\n\n여기서 「" + fieldDef.label + "」을 바꾸면 판매요청·예약 배정과 어긋납니다.\n"
+            + "되돌리시려면 <판매 관리>에서 취소하거나, <예약 배정>에서 배정 취소해주세요.");
+          return;
+        }
+        if(!confirm("고르신 재고 중 " + locked.length + "대가 판매요청에 묶여 있습니다.\n\n"
           + locked.slice(0,5).map(x=> "· " + (x.serialNumber||"-") + " " + (x.destination||"")).join("\n")
           + (locked.length > 5 ? "\n... 외 " + (locked.length-5) + "대" : "")
-          + "\n\n여기서 「" + fieldDef.label + "」을 바꾸면 판매요청·예약 배정과 어긋납니다.\n"
-          + "되돌리시려면 <판매 관리>에서 취소하거나, <예약 배정>에서 배정 취소해주세요.");
-        return;
+          + "\n\n「" + fieldDef.label + "」을 바꾸면 그 판매요청의 판매가·판매할인도 함께 바꿉니다.\n"
+          + "이미 입금까지 끝난 건이면 입금액과 달라지니 확인해주세요.\n\n진행할까요?")) return;
+        saleLinkedIds = locked.map(x=> x.id);
       }
     }
 
@@ -31682,6 +31694,36 @@
         beforeSet[bk] = (beforeSet[bk]||0) + 1; }
       await updateDoc(doc(db,"inventoryItems", id), patch);
     }
+    // 판매요청에 묶인 재고면 그 판매요청의 금액도 같이 맞춥니다.
+    let srFixed = 0;
+    if(saleLinkedIds.length){
+      try{
+        for(const id of saleLinkedIds){
+          const it = (lastRenderedItems||[]).find(x=> x.id === id);
+          if(!it || !it.saleRequestId) continue;
+          const L = Number(it.listPrice)||0;
+          const patch2 = {};
+          if(key === "salePrice"){
+            patch2.salePrice = parsedVal;
+            if(L){ patch2.saleDiscountAmt = L - parsedVal;
+                   patch2.saleDiscount = Number((((L - parsedVal)/L)*100).toFixed(2)); }
+          }else if(key === "saleDiscountAmt"){
+            patch2.saleDiscountAmt = parsedVal;
+            if(L){ patch2.salePrice = L - parsedVal;
+                   patch2.saleDiscount = Number(((parsedVal/L)*100).toFixed(2)); }
+          }else if(key === "saleDiscount"){
+            const amt2 = L ? Math.round(L * parsedVal / 100) : 0;
+            patch2.saleDiscount = parsedVal;
+            patch2.saleDiscountAmt = amt2;
+            if(L) patch2.salePrice = L - amt2;
+          }
+          await updateDoc(doc(db,"saleRequests", it.saleRequestId), patch2);
+          srFixed++;
+        }
+      }catch(e){}
+      clearCache("saleRequests");
+    }
+
     // 전 → 후. 바뀌기 전 값이 여러 가지면 많은 것부터 몇 개만 적습니다.
     const beforeTxt = Object.keys(beforeSet)
       .sort((a,b)=> beforeSet[b] - beforeSet[a])
@@ -31689,7 +31731,8 @@
       .map(v=> v + (beforeSet[v] > 1 ? "(" + beforeSet[v] + "건)" : ""))
       .join(", ") + (Object.keys(beforeSet).length > 4 ? " 외" : "");
     logAction("재고 일괄 변경", fieldDef.label + " " + beforeTxt + " → " + newVal
-      + " (" + ids.length + "건" + (useLink ? " / 연동계산 " + linkedCount + "건" : " / 연동 없음") + ")");
+      + " (" + ids.length + "건" + (useLink ? " / 연동계산 " + linkedCount + "건" : " / 연동 없음")
+      + (srFixed ? " / 판매요청 " + srFixed + "건 함께 수정" : "") + ")");
     clearInvSelectAll();
     closeBulkChangeModal();
     loadInventoryList();
