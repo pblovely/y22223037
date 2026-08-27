@@ -387,7 +387,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v762</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v765</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -14802,18 +14802,37 @@
       if(picked.length === 0){ if(note) note.innerHTML = ""; return; }
       // 계산서 한 장을 통째로 계산합니다. (주문별로 나눠 더하면 몇 원씩 어긋납니다)
       // 그 달에 여신복구가 끝난 반품은 계산서 금액에서 빼야 딱 맞습니다. (미리 담아둔 값)
-      const retSum = colReturnSum.amount || 0, retCnt = colReturnSum.count || 0;
+      // 체크한 반품만 뺍니다. (처음엔 전부 체크되어 있습니다)
+      const retRows = colReturnSum.rows || [];
+      const noteEl0 = document.getElementById("col-return-note");
+      const cks = noteEl0 ? Array.from(noteEl0.querySelectorAll(".col-ret-ck")) : [];
+      const retSum = cks.length
+        ? cks.reduce((n,x)=> n + (x.checked ? (retRows[Number(x.dataset.ri)]||{}).amount||0 : 0), 0)
+        : (colReturnSum.amount || 0);
+      const retCnt = colReturnSum.count || 0;
       { const el0 = document.getElementById("col-return-note");
         if(el0 && retCnt){
           el0.innerHTML = '<div style="border:1px solid var(--danger);background:#fdecea;padding:6px 8px;">'
             + '<b style="color:var(--danger);">이 달에 여신복구된 반품 ' + retCnt + '건 — 계산서에서 뺍니다</b>'
             + '<table class="data-table" style="width:auto;margin-top:4px;"><thead><tr>'
-            + '<th>복구일</th><th>반품일</th><th class="ta-right">금액</th></tr></thead><tbody>'
-            + (colReturnSum.rows||[]).map(r=> '<tr><td>' + comboEsc(r.date||"-") + '</td>'
+            + '<th><input type="checkbox" id="col-ret-all" checked></th>'
+            + '<th>복구일</th><th>반품일</th><th>일련번호</th><th class="ta-right">금액</th></tr></thead><tbody>'
+            + (colReturnSum.rows||[]).map((r,ri)=> '<tr>'
+                + '<td><input type="checkbox" class="col-ret-ck" data-ri="'+ri+'" checked></td>'
+                + '<td>' + comboEsc(r.date||"-") + '</td>'
                 + '<td>' + comboEsc(r.back||"-") + '</td>'
+                + '<td>' + comboEsc(r.serial||"-") + '</td>'
                 + '<td class="ta-right" style="color:var(--danger);font-weight:700;">−'
                 + r.amount.toLocaleString() + '</td></tr>').join("")
-            + '</tbody></table></div>';
+            + '</tbody></table>'
+            + '<div style="color:var(--gray);font-size:11.5px;margin-top:3px;">체크한 것만 계산서 금액에서 뺍니다.</div></div>';
+          // 체크를 바꾸면 금액을 다시 냅니다.
+          const allCk = document.getElementById("col-ret-all");
+          if(allCk) allCk.onclick = ()=>{
+            el0.querySelectorAll(".col-ret-ck").forEach(x=> x.checked = allCk.checked);
+            sync();
+          };
+          el0.querySelectorAll(".col-ret-ck").forEach(x=> x.onchange = ()=> sync());
         }
         if(el0 && !retCnt) el0.innerHTML = "";
       }
