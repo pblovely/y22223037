@@ -387,7 +387,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v717</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v719</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -3856,6 +3856,9 @@
     { key:"purchaseDiscountAmt", label:"선할인", get:it=> discFmt(preDiscountAmtOf(it)), getRaw:it=> discRaw(preDiscountAmtOf(it)) },
     { key:"purchaseDiscount", label:"선할인%", get:it=> discPctFmt(preDiscountPctOf(it)), getRaw:it=> discRaw(preDiscountPctOf(it)) },
     { key:"otherDiscountAmt", label:"타할인", get:it=> discFmt(it.otherDiscountAmt), getRaw:it=> discRaw(it.otherDiscountAmt) },
+    { key:"salePriceFollowsBuy", label:"판매가 연동",
+      get:it=> it.salePriceFollowsBuy === true ? '<span style="color:#2e7d32;font-weight:700;">입고가 따라감</span>' : '<span style="color:var(--gray);">-</span>',
+      getRaw:it=> it.salePriceFollowsBuy === true ? "입고가 따라감" : "" },
     { key:"otherDiscountPct", label:"타할인%", get:it=> discPctFmt(it.otherDiscountPct), getRaw:it=> discRaw(it.otherDiscountPct) },
     { key:"totalPurchaseDiscount", label:"입고할인", get:it=> discFmt(totalInDiscountOf(it)), getRaw:it=> discRaw(totalInDiscountOf(it)) },
     { key:"destination", label:"판매처", get:it=>it.destination||"-" },
@@ -31808,6 +31811,42 @@
         beforeSet[bk] = (beforeSet[bk]||0) + 1; }
       await updateDoc(doc(db,"inventoryItems", id), patch);
     }
+    // 재고의 할인을 바꾸면 그 재고가 붙어 있는 주문 품목도 같은 값으로 맞춥니다.
+    //  주문의 타할인은 여신 화면의 「클럽장려금 받을 금액」 기준이 됩니다.
+    let ordFixed = 0;
+    if(["purchaseDiscount","purchaseDiscountAmt","otherDiscountPct","otherDiscountAmt"].includes(key)){
+      try{
+        const seen = new Set();
+        for(const id of ids){
+          const it = (lastRenderedItems||[]).find(x=> x.id === id);
+          if(!it || !it.orderId || seen.has(it.orderId)) continue;
+          seen.add(it.orderId);
+          const L = Number(it.listPrice)||0;
+          const p2 = {};
+          if(key === "purchaseDiscount"){
+            p2.preDiscountPct = parsedVal;
+            if(L) p2.preDiscountAmt = Math.round(L * parsedVal / 100);
+          }else if(key === "purchaseDiscountAmt"){
+            p2.preDiscountAmt = parsedVal;
+            if(L) p2.preDiscountPct = Number((((parsedVal)/L)*100).toFixed(2));
+          }else if(key === "otherDiscountPct"){
+            p2.otherDiscountPct = parsedVal;
+            if(L) p2.otherDiscountAmt = Math.round(L * parsedVal / 100);
+          }else if(key === "otherDiscountAmt"){
+            p2.otherDiscountAmt = parsedVal;
+            if(L) p2.otherDiscountPct = Number((((parsedVal)/L)*100).toFixed(2));
+          }
+          // 입고가도 함께 맞춥니다. (출고가 − 선할인 − 타할인)
+          const pre2 = (p2.preDiscountAmt != null) ? p2.preDiscountAmt : (Number(it.purchaseDiscountAmt)||0);
+          const oth2 = (p2.otherDiscountAmt != null) ? p2.otherDiscountAmt : (Number(it.otherDiscountAmt)||0);
+          if(L) p2.purchasePrice = L - pre2 - oth2;
+          await updateDoc(doc(db,"orders", it.orderId), p2);
+          ordFixed++;
+        }
+      }catch(e){}
+      if(ordFixed){ clearCache("orders"); clearCache("loan"); }
+    }
+
     // 「판매가 = 입고가」로 맞춰둔 재고는, 선할인·타할인이 바뀌면 판매요청 금액도 함께 맞춥니다.
     if(useLink && ["purchaseDiscount","purchaseDiscountAmt","otherDiscountPct","otherDiscountAmt"].includes(key)){
       try{
@@ -31865,7 +31904,8 @@
     logAction("재고 일괄 변경", fieldDef.label + " " + beforeTxt + " → " + newVal
       + " (" + ids.length + "건" + (useLink ? " / 연동계산 " + linkedCount + "건" : " / 연동 없음")
       + (srFixed ? " / 판매요청 " + srFixed + "건 함께 수정" : "")
-      + (followFixed ? " / 판매가 따라가기 " + followFixed + "건" : "") + ")");
+      + (followFixed ? " / 판매가 따라가기 " + followFixed + "건" : "")
+      + (ordFixed ? " / 주문 품목 " + ordFixed + "건 함께 수정" : "") + ")");
     // 담아둔 자료도 함께 비웁니다. 안 비우면 방금 바꾼 값이 화면에 안 보입니다.
     clearCache("inventory"); clearCache("saleRequests"); clearDashCache();
     clearInvSelectAll();
