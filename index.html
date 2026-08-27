@@ -387,7 +387,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v765</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v766</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -15550,7 +15550,8 @@
       const rs = await getDocs(query(collection(db,"b2bLedger"), where("category","==","return_credit")));
       rs.forEach(d=>{
         const e = d.data();
-        const ym = String(e.date||"").replace(/\D/g,"").slice(0,6);
+        // 여신이 실제로 돌아온 달에 뺍니다. 복구일이 없으면 어느 달에도 안 넣습니다.
+        const ym = String(e.creditReturnDate||"").replace(/\D/g,"").slice(0,6);
         const co = String(e.partner || e.source || "").trim();
         if(!ym || !co) return;
         retByKey[ym + "|" + co] = (retByKey[ym + "|" + co] || 0) + (Number(e.amount)||0);
