@@ -387,7 +387,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v698</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v700</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -13830,7 +13830,28 @@
           updatedBy: currentUser.name, updatedAt: serverTimestamp()
         });
       }catch(e){ msg("저장에 실패했습니다. " + comboEsc((e&&e.message)||String(e)), true); return; }
+
+      // 이 대출에서 나온 이자·수수료 기록의 대출명·적요·은행·대상도 함께 바꿔둡니다.
+      //  안 바꾸면 대출비용 목록에 옛 이름이 남습니다.
+      let costFixed = 0;
+      try{
+        const cs = await getDocs(query(collection(db,"b2bLoanCost"), where("fromLoanId","==", editingLoanId)));
+        const bt2 = writeBatch(db);
+        cs.forEach(d=>{
+          const c = d.data();
+          // 메모 앞머리는 그대로 두고(「이자 3회차」 「MP수수료」 등) 뒤의 대출 이름만 바꿉니다.
+          const head = String(c.memo||"").split(":")[0];
+          bt2.update(doc(db,"b2bLoanCost", d.id), {
+            bank: bankE, partner: partnerE, loanCode: codeE, loanName: name,
+            memo: head + ": " + (codeE ? "[" + codeE + "] " : "") + (name || "-")
+          });
+          costFixed++;
+        });
+        if(costFixed) await bt2.commit();
+      }catch(e){}
+
       logAction("B2B 대출 수정", (codeE ? "[" + codeE + "] " : "") + name
+        + (costFixed ? " / 이자·수수료 기록 " + costFixed + "건 함께 수정" : "")
         + " / " + splitTerm + "개월" + (splitExts ? " + 연장 " + splitExts[0].days + "일" : "")
         + " / 만기 " + (splitDue||"-") + " / 원금 " + principal.toLocaleString());
       editingLoanId = null;
@@ -14863,6 +14884,172 @@
   let colRowBatches = {};     // 담보 계산서 줄에 묶인 주문 (「주문 보기」에서 씁니다)
 
   // 이 줄에 어떤 주문이 묶였는지 보여줍니다. 계산서에 안 담긴 주문도 알려드립니다.
+  // ===== 계산서 ↔ 주문 매칭 (한 화면에서) =====
+  //  그 달의 계산서 여러 장과 여신결제 주문을 한 번에 놓고, 주문마다 어느 계산서인지 고릅니다.
+  let colMapState = null;
+  window.openColMap = async function(key){
+    if(!hasPerm(currentUserPerms, "paymentProcess")){ alert("권한이 없습니다."); return; }
+    const parts = String(key).split("|");
+    const month = parts[0] || "", company = parts[1] || "";
+    const el = document.getElementById("collateral-detail");
+    if(!el) return;
+    el.innerHTML = '<div style="color:var(--gray);font-size:12.5px;">불러오는 중입니다...</div>';
+
+    await ensureOrderCache();
+    // 그 달 계산서
+    let cols = [];
+    try{
+      const cs = await getDocs(collection(db,"b2bCollaterals"));
+      cs.forEach(d=>{
+        const c = d.data();
+        if(String(c.month||"") !== month) return;
+        if(String(c.company||"").trim() !== company) return;
+        cols.push({ id:d.id, ...c });
+      });
+    }catch(e){}
+    cols.sort((a,b)=> String(a.issueDate||"").localeCompare(String(b.issueDate||"")));
+    if(cols.length === 0){ el.innerHTML = '<div style="color:var(--danger);">이 달에 등록된 계산서가 없습니다.</div>'; return; }
+
+    // 그 달 여신결제 주문 (이미 이 달 계산서에 묶인 것 포함)
+    const colIds = new Set(cols.map(c=> c.id));
+    const orders = [];
+    Object.keys(orderBatchCache||{}).forEach(bid=>{
+      const b = orderBatchCache[bid];
+      if(!b || b.status === "취소") return;
+      if(b.paymentMethod !== "b2b_credit") return;
+      if(String(b.source||"").trim() !== company) return;
+      const cid = String(b.collateralId||"");
+      if(cid && !colIds.has(cid)) return;                    // 다른 달 계산서에 묶인 건 건드리지 않습니다
+      const ym = String(b.orderDate||"").replace(/\D/g,"").slice(0,6);
+      if(ym !== month && !cid) return;                       // 이 달 주문이거나, 이 달 계산서에 이미 묶인 것
+      const lines = (orderBatchLinesCache[bid]||[]).filter(o=> o.status !== "취소");
+      if(lines.length === 0) return;
+      orders.push({ batchId:bid, b, lines,
+        qty: lines.reduce((n,o)=> n + (Number(o.quantity)||0), 0),
+        credit: Number(b.creditUsed != null ? b.creditUsed : b.depositRequired)||0,
+        listSum: lines.reduce((n,o)=> n + (Number(o.listPrice)||0) * (Number(o.quantity)||0), 0),
+        models: [...new Set(lines.map(o=> String(o.systemModel||o.baseModel||"-")))].slice(0,3).join("·"),
+        pick: cid || "" });
+    });
+    orders.sort((a,b)=> String(a.b.orderDate||"").localeCompare(String(b.b.orderDate||"")));
+    colMapState = { month, company, cols, orders };
+    renderColMap();
+  };
+
+  function renderColMap(){
+    const el = document.getElementById("collateral-detail");
+    if(!el || !colMapState) return;
+    const { month, company, cols, orders } = colMapState;
+    const opt = (sel)=> '<option value="">(안 정함)</option>'
+      + cols.map(c=> '<option value="'+c.id+'"' + (sel === c.id ? ' selected' : '') + '>'
+          + comboEsc(c.issueDate||"-") + ' · ' + (Number(c.amount)||0).toLocaleString() + '</option>').join("");
+    const sumBy = {};
+    orders.forEach(o=>{ if(o.pick) sumBy[o.pick] = (sumBy[o.pick]||0) + o.credit; });
+
+    el.innerHTML = '<div style="border:1px solid var(--navy);padding:10px 12px;margin-top:8px;">'
+      + '<div style="font-weight:700;margin-bottom:6px;">' + comboEsc(month) + ' · ' + comboEsc(company)
+      + ' — 계산서 ' + cols.length + '장에 주문을 이어 붙입니다</div>'
+      + '<table class="data-table" style="width:auto;margin-bottom:10px;"><thead><tr>'
+      + '<th>발행일</th><th class="ta-right">계산서 금액</th><th class="ta-right">붙인 주문 합계</th><th class="ta-right">차이</th>'
+      + '</tr></thead><tbody>'
+      + cols.map(c=>{
+          const got = sumBy[c.id]||0, amt = Number(c.amount)||0, gap = amt - got;
+          return '<tr><td>' + comboEsc(c.issueDate||"-") + '</td>'
+            + '<td class="ta-right">' + amt.toLocaleString() + '</td>'
+            + '<td class="ta-right">' + (got ? got.toLocaleString() : '<span style="color:var(--gray);">-</span>') + '</td>'
+            + '<td class="ta-right" style="font-weight:700;color:' + (gap === 0 ? '#2e7d32' : 'var(--danger)') + ';">'
+            + (got ? ((gap>0?"+":"") + gap.toLocaleString()) : "-") + '</td></tr>';
+        }).join("")
+      + '</tbody></table>'
+      + '<table class="data-table" style="width:auto;"><thead><tr>'
+      + '<th>주문일</th><th>모델</th><th class="ta-right">수량</th><th class="ta-right">여신차감</th><th>어느 계산서</th>'
+      + '</tr></thead><tbody>'
+      + orders.map((o,i)=> '<tr' + (o.pick ? '' : ' style="background:#fdecea;"') + '>'
+          + '<td>' + comboEsc(o.b.orderDate||"-") + '</td>'
+          + '<td style="white-space:nowrap;">' + comboEsc(o.models||"-") + '</td>'
+          + '<td class="ta-right">' + o.qty.toLocaleString() + '</td>'
+          + '<td class="ta-right">' + o.credit.toLocaleString() + '</td>'
+          + '<td><select data-colmap-i="'+i+'" style="height:26px;border:1px solid var(--line);font-size:12px;">'
+          + opt(o.pick) + '</select></td></tr>').join("")
+      + '<tr style="background:#fff;font-weight:700;border-top:2px solid var(--navy);">'
+      + '<td colspan="3">합계</td>'
+      + '<td class="ta-right">' + orders.reduce((n,o)=> n + o.credit, 0).toLocaleString() + '</td><td></td></tr>'
+      + '</tbody></table>'
+      + '<div style="margin-top:8px;">'
+      + '<button class="btn small" style="width:auto;" onclick="saveColMap()">이대로 저장</button>'
+      + '<button class="btn small secondary" style="width:auto;margin-left:6px;" onclick="document.getElementById(\'collateral-detail\').innerHTML=\'\';">닫기</button>'
+      + '<span style="font-size:11.5px;color:var(--gray);margin-left:8px;">'
+      + '저장하면 각 계산서 금액이 그 계산서에 붙인 주문들에 <b>출고가 비율</b>로 나뉘어 들어갑니다.</span></div>'
+      + '</div>';
+
+    el.querySelectorAll("[data-colmap-i]").forEach(sel=>{
+      sel.onchange = ()=>{
+        const i = Number(sel.dataset.colmapI);
+        if(colMapState.orders[i]) colMapState.orders[i].pick = sel.value || "";
+        renderColMap();
+      };
+    });
+  }
+
+  window.saveColMap = async function(){
+    if(!colMapState) return;
+    const { cols, orders } = colMapState;
+    const groups = {};
+    orders.forEach(o=>{ if(o.pick) (groups[o.pick] = groups[o.pick] || []).push(o); });
+    const lines = cols.map(c=>{
+      const g = groups[c.id] || [];
+      return "  " + (c.issueDate||"-") + " · " + (Number(c.amount)||0).toLocaleString()
+        + " ← 주문 " + g.length + "건";
+    }).join("\n");
+    const none = orders.filter(o=> !o.pick).length;
+    if(!confirm("계산서에 주문을 이어 붙입니다.\n\n" + lines
+      + (none ? "\n\n안 정한 주문 " + none + "건은 연결이 풀립니다." : "")
+      + "\n\n각 계산서 금액이 붙인 주문들에 출고가 비율로 나뉩니다.\n진행할까요?")) return;
+
+    try{
+      const bt = writeBatch(db);
+      cols.forEach(c=>{
+        const g = groups[c.id] || [];
+        if(g.length === 0) return;
+        const parts = splitByShare(Number(c.amount)||0, g.map(o=> o.listSum || o.credit || 0));
+        g.forEach((o,i)=>{
+          bt.update(doc(db,"orderBatches", o.batchId), {
+            collateralId: c.id, collateralNo: c.invoiceNo || "", collateralDate: c.issueDate || "",
+            creditUsed: parts[i]
+          });
+          if(orderBatchCache[o.batchId]){
+            orderBatchCache[o.batchId].collateralId = c.id;
+            orderBatchCache[o.batchId].creditUsed = parts[i];
+          }
+        });
+        bt.update(doc(db,"b2bCollaterals", c.id), { orderBatchIds: g.map(o=> o.batchId) });
+      });
+      orders.filter(o=> !o.pick).forEach(o=>{
+        bt.update(doc(db,"orderBatches", o.batchId), { collateralId: "", collateralNo: "", collateralDate: "" });
+        if(orderBatchCache[o.batchId]) orderBatchCache[o.batchId].collateralId = "";
+      });
+      await bt.commit();
+
+      // 여신 원장도 새 금액으로 맞춥니다.
+      for(const c of cols){
+        const g = groups[c.id] || [];
+        const parts = splitByShare(Number(c.amount)||0, g.map(o=> o.listSum || o.credit || 0));
+        for(let i=0; i<g.length; i++){
+          try{ await replaceB2BOrderUse(g[i].batchId, parts[i],
+            g[i].b.depositPaidDate || g[i].b.orderDate || todayStr(), g[i].b.source || "-"); }catch(e){}
+        }
+      }
+    }catch(e){ alert("저장하지 못했습니다.\n" + ((e&&e.message)?e.message:String(e))); return; }
+
+    logAction("담보 계산서 주문 매칭", colMapState.month + " / " + colMapState.company
+      + " / 계산서 " + cols.length + "장 · 주문 " + orders.filter(o=> o.pick).length + "건");
+    alert("저장했습니다.");
+    clearCache("loan"); clearCache("orders");
+    colMapState = null;
+    document.getElementById("collateral-detail").innerHTML = "";
+    if(typeof loadCollateralList === "function") loadCollateralList();
+  };
+
   window.showCollateralOrders = function(key){
     const list = colRowBatches[key] || [];
     const el = document.getElementById("collateral-detail");
@@ -15098,6 +15285,7 @@
                       + (((r.cols||[]).length > 1) ? ' ' + comboEsc(String(c.issueDate||"").slice(4)) : '') + '</button>').join("")
                   + (r.cols||[]).map(c=> '<button class="btn small danger" style="width:auto;margin-left:2px;" data-col-del="'+c.id+'" title="'+comboEsc(c.issueDate||"")+' 삭제">삭제' + (((r.cols||[]).length > 1) ? ' ' + comboEsc(String(c.issueDate||"").slice(4)) : '') + '</button>').join("")
                   + '<button class="btn small" style="width:auto;margin-left:4px;" title="이 달에 계산서를 한 장 더 넣습니다" data-col-new="'+comboEsc(r.month)+'|'+comboEsc(r.company)+'|'+Math.max(0, r.credit - r.colAmt)+'">계산서 추가</button>'
+                  + '<button class="btn small secondary" style="width:auto;margin-left:4px;" title="이 달의 계산서와 주문을 한 화면에서 이어 붙입니다." data-col-map="'+comboEsc(r.month)+'|'+comboEsc(r.company)+'">주문 매칭</button>'
                 : '<button class="btn small" style="width:auto;" data-col-new="'+comboEsc(r.month)+'|'+comboEsc(r.company)+'|'+r.credit+'">계산서 등록</button>')
             + '</td>' : '')
         + '</tr>';
@@ -15123,6 +15311,7 @@
       openCollateralModal(null, { month:m, company:co, amount:Number(amt)||0 });
     });
     // 주문완료 숫자를 누르면 이 줄에 묶인 주문을 보여줍니다.
+    listEl.querySelectorAll("[data-col-map]").forEach(b=> b.onclick = ()=> openColMap(b.dataset.colMap));
     listEl.querySelectorAll("[data-col-orders]").forEach(a=>{
       a.onclick = ()=> showCollateralOrders(a.dataset.colOrders);
     });
