@@ -387,7 +387,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v719</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v723</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -3858,6 +3858,7 @@
     { key:"otherDiscountAmt", label:"타할인", get:it=> discFmt(it.otherDiscountAmt), getRaw:it=> discRaw(it.otherDiscountAmt) },
     { key:"salePriceFollowsBuy", label:"판매가 연동",
       get:it=> it.salePriceFollowsBuy === true ? '<span style="color:#2e7d32;font-weight:700;">입고가 따라감</span>' : '<span style="color:var(--gray);">-</span>',
+      isText:true,
       getRaw:it=> it.salePriceFollowsBuy === true ? "입고가 따라감" : "" },
     { key:"otherDiscountPct", label:"타할인%", get:it=> discPctFmt(it.otherDiscountPct), getRaw:it=> discRaw(it.otherDiscountPct) },
     { key:"totalPurchaseDiscount", label:"입고할인", get:it=> discFmt(totalInDiscountOf(it)), getRaw:it=> discRaw(totalInDiscountOf(it)) },
@@ -25167,7 +25168,7 @@
     const date = (document.getElementById("i2s-date").value||"").replace(/\D/g,"") || todayStr();
     const checked = Array.from(document.querySelectorAll(".i2s-cb:checked")).map(cb=>cb.dataset.id);
     if(checked.length === 0){ alert("재고를 선택해주세요."); return; }
-    const items = i2sRows.filter(x=> checked.includes(x.id));
+    let items = i2sRows.filter(x=> checked.includes(x.id));
 
     // 모델·판매가 단위로 묶어서 판매요청 줄을 만듭니다.
     const groups = {};
@@ -25178,6 +25179,15 @@
     });
     const total = items.reduce((n,it)=> n + (Number(it.salePrice)||0), 0);
 
+    // 반품한 재고는 팔 수 없습니다. 목록에는 남지만 판매요청 대상에서는 뺍니다.
+    const returned = items.filter(it=> it.status === "반품");
+    if(returned.length){
+      alert("반품된 재고가 " + returned.length + "대 있습니다.\n\n"
+        + returned.slice(0,5).map(x=> "· " + (x.serialNumber||"-")).join("\n")
+        + "\n\n반품한 단말기는 판매할 수 없어 뺐습니다.");
+      items = items.filter(it=> it.status !== "반품");
+      if(items.length === 0) return;
+    }
     const notSold = items.filter(it=> it.status !== "판매");
     let markSold = false;
     if(!confirm(dest + " 판매요청을 만듭니다.\n\n"
@@ -30742,7 +30752,8 @@
         if(okBatch && !okBatch.has(o.batchId)) return;
         if(b2bOrderDate && dateOfBatch[o.batchId] !== b2bOrderDate) return;
         const q = Number(o.quantity)||0;
-        pendingRebate += (Number(o.otherDiscountAmt)||0) * q;
+        // 타할인 금액은 공급가 기준으로 넣습니다. 그대로 더하면 삼성이 주는 금액과 같습니다.
+      pendingRebate += (Number(o.otherDiscountAmt)||0) * q;
         listSumAll  += (Number(o.listPrice)||0) * q;
         preSumAll   += (Number(o.preDiscountAmt)||0) * q;
         otherSumAll += (Number(o.otherDiscountAmt)||0) * q;
@@ -30751,6 +30762,7 @@
     }catch(e){}
     const discountAll = preSumAll + otherSumAll;          // 할인금액 = 출고가 − 입고가
     const costSumAll  = listSumAll - discountAll;         // 입고가 합계
+    pendingRebate = Math.round(pendingRebate);
     const notYet = pendingRebate - clubIncentiveTotal;
     // 거래처마다 타할인을 넣은 곳과 안 넣은 곳이 섞여 있습니다.
     //  타할인이 0인데 장려금을 받았다면 「받을 금액」을 셀 기준이 없습니다. 0으로 두지 않고 그 사실을 알려줍니다.
@@ -30794,7 +30806,7 @@
         ? ("주문에 타할인을 안 넣어 셀 수가 없습니다 · 수령 " + clubIncentiveTotal.toLocaleString()
            + (b2bPartnerPick ? " · " + comboEsc(b2bPartnerPick) : ""))
         : ((b2bOrderDate ? "주문일 " + b2bOrderDate + " · " : "")
-           + "누적 " + pendingRebate.toLocaleString() + " · 수령 " + clubIncentiveTotal.toLocaleString()
+           + "공급액 기준 · 누적 " + pendingRebate.toLocaleString() + " · 수령 " + clubIncentiveTotal.toLocaleString()
            + (notYet < 0 ? " · 받은 금액이 " + Math.abs(notYet).toLocaleString() + " 더 많습니다" : "")
            + (b2bPartnerPick ? " · " + comboEsc(b2bPartnerPick) : "")));
     html += statCard("이자지급 수령 합계", interestReceivedTotal.toLocaleString(), "#2e7d32");
@@ -31008,6 +31020,8 @@
     { key:"profit", label:"수익", type:"number" },
     // 매입가 그대로 넘길 때 씁니다. %로 계산하면 매입처마다 절사가 달라 1원씩 어긋납니다.
     { key:"__salePriceFromBuy", label:"판매가 = 입고가로 맞추기", type:"same" },
+    // 삼성전자로 되돌려 보내는 반품. 재고를 「반품」으로 두고 여신을 되돌려 받습니다.
+    { key:"__returnToSamsung", label:"삼성 반품 (여신 환입)", type:"return" },
     { key:"orderDate", label:"주문일", type:"text" },
     { key:"inDate", label:"입고일", type:"text" },
     { key:"expectedSaleDate", label:"판매예정일", type:"text" },
@@ -31090,6 +31104,17 @@
     }else{
       linkBox.style.display = "none";
       linkDesc.innerHTML = "";
+    }
+    if(fieldDef.type === "return"){
+      wrap.innerHTML = '<span style="font-size:12.5px;color:var(--navy);">'
+        + '고른 재고를 <b>삼성전자로 반품</b> 처리합니다.<br>'
+        + '<span style="color:var(--gray);">재고는 「반품」 상태가 되고, 그 단말기의 여신 차감분을 '
+        + '<b>여신 장부에 되돌려 넣습니다</b>. 반품일은 오늘로 넣고 나중에 고치실 수 있습니다.<br>'
+        + '판매·개통된 재고는 고를 수 없습니다.</span></span>'
+        + '<input type="hidden" id="bulk-edit-value" value="=반품">';
+      const linkBoxR = document.getElementById("bulk-link-box");
+      if(linkBoxR) linkBoxR.style.display = "none";
+      return;
     }
     if(fieldDef.type === "same"){
       wrap.innerHTML = '<span style="font-size:12.5px;color:var(--navy);">'
@@ -31213,8 +31238,11 @@
 
     if(key === "purchaseDiscount"){    pre = amt(val) || 0;  p.purchaseDiscountAmt = pre; }
     if(key === "purchaseDiscountAmt"){ pre = num(val);       p.purchaseDiscount = pct(pre); }
-    if(key === "otherDiscountPct"){    other = amt(val) || 0; p.otherDiscountAmt = other; }
-    if(key === "otherDiscountAmt"){    other = num(val);      p.otherDiscountPct = pct(other); }
+    // 타할인(클럽장려금)은 삼성이 「공급가」에 지급률을 곱해 줍니다. 출고가가 아닙니다.
+    const supAmt = (r) => L ? Math.round((L/1.1) * num(r) / 100) : null;
+    const supPct = (a) => L ? Number(((a/(L/1.1))*100).toFixed(2)) : null;
+    if(key === "otherDiscountPct"){    other = supAmt(val) || 0; p.otherDiscountAmt = other; }
+    if(key === "otherDiscountAmt"){    other = num(val);         p.otherDiscountPct = supPct(other); }
 
     if(["purchaseDiscount","purchaseDiscountAmt","otherDiscountPct","otherDiscountAmt"].includes(key)){
       if(L){
@@ -31660,6 +31688,80 @@
       }
     }
 
+    // 삼성 반품 — 재고를 「반품」으로 두고 여신을 되돌려 받습니다.
+    if(fieldDef.type === "return"){
+      const picked = ids.map(id=> (lastRenderedItems||[]).find(x=> x.id === id)).filter(Boolean);
+      const sold = picked.filter(x=> x.status === "판매" || x.status === "개통" || x.saleRequestId);
+      if(sold.length){
+        alert("판매·개통된 재고가 " + sold.length + "대 있습니다.\n\n"
+          + sold.slice(0,5).map(x=> "· " + (x.serialNumber||"-") + " " + (x.destination||"")).join("\n")
+          + "\n\n먼저 판매를 취소한 뒤 반품해주세요.");
+        return;
+      }
+      const already = picked.filter(x=> x.status === "반품");
+      const targets = picked.filter(x=> x.status !== "반품");
+      if(targets.length === 0){ alert("반품할 재고가 없습니다."); return; }
+
+      // 되돌려 받을 여신 — 매입처 계산 방식 그대로, 한 대씩 계산합니다.
+      const creditOf = (it)=> creditFromLines(it.source, [{
+        listPrice: Number(it.listPrice)||0, quantity: 1,
+        preDiscountAmt: Number(it.purchaseDiscountAmt)||0,
+        preDiscountPct: it.purchaseDiscount
+      }]);
+      const bySrc = {};
+      targets.forEach(it=>{
+        const src = String(it.source||"").trim() || "(미지정)";
+        bySrc[src] = (bySrc[src]||0) + creditOf(it);
+      });
+      const lines = Object.keys(bySrc).map(k=> "  " + k + " : " + Math.round(bySrc[k]).toLocaleString()).join("\n");
+      const day = prompt("반품일을 넣어주세요. (8자리)", todayStr());
+      if(day == null) return;
+      const rday = String(day).replace(/\D/g,"");
+      if(rday.length !== 8){ alert("반품일을 8자리로 넣어주세요. (예: 20260828)"); return; }
+      if(!confirm("고른 재고 " + targets.length + "대를 삼성전자로 반품합니다.\n\n"
+        + targets.slice(0,6).map(x=> "  " + (x.serialNumber||"-") + " " + (x.systemModel||"") + " "
+            + (x.systemColor||x.manufacturerColor||"")).join("\n")
+        + (targets.length > 6 ? "\n  ... 외 " + (targets.length-6) + "대" : "")
+        + "\n\n되돌려 받을 여신\n" + lines
+        + (already.length ? "\n\n이미 반품된 " + already.length + "대는 건너뜁니다." : "")
+        + "\n\n반품일 " + rday + " 로 진행할까요?")) return;
+
+      let n1 = 0, n2 = 0;
+      try{
+        for(const it of targets){
+          await updateDoc(doc(db,"inventoryItems", it.id), {
+            status: "반품", returnDate: rday,
+            returnCredit: Math.round(creditOf(it))
+          });
+          n1++;
+        }
+        // 매입처마다 한 줄로 여신 장부에 되돌려 넣습니다.
+        for(const src of Object.keys(bySrc)){
+          const amt = Math.round(bySrc[src]);
+          if(!(amt > 0)) continue;
+          await addDoc(collection(db,"b2bLedger"), {
+            date: rday, category: "deposit", amount: amt,
+            partner: src, source: src,
+            memo: "반품 여신 환입: " + src + " (" 
+              + targets.filter(x=> (String(x.source||"").trim()||"(미지정)") === src).length + "대)",
+            isReturn: true,
+            createdBy: currentUser.name, createdByUsername: currentUser.username, createdAt: serverTimestamp()
+          });
+          n2++;
+        }
+      }catch(e){ alert("반품 처리에 실패했습니다.\n" + ((e&&e.message)?e.message:String(e))); return; }
+
+      logAction("삼성 반품", rday + " / 재고 " + n1 + "대 / 여신 환입 "
+        + Object.keys(bySrc).map(k=> k + " " + Math.round(bySrc[k]).toLocaleString()).join(", "));
+      clearCache("inventory"); clearCache("loan"); clearCache("orders"); clearDashCache();
+      clearInvSelectAll();
+      closeBulkChangeModal();
+      alert("반품 처리했습니다.\n\n  재고 " + n1 + "대 → 반품\n  여신 환입 " + n2 + "건\n\n"
+        + "여신 화면에서 확인해주세요.");
+      loadInventoryList();
+      return;
+    }
+
     // 판매가를 입고가와 똑같이 맞춥니다. (계산이 아니라 그대로 복사라 절사 차이가 없습니다)
     if(fieldDef.type === "same"){
       const targets = ids.map(id=> (lastRenderedItems||[]).find(x=> x.id === id)).filter(Boolean)
@@ -31830,11 +31932,12 @@
             p2.preDiscountAmt = parsedVal;
             if(L) p2.preDiscountPct = Number((((parsedVal)/L)*100).toFixed(2));
           }else if(key === "otherDiscountPct"){
+            // 타할인(클럽장려금)은 공급가 기준입니다.
             p2.otherDiscountPct = parsedVal;
-            if(L) p2.otherDiscountAmt = Math.round(L * parsedVal / 100);
+            if(L) p2.otherDiscountAmt = Math.round((L/1.1) * parsedVal / 100);
           }else if(key === "otherDiscountAmt"){
             p2.otherDiscountAmt = parsedVal;
-            if(L) p2.otherDiscountPct = Number((((parsedVal)/L)*100).toFixed(2));
+            if(L) p2.otherDiscountPct = Number((((parsedVal)/(L/1.1))*100).toFixed(2));
           }
           // 입고가도 함께 맞춥니다. (출고가 − 선할인 − 타할인)
           const pre2 = (p2.preDiscountAmt != null) ? p2.preDiscountAmt : (Number(it.purchaseDiscountAmt)||0);
@@ -35164,8 +35267,14 @@
     // 현재상태는 보기 설정 항목이 아니라 항상 보이는 칸이라 그대로 넣습니다.
     // 열 위치는 보기 설정에서 고른 항목 순서 그대로입니다. 앞에 칸을 끼워넣지 않습니다.
     const headers = cols.map(c=>c.label).concat(["현재상태"]);
+    // 숫자 칸만 숫자로 넣습니다. (글자를 돌려주는 칸은 그대로 글자로)
     const numericColIndices = new Set();
-    cols.forEach((c,idx)=>{ if(c.getRaw) numericColIndices.add(idx); });
+    const sample = lastRenderedItems[0];
+    cols.forEach((c,idx)=>{
+      if(!c.getRaw) return;
+      const v = c.getRaw(sample);
+      if(typeof v === "number" || (v !== "" && v != null && isFinite(Number(v)))) numericColIndices.add(idx);
+    });
     const rows = lastRenderedItems.map(it=>{
       const row = cols.map(c=> c.getRaw ? c.getRaw(it) : c.get(it));
       row.push(it.status||"-");
