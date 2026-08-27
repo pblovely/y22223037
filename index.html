@@ -387,7 +387,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v713</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v714</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -31602,11 +31602,35 @@
             + "되돌리시려면 <판매 관리>에서 취소하거나, <예약 배정>에서 배정 취소해주세요.");
           return;
         }
+        // 입금까지 끝난 판매요청은 금액을 바꿀 수 없습니다. 받은 돈과 달라지기 때문입니다.
+        const paid = [];
+        try{
+          const srIds = [...new Set(locked.map(x=> x.saleRequestId).filter(Boolean))];
+          const bIds = {};
+          for(const sid of srIds){
+            const sd = await getDoc(doc(db,"saleRequests", sid));
+            if(sd.exists()) bIds[sid] = sd.data().batchId || "";
+          }
+          const done = {};
+          for(const bid of [...new Set(Object.values(bIds).filter(Boolean))]){
+            const bd = await getDoc(doc(db,"saleRequestBatches", bid));
+            if(bd.exists() && bd.data().depositReceived === true) done[bid] = true;
+          }
+          locked.forEach(x=>{ const bid = bIds[x.saleRequestId]; if(bid && done[bid]) paid.push(x); });
+        }catch(e){}
+        if(paid.length > 0){
+          alert("입금까지 끝난 판매요청이 " + paid.length + "대 있습니다.\n\n"
+            + paid.slice(0,5).map(x=> "· " + (x.serialNumber||"-") + " " + (x.destination||"")).join("\n")
+            + (paid.length > 5 ? "\n... 외 " + (paid.length-5) + "대" : "")
+            + "\n\n받은 돈과 달라지므로 「" + fieldDef.label + "」을 바꿀 수 없습니다.\n"
+            + "이 건들을 뺀 뒤 다시 해주세요. 꼭 고쳐야 하면 <판매 관리>에서 입금을 먼저 되돌려주세요.");
+          return;
+        }
         if(!confirm("고르신 재고 중 " + locked.length + "대가 판매요청에 묶여 있습니다.\n\n"
           + locked.slice(0,5).map(x=> "· " + (x.serialNumber||"-") + " " + (x.destination||"")).join("\n")
           + (locked.length > 5 ? "\n... 외 " + (locked.length-5) + "대" : "")
           + "\n\n「" + fieldDef.label + "」을 바꾸면 그 판매요청의 판매가·판매할인도 함께 바꿉니다.\n"
-          + "이미 입금까지 끝난 건이면 입금액과 달라지니 확인해주세요.\n\n진행할까요?")) return;
+          + "(입금이 끝난 건은 없습니다 — 확인했습니다)\n\n진행할까요?")) return;
         saleLinkedIds = locked.map(x=> x.id);
       }
     }
