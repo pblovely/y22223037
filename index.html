@@ -387,7 +387,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v755</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v756</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -3873,7 +3873,19 @@
     // 삼성전자는 공급가(VAT 뺀 금액)에 할인율을 곱합니다. 그 기준으로 환산한 값입니다.
     { key:"returnDate", label:"반품일", get:it=> it.returnDate || "-", getRaw:it=> it.returnDate || "-" },
     { key:"creditReturnDate", label:"여신복구일", get:it=> it.creditReturnDate || "-", getRaw:it=> it.creditReturnDate || "-" },
-    { key:"samsungPct", label:"삼성기준 할인%",
+    // 판매 쪽도 삼성 기준(공급가)으로 환산해 보여줍니다. 매입 할인율과 바로 견줄 수 있게요.
+    { key:"samsungSalePct", label:"삼성기준 판매할인%",
+      get:it=>{
+        const L = Number(it.listPrice)||0, sp = Number(it.salePrice)||0;
+        if(!L || !sp) return "-";
+        return (((L - sp) / (L/1.1)) * 100).toFixed(2) + "%";
+      },
+      getRaw:it=>{
+        const L = Number(it.listPrice)||0, sp = Number(it.salePrice)||0;
+        if(!L || !sp) return "-";
+        return Number((((L - sp) / (L/1.1)) * 100).toFixed(2));
+      } },
+    { key:"samsungPct", label:"삼성기준 매입할인%",
       get:it=>{
         const L = Number(it.listPrice)||0, buy = Number(it.purchasePrice)||0;
         if(!L || !buy) return "-";
