@@ -387,7 +387,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v715</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v717</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -31003,6 +31003,8 @@
     { key:"note1", label:"비고1", type:"text", placeholder:"자유 입력" },
     { key:"note2", label:"비고2", type:"text", placeholder:"자유 입력" },
     { key:"profit", label:"수익", type:"number" },
+    // 매입가 그대로 넘길 때 씁니다. %로 계산하면 매입처마다 절사가 달라 1원씩 어긋납니다.
+    { key:"__salePriceFromBuy", label:"판매가 = 입고가로 맞추기", type:"same" },
     { key:"orderDate", label:"주문일", type:"text" },
     { key:"inDate", label:"입고일", type:"text" },
     { key:"expectedSaleDate", label:"판매예정일", type:"text" },
@@ -31085,6 +31087,16 @@
     }else{
       linkBox.style.display = "none";
       linkDesc.innerHTML = "";
+    }
+    if(fieldDef.type === "same"){
+      wrap.innerHTML = '<span style="font-size:12.5px;color:var(--navy);">'
+        + '고른 재고의 <b>판매가를 그 재고의 입고가와 똑같이</b> 맞춥니다.<br>'
+        + '<span style="color:var(--gray);">판매할인·판매할인%도 출고가 기준으로 다시 계산합니다. '
+        + '매입처마다 계산 방식이 달라도 1원도 안 틀립니다.</span></span>'
+        + '<input type="hidden" id="bulk-edit-value" value="=입고가">';
+      const linkBox0 = document.getElementById("bulk-link-box");
+      if(linkBox0) linkBox0.style.display = "none";
+      return;
     }
     if(fieldDef.type === "select"){
       const snap = await getDocs(query(collection(db, fieldDef.collection), orderBy("name")));
@@ -31202,7 +31214,17 @@
     if(key === "otherDiscountAmt"){    other = num(val);      p.otherDiscountPct = pct(other); }
 
     if(["purchaseDiscount","purchaseDiscountAmt","otherDiscountPct","otherDiscountAmt"].includes(key)){
-      if(L){ buy = L - pre - other; p.purchasePrice = buy; }
+      if(L){
+        buy = L - pre - other; p.purchasePrice = buy;
+        // 「판매가 = 입고가」로 맞춰둔 재고는 판매가도 함께 따라갑니다.
+        if(it.salePriceFollowsBuy === true){
+          sale = buy;
+          p.salePrice = buy;
+          p.saleDiscountAmt = L - buy;
+          p.saleDiscount = pct(L - buy);
+          p.profit = 0;
+        }
+      }
     }
     if(key === "purchasePrice"){
       buy = num(val);
@@ -31635,6 +31657,74 @@
       }
     }
 
+    // 판매가를 입고가와 똑같이 맞춥니다. (계산이 아니라 그대로 복사라 절사 차이가 없습니다)
+    if(fieldDef.type === "same"){
+      const targets = ids.map(id=> (lastRenderedItems||[]).find(x=> x.id === id)).filter(Boolean)
+        .filter(it=> Number(it.purchasePrice) > 0);
+      if(targets.length === 0){ alert("입고가가 들어 있는 재고가 없습니다."); return; }
+      // 입금까지 끝난 판매요청은 건드리지 않습니다.
+      const linkedT = targets.filter(x=> x.saleRequestId);
+      const paidT = [];
+      try{
+        const bIds = {};
+        for(const sid of [...new Set(linkedT.map(x=> x.saleRequestId))]){
+          const sd = await getDoc(doc(db,"saleRequests", sid));
+          if(sd.exists()) bIds[sid] = sd.data().batchId || "";
+        }
+        const done = {};
+        for(const bid of [...new Set(Object.values(bIds).filter(Boolean))]){
+          const bd = await getDoc(doc(db,"saleRequestBatches", bid));
+          if(bd.exists() && bd.data().depositReceived === true) done[bid] = true;
+        }
+        linkedT.forEach(x=>{ const bid = bIds[x.saleRequestId]; if(bid && done[bid]) paidT.push(x); });
+      }catch(e){}
+      if(paidT.length){
+        alert("입금까지 끝난 판매요청이 " + paidT.length + "대 있습니다.\n\n"
+          + paidT.slice(0,5).map(x=> "· " + (x.serialNumber||"-")).join("\n")
+          + "\n\n받은 돈과 달라지므로 바꿀 수 없습니다. 그 건들을 빼고 다시 해주세요.");
+        return;
+      }
+      const sample = targets.slice(0,3).map(x=>
+        "  " + (x.serialNumber||"-") + " : 판매가 "
+        + (Number(x.salePrice)||0).toLocaleString() + " → " + (Number(x.purchasePrice)||0).toLocaleString()).join("\n");
+      if(!confirm("고른 재고 " + targets.length + "대의 판매가를 입고가와 똑같이 맞춥니다.\n\n"
+        + sample + (targets.length > 3 ? "\n  ... 외 " + (targets.length-3) + "대" : "")
+        + "\n\n판매할인·판매할인%도 출고가 기준으로 다시 계산합니다."
+        + (linkedT.length ? "\n판매요청 " + linkedT.length + "건도 함께 바꿉니다." : "")
+        + "\n\n진행할까요?")) return;
+      let n1 = 0, n2 = 0;
+      try{
+        for(const it of targets){
+          const L = Number(it.listPrice)||0;
+          const buy = Number(it.purchasePrice)||0;
+          const patch = { salePrice: buy };
+          if(L){ patch.saleDiscountAmt = L - buy;
+                 patch.saleDiscount = Number((((L - buy)/L)*100).toFixed(2)); }
+          patch.profit = 0;                       // 매입가 그대로 넘기므로 수익 0
+          patch.salePriceFollowsBuy = true;       // 앞으로 입고가가 바뀌면 판매가도 따라갑니다
+          await updateDoc(doc(db,"inventoryItems", it.id), patch);
+          n1++;
+          if(it.saleRequestId){
+            await updateDoc(doc(db,"saleRequests", it.saleRequestId), {
+              salePrice: buy,
+              ...(L ? { saleDiscountAmt: L - buy,
+                        saleDiscount: Number((((L - buy)/L)*100).toFixed(2)) } : {})
+            });
+            n2++;
+          }
+        }
+      }catch(e){ alert("바꾸지 못했습니다.\n" + ((e&&e.message)?e.message:String(e))); return; }
+      logAction("재고 일괄 변경", "판매가 = 입고가로 맞춤 (" + n1 + "건"
+        + (n2 ? " / 판매요청 " + n2 + "건 함께 수정" : "") + ")");
+      clearCache("inventory"); clearCache("saleRequests"); clearDashCache();
+      clearInvSelectAll();
+      closeBulkChangeModal();
+      alert(n1 + "대의 판매가를 입고가와 똑같이 맞췄습니다."
+        + (n2 ? "\n판매요청 " + n2 + "건도 함께 바꿨습니다." : ""));
+      loadInventoryList();
+      return;
+    }
+
     // 색상 — 제조사색상·전산색상·SKU 를 함께 바꿉니다.
     if(fieldDef.type === "color"){
       const parts = String(newVal).split("|");
@@ -31698,7 +31788,7 @@
     msg += "\n진행하시겠습니까?";
     if(!confirm(msg)) return;
 
-    let linkedCount = 0;
+    let linkedCount = 0, followFixed = 0;
     // 바뀌기 전 값을 모아 이력에 「전 → 후」로 남깁니다. (몇 가지 값이 있었는지도 함께)
     const beforeSet = {};
     for(const id of ids){
@@ -31718,6 +31808,24 @@
         beforeSet[bk] = (beforeSet[bk]||0) + 1; }
       await updateDoc(doc(db,"inventoryItems", id), patch);
     }
+    // 「판매가 = 입고가」로 맞춰둔 재고는, 선할인·타할인이 바뀌면 판매요청 금액도 함께 맞춥니다.
+    if(useLink && ["purchaseDiscount","purchaseDiscountAmt","otherDiscountPct","otherDiscountAmt"].includes(key)){
+      try{
+        for(const id of ids){
+          const it = (lastRenderedItems||[]).find(x=> x.id === id);
+          if(!it || it.salePriceFollowsBuy !== true || !it.saleRequestId) continue;
+          const linked2 = computeLinkedPatch(it, key, parsedVal);
+          if(linked2.salePrice == null) continue;
+          await updateDoc(doc(db,"saleRequests", it.saleRequestId), {
+            salePrice: linked2.salePrice,
+            ...(linked2.saleDiscountAmt != null ? { saleDiscountAmt: linked2.saleDiscountAmt } : {}),
+            ...(linked2.saleDiscount != null ? { saleDiscount: linked2.saleDiscount } : {})
+          });
+          followFixed++;
+        }
+      }catch(e){}
+    }
+
     // 판매요청에 묶인 재고면 그 판매요청의 금액도 같이 맞춥니다.
     let srFixed = 0;
     if(saleLinkedIds.length){
@@ -31756,7 +31864,8 @@
       .join(", ") + (Object.keys(beforeSet).length > 4 ? " 외" : "");
     logAction("재고 일괄 변경", fieldDef.label + " " + beforeTxt + " → " + newVal
       + " (" + ids.length + "건" + (useLink ? " / 연동계산 " + linkedCount + "건" : " / 연동 없음")
-      + (srFixed ? " / 판매요청 " + srFixed + "건 함께 수정" : "") + ")");
+      + (srFixed ? " / 판매요청 " + srFixed + "건 함께 수정" : "")
+      + (followFixed ? " / 판매가 따라가기 " + followFixed + "건" : "") + ")");
     // 담아둔 자료도 함께 비웁니다. 안 비우면 방금 바꾼 값이 화면에 안 보입니다.
     clearCache("inventory"); clearCache("saleRequests"); clearDashCache();
     clearInvSelectAll();
