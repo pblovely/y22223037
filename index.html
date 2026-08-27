@@ -387,7 +387,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v688</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v689</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -9068,6 +9068,22 @@
     { key:"createdAt",  label:"작성일",   get:r=> fmtStamp(r.b.createdAt), sort:r=> (r.b.createdAt&&r.b.createdAt.seconds)||0 },
     { key:"updatedAt",  label:"수정일",   get:r=> fmtStamp(r.b.updatedAt) }
   ];
+  //  판매요청 한 건의 「출고가 금액」 — 모델 등록의 출고가 × 수량입니다.
+  //   줄에 출고가가 적혀 있으면 그 값을 먼저 쓰고, 없으면 모델 등록에서 찾습니다.
+  function saleListAmount(r){
+    return ((r.lines||[]).filter(l=> l.status !== "취소")).reduce((n,l)=>{
+      const q = Number(l.quantity)||0;
+      if(!q) return n;
+      let lp = Number(l.listPrice)||0;
+      if(!lp){
+        const key = modelDupKey(l.systemModel||"");
+        const m = (modelsCache||[]).find(x=> modelDupKey(x.systemModel||"") === key);
+        lp = m ? (Number(m.priceIncVat)||0) : 0;
+      }
+      return n + lp * q;
+    }, 0);
+  }
+
   const SALE_COLS = [
     { key:"requestDate", label:"요청일",  get:r=> r.b.requestDate||"-", sort:r=> r.b.requestDate||"" },
     { key:"destination", label:"판매처",  get:r=> comboEsc(r.b.destination||"-"), sort:r=> r.b.destination||"" },
@@ -9090,6 +9106,19 @@
     { key:"match",       label:"매칭",    get:r=> r.done+"/"+r.qty, num:true,
       cls:r=> r.done>=r.qty ? "color:#2e7d32;font-weight:700;" : (r.done>0 ? "color:#b8860b;" : "color:var(--danger);") },
     { key:"amount",      label:"판매금액", get:r=> (Number(r.b.depositRequired)||0).toLocaleString(), num:true, sort:r=> Number(r.b.depositRequired)||0 },
+    // 출고가로도 정리하실 수 있게 넣습니다. (모델 등록의 출고가 × 수량)
+    { key:"listAmount",  label:"출고가 금액", get:r=> { const v = saleListAmount(r); return v ? v.toLocaleString() : "-"; },
+      num:true, sort:r=> saleListAmount(r) },
+    { key:"listDiff",    label:"할인금액", get:r=> {
+        const v = saleListAmount(r); if(!v) return "-";
+        const d = v - (Number(r.b.depositRequired)||0);
+        return d ? '<span style="color:var(--danger);">' + d.toLocaleString() + '</span>' : "0";
+      }, num:true, sort:r=> saleListAmount(r) - (Number(r.b.depositRequired)||0) },
+    { key:"listPct",     label:"할인%", get:r=> {
+        const v = saleListAmount(r); if(!v) return "-";
+        const d = v - (Number(r.b.depositRequired)||0);
+        return ((d / v) * 100).toFixed(2) + "%";
+      }, num:true, sort:r=> { const v = saleListAmount(r); return v ? (v - (Number(r.b.depositRequired)||0)) / v : 0; } },
     { key:"payState",    label:"입금",    get:r=> r.b.depositReceived ? '<span style="color:#2e7d32;font-weight:700;">완료</span>'
         : (r.b.depositRequestId ? '<span style="color:#b8860b;font-weight:700;">확인중</span>' : '<span style="color:var(--danger);">필요</span>') },
     { key:"payDate",     label:"입금일",  get:r=> r.b.depositReceivedDate||"-" },
