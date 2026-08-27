@@ -387,7 +387,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v730</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v733</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -3859,9 +3859,9 @@
     { key:"purchaseDiscount", label:"선할인%", get:it=> discPctFmt(preDiscountPctOf(it)), getRaw:it=> discRaw(preDiscountPctOf(it)) },
     { key:"otherDiscountAmt", label:"타할인", get:it=> discFmt(it.otherDiscountAmt), getRaw:it=> discRaw(it.otherDiscountAmt) },
     { key:"salePriceFollowsBuy", label:"판매가 연동",
-      get:it=> it.salePriceFollowsBuy === true ? '<span style="color:#2e7d32;font-weight:700;">입고동일</span>' : '<span style="color:var(--gray);">-</span>',
+      get:it=> it.salePriceFollowsBuy === true ? "입고동일" : "-",
       isText:true,
-      getRaw:it=> it.salePriceFollowsBuy === true ? "입고동일" : "" },
+      getRaw:it=> it.salePriceFollowsBuy === true ? "입고동일" : "-" },
     { key:"otherDiscountPct", label:"타할인%", get:it=> discPctFmt(it.otherDiscountPct), getRaw:it=> discRaw(it.otherDiscountPct) },
     { key:"totalPurchaseDiscount", label:"입고할인", get:it=> discFmt(totalInDiscountOf(it)), getRaw:it=> discRaw(totalInDiscountOf(it)) },
     { key:"destination", label:"판매처", get:it=>it.destination||"-" },
@@ -31287,7 +31287,7 @@
           sale = buy;
           p.salePrice = buy;
           p.saleDiscountAmt = L - buy;
-          p.saleDiscount = sPct(L - buy);   // 매입처 기준 (입고 그대로 넘기므로)
+          // 판매할인%는 적어두신 값 그대로 둡니다. 금액만 입고가에 맞춥니다.
           p.profit = 0;
         }
       }
@@ -31857,8 +31857,7 @@
           if(it.saleRequestId){
             await updateDoc(doc(db,"saleRequests", it.saleRequestId), {
               salePrice: buy,
-              ...(L ? { saleDiscountAmt: L - buy,
-                        saleDiscount: Number((((L - buy)/L)*100).toFixed(2)) } : {})
+              ...(L ? { saleDiscountAmt: L - buy } : {})   // 판매할인%는 그대로 둡니다
             });
             n2++;
           }
