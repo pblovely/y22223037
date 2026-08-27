@@ -387,7 +387,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v760</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v762</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -3681,6 +3681,13 @@
           <div class="stack-row"><label>판매처 (선택)</label><select id="item-dest-select"><option value="">해당없음</option></select></div>
           <div class="stack-row"><label>판매가 (선택)</label><input type="number" id="item-saleprice-input" oninput="onSalePriceInput()"></div>
           <div class="stack-row"><label>판매할인</label><input type="number" id="item-salediscountamt-input" placeholder="예: 10000" oninput="onSaleDiscountAmtInput()"></div>
+          <div class="stack-row"><label>할인 계산 기준 <span class="info-tip" title="매입처·판매처에 저장해둔 기준이 자동으로 들어옵니다. 이 재고에서만 다르게 하려면 바꾸세요.">ⓘ</span></label>
+            <select id="item-base-select" onchange="onItemBaseChange()">
+              <option value="unit">대당 (출고가에 걸기)</option>
+              <option value="total">합계 (출고가에 걸기)</option>
+              <option value="supply">공급가 기준 (삼성전자 방식)</option>
+            </select>
+          </div>
           <div class="stack-row"><label>판매할인%</label><input type="number" step="0.01" id="item-salediscount-input" placeholder="예: 0.20" oninput="onSaleDiscountInput()"></div>
           <div class="stack-row"><label>공시지원금 (선택)</label><input type="number" id="item-subsidyamount-input" placeholder="본사에서 유치수수료로 주는 금액"></div>
           <div class="stack-row"><label>공시지원금 상태</label>
@@ -7236,6 +7243,21 @@
     return B ? ((Number(amtRaw)/B)*100).toFixed(2) : "";
   }
   //  업체정보에 저장한 기준으로 계산 밑금액을 냅니다. (공급가면 VAT 제외)
+  //  재고 창에서 기준을 바꾸면 그 자리에서 금액을 다시 냅니다.
+  window.onItemBaseChange = function(){
+    itemBaseOverride = String((document.getElementById("item-base-select")||{}).value||"") || null;
+    const L = Number((document.getElementById("item-listprice-input")||{}).value) || 0;
+    [["item-purchasediscount-input","item-purchasediscountamt-input"],
+     ["item-otherdiscountpct-input","item-otherdiscountamt-input"],
+     ["item-salediscount-input","item-salediscountamt-input"]].forEach(([pctId, amtId])=>{
+      const pe = document.getElementById(pctId), ae = document.getElementById(amtId);
+      if(!pe || !ae) return;
+      if(String(pe.value||"").trim() !== "") ae.value = amtFromPct(pe.value, L);
+    });
+    if(typeof recalcItemPrices === "function") recalcItemPrices();
+  };
+  let itemBaseOverride = null;
+
   window.baseByCompany = function(companyName, listPrice, override){
     const L = Number(listPrice)||0;
     const b = override || (function(){
@@ -7247,7 +7269,8 @@
 
   //  할인 기준이 「공급가」면 VAT를 뺀 금액에 %를 겁니다. (삼성전자 방식)
   function discBase(listPrice){
-    const b = (currentOrderSourceInfo && currentOrderSourceInfo.base) || "";
+    //  재고 창에서 고른 기준이 있으면 그것을, 없으면 주문 창의 기준을 씁니다.
+    const b = itemBaseOverride || (currentOrderSourceInfo && currentOrderSourceInfo.base) || "";
     return (b === "supply") ? (Number(listPrice)||0)/1.1 : (Number(listPrice)||0);
   }
   function amtFromPct(pctRaw, listPrice){
@@ -7370,6 +7393,7 @@
   let currentOrderLinkId = null; // 재고등록 팝업이 특정 주문의 "도착 등록"으로 열렸을 때 해당 주문 id
   let serialAddCount = 0;
   window.openItemModal = function(){
+    itemBaseOverride = null;   // 창을 열 때마다 초기화합니다.
     editingItemId = null;
     serialAddCount = 0;
     document.getElementById("item-serial-count-msg").style.display = "none";
@@ -7500,6 +7524,9 @@
     document.getElementById("item-otherdiscountpct-input").value = it.otherDiscountPct || "";
     updateTotalDiscountDisplay();
     document.getElementById("item-clawback-row").style.display = (it.subsidyStatus==="환수") ? "flex" : "none";
+    { const c0 = (companiesCache||[]).find(x=> String(x.name||"").trim() === String(it.source||"").trim());
+      const bs = document.getElementById("item-base-select");
+      if(bs) bs.value = (c0 && (c0.discountBase === "total" || c0.discountBase === "supply")) ? c0.discountBase : "unit"; }
     { const e = document.getElementById("item-returndate-input"); if(e) e.value = it.returnDate || ""; }
     { const e = document.getElementById("item-creditreturndate-input"); if(e) e.value = it.creditReturnDate || ""; }
     currentOrderLinkId = it.orderId || null;
@@ -14697,10 +14724,13 @@
         const rs = await getDocs(query(collection(db,"b2bLedger"), where("category","==","return_credit")));
         rs.forEach(d=>{
           const e = d.data();
-          if(String(e.date||"").replace(/\D/g,"").slice(0,6) !== m0) return;
+          // 여신이 실제로 돌아온 달 기준입니다. (복구일을 안 넣었으면 아직 안 뺍니다)
+          if(String(e.creditReturnDate||"").replace(/\D/g,"").slice(0,6) !== m0) return;
           if(String(e.partner || e.source || "").trim() !== co0) return;
           colReturnSum.amount += (Number(e.amount)||0);
           colReturnSum.count++;
+          colReturnSum.rows = (colReturnSum.rows||[]).concat([{
+            date: e.creditReturnDate||"", back: e.date||"", amount: Number(e.amount)||0, memo: e.memo||"" }]);
         });
       }
     }catch(e){}
@@ -14774,10 +14804,19 @@
       // 그 달에 여신복구가 끝난 반품은 계산서 금액에서 빼야 딱 맞습니다. (미리 담아둔 값)
       const retSum = colReturnSum.amount || 0, retCnt = colReturnSum.count || 0;
       { const el0 = document.getElementById("col-return-note");
-        if(el0) el0.innerHTML = retCnt
-          ? '<span style="color:var(--danger);font-weight:700;">반품(여신복구) ' + retCnt + '건 −'
-            + Math.round(retSum).toLocaleString() + '</span> <span style="color:var(--gray);">를 뺀 금액입니다.</span>'
-          : ''; }
+        if(el0 && retCnt){
+          el0.innerHTML = '<div style="border:1px solid var(--danger);background:#fdecea;padding:6px 8px;">'
+            + '<b style="color:var(--danger);">이 달에 여신복구된 반품 ' + retCnt + '건 — 계산서에서 뺍니다</b>'
+            + '<table class="data-table" style="width:auto;margin-top:4px;"><thead><tr>'
+            + '<th>복구일</th><th>반품일</th><th class="ta-right">금액</th></tr></thead><tbody>'
+            + (colReturnSum.rows||[]).map(r=> '<tr><td>' + comboEsc(r.date||"-") + '</td>'
+                + '<td>' + comboEsc(r.back||"-") + '</td>'
+                + '<td class="ta-right" style="color:var(--danger);font-weight:700;">−'
+                + r.amount.toLocaleString() + '</td></tr>').join("")
+            + '</tbody></table></div>';
+        }
+        if(el0 && !retCnt) el0.innerHTML = "";
+      }
 
       const listSum = picked.reduce((n,x)=> n + x.listSum, 0);
       // 고른 주문의 품목 줄을 모두 모아 삼성 방식(대당)으로 계산합니다.
