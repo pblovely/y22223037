@@ -387,7 +387,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v772</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v773</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -31029,15 +31029,23 @@
     // 반품한 단말기는 삼성이 장려금을 주지 않습니다. 그만큼 뺍니다.
     let rebateBack = 0, returnedCnt = 0;
     try{
-      const invSnap = await getDocs(query(collection(db,"inventoryItems"), where("status","==","반품")));
-      invSnap.forEach(d=>{
-        const it = d.data();
-        if(it.deleted === true) return;
-        const src = String(it.source||"").trim();
+      // 여신복구가 끝난 반품 기록을 기준으로 뺍니다. (재고 상태와 무관)
+      const retIds = [];
+      rows.forEach(e=>{
+        if(e.category !== "return_credit") return;
+        if(!e.creditReturnDate) return;                       // 아직 안 돌아온 건 제외
+        const src = String(e.partner || e.source || "").trim();
         if(b2bPartnerPick && src !== b2bPartnerPick) return;
-        rebateBack += (Number(it.otherDiscountAmt)||0);
+        if(e.itemId) retIds.push(e.itemId);
         returnedCnt++;
       });
+      // 그 단말기의 타할인만큼 뺍니다.
+      for(const iid of retIds){
+        try{
+          const sd = await getDoc(doc(db,"inventoryItems", iid));
+          if(sd.exists()) rebateBack += (Number(sd.data().otherDiscountAmt)||0);
+        }catch(e){}
+      }
     }catch(e){}
     pendingRebate = Math.round(pendingRebate - rebateBack);
     const notYet = pendingRebate - clubIncentiveTotal;
