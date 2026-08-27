@@ -387,7 +387,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v703</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v704</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -14895,6 +14895,26 @@
   // ===== 계산서 ↔ 주문 매칭 (한 화면에서) =====
   //  그 달의 계산서 여러 장과 여신결제 주문을 한 번에 놓고, 주문마다 어느 계산서인지 고릅니다.
   let colMapState = null;
+  //  기한이 끝나 더 못 쓰는 계산서로 표시합니다. 담보 총액·남은 한도에서 빠집니다.
+  window.toggleCollateralExpire = async function(colId){
+    if(!hasPerm(currentUserPerms, "paymentProcess")){ alert("권한이 없습니다."); return; }
+    let c = null;
+    try{ const s0 = await getDoc(doc(db,"b2bCollaterals", colId)); if(s0.exists()) c = s0.data(); }catch(e){}
+    if(!c){ alert("계산서를 찾을 수 없습니다."); return; }
+    const on = !c.expired;
+    if(!confirm((c.issueDate||"-") + " · " + (Number(c.amount)||0).toLocaleString() + "\n\n"
+      + (on ? "이 계산서를 더 못 쓰는 상태(기한 종료)로 둡니다.\n담보 총액과 남은 한도에서 빠집니다."
+            : "다시 쓸 수 있는 상태로 되돌립니다.\n담보 총액에 다시 들어갑니다.")
+      + "\n\n진행할까요?")) return;
+    try{
+      await updateDoc(doc(db,"b2bCollaterals", colId), { expired: on, expiredAt: on ? todayStr() : "" });
+    }catch(e){ alert("바꾸지 못했습니다.\n" + ((e&&e.message)?e.message:String(e))); return; }
+    logAction(on ? "담보 계산서 기한 종료" : "담보 계산서 기한 되돌리기",
+      (c.month||"-") + " / " + (c.company||"-") + " / " + (c.issueDate||"-") + " / " + (Number(c.amount)||0).toLocaleString());
+    clearCache("loan");
+    loadCollateralList();
+  };
+
   window.openColMap = async function(key){
     if(!hasPerm(currentUserPerms, "paymentProcess")){ alert("권한이 없습니다."); return; }
     const parts = String(key).split("|");
@@ -15186,7 +15206,8 @@
       (colByKey[k] = colByKey[k] || []).push(c);
     });
     Object.keys(colByKey).forEach(k=> colByKey[k].sort((a,b)=> String(a.issueDate||"").localeCompare(String(b.issueDate||""))));
-    const sumCols = arr=> (arr||[]).reduce((n,c)=> n + (Number(c.amount)||0), 0);
+    // 기한이 끝난 계산서는 더 못 빌리므로 담보 금액에서 뺍니다. (표에는 기록으로 남깁니다)
+    const sumCols = arr=> (arr||[]).reduce((n,c)=> n + (c.expired ? 0 : (Number(c.amount)||0)), 0);
     const sumUsed = arr=> (arr||[]).reduce((n,c)=> n + (usedBy[c.id]||0), 0);
 
     const rows = [];
@@ -15259,12 +15280,13 @@
         + '<td>' + (r.col
             ? '<span style="color:#2e7d32;font-weight:700;">발행완료</span>'
               + (((r.cols||[]).length > 1) ? ' <span style="color:var(--navy);font-size:10.5px;font-weight:700;">' + r.cols.length + '장</span>' : '')
+              + ((r.cols||[]).some(c=> c.expired) ? ' <span style="color:var(--gray);font-size:10.5px;font-weight:700;">기한종료 ' + r.cols.filter(c=> c.expired).length + '장</span>' : '')
             : '<span style="color:var(--danger);font-weight:700;">미발행</span>') + '</td>'
         + '<td style="white-space:nowrap;">' + ((r.cols||[]).length ? r.cols.map(c=> comboEsc(c.issueDate||"-")).join(" · ") : "-") + '</td>'
         + '<td class="ta-right" style="white-space:nowrap;">'
           + (((r.cols||[]).length > 1)
-              ? '<span style="color:var(--gray);font-size:11px;">' + r.cols.map(c=> (Number(c.amount)||0).toLocaleString()).join(" + ") + '</span> <b>= ' + r.colAmt.toLocaleString() + '</b>'
-              : '<b>'+(r.colAmt ? r.colAmt.toLocaleString() : "-")+'</b>') + '</td>'
+              ? '<span style="color:var(--gray);font-size:11px;">' + r.cols.map(c=> c.expired ? ('<span style="text-decoration:line-through;">' + (Number(c.amount)||0).toLocaleString() + '</span>') : (Number(c.amount)||0).toLocaleString()).join(" + ") + '</span> <b>= ' + r.colAmt.toLocaleString() + '</b>'
+              : (((r.cols||[]).length && r.cols[0].expired) ? '<span style="color:var(--gray);text-decoration:line-through;">' + (Number(r.cols[0].amount)||0).toLocaleString() + '</span>' : ('<b>'+(r.colAmt ? r.colAmt.toLocaleString() : "-")+'</b>'))) + '</td>'
         + '<td class="ta-right" style="white-space:nowrap;">'
           + (diff
               ? '<span style="color:var(--danger);font-weight:700;">' + (diff>0?"+":"") + diff.toLocaleString() + '</span>'
@@ -15294,6 +15316,7 @@
                   + (r.cols||[]).map(c=> '<button class="btn small danger" style="width:auto;margin-left:2px;" data-col-del="'+c.id+'" title="'+comboEsc(c.issueDate||"")+' 삭제">삭제' + (((r.cols||[]).length > 1) ? ' ' + comboEsc(String(c.issueDate||"").slice(4)) : '') + '</button>').join("")
                   + '<button class="btn small" style="width:auto;margin-left:4px;" title="이 달에 계산서를 한 장 더 넣습니다" data-col-new="'+comboEsc(r.month)+'|'+comboEsc(r.company)+'|'+Math.max(0, r.credit - r.colAmt)+'">계산서 추가</button>'
                   + '<button class="btn small secondary" style="width:auto;margin-left:4px;" title="이 달의 계산서와 주문을 한 화면에서 이어 붙입니다." data-col-map="'+comboEsc(r.month)+'|'+comboEsc(r.company)+'">주문 매칭</button>'
+                  + (r.cols||[]).map(c=> '<button class="btn small secondary" style="width:auto;margin-left:2px;" title="' + comboEsc(c.issueDate||"") + ' 계산서를 더 못 쓰는 상태로 두거나 되돌립니다." data-col-exp="'+c.id+'">' + (c.expired ? '기한 되돌리기' : '기한 종료') + (((r.cols||[]).length > 1) ? ' ' + comboEsc(String(c.issueDate||"").slice(4)) : '') + '</button>').join("")
                 : '<button class="btn small" style="width:auto;" data-col-new="'+comboEsc(r.month)+'|'+comboEsc(r.company)+'|'+r.credit+'">계산서 등록</button>')
             + '</td>' : '')
         + '</tr>';
@@ -15320,6 +15343,7 @@
     });
     // 주문완료 숫자를 누르면 이 줄에 묶인 주문을 보여줍니다.
     listEl.querySelectorAll("[data-col-map]").forEach(b=> b.onclick = ()=> openColMap(b.dataset.colMap));
+    listEl.querySelectorAll("[data-col-exp]").forEach(b=> b.onclick = ()=> toggleCollateralExpire(b.dataset.colExp));
     listEl.querySelectorAll("[data-col-orders]").forEach(a=>{
       a.onclick = ()=> showCollateralOrders(a.dataset.colOrders);
     });
