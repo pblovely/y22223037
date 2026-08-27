@@ -387,7 +387,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v706</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v709</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -9975,6 +9975,9 @@
         const sum = recs.reduce((n,r)=> n + (Number(r.amount)||0), 0);
         // 선할인까지만 반영한 금액이 여신 차감액입니다.
         const lines = (ordersByBatch[bd.id]||[]).filter(o=> o.status !== "취소");
+        // 담보 계산서에 묶어둔 주문은 그 계산서 금액으로 맞춰둔 것이라 건드리지 않습니다.
+        //  (여기서 다시 계산하면 계산서에 맞춰 나눈 금액이 도로 바뀝니다)
+        if(isCredit && b.collateralId && recs.length === 1) continue;
         const want = isCredit ? creditFromLines(b.source, lines) : 0;
         if(sum !== want || recs.length > 1){
           await replaceB2BOrderUse(bd.id, want, b.depositPaidDate || b.orderDate || todayStr(), b.source || "-");
@@ -14897,6 +14900,7 @@
   };
 
   let colRowBatches = {};     // 담보 계산서 줄에 묶인 주문 (「주문 보기」에서 씁니다)
+  let colSheetCache = {};     // 그 줄의 계산서 목록 (「계산서별 작업」에서 씁니다)
 
   // 이 줄에 어떤 주문이 묶였는지 보여줍니다. 계산서에 안 담긴 주문도 알려드립니다.
   // ===== 계산서 ↔ 주문 매칭 (한 화면에서) =====
@@ -14970,6 +14974,39 @@
       (c.month||"-") + " / " + (c.company||"-") + " / " + (c.issueDate||"-") + " / " + (Number(c.amount)||0).toLocaleString());
     clearCache("loan");
     loadCollateralList();
+  };
+
+  //  계산서가 여러 장이면 버튼이 너무 많아집니다. 눌렀을 때 장별로 펼쳐 보여줍니다.
+  window.openColSheet = function(key){
+    const el = document.getElementById("collateral-detail");
+    if(!el) return;
+    const parts = String(key).split("|");
+    const month = parts[0] || "", company = parts[1] || "";
+    const list = (colSheetCache[key] || []);
+    if(list.length === 0){ el.innerHTML = '<div style="color:var(--gray);">계산서가 없습니다.</div>'; return; }
+    el.innerHTML = '<div style="border:1px solid var(--navy);padding:10px 12px;margin-top:8px;">'
+      + '<div style="font-weight:700;margin-bottom:8px;">' + comboEsc(month) + ' · ' + comboEsc(company)
+      + ' — 계산서 ' + list.length + '장</div>'
+      + '<table class="data-table" style="width:auto;"><thead><tr>'
+      + '<th>발행일</th><th class="ta-right">금액</th><th>상태</th><th>작업</th></tr></thead><tbody>'
+      + list.map(c=> '<tr' + (c.expired ? ' style="background:#f3f4f8;color:var(--gray);"' : '') + '>'
+          + '<td>' + comboEsc(c.issueDate||"-") + '</td>'
+          + '<td class="ta-right">' + (Number(c.amount)||0).toLocaleString() + '</td>'
+          + '<td>' + (c.expired ? '기한종료' : '사용 가능') + '</td>'
+          + '<td style="white-space:nowrap;">'
+          + '<button class="btn small secondary" style="width:auto;" data-cs-edit="'+c.id+'">수정</button>'
+          + '<button class="btn small secondary" style="width:auto;margin-left:3px;" data-cs-loan="'+c.id+'">대출 잇기</button>'
+          + '<button class="btn small secondary" style="width:auto;margin-left:3px;" data-cs-exp="'+c.id+'">'
+            + (c.expired ? '기한 되돌리기' : '기한 종료') + '</button>'
+          + '<button class="btn small danger" style="width:auto;margin-left:3px;" data-cs-del="'+c.id+'">삭제</button>'
+          + '</td></tr>').join("")
+      + '</tbody></table>'
+      + '<button class="btn small secondary" style="width:auto;margin-top:8px;" onclick="document.getElementById(\'collateral-detail\').innerHTML=\'\';">닫기</button>'
+      + '</div>';
+    el.querySelectorAll("[data-cs-edit]").forEach(b=> b.onclick = ()=> openCollateralModal(b.dataset.csEdit));
+    el.querySelectorAll("[data-cs-loan]").forEach(b=> b.onclick = ()=> linkLoanToCollateral(b.dataset.csLoan));
+    el.querySelectorAll("[data-cs-exp]").forEach(b=> b.onclick = ()=> toggleCollateralExpire(b.dataset.csExp));
+    el.querySelectorAll("[data-cs-del]").forEach(b=> b.onclick = ()=> deleteCollateral(b.dataset.csDel));
   };
 
   window.openColMap = async function(key){
@@ -15315,6 +15352,8 @@
       + '<th class="ta-right">쓴 금액</th><th class="ta-right">남은 금액</th>' 
       + (canDo ? '<th class="ta-right">관리</th>' : '') + '</tr></thead><tbody>';
     colRowBatches = {};
+    colSheetCache = {};
+    rows.forEach(r=>{ colSheetCache[(r.month||"")+"|"+(r.company||"")] = r.cols || []; });
     rows.forEach(r=>{ colRowBatches[(r.month||"")+"|"+(r.company||"")] = r.batches || []; });
     let tC=0, tU=0;
     rows.forEach(r=>{
@@ -15360,21 +15399,13 @@
           + (r.col ? r.left.toLocaleString() : "-") + '</td>'
         + (canDo ? '<td class="ta-right" style="white-space:nowrap;">'
             + (r.col
-                ? (r.cols||[]).map(c=> '<button class="btn small secondary" style="width:auto;margin-left:2px;" data-col-edit="'+c.id+'" title="'+comboEsc(c.issueDate||"")+' · '+(Number(c.amount)||0).toLocaleString()+'">수정' + (((r.cols||[]).length > 1) ? ' ' + comboEsc(String(c.issueDate||"").slice(4)) : '') + '</button>').join("")
-                  // 아직 안 맞춘 만큼만 채웁니다. 계산서에 안 이어진 조정도 함께 셉니다.
-                  //  (안 그러면 이미 넣은 조정을 못 보고 또 채워 두 번 빠집니다)
+                ? '<button class="btn small secondary" style="width:auto;" data-col-sheet="'+comboEsc(r.month)+'|'+comboEsc(r.company)+'">계산서별 작업</button>'
                   + (needAdj ? '<button class="btn small secondary" style="width:auto;margin-left:4px;"'
                       + ' title="아직 안 맞춘 차이 ' + needAdj.toLocaleString() + ' 만큼 여신을 조정합니다"'
                       + ' data-col-adj="'+comboEsc(r.company)+'|'+needAdj+'|'+r.col.id+'">'
                       + ((colAdj || freeAdj) ? '조정 더하기' : '여신 조정') + '</button>' : '')
-                  + (r.cols||[]).map(c=> '<button class="btn small secondary" style="width:auto;margin-left:2px;"'
-                      + ' title="' + comboEsc(c.issueDate||"") + ' 계산서를 담보로 실행한 B2B 대출을 이어둡니다"'
-                      + ' data-col-loan="'+c.id+'">대출 잇기'
-                      + (((r.cols||[]).length > 1) ? ' ' + comboEsc(String(c.issueDate||"").slice(4)) : '') + '</button>').join("")
-                  + (r.cols||[]).map(c=> '<button class="btn small danger" style="width:auto;margin-left:2px;" data-col-del="'+c.id+'" title="'+comboEsc(c.issueDate||"")+' 삭제">삭제' + (((r.cols||[]).length > 1) ? ' ' + comboEsc(String(c.issueDate||"").slice(4)) : '') + '</button>').join("")
-                  + '<button class="btn small" style="width:auto;margin-left:4px;" title="이 달에 계산서를 한 장 더 넣습니다" data-col-new="'+comboEsc(r.month)+'|'+comboEsc(r.company)+'|'+Math.max(0, r.credit - r.colAmt)+'">계산서 추가</button>'
                   + '<button class="btn small secondary" style="width:auto;margin-left:4px;" title="이 달의 계산서와 주문을 한 화면에서 이어 붙입니다." data-col-map="'+comboEsc(r.month)+'|'+comboEsc(r.company)+'">주문 매칭</button>'
-                  + (r.cols||[]).map(c=> '<button class="btn small secondary" style="width:auto;margin-left:2px;" title="' + comboEsc(c.issueDate||"") + ' 계산서를 더 못 쓰는 상태로 두거나 되돌립니다." data-col-exp="'+c.id+'">' + (c.expired ? '기한 되돌리기' : '기한 종료') + (((r.cols||[]).length > 1) ? ' ' + comboEsc(String(c.issueDate||"").slice(4)) : '') + '</button>').join("")
+                  + '<button class="btn small" style="width:auto;margin-left:4px;" title="이 달에 계산서를 한 장 더 넣습니다" data-col-new="'+comboEsc(r.month)+'|'+comboEsc(r.company)+'|'+Math.max(0, r.credit - r.colAmt)+'">계산서 추가</button>'
                 : '<button class="btn small" style="width:auto;" data-col-new="'+comboEsc(r.month)+'|'+comboEsc(r.company)+'|'+r.credit+'">계산서 등록</button>')
             + '</td>' : '')
         + '</tr>';
@@ -15402,6 +15433,7 @@
     });
     // 주문완료 숫자를 누르면 이 줄에 묶인 주문을 보여줍니다.
     listEl.querySelectorAll("[data-col-map]").forEach(b=> b.onclick = ()=> openColMap(b.dataset.colMap));
+    listEl.querySelectorAll("[data-col-sheet]").forEach(b=> b.onclick = ()=> openColSheet(b.dataset.colSheet));
     listEl.querySelectorAll("[data-col-exp]").forEach(b=> b.onclick = ()=> toggleCollateralExpire(b.dataset.colExp));
     listEl.querySelectorAll("[data-col-orders]").forEach(a=>{
       a.onclick = ()=> showCollateralOrders(a.dataset.colOrders);
@@ -32670,7 +32702,12 @@
     if(!m) return key === "dashboard";     // 기본은 대시보드만 켜짐
     return m[key] === true;
   }
-  window.clearCache = function(key){ delete dataCache[key]; };
+  //  자료를 고치면 그 저장소 캐시와 함께, 그 이름으로 담아둔 화면 묶음도 같이 버립니다.
+  //  (안 버리면 내가 고친 내용이 「새로 읽기」 전까지 화면에 안 보입니다)
+  window.clearCache = function(key){
+    delete dataCache[key];
+    delete dataCache["_m_" + key];
+  };
 
   // 저장소 하나를 화면키로 담아둡니다. 「읽기 절약」이 켜져 있으면 다시 읽지 않습니다.
   //  자료가 바뀌면 logAction 에서 통째로 비우므로 옛 값이 남지 않습니다.
