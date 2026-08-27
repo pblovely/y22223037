@@ -387,7 +387,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v727</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v729</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -31238,8 +31238,23 @@
     const num = v => (v==null || v==="" || !isFinite(Number(v))) ? 0 : Number(v);
     const L0 = num(it.listPrice);
     const L  = (key === "listPrice") ? num(val) : L0;
+    // 업체마다 할인 기준이 다릅니다.
+    //  삼성전자처럼 「공급가 기준」인 곳은 VAT를 뺀 금액에 %를 곱하고,
+    //  나머지는 출고가(VAT 포함)에 곱합니다. 업체정보의 「할인 계산 기준」을 따릅니다.
+    const baseOf = (name)=>{
+      const c = (companiesCache||[]).find(x=> String(x.name||"").trim() === String(name||"").trim());
+      return (c && c.discountBase === "supply") ? (L/1.1) : L;
+    };
+    const buyBase  = baseOf(it.source);          // 매입처 기준 (선할인·타할인)
+    //  「판매가 = 입고가」로 맞춰둔 재고는 매입 조건 그대로 넘기는 것이라
+    //  판매할인%도 매입처 기준으로 냅니다. (삼성 매입분이면 공급가 기준)
+    const saleBase = (it.salePriceFollowsBuy === true) ? buyBase : baseOf(it.destination);
     const pct = (amt) => L ? Number(((amt/L)*100).toFixed(2)) : null;
     const amt = (r)   => L ? Math.round(L * num(r) / 100) : null;
+    const bAmt = (r)  => buyBase  ? Math.round(buyBase  * num(r) / 100) : null;
+    const bPct = (a)  => buyBase  ? Number(((a/buyBase) *100).toFixed(2)) : null;
+    const sAmt = (r)  => saleBase ? Math.round(saleBase * num(r) / 100) : null;
+    const sPct = (a)  => saleBase ? Number(((a/saleBase)*100).toFixed(2)) : null;
 
     let pre   = num(it.purchaseDiscountAmt);
     let other = num(it.otherDiscountAmt);
@@ -31248,13 +31263,11 @@
     let sale  = num(it.salePrice);
     const p = {};
 
-    if(key === "purchaseDiscount"){    pre = amt(val) || 0;  p.purchaseDiscountAmt = pre; }
-    if(key === "purchaseDiscountAmt"){ pre = num(val);       p.purchaseDiscount = pct(pre); }
+    if(key === "purchaseDiscount"){    pre = bAmt(val) || 0;  p.purchaseDiscountAmt = pre; }
+    if(key === "purchaseDiscountAmt"){ pre = num(val);        p.purchaseDiscount = bPct(pre); }
     // 타할인(클럽장려금)은 삼성이 「공급가」에 지급률을 곱해 줍니다. 출고가가 아닙니다.
-    const supAmt = (r) => L ? Math.round((L/1.1) * num(r) / 100) : null;
-    const supPct = (a) => L ? Number(((a/(L/1.1))*100).toFixed(2)) : null;
-    if(key === "otherDiscountPct"){    other = supAmt(val) || 0; p.otherDiscountAmt = other; }
-    if(key === "otherDiscountAmt"){    other = num(val);         p.otherDiscountPct = supPct(other); }
+    if(key === "otherDiscountPct"){    other = bAmt(val) || 0; p.otherDiscountAmt = other; }
+    if(key === "otherDiscountAmt"){    other = num(val);        p.otherDiscountPct = bPct(other); }
 
     if(["purchaseDiscount","purchaseDiscountAmt","otherDiscountPct","otherDiscountAmt"].includes(key)){
       if(L){
@@ -31264,7 +31277,7 @@
           sale = buy;
           p.salePrice = buy;
           p.saleDiscountAmt = L - buy;
-          p.saleDiscount = pct(L - buy);
+          p.saleDiscount = sPct(L - buy);   // 매입처 기준 (입고 그대로 넘기므로)
           p.profit = 0;
         }
       }
@@ -31274,9 +31287,9 @@
       if(L){ pre = L - buy - other; p.purchaseDiscountAmt = pre; p.purchaseDiscount = pct(pre); }
     }
 
-    if(key === "saleDiscount"){    saleA = amt(val) || 0; p.saleDiscountAmt = saleA; if(L){ sale = L - saleA; p.salePrice = sale; } }
-    if(key === "saleDiscountAmt"){ saleA = num(val);      p.saleDiscount = pct(saleA); if(L){ sale = L - saleA; p.salePrice = sale; } }
-    if(key === "salePrice"){       sale = num(val);       if(L){ saleA = L - sale; p.saleDiscountAmt = saleA; p.saleDiscount = pct(saleA); } }
+    if(key === "saleDiscount"){    saleA = sAmt(val) || 0; p.saleDiscountAmt = saleA; if(L){ sale = L - saleA; p.salePrice = sale; } }
+    if(key === "saleDiscountAmt"){ saleA = num(val);       p.saleDiscount = sPct(saleA); if(L){ sale = L - saleA; p.salePrice = sale; } }
+    if(key === "salePrice"){       sale = num(val);        if(L){ saleA = L - sale; p.saleDiscountAmt = saleA; p.saleDiscount = sPct(saleA); } }
 
     if(key === "listPrice"){
       // 출고가 인하 등: 실제 오간 금액(입고가·판매가)은 그대로 두고 할인만 다시 계산
@@ -31821,9 +31834,12 @@
         for(const it of targets){
           const L = Number(it.listPrice)||0;
           const buy = Number(it.purchasePrice)||0;
+          // 입고가 그대로 넘기므로 판매할인%도 매입처 기준으로 냅니다.
+          const cS = (companiesCache||[]).find(x=> String(x.name||"").trim() === String(it.source||"").trim());
+          const sBase = (cS && cS.discountBase === "supply") ? (L/1.1) : L;
           const patch = { salePrice: buy };
           if(L){ patch.saleDiscountAmt = L - buy;
-                 patch.saleDiscount = Number((((L - buy)/L)*100).toFixed(2)); }
+                 patch.saleDiscount = sBase ? Number((((L - buy)/sBase)*100).toFixed(2)) : null; }
           patch.profit = 0;                       // 매입가 그대로 넘기므로 수익 0
           patch.salePriceFollowsBuy = true;       // 앞으로 입고가가 바뀌면 판매가도 따라갑니다
           await updateDoc(doc(db,"inventoryItems", it.id), patch);
