@@ -387,7 +387,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v775</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v776</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -31017,7 +31017,8 @@
         if(b2bOrderDate && dateOfBatch[o.batchId] !== b2bOrderDate) return;
         const q = Number(o.quantity)||0;
         // 타할인 금액은 공급가 기준으로 넣습니다. 그대로 더하면 삼성이 주는 금액과 같습니다.
-      pendingRebate += (Number(o.otherDiscountAmt)||0) * q;
+      // 클럽장려금 누적은 아래에서 「재고」로 다시 셉니다. (주문에 안 붙은 건도 잡히게)
+      // pendingRebate += (Number(o.otherDiscountAmt)||0) * q;
         listSumAll  += (Number(o.listPrice)||0) * q;
         preSumAll   += (Number(o.preDiscountAmt)||0) * q;
         otherSumAll += (Number(o.otherDiscountAmt)||0) * q;
@@ -31029,6 +31030,20 @@
     // 반품한 단말기는 삼성이 장려금을 주지 않습니다. 그만큼 뺍니다.
     let rebateBack = 0, returnedCnt = 0;
     try{
+      // 클럽장려금 누적 — 재고에 적힌 타할인을 그대로 셉니다.
+      //  주문에 안 붙은 재고도 잡히고, 재고 목록에서 눈으로 대조하실 수 있습니다.
+      pendingRebate = 0;
+      try{
+        const invAll = await getDocs(collection(db,"inventoryItems"));
+        invAll.forEach(d=>{
+          const it = d.data();
+          if(it.deleted === true) return;
+          const src = String(it.source||"").trim();
+          if(b2bPartnerPick && src !== b2bPartnerPick) return;
+          pendingRebate += (Number(it.otherDiscountAmt)||0);
+        });
+      }catch(e){}
+
       // 여신복구가 끝난 반품 기록을 기준으로 뺍니다. (재고 상태와 무관)
       const retIds = [];
       const retSnap = await getDocs(query(collection(db,"b2bLedger"), where("category","==","return_credit")));
