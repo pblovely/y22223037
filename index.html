@@ -387,7 +387,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v695</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-09 v698</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -1136,7 +1136,7 @@
             </datalist>
           </div>
           <div class="stack-row"><label>대상 <span class="info-tip" title="빌린 돈이 어느 거래처 여신으로 들어가는지 고릅니다. 목록은 업체정보의 매입처를 그대로 씁니다. 여신 잔액이 대상별로 따로 쌓입니다.">ⓘ</span></label>
-            <select id="loan-partner"><option value="">(미지정)</option></select>
+            <select id="loan-partner" onchange="fillLoanCollateralSelect()"><option value="">(미지정)</option></select>
           </div>
           <div class="stack-row"><label>담보 계산서 <span class="info-tip" title="이 대출의 담보로 쓸 세금계산서를 고릅니다. 남은 금액이 있는 것만 나옵니다. 안 골라도 등록은 됩니다.">ⓘ</span></label>
             <select id="loan-collateral"><option value="">(안 고름)</option></select>
@@ -6718,6 +6718,11 @@
     document.getElementById("mm-preview").innerHTML = '<span style="color:var(--gray);">두 모델을 고르면 무엇이 옮겨지는지 알려드립니다.</span>';
     mergeCounts = null;
     document.getElementById("mmerge-overlay").style.display = "flex";
+    // 타이핑해서 찾을 수 있게 합니다.
+    initSearchableSelect("mm-keep", "전산모델명을 입력하면 목록이 나옵니다");
+    initSearchableSelect("mm-drop", "전산모델명을 입력하면 목록이 나옵니다");
+    syncSearchableSelect("mm-keep");
+    syncSearchableSelect("mm-drop");
   };
   window.closeModelMerge = function(){
     document.getElementById("mmerge-overlay").style.display = "none";
@@ -12699,6 +12704,19 @@
         const t = rest[i];
         let narrowed = cands.filter(o=> hitOne(o, t.toLowerCase()));
         if(narrowed.length === 0){
+          // 「A235」처럼 모델명을 줄여 적으신 경우 — 모델명 안에 들어 있으면 인정합니다.
+          //  (SM-A235N 의 A235). 색상·숫자와 헷갈리지 않게 두 글자 이상·영문+숫자일 때만 봅니다.
+          const tk = String(t).trim().toLowerCase();
+          if(tk.length >= 3 && /[a-z]/.test(tk) && /[0-9]/.test(tk)){
+            const part = cands.filter(o=>{
+              const a1 = modelDupKey(o.systemModel||""), a2 = modelDupKey(o.baseModel||"");
+              const k = modelDupKey(tk);
+              return (a1 && a1.indexOf(k) >= 0) || (a2 && a2.indexOf(k) >= 0);
+            });
+            if(part.length > 0) narrowed = part;
+          }
+        }
+        if(narrowed.length === 0){
           // 「바이올렛 쉐도우」처럼 색상 이름이 띄어쓰기로 나뉘어 들어온 경우,
           //  뒤 낱말을 최대 두 개까지 붙여서 다시 찾아봅니다.
           let joined = t;
@@ -13623,16 +13641,37 @@
         const avail = cols.map(c=> ({ ...c, left:(Number(c.amount)||0) - (used[c.id]||0) }))
           .filter(c=> c.left > 0 || (editingLoanId && String(c.id) === String(editingLoanColId||"")))
           .sort((a,b)=> String(a.month||"").localeCompare(String(b.month||"")));
-        const sel2 = document.getElementById("loan-collateral");
-        if(sel2){
-          sel2.innerHTML = '<option value="">(안 고름)</option>'
-            + avail.map(c=>'<option value="'+c.id+'">' + comboEsc(c.month||"-") + ' · ' + comboEsc(c.company||"-")
-                + ' · 남은 ' + c.left.toLocaleString() + (c.left <= 0 ? ' (지금 이 대출에 물림)' : '') + '</option>').join("");
-          if(editingLoanColId) sel2.value = editingLoanColId;
-        }
+        loanColCands = avail;                  // 대상을 바꿀 때 다시 거르려고 담아둡니다
+        fillLoanCollateralSelect();
+        // 타이핑해서 찾을 수 있게 합니다.
+        initSearchableSelect("loan-partner", "대상을 입력하면 목록이 나옵니다");
+        initSearchableSelect("loan-collateral", "귀속월·매입처를 입력하면 목록이 나옵니다");
+        syncSearchableSelect("loan-partner");
+        syncSearchableSelect("loan-collateral");
       }catch(e){}
     })();
   };
+  //  대출 「대상」으로 고른 매입처의 계산서만 보여줍니다. 목록이 길어져도 헷갈리지 않게요.
+  let loanColCands = [];
+  window.fillLoanCollateralSelect = function(){
+    const sel2 = document.getElementById("loan-collateral");
+    if(!sel2) return;
+    const partner = String((document.getElementById("loan-partner")||{}).value || "").trim();
+    const keep = String(sel2.value || "");
+    const list = (loanColCands||[]).filter(c=>
+      !partner || String(c.company||"").trim() === partner
+      || (editingLoanColId && String(c.id) === String(editingLoanColId)));   // 물려 있던 것은 남깁니다
+    sel2.innerHTML = '<option value="">(안 고름)</option>'
+      + list.map(c=>'<option value="'+c.id+'">' + comboEsc(c.month||"-") + ' · ' + comboEsc(c.company||"-")
+          + ' · 남은 ' + c.left.toLocaleString() + (c.left <= 0 ? ' (지금 이 대출에 물림)' : '') + '</option>').join("")
+      + ((partner && list.length === 0)
+          ? '<option value="" disabled>' + comboEsc(partner) + ' 의 남은 계산서가 없습니다</option>' : '');
+    if(editingLoanColId && list.some(c=> String(c.id) === String(editingLoanColId))) sel2.value = editingLoanColId;
+    else if(keep && list.some(c=> String(c.id) === keep)) sel2.value = keep;
+    else sel2.value = "";
+    if(typeof syncSearchableSelect === "function") syncSearchableSelect("loan-collateral");
+  };
+
   // 만기일 — 은행마다 세는 법이 다릅니다.
   //   · 기업은행 — 날짜 기준. 6개월이면 실행일 + 180일 (한 달 30일로 셉니다)
   //       휴일이면 실제로는 그 전날이지만, 여기서는 180일 되는 날을 그대로 넣습니다.
@@ -22327,6 +22366,8 @@
     sel.innerHTML = '<option value="">(줄에 적은 대로)</option>'
       + names.map(n=> '<option value="' + comboEsc(n) + '">' + comboEsc(n) + '</option>').join("");
     if(cur && names.indexOf(cur) >= 0) sel.value = cur;
+    initSearchableSelect("resv-paste-dest", "거래처를 입력하면 목록이 나옵니다");
+    syncSearchableSelect("resv-paste-dest");
   }
 
   window.setResvPasteKind = function(k){
@@ -35576,6 +35617,10 @@
       + ["LG","SK","KT"].map(c=> '<option value="'+c+'"'+(c===car?' selected':'')+'>'+c+'</option>').join("")
       + '</select> <span style="color:var(--gray);font-size:11.5px;margin-left:6px;">고른 통신사의 재고만 판매처리합니다.</span></div>';
     html += '<div class="stack-row"><label>판매처</label><select id="paste-sale-dest-select"></select></div>';
+    setTimeout(()=>{ try{
+      initSearchableSelect("paste-sale-dest-select", "판매처를 입력하면 목록이 나옵니다");
+      syncSearchableSelect("paste-sale-dest-select");
+    }catch(e){} }, 0);
     html += '<div class="stack-row"><label>출고일</label><input type="text" id="paste-sale-outdate-input" maxlength="8" inputmode="numeric" value="'+(matchedDate||todayStr())+'"></div>';
     html += '<div class="stack-row"><label>판매할인 <span class="info-tip" title="모든 줄에 똑같이 넣습니다. 금액이나 %% 중 하나만 넣으시면 나머지는 알아서 계산합니다. 안 넣으시면 할인 없이 판매가 그대로 들어갑니다.">ⓘ</span></label>'
       + '<span><input type="number" id="paste-sale-discamt" placeholder="할인 금액" style="width:120px;" oninput="onPasteSaleDisc(\'amt\')"> 원'
