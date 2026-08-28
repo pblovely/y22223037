@@ -387,7 +387,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-28 v781</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-28 v782</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -26682,6 +26682,7 @@
   // 모델 출고가와 다른 것들을 모아 보여줍니다.
   //  프로그램이 스스로 고치지 않습니다. 무엇이 다른지 보고 사람이 정합니다.
   let priceDiffCache = [];
+  let baseDiffCache = [];        // 할인 금액이 업체 기준과 다른 재고
 
   // 앞에 0 이 붙은 일련번호를 모아 보여주고, 골라서 0 을 뗍니다.
   let zeroSerialCache = [];
@@ -27709,6 +27710,134 @@
     runDataCheck();
   };
 
+  // 할인 금액이 업체 기준과 다른 재고 — 목록과 한 번에 맞추기
+  window.showBaseDiffList = function(){
+    const el = document.getElementById("datacheck-detail");
+    if(!el) return;
+    if(baseDiffCache.length === 0){ el.innerHTML = '<div class="list-empty">다른 것이 없습니다.</div>'; return; }
+    // 매입처 · 기준 · 선할인% · 타할인% 가 같은 것끼리 묶어 보여드립니다.
+    const byKey = {};
+    baseDiffCache.forEach(r=>{
+      const k = r.source + "|" + r.base + "|" + (Number(r.it.purchaseDiscount)||0)
+              + "|" + (Number(r.it.otherDiscountPct)||0) + "|" + r.L;
+      (byKey[k] = byKey[k] || { r, n:0, gap:0 });
+      byKey[k].n++; byKey[k].gap += (r.wantBuy - r.curBuy);
+    });
+    const keys = Object.keys(byKey).sort();
+    const gapAll = baseDiffCache.reduce((n,r)=> n + Math.abs(r.wantBuy - r.curBuy), 0);
+    let h = '<div style="border:1px solid var(--navy);padding:10px 12px;margin-top:10px;">'
+      + '<div style="font-weight:700;margin-bottom:4px;">할인 금액이 업체 기준과 다른 재고 — '
+      + baseDiffCache.length + '대 · 합계 차이 ' + gapAll.toLocaleString() + '</div>'
+      + '<div style="font-size:11.5px;color:var(--gray);line-height:1.7;margin-bottom:8px;">'
+      + '<b>%는 그대로 두고 금액만</b> 업체 기준에 맞춰 다시 냅니다.<br>'
+      + '판매가를 <b>입고가로 맞춰둔 재고</b>는 판매가·판매할인도 함께 따라갑니다.<br>'
+      + '<b>입금이 끝난 판매요청</b>에 묶인 재고는 건드리지 않고 남겨둡니다.</div>'
+      + '<div style="max-height:360px;overflow-y:auto;border:1px solid var(--line);">'
+      + '<table class="data-table" style="width:100%;"><thead><tr>'
+      + '<th>매입처</th><th>기준</th><th class="ta-right">출고가</th>'
+      + '<th class="ta-right">선할인%</th><th class="ta-right">타할인%</th>'
+      + '<th class="ta-right">대수</th><th class="ta-right">지금 입고가</th>'
+      + '<th class="ta-right">맞춘 뒤</th><th class="ta-right">차이</th>'
+      + '</tr></thead><tbody>';
+    keys.forEach(k=>{
+      const g = byKey[k], r = g.r;
+      h += '<tr>'
+        + '<td>'+comboEsc(r.source)+'</td>'
+        + '<td>'+comboEsc(r.base)+'</td>'
+        + '<td class="ta-right">'+r.L.toLocaleString()+'</td>'
+        + '<td class="ta-right">'+(Number(r.it.purchaseDiscount)||0)+'%</td>'
+        + '<td class="ta-right">'+(Number(r.it.otherDiscountPct)||0)+'%</td>'
+        + '<td class="ta-right">'+g.n.toLocaleString()+'</td>'
+        + '<td class="ta-right">'+r.curBuy.toLocaleString()+'</td>'
+        + '<td class="ta-right"><b>'+r.wantBuy.toLocaleString()+'</b></td>'
+        + '<td class="ta-right" style="color:var(--danger);font-weight:700;">'
+        + (g.gap > 0 ? "+" : "") + g.gap.toLocaleString() + '</td></tr>';
+    });
+    h += '</tbody></table></div>'
+      + '<button class="btn small" style="width:auto;margin-top:10px;" onclick="fixBaseDiffAll()">'
+      + '전부 업체 기준으로 맞추기 (' + baseDiffCache.length + '대)</button>'
+      + '</div>';
+    el.innerHTML = h;
+  };
+
+  window.fixBaseDiffAll = async function(){
+    if(baseDiffCache.length === 0){ alert("맞출 재고가 없습니다."); return; }
+    const gapAll = baseDiffCache.reduce((n,r)=> n + Math.abs(r.wantBuy - r.curBuy), 0);
+    const prev = baseDiffCache.slice(0,4).map(r=>
+      "  " + (r.it.serialNumber||"-") + " : " + r.curBuy.toLocaleString() + " → " + r.wantBuy.toLocaleString()).join("\n");
+    if(!confirm("재고 " + baseDiffCache.length + "대의 할인 금액을 업체 기준으로 다시 냅니다.\n\n"
+      + prev + (baseDiffCache.length > 4 ? "\n  ... 외 " + (baseDiffCache.length-4) + "대" : "")
+      + "\n\n합계 차이 " + gapAll.toLocaleString() + "\n"
+      + "%는 그대로 두고 금액만 바꿉니다.\n진행할까요?")) return;
+
+    const el = document.getElementById("datacheck-detail");
+    if(el) el.innerHTML = '<div class="list-empty">맞추는 중입니다...</div>';
+
+    // 입금이 끝난 판매요청에 묶인 재고는 건드리지 않습니다. (받은 돈과 달라집니다)
+    const locked = new Set();
+    try{
+      const srIds = [...new Set(baseDiffCache.map(r=> r.it.saleRequestId).filter(Boolean))];
+      const bOf = {};
+      for(const sid of srIds){
+        const sd = await getDoc(doc(db,"saleRequests", sid));
+        if(sd.exists()) bOf[sid] = sd.data().batchId || "";
+      }
+      const paid = {};
+      for(const bid of [...new Set(Object.values(bOf).filter(Boolean))]){
+        const bd = await getDoc(doc(db,"saleRequestBatches", bid));
+        if(bd.exists() && bd.data().depositReceived === true) paid[bid] = true;
+      }
+      baseDiffCache.forEach(r=>{
+        const bid = bOf[r.it.saleRequestId];
+        if(bid && paid[bid]) locked.add(r.id);
+      });
+    }catch(e){}
+
+    const targets = baseDiffCache.filter(r=> !locked.has(r.id));
+    let n1=0, n2=0, n3=0;
+    const ihRows = [];
+    try{
+      const seenOrder = new Set();
+      for(const r of targets){
+        const it = r.it, L = r.L;
+        const patch = { purchaseDiscountAmt: r.wantPre, otherDiscountAmt: r.wantOther,
+                        purchasePrice: r.wantBuy };
+        if(it.salePriceFollowsBuy === true){
+          patch.salePrice = r.wantBuy; patch.saleDiscountAmt = L - r.wantBuy; patch.profit = 0;
+        }
+        await updateDoc(doc(db,"inventoryItems", r.id), patch);
+        ihRows.push({ id:r.id, serialNumber: it.serialNumber||"", systemModel: it.systemModel||"",
+          detail: "할인 금액을 업체 기준(" + r.base + ")으로 맞춤 · 입고가 "
+            + r.curBuy.toLocaleString() + " → " + r.wantBuy.toLocaleString()
+            + " (선할인 " + r.wantPre.toLocaleString() + " · 타할인 " + r.wantOther.toLocaleString() + ")" });
+        n1++;
+        if(it.salePriceFollowsBuy === true && it.saleRequestId){
+          await updateDoc(doc(db,"saleRequests", it.saleRequestId),
+            { salePrice: r.wantBuy, saleDiscountAmt: L - r.wantBuy });
+          n2++;
+        }
+        if(it.orderId && !seenOrder.has(it.orderId)){
+          seenOrder.add(it.orderId);
+          await updateDoc(doc(db,"orders", it.orderId), {
+            preDiscountAmt: r.wantPre, otherDiscountAmt: r.wantOther, purchasePrice: r.wantBuy });
+          n3++;
+        }
+      }
+    }catch(e){ alert("맞추지 못했습니다.\n" + ((e&&e.message)?e.message:String(e))); return; }
+
+    try{ await logItemsEach(ihRows, "price", {}); }catch(e){}
+    logAction("데이터 점검 — 할인 금액 기준 맞춤", n1 + "대"
+      + (n2 ? " / 판매요청 " + n2 + "건" : "") + (n3 ? " / 주문 품목 " + n3 + "건" : "")
+      + (locked.size ? " / 입금완료 " + locked.size + "대 제외" : ""));
+    clearCache("inventory"); clearCache("saleRequests"); clearCache("orders"); clearCache("loan"); clearDashCache();
+    alert("맞췄습니다.\n\n  재고 " + n1 + "대"
+      + (n2 ? "\n  판매요청 " + n2 + "건" : "") + (n3 ? "\n  주문 품목 " + n3 + "건" : "")
+      + (locked.size ? "\n\n입금이 끝난 판매요청에 묶인 " + locked.size + "대는 그대로 두었습니다.\n"
+                     + "고치시려면 판매 관리에서 입금을 먼저 되돌려주세요." : ""));
+    baseDiffCache = baseDiffCache.filter(r=> locked.has(r.id));
+    runDataCheck();
+  };
+
   window.showPriceDiffList = function(){
     const el = document.getElementById("datacheck-detail");
     if(!el) return;
@@ -28120,6 +28249,41 @@
         issues.push({ n:"모델 출고가와 다름", cnt:rows.length, unit:"차이 " + gapSum.toLocaleString(),
           why:"모델 등록에 적힌 출고가와 다른 주문·재고입니다. 출고가가 바뀌었거나 잘못 넣었을 수 있습니다. 그 건만 다른 값으로 산 것이면 그대로 두셔도 됩니다.",
           fix: rows.length ? "showPriceDiffList()" : null, fixLabel:"확인하기" });
+      }
+
+      // ⓪-2 할인 금액이 업체 기준과 다른 재고
+      //  %는 맞는데 금액이 옛 기준(출고가)으로 남아 있는 건을 찾습니다.
+      //  기준을 공급가로 바꾸기 전에 등록한 재고가 그대로 남아 있으면 여기서 잡힙니다.
+      {
+        const rows = [];
+        Object.keys(items).forEach(id=>{
+          const it = items[id];
+          if(it.deleted === true) return;
+          const L = Number(it.listPrice)||0;
+          if(!L) return;
+          const c = (companiesCache||[]).find(x=>
+            String(x.name||"").trim() === String(it.source||"").trim());
+          if(!c) return;                                  // 업체를 모르면 견줄 수 없습니다
+          const B = (c.discountBase === "supply") ? (L/1.1) : L;
+          const pp = Number(it.purchaseDiscount)||0, op = Number(it.otherDiscountPct)||0;
+          if(!(pp > 0) && !(op > 0)) return;              // %가 없으면 견줄 것이 없습니다
+          const wantPre   = Math.round(B * pp / 100);
+          const wantOther = Math.round(B * op / 100);
+          const curPre    = Number(it.purchaseDiscountAmt)||0;
+          const curOther  = Number(it.otherDiscountAmt)||0;
+          if(curPre === wantPre && curOther === wantOther) return;
+          const wantBuy = L - wantPre - wantOther;
+          rows.push({ id, it, L,
+            curPre, wantPre, curOther, wantOther,
+            curBuy: Number(it.purchasePrice)||0, wantBuy,
+            base: (c.discountBase === "supply") ? "공급가" : "출고가",
+            source: String(it.source||"-") });
+        });
+        baseDiffCache = rows;
+        const gap = rows.reduce((n,r)=> n + Math.abs(r.wantBuy - r.curBuy), 0);
+        issues.push({ n:"할인 금액이 업체 기준과 다른 재고", cnt:rows.length, unit:"차이 " + gap.toLocaleString(),
+          why:"%는 맞는데 금액이 업체의 할인 기준(공급가/출고가)과 다릅니다. 기준을 바꾸기 전에 등록한 재고입니다. 여기서 한 번에 맞출 수 있습니다.",
+          fix: rows.length ? "showBaseDiffList()" : null, fixLabel:"확인하고 맞추기" });
       }
 
       // ① 주문이 지워졌는데 남은 판매요청
