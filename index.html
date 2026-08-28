@@ -3106,6 +3106,12 @@
         <div id="arrival-paste-box" style="display:none;border:1px solid var(--navy);background:#f4f7fb;padding:10px 12px;margin-top:8px;margin-bottom:8px;">
           <div style="font-size:12.5px;font-weight:700;margin-bottom:6px;">일련번호를 그대로 붙여넣으세요</div>
           <textarea id="arrival-paste-text" rows="6" style="width:100%;border:1px solid var(--line);padding:8px;font-size:12.5px;font-family:monospace;box-sizing:border-box;" placeholder="1038307&#10;1038472&#10;&#10;또는 한 줄에 여러 개&#10;1038307 1038472 1038215&#10;&#10;또는 모델·색상을 위에 적고&#10;SM-F971N512&#10;그라파이트&#10;1038307&#10;1038472"></textarea>
+          <label style="display:flex;align-items:flex-start;gap:6px;margin-top:8px;border:1px solid var(--danger);background:#fff;padding:8px 10px;font-size:12.5px;line-height:1.7;cursor:pointer;">
+            <input type="checkbox" id="arrival-paste-loose" style="margin-top:3px;">
+            <span><b style="color:var(--danger);">한 줄을 통째로 일련번호로 넣기 (형식 검사 안 함)</b><br>
+            <span style="color:var(--gray);">숫자가 아닌 시리얼번호(예: RT0067-FU4954236)를 그대로 넣습니다.
+            <b>한 줄에 한 개</b>씩 적어주세요. 형식을 안 따지므로 오타도 그대로 들어갑니다.</span></span>
+          </label>
           <div style="margin-top:8px;">
             <span class="btn-row"><button class="btn small" style="width:auto;" onclick="applyArrivalPaste()">넣기</button><button class="btn small secondary" style="width:auto;" onclick="applyArrivalPaste(true)">기존 줄 지우고 넣기</button></span>
           </div>
@@ -13258,7 +13264,10 @@
     }
 
     const blocked = [];
-    const parsed = parseSerialPaste(raw).map(e=>{
+    // 「형식 검사 안 함」을 켜면 한 줄을 통째로 일련번호로 씁니다.
+    const looseEl2 = document.getElementById("arrival-paste-loose");
+    const loose2 = !!(looseEl2 && looseEl2.checked);
+    const parsed = (loose2 ? parseSerialPasteLoose(raw) : parseSerialPaste(raw)).map(e=>{
       const bad = wrongModelHint(e.hints);
       if(bad){ blocked.push({ line:e.line, sn:e.sn, text:bad.text, model:bad.model }); return null; }
       const col = (e.hints||[]).find(t=> colorNames.has(String(t).trim().toLowerCase())) || "";
