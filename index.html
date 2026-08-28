@@ -387,7 +387,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-28 v838</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-29 v840</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -8836,7 +8836,8 @@
     const base = (c && (c.discountBase === "total" || c.discountBase === "supply")) ? c.discountBase : "unit";
     currentOrderSourceInfo = c ? { name, rate, base } : null;
     // 업체정보에 저장해둔 기준을 칸에 넣어둡니다. 이 주문에서만 바꾸실 수 있습니다.
-    { const bs = document.getElementById("order-base-select"); if(bs) bs.value = base; }
+    //  매입처를 안 고르셨으면 기본값(대당)으로 되돌립니다.
+    { const bs = document.getElementById("order-base-select"); if(bs) bs.value = c ? base : "unit"; }
 
     const el = document.getElementById("order-source-note");
     if(el){
@@ -8899,6 +8900,11 @@
         const o = document.createElement("option"); o.value = n; o.textContent = n; bd.appendChild(o);
       });
     }
+    // 입고처를 비우고, 매입처 정보(할인 계산 기준·현금할인율)도 함께 초기화합니다.
+    //  전에는 창을 다시 열어도 앞 매입처의 기준이 남아 있었습니다.
+    { const ss = document.getElementById("order-source-select"); if(ss) ss.value = ""; }
+    try{ syncSearchableSelect("order-source-select"); }catch(e){}
+    if(typeof onOrderSourceChange === "function") onOrderSourceChange();
     await addOrderLine(); // 기본 1줄 시작
     document.getElementById("order-modal-overlay").style.display = "flex";
   };
@@ -16060,7 +16066,15 @@
             ? '<a href="javascript:void(0)" data-col-orders="'+comboEsc((r.month||"")+"|"+(r.company||""))+'" title="이 줄에 묶인 주문을 봅니다.">' + r.qty.toLocaleString() + '</a>'
             : "-")+'</td>'
         + '<td class="ta-right">'+(r.cost ? r.cost.toLocaleString() : "-")+'</td>'
-        + '<td class="ta-right" style="white-space:nowrap;">' + (r.credit ? r.credit.toLocaleString() : "-") + (r.ret ? '<br><span style="color:var(--danger);font-size:11px;">반품 −' + r.ret.toLocaleString() + '</span><br><b>' + ((r.credit||0) - r.ret).toLocaleString() + '</b>' : '') + '</td>'
+        // 여신차감액은 이미 반품이 빠진 값입니다. 여기서 또 빼면 안 됩니다.
+        //  반품 전 금액 → 반품 차감 → 남은 금액 순서로 보여줍니다.
+        + '<td class="ta-right" style="white-space:nowrap;">'
+          + (r.ret
+              ? ((r.credit||0) + r.ret).toLocaleString()
+                + '<br><span style="color:var(--danger);font-size:11px;">반품 −' + r.ret.toLocaleString() + '</span>'
+                + '<br><b>' + (r.credit||0).toLocaleString() + '</b>'
+              : (r.credit ? r.credit.toLocaleString() : "-"))
+          + '</td>'
         + '<td>' + (r.col
             ? '<span style="color:#2e7d32;font-weight:700;">발행완료</span>'
               + (((r.cols||[]).length > 1) ? ' <span style="color:var(--navy);font-size:10.5px;font-weight:700;">' + r.cols.length + '장</span>' : '')
@@ -21837,6 +21851,10 @@
     });
     document.getElementById("resv-salediscountpct-input").value = "";
     document.getElementById("resv-result-msg").style.display = "none";
+    // 거래처를 비우고 할인 계산 기준도 기본값으로 되돌립니다.
+    //  거래처를 고르면 그 업체에 저장해둔 기준이 자동으로 들어옵니다.
+    { const ds = document.getElementById("resv-dest-select"); if(ds) ds.value = ""; }
+    { const bs = document.getElementById("resv-base-select"); if(bs) bs.value = "unit"; }
     editingReservationId = null;
     if(resvListFilter === "buy" || resvListFilter === "sale") await setResvKind(resvListFilter);
     document.getElementById("resv-modal-title").textContent = "예약 추가";
