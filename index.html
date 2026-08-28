@@ -387,7 +387,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-28 v799</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-28 v802</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -3887,6 +3887,23 @@
   const discRaw    = v => isBlankDisc(v) ? ""  : Number(v);
 
   // ---------- 보기 설정 ----------
+  // 「판매가 = 입고가」로 넘길 때 쓸 판매할인·판매할인%입니다.
+  //  매입할 때 쓴 선할인 + 타할인을 그대로 씁니다.
+  //  역산해서 다시 내면 반올림 때문에 매입 %와 어긋나므로, 사온 조건을 그대로 옮깁니다.
+  function saleFromBuy(it){
+    const L    = Number(it && it.listPrice)||0;
+    const pre  = Number(it && it.purchaseDiscountAmt)||0;
+    const oth  = Number(it && it.otherDiscountAmt)||0;
+    const pPct = Number(it && it.purchaseDiscount)||0;
+    const oPct = Number(it && it.otherDiscountPct)||0;
+    const buy  = Number(it && it.purchasePrice)||0;
+    const amt  = (pre + oth) || (L ? (L - buy) : 0);
+    const pct  = (pPct + oPct) ? Number((pPct + oPct).toFixed(2))
+               : (L ? Number(((amt / L) * 100).toFixed(2)) : null);
+    return { amt, pct };
+  }
+  window.saleFromBuy = saleFromBuy;
+
   // 저장된 할인 금액이 「실제로」 어느 기준으로 나온 값인지 역산합니다.
   //  적어둔 %를 출고가에 곱한 값인지, 공급가(출고가÷1.1)에 곱한 값인지 맞춰봅니다.
   //  딱 떨어지지 않으면 「안 맞음」이라고 뭉뚱그리지 않고, 그 금액이 실제로 몇 %인지 돌려줍니다.
@@ -32850,8 +32867,11 @@
           const patch = { discountBase: want,
                           purchaseDiscountAmt: c.pre, otherDiscountAmt: c.other, purchasePrice: c.buy };
           if(it.salePriceFollowsBuy === true && c.L){
-            patch.salePrice = c.buy; patch.saleDiscountAmt = c.L - c.buy;
-            patch.saleDiscount = c.B ? Number((((c.L - c.buy)/c.B)*100).toFixed(2)) : null;
+            const sb = saleFromBuy({ ...it, purchaseDiscountAmt:c.pre,
+              otherDiscountAmt:c.other, purchasePrice:c.buy });
+            patch.salePrice = c.buy;
+            patch.saleDiscountAmt = sb.amt;
+            patch.saleDiscount    = sb.pct;
             patch.profit = 0;
           }
           await updateDoc(doc(db,"inventoryItems", it.id), patch);
@@ -33120,8 +33140,15 @@
           const patch = { salePrice: buy };
           if(f){ patch.purchaseDiscountAmt = f.pre; patch.otherDiscountAmt = f.other;
                  patch.purchasePrice = f.buy; }
-          if(L){ patch.saleDiscountAmt = L - buy;
-                 patch.saleDiscount = sBase ? Number((((L - buy)/sBase)*100).toFixed(2)) : null; }
+          // 판매할인·%는 사온 조건(선할인+타할인)을 그대로 옮깁니다.
+          if(L){
+            const sb = saleFromBuy({ ...it,
+              purchaseDiscountAmt: f ? f.pre   : it.purchaseDiscountAmt,
+              otherDiscountAmt:    f ? f.other : it.otherDiscountAmt,
+              purchasePrice:       buy });
+            patch.saleDiscountAmt = sb.amt;
+            patch.saleDiscount    = sb.pct;
+          }
           patch.profit = 0;                       // 매입가 그대로 넘기므로 수익 0
           patch.salePriceFollowsBuy = true;       // 앞으로 입고가가 바뀌면 판매가도 따라갑니다
           await updateDoc(doc(db,"inventoryItems", it.id), patch);
@@ -34008,11 +34035,19 @@
     getPageState("inventory").page = 1;
     loadInventoryList();
   };
-  let inventorySortField = "outDate"; // "outDate"(판매일) | "orderDate"(주문일)
+  let inventorySortField = "outDate"; // 판매일 · 주문일 · 입고일 · 개통일 (버튼으로 돌려가며 고릅니다)
+  // 정렬 기준을 차례로 바꿉니다. (누를 때마다 다음 날짜로)
+  const INV_SORT_FIELDS = [
+    { key:"outDate",   label:"판매일" },
+    { key:"orderDate", label:"주문일" },
+    { key:"inDate",    label:"입고일" },
+    { key:"activateDate", label:"개통일" }
+  ];
   window.toggleInventorySortField = function(){
-    inventorySortField = inventorySortField==="outDate" ? "orderDate" : "outDate";
-    document.getElementById("inv-sort-toggle-btn").textContent =
-      "정렬: " + (inventorySortField==="outDate" ? "판매일" : "주문일") + " ▾";
+    const at = INV_SORT_FIELDS.findIndex(f=> f.key === inventorySortField);
+    const next = INV_SORT_FIELDS[(at + 1) % INV_SORT_FIELDS.length];
+    inventorySortField = next.key;
+    document.getElementById("inv-sort-toggle-btn").textContent = "정렬: " + next.label + " ▾";
     loadInventoryList();
   };
 
@@ -35948,7 +35983,8 @@
         });
       }
     }else{
-      const sortField = inventorySortField==="orderDate" ? "orderDate" : "outDate";
+      const sortField = (typeof INV_SORT_FIELDS !== "undefined"
+        && INV_SORT_FIELDS.some(f=> f.key === inventorySortField)) ? inventorySortField : "outDate";
       items.sort((a,b)=> normDate(b[sortField]).localeCompare(normDate(a[sortField])));
     }
 
@@ -35969,7 +36005,9 @@
         const c = INV_COLUMNS.find(x=> x.key === invSortCol);
         return (c ? c.label : invSortCol) + (invSortAsc ? " 오름차순" : " 내림차순");
       }
-      return (inventorySortField === "orderDate" ? "주문일" : "출고일(판매일)") + " 내림차순 (기본값)";
+      const sf = (typeof INV_SORT_FIELDS !== "undefined")
+        ? INV_SORT_FIELDS.find(f=> f.key === inventorySortField) : null;
+      return (sf ? sf.label : "출고일(판매일)") + " 내림차순 (기본값)";
     })();
     lastRenderedFilterLabels = filterSteps.map(s=> s.label);
     const masterStockSerials = await getLatestMasterStockSerialSet();
@@ -37792,7 +37830,7 @@
     html += '</div>';
 
     html += '<p class="desc" style="margin-top:10px;margin-bottom:4px;font-weight:700;color:var(--navy);">인식된 품목 미리보기</p>';
-    html += '<div style="overflow-x:auto;border:1px solid var(--line);max-height:260px;overflow-y:auto;"><table class="data-table"><thead><tr><th>일련번호</th><th>모델 (전산모델명)</th><th>통신사</th><th class="ta-right">판매가</th><th class="ta-right">할인 뒤</th><th>상태</th></tr></thead><tbody id="paste-sale-preview-body">';
+    html += '<div style="overflow-x:auto;border:1px solid var(--line);max-height:260px;overflow-y:auto;"><table class="data-table"><thead><tr><th>일련번호</th><th>모델 (전산모델명)</th><th>통신사</th><th class="ta-right">출고가</th><th class="ta-right">판매할인</th><th class="ta-right">판매가</th><th>상태</th></tr></thead><tbody id="paste-sale-preview-body">';
     dataRows.forEach((r,ri)=>{
       const it = foundMap[r.serial];
       const p = (r.price != null) ? Number(r.price) : (it && it.listPrice ? Number(it.listPrice) : 0);
@@ -37803,7 +37841,8 @@
           +(it ? comboEsc(it.carrier||"-") : '-')
           +((dupList.indexOf(r.serial)>=0)
               ? ' (중복 '+(allMap[r.serial]||[]).filter(x=> String(x.carrier||"").toUpperCase()===car).length+'건)' : '')+'</td>' +
-        '<td class="ta-right">'+(r.price!=null?r.price.toLocaleString():(it&&it.listPrice?Number(it.listPrice).toLocaleString()+'(출고가)':'-'))+'</td>' +
+        '<td class="ta-right">'+((it&&it.listPrice)?Number(it.listPrice).toLocaleString():'-')+'</td>' +
+        '<td class="ta-right" data-ps-disc="'+ri+'"><span style="color:var(--gray);">-</span></td>' +
         '<td class="ta-right" data-ps-final="'+ri+'">'+(p?p.toLocaleString():'<span style="color:var(--gray);">-</span>')+'</td>' +
         '<td>'+(it ? (it.status==='판매'?'이미 판매됨':'✓ 보유중')
                    : (otherMap[r.serial] ? comboEsc(car)+'에는 없습니다 ('+comboEsc(otherMap[r.serial].join(", "))+'에 있음)'
@@ -37819,8 +37858,10 @@
     analysisEl.dataset.rows = JSON.stringify(dataRows.map(r=>{
       const it = foundMap[r.serial];
       const p = (r.price != null) ? Number(r.price) : (it && it.listPrice ? Number(it.listPrice) : null);
+      const sb = it ? saleFromBuy(it) : { amt:0, pct:null };
       return { ...r, price: p, itemId: it ? it.id : null,
-               buyPrice: (it && it.purchasePrice) ? Number(it.purchasePrice) : null };
+               buyPrice: (it && it.purchasePrice) ? Number(it.purchasePrice) : null,
+               buyDiscAmt: sb.amt, buyDiscPct: sb.pct };
     }));
 
     const destSel = document.getElementById("paste-sale-dest-select");
@@ -37875,22 +37916,31 @@
     if(!el) return;
     const rows = JSON.parse(document.getElementById("paste-sale-analysis").dataset.rows||"[]");
     const dAmt = Number((document.getElementById("paste-sale-discamt")||{}).value) || 0;
+    const dPct = Number((document.getElementById("paste-sale-discpct")||{}).value) || 0;
     const same = !!(document.getElementById("paste-sale-samebuy")||{}).checked;
-    const cut = same ? 0 : dAmt;
+    const discCells = el.querySelectorAll("[data-ps-disc]");
     el.querySelectorAll("[data-ps-final]").forEach((td,i)=>{
       const r = rows[i] || {};
+      const dc = discCells[i];
       if(same){
+        // 입고동일 — 사온 조건(선할인+타할인)이 그대로 판매할인이 됩니다.
         const b = Number(r.buyPrice)||0;
+        if(dc) dc.innerHTML = b
+          ? (Number(r.buyDiscAmt)||0).toLocaleString()
+            + (r.buyDiscPct != null ? ' <span style="color:var(--gray);font-size:10.5px;">' + r.buyDiscPct + '%</span>' : '')
+          : '<span style="color:var(--gray);">-</span>';
         td.innerHTML = b
           ? '<b>' + b.toLocaleString() + '</b> <span style="color:var(--navy);font-size:10.5px;">입고동일</span>'
           : '<span style="color:var(--danger);font-size:10.5px;">입고가 없음</span>';
         return;
       }
       const p = Number(r.price) || 0;
-      const f = Math.max(0, p - cut);
-      td.innerHTML = cut
-        ? '<b>' + f.toLocaleString() + '</b> <span style="color:var(--danger);font-size:10.5px;">-' + cut.toLocaleString() + '</span>'
-        : (p ? p.toLocaleString() : '<span style="color:var(--gray);">-</span>');
+      const f = Math.max(0, p - dAmt);
+      if(dc) dc.innerHTML = dAmt
+        ? dAmt.toLocaleString()
+          + (dPct ? ' <span style="color:var(--gray);font-size:10.5px;">' + dPct + '%</span>' : '')
+        : '<span style="color:var(--gray);">-</span>';
+      td.innerHTML = p ? f.toLocaleString() : '<span style="color:var(--gray);">-</span>';
     });
   }
 
@@ -37931,17 +37981,12 @@
       if(salePrice){
         patch.salePrice = Number(salePrice);
         if(sameBuy){
-          const L = Number(it.listPrice)||0;
           patch.salePriceFollowsBuy = true;      // 앞으로 입고가가 바뀌면 판매가도 따라갑니다
           patch.profit = 0;                      // 사온 값 그대로 넘기므로 수익 0
-          if(L){
-            // 판매할인%는 그 재고의 할인 계산 기준으로 냅니다.
-            const sBase = (typeof itemDiscountAmountBase === "function")
-              ? itemDiscountAmountBase(it, L) : L;
-            patch.saleDiscountAmt = L - Number(salePrice);
-            patch.saleDiscount = sBase
-              ? Number((((L - Number(salePrice))/sBase)*100).toFixed(2)) : null;
-          }
+          // 판매할인·%는 사온 조건(선할인 + 타할인)을 그대로 옮깁니다.
+          const sb = saleFromBuy(it);
+          patch.saleDiscountAmt = sb.amt;
+          patch.saleDiscount    = sb.pct;
         }else{
           // 판매할인 — 넣으셨으면 그대로 적고, 수익은 할인 뒤 금액으로 계산합니다.
           if(discAmt > 0){
