@@ -387,7 +387,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-28 v777</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-28 v778</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -3064,6 +3064,13 @@
           <div style="font-size:13px;font-weight:700;margin-bottom:4px;">도착 일괄 등록</div>
           <p class="desc" style="margin-top:0;">일련번호를 그대로 붙여넣으세요. <b>모델·색상은 이 주문의 품목에서 자동으로 찾습니다.</b></p>
           <textarea id="bulk-arrival-text" rows="8" style="width:100%;border:1px solid var(--line);padding:8px;font-size:12.5px;font-family:monospace;box-sizing:border-box;" placeholder="SM-F776N256&#9;핑크&#9;1038307&#10;SM-F776N256&#9;핑크&#9;1038472&#10;&#10;또는 일련번호만 (품목이 하나뿐일 때)&#10;1038307&#10;1038472"></textarea>
+          <label style="display:flex;align-items:flex-start;gap:6px;margin-top:8px;border:1px solid var(--danger);background:#fff;padding:8px 10px;font-size:12.5px;line-height:1.7;cursor:pointer;">
+            <input type="checkbox" id="bulk-arrival-loose" style="margin-top:3px;">
+            <span><b style="color:var(--danger);">한 줄을 통째로 일련번호로 넣기 (형식 검사 안 함)</b><br>
+            <span style="color:var(--gray);">숫자가 아닌 시리얼번호(예: RT0067-FU4954236)를 그대로 넣습니다.
+            <b>한 줄에 한 개</b>씩 적어주세요. 모델명·색상만 적은 줄은 그대로 알아보고 그 아래 줄들에 적용합니다.<br>
+            형식을 안 따지므로 오타도 그대로 들어갑니다 — 넣기 전 목록을 꼭 확인해주세요.</span></span>
+          </label>
           <div class="stack-form" style="max-width:520px;margin-top:10px;">
             <div class="stack-row"><label>입고일</label><input type="text" id="bulk-arrival-indate" maxlength="8" inputmode="numeric" placeholder="예: 20260726"></div>
             <div class="stack-row"><label>출고일 (선택)</label><input type="text" id="bulk-arrival-outdate" maxlength="8" inputmode="numeric" placeholder="비우면 입고일과 동일"></div>
@@ -5861,6 +5868,31 @@
     out.forEach(o=>{ o.sn = normSerial(o.sn); });
     return out;
   }
+
+  // 한 줄 = 일련번호 1개. 형식을 따지지 않고 적은 그대로 씁니다.
+  //  액세서리처럼 영문·기호가 섞인 시리얼번호(RT0067-FU4954236)를 넣을 때 씁니다.
+  //  모델명·색상만 적힌 줄은 그대로 알아보고 그 아래 줄들에 적용합니다.
+  function parseSerialPasteLoose(raw){
+    const norm = v => String(v||"").trim().toLowerCase();
+    const modelSet = new Set(), colorSet = new Set();
+    (modelsCache||[]).forEach(m=>{
+      [m.systemModel, m.baseModel, m.petName].forEach(v=>{ if(v) modelSet.add(norm(v)); });
+      (m.colors||[]).forEach(c=>{
+        [c.manufacturerColor, c.systemColor].forEach(v=>{ if(v) colorSet.add(norm(v)); });
+      });
+    });
+    const out = [];
+    let cm = "", cc = "";
+    String(raw||"").split(/\r?\n/).forEach((l, idx)=>{
+      const t = String(l).trim();
+      if(!t) return;
+      if(modelSet.has(norm(t))){ cm = t; cc = ""; return; }   // 모델 줄
+      if(colorSet.has(norm(t))){ cc = t; return; }            // 색상 줄
+      out.push({ sn: normSerial(t), hints:[cm, cc].filter(Boolean), line:l, no:idx+1 });
+    });
+    return out;
+  }
+  window.parseSerialPasteLoose = parseSerialPasteLoose;
 
   async function fetchModelsCache(){
     const snap = asSnap(await readColCached("models","inventoryModels"));
@@ -12787,9 +12819,14 @@
     lines.forEach(o=> remain[o.id] = (Number(o.quantity)||0) - (Number(o.fulfilledCount)||0));
 
     // 붙여넣기 해석 — 모델·색상 줄, 한 줄에 여러 일련번호 모두 지원 (공통 함수)
-    const entries = parseSerialPaste(raw);
+    //  「형식 검사 안 함」을 켜면 한 줄을 통째로 일련번호로 씁니다.
+    const looseEl = document.getElementById("bulk-arrival-loose");
+    const loose = !!(looseEl && looseEl.checked);
+    const entries = loose ? parseSerialPasteLoose(raw) : parseSerialPaste(raw);
     if(entries.length === 0){
-      el.innerHTML = '<span style="color:var(--danger);">일련번호를 찾지 못했습니다. 숫자 4자리 이상이어야 합니다.</span>'; return;
+      el.innerHTML = '<span style="color:var(--danger);">'
+        + (loose ? '넣을 줄이 없습니다.' : '일련번호를 찾지 못했습니다. 숫자 4자리 이상이어야 합니다.')
+        + '</span>'; return;
     }
     // 이미 재고에 있는 일련번호를 먼저 찾아둡니다. (중복 입고를 막습니다)
     const allSerials = [...new Set(entries.map(e=> e.sn))];
@@ -25727,6 +25764,31 @@
     }catch(e){ console.error("단말 이력 기록 실패", e); }
   }
 
+  // 건마다 내용이 다른 이력을 남깁니다. (일괄 변경처럼 「전 → 후」가 대마다 다를 때)
+  //  일자는 언제나 작업한 날로 둡니다 — 내용에 적힌 날짜 숫자에 정렬이 끌려가지 않게 합니다.
+  async function logItemsEach(rows, type, extra){
+    if(!rows || rows.length === 0) return;
+    try{
+      for(let i=0; i<rows.length; i+=300){
+        const bt = writeBatch(db);
+        rows.slice(i, i+300).forEach(x=>{
+          bt.set(doc(collection(db,"itemHistory")), {
+            itemId: x.id||"", serialNumber: String(x.serialNumber||""),
+            systemModel: String(x.systemModel||""),
+            type, detail: String(x.detail||""),
+            ...(extra||{}),
+            eventDate: (extra && extra.eventDate) || todayStr(),
+            date: todayStr(),
+            by: currentUser.name, byUsername: currentUser.username,
+            at: serverTimestamp()
+          });
+        });
+        await bt.commit();
+      }
+    }catch(e){ console.error("단말 이력 기록 실패", e); }
+  }
+  window.logItemsEach = logItemsEach;
+
   window.initItemHistoryTab = async function(){
     const tSel = document.getElementById("ih-type");
     if(tSel && tSel.options.length <= 1){
@@ -31883,6 +31945,7 @@
 
     const patch = {};
     const changed = [];
+    const meChanges = [];      // 단말 이력용 — 어떤 칸이 어떤 값이 됐는지
     MULTI_EDIT_FIELDS.forEach(f=>{
       const c = document.getElementById(meChk(f.key));
       if(!c || !c.checked) return;
@@ -31890,6 +31953,7 @@
       if(f.type === "number") patch[f.key] = (v === "" ? null : Number(v));
       else patch[f.key] = (v === "" ? null : v);
       changed.push(f.label + " → " + (v === "" ? "(비움)" : v));
+      meChanges.push({ key:f.key, label:f.label, val:(v === "" ? "(비움)" : v) });
     });
     if(changed.length === 0){ showModelMsg("multi-edit-msg", "바꿀 항목을 왼쪽 체크박스로 하나 이상 골라주세요.", true); return; }
 
@@ -31950,6 +32014,18 @@
     clearDashCache(); clearCache("inventory");
     logAction("재고 일괄 수정(다중항목)", ids.length + "건 / " + changed.length + "개 항목"
       + (srFixed ? " / 판매요청 " + srFixed + "건 함께 수정" : ""));
+    // 단말기마다 이력을 남깁니다. 대마다 「전 → 후」를 따로 적습니다.
+    try{
+      await logItemsEach(ids.map(id=>{
+        const it = lastRenderedItems.find(x=>x.id===id) || {};
+        return { id, serialNumber: it.serialNumber||"", systemModel: it.systemModel||"",
+          detail: meChanges.map(c=>{
+            const bv = it[c.key];
+            const bk = (bv == null || bv === "") ? "(없음)" : String(bv);
+            return c.label + " " + bk + " → " + c.val;
+          }).join(" · ") };
+      }), "edited", {});
+    }catch(e){}
     showModelMsg("multi-edit-msg", ids.length + "건에 적용했습니다."
       + (srFixed ? " 판매요청 " + srFixed + "건도 함께 맞췄습니다." : ""), false);
     clearInvSelectAll();
@@ -32062,6 +32138,7 @@
         + "\n\n%는 그대로 두고 금액만 바꿉니다.\n진행할까요?")) return;
 
       let n1=0, n2=0, n3=0;
+      const ihRecalc = [];
       try{
         const seenOrder = new Set();
         for(const it of list){
@@ -32076,6 +32153,11 @@
             patch.salePrice = buy; patch.saleDiscountAmt = L - buy; patch.profit = 0;
           }
           await updateDoc(doc(db,"inventoryItems", it.id), patch);
+          ihRecalc.push({ id: it.id, serialNumber: it.serialNumber||"", systemModel: it.systemModel||"",
+            detail: "할인 금액 다시 계산 · 입고가 "
+              + ((Number(it.purchasePrice)||0) ? Number(it.purchasePrice).toLocaleString() : "(없음)")
+              + " → " + buy.toLocaleString()
+              + " (선할인 " + np.toLocaleString() + " · 타할인 " + no.toLocaleString() + ")" });
           n1++;
           if(it.salePriceFollowsBuy === true && it.saleRequestId){
             await updateDoc(doc(db,"saleRequests", it.saleRequestId),
@@ -32093,6 +32175,7 @@
 
       logAction("재고 일괄 변경", "할인 금액 전부 다시 계산 (" + n1 + "건"
         + (n2 ? " / 판매요청 " + n2 + "건" : "") + (n3 ? " / 주문 품목 " + n3 + "건" : "") + ")");
+      try{ await logItemsEach(ihRecalc, "price", {}); }catch(e){}
       clearCache("inventory"); clearCache("saleRequests"); clearCache("orders"); clearCache("loan"); clearDashCache();
       clearInvSelectAll();
       closeBulkChangeModal();
@@ -32229,6 +32312,7 @@
         + (linkedT.length ? "\n판매요청 " + linkedT.length + "건도 함께 바꿉니다." : "")
         + "\n\n진행할까요?")) return;
       let n1 = 0, n2 = 0;
+      const ihSame = [];
       try{
         for(const it of targets){
           const L = Number(it.listPrice)||0;
@@ -32242,6 +32326,10 @@
           patch.profit = 0;                       // 매입가 그대로 넘기므로 수익 0
           patch.salePriceFollowsBuy = true;       // 앞으로 입고가가 바뀌면 판매가도 따라갑니다
           await updateDoc(doc(db,"inventoryItems", it.id), patch);
+          ihSame.push({ id: it.id, serialNumber: it.serialNumber||"", systemModel: it.systemModel||"",
+            detail: "판매가 = 입고가로 맞춤 · 판매가 "
+              + ((Number(it.salePrice)||0) ? Number(it.salePrice).toLocaleString() : "(없음)")
+              + " → " + buy.toLocaleString() });
           n1++;
           if(it.saleRequestId){
             await updateDoc(doc(db,"saleRequests", it.saleRequestId), {
@@ -32254,6 +32342,7 @@
       }catch(e){ alert("바꾸지 못했습니다.\n" + ((e&&e.message)?e.message:String(e))); return; }
       logAction("재고 일괄 변경", "판매가 = 입고가로 맞춤 (" + n1 + "건"
         + (n2 ? " / 판매요청 " + n2 + "건 함께 수정" : "") + ")");
+      try{ await logItemsEach(ihSame, "price", {}); }catch(e){}
       clearCache("inventory"); clearCache("saleRequests"); clearDashCache();
       clearInvSelectAll();
       closeBulkChangeModal();
@@ -32287,6 +32376,16 @@
       try{ synced = await syncColorEverywhere(ids, mc, sc, sku); }catch(e){}
       const syncTxt = Object.keys(synced).map(k=> k + " " + synced[k] + "건").join(" / ");
       logAction("재고 색상 일괄 변경", ids.length + "건 → " + label + (syncTxt ? " / " + syncTxt : ""));
+      // 단말기마다 이력을 남깁니다.
+      try{
+        await logItemsEach(ids.map(id=>{
+          const it = (lastRenderedItems||[]).find(x=> x.id === id) || {};
+          const b = (it.systemColor || it.manufacturerColor || "(없음)");
+          return { id, serialNumber: it.serialNumber||"", systemModel: it.systemModel||"",
+            detail: "색상 " + b + " → " + label
+              + " (제조사색상 " + (mc||"-") + " · 전산색상 " + (sc||"-") + " · SKU " + (sku||"-") + ")" };
+        }), "edited", {});
+      }catch(e){}
       clearDashCache(); clearCache("inventory");
       clearInvSelectAll();
       closeBulkChangeModal();
@@ -32329,6 +32428,7 @@
     let linkedCount = 0, followFixed = 0;
     // 바뀌기 전 값을 모아 이력에 「전 → 후」로 남깁니다. (몇 가지 값이 있었는지도 함께)
     const beforeSet = {};
+    const ihRows = [];          // 단말 이력용 — 대마다 전 → 후를 따로 적습니다
     for(const id of ids){
       const it = lastRenderedItems.find(x=>x.id===id);
       const patch = { [key]: parsedVal };
@@ -32343,7 +32443,17 @@
       }
       { const bv = it ? it[key] : null;
         const bk = (bv == null || bv === "") ? "(없음)" : String(bv);
-        beforeSet[bk] = (beforeSet[bk]||0) + 1; }
+        beforeSet[bk] = (beforeSet[bk]||0) + 1;
+        // 함께 바뀐 값도 같이 적어 무엇이 어떻게 됐는지 한 줄로 보이게 합니다.
+        const alsoTxt = Object.keys(patch).filter(k=> k !== key)
+          .map(k=> (BULK_FIELD_LABELS[k]||k) + " "
+            + (((it && (it[k]!=null) && it[k]!=="") ? String(it[k]) : "(없음)")) + " → " + String(patch[k]))
+          .join(" · ");
+        ihRows.push({ id,
+          serialNumber: it ? (it.serialNumber||"") : "",
+          systemModel:  it ? (it.systemModel||"")  : "",
+          detail: fieldDef.label + " " + bk + " → " + String(newVal)
+            + (alsoTxt ? " (함께 " + alsoTxt + ")" : "") }); }
       await updateDoc(doc(db,"inventoryItems", id), patch);
     }
     // 재고의 할인을 바꾸면 그 재고가 붙어 있는 주문 품목도 같은 값으로 맞춥니다.
@@ -32442,6 +32552,8 @@
       + (srFixed ? " / 판매요청 " + srFixed + "건 함께 수정" : "")
       + (followFixed ? " / 판매가 따라가기 " + followFixed + "건" : "")
       + (ordFixed ? " / 주문 품목 " + ordFixed + "건 함께 수정" : "") + ")");
+    // 단말기마다 이력을 남깁니다. (일련번호를 눌러 보는 <단말 이력>에 나옵니다)
+    try{ await logItemsEach(ihRows, "edited", {}); }catch(e){}
     // 담아둔 자료도 함께 비웁니다. 안 비우면 방금 바꾼 값이 화면에 안 보입니다.
     clearCache("inventory"); clearCache("saleRequests"); clearDashCache();
     clearInvSelectAll();
