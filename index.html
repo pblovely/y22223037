@@ -387,7 +387,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-28 v805</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-28 v812</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -430,7 +430,6 @@
           <button class="tab-btn" data-tab="tab-reqboard" data-label-key="tab-reqboard" id="tabbtn-reqboard" onclick="switchTab('tab-reqboard')" style="display:none;"><span class="tab-label-text">입출금리스트</span></button>
           <button class="tab-btn" data-tab="tab-recon" data-label-key="tab-recon" id="tabbtn-recon" onclick="switchTab('tab-recon')" style="display:none;"><span class="tab-label-text">입출금 대사</span></button>
           <button class="tab-btn" data-tab="tab-tax" data-label-key="tab-tax" id="tabbtn-tax" onclick="switchTab('tab-tax')" style="display:none;"><span class="tab-label-text">세금계산서</span></button>
-          <button class="tab-btn" data-tab="tab-cashbook" data-label-key="tab-cashbook" id="tabbtn-cashbook" onclick="switchTab('tab-cashbook')" style="display:none;"><span class="tab-label-text">입출금 내역</span></button>
           <button class="tab-btn" data-tab="tab-paycheck" data-label-key="tab-paycheck" id="tabbtn-paycheck" onclick="switchTab('tab-paycheck')" style="display:none;"><span class="tab-label-text">단말기 입금 대조</span></button>
           <button class="tab-btn" data-tab="tab-lgrefund" data-label-key="tab-lgrefund" id="tabbtn-lgrefund" onclick="switchTab('tab-lgrefund')" style="display:none;"><span class="tab-label-text">LG 환불·수수료</span></button>
           <button class="tab-btn" data-tab="tab-datacheck" data-label-key="tab-datacheck" id="tabbtn-datacheck" onclick="switchTab('tab-datacheck')" style="display:none;"><span class="tab-label-text">데이터 점검</span></button>
@@ -3816,12 +3815,12 @@
   };
   // 권한을 성격별로 묶어서 보여줍니다 (화면에서 찾기 쉽게)
   const PERMISSION_GROUPS = [
-    { title:"화면 메뉴", keys:["dashboard","menuInvWork","menuInvUpload","menuOrders","menuSaleReq","menuReservation","menuCompany","menuDataUpload","menuItemHistory","menuLgRefund","menuLedger","menuDataCheck","menuReqBoard","menuCashbook","menuTax","menuRecon"] },
+    { title:"화면 메뉴", keys:["dashboard","menuInvWork","menuInvUpload","menuOrders","menuSaleReq","menuReservation","menuCompany","menuDataUpload","menuItemHistory","menuLgRefund","menuLedger","menuDataCheck","menuReqBoard","menuTax","menuRecon"] },
     { title:"기능", keys:["excelExport","bulkEdit","bulkModelApply","companyEdit","listPriceOverride","cancelDelete","accountView","depositApprove","paymentProcess","uiCustomize"] },
     { title:"관리자", keys:["userApproval","permissionManage","selfPermission","teamManage","inventorySettings","settlementSettings","siteSettings","dataReset"] }
   ];
   // 상위 항목 아래에 들여쓰기할 항목
-  const PERMISSION_SUB_KEYS = ["menuInvUpload","menuCashbook","menuTax","menuRecon"];
+  const PERMISSION_SUB_KEYS = ["menuInvUpload","menuTax","menuRecon"];
 
   const DEFAULT_SITE_NAME = "유통폰 관리 대시보드";
   const DEFAULT_PENDING_TITLE = "승인 대기 중입니다";
@@ -3904,6 +3903,34 @@
   }
   window.saleFromBuy = saleFromBuy;
 
+  // %와 금액 한 쌍이 「출고가에 곱한 값」인지 「공급가에 곱한 값」인지 가립니다.
+  //  딱 안 떨어지면 그 금액이 실제로 몇 %인지 돌려줍니다.
+  function baseOfPctAmt(L, pct, amt){
+    const p = Number(pct)||0, a = Number(amt)||0;
+    if(!L || !(p > 0)) return null;
+    const S = L / 1.1;
+    const byList = Math.round(L * p / 100), bySupply = Math.round(S * p / 100);
+    if(byList === bySupply) return null;              // 두 값이 같으면 구분이 안 됩니다
+    if(a === byList)   return { k:"unit" };
+    if(a === bySupply) return { k:"supply" };
+    const pList = (a / L) * 100, pSupply = (a / S) * 100;
+    const useList = Math.abs(pList - p) <= Math.abs(pSupply - p);
+    const realPct = Number((useList ? pList : pSupply).toFixed(2));
+    // 반올림 1원 차이로 딱 안 맞아도, 실제 비율이 적어둔 %와 같으면 기준은 맞는 것입니다.
+    if(realPct === Number(p.toFixed(2))) return { k: useList ? "unit" : "supply" };
+    return { k:"off", base: useList ? "unit" : "supply", pct: realPct };
+  }
+
+  // 판매할인이 실제로 어느 기준으로 계산돼 있는지 가립니다.
+  function actualSaleBase(it){
+    const L = Number(it && it.listPrice)||0;
+    const r = baseOfPctAmt(L, (it && it.saleDiscount), (it && it.saleDiscountAmt));
+    if(!r) return "-";
+    if(r.k === "off") return (r.base === "supply" ? "공급가" : "출고가") + " " + r.pct + "%";
+    return (r.k === "supply") ? "공급가" : "출고가";
+  }
+  window.actualSaleBase = actualSaleBase;
+
   // 저장된 할인 금액이 「실제로」 어느 기준으로 나온 값인지 역산합니다.
   //  적어둔 %를 출고가에 곱한 값인지, 공급가(출고가÷1.1)에 곱한 값인지 맞춰봅니다.
   //  딱 떨어지지 않으면 「안 맞음」이라고 뭉뚱그리지 않고, 그 금액이 실제로 몇 %인지 돌려줍니다.
@@ -3928,8 +3955,10 @@
       const pList   = (a / L) * 100;
       const pSupply = (a / S) * 100;
       const useList = Math.abs(pList - p) <= Math.abs(pSupply - p);
-      return { k:"off", base: useList ? "unit" : "supply",
-               pct: Number((useList ? pList : pSupply).toFixed(2)) };
+      const realPct = Number((useList ? pList : pSupply).toFixed(2));
+      // 반올림 1원 차이로 딱 안 맞아도, 실제 비율이 적어둔 %와 같으면 기준은 맞는 것입니다.
+      if(realPct === Number(p.toFixed(2))) return { k: useList ? "unit" : "supply" };
+      return { k:"off", base: useList ? "unit" : "supply", pct: realPct };
     };
     const pre   = one(it.purchaseDiscount, it.purchaseDiscountAmt);
     const other = one(it.otherDiscountPct, it.otherDiscountAmt);
@@ -4036,6 +4065,9 @@
     { key:"salePrice", label:"판매가", get:it=>it.salePrice?Number(it.salePrice).toLocaleString():"-", getRaw:it=>it.salePrice!=null?Number(it.salePrice):"" },
     { key:"saleDiscountAmt", label:"판매할인", get:it=> discFmt(saleDiscountAmtOf(it)), getRaw:it=> discRaw(saleDiscountAmtOf(it)) },
     { key:"saleDiscount", label:"판매할인%", get:it=> discPctFmt(saleDiscountPctOf(it)), getRaw:it=> discRaw(saleDiscountPctOf(it)) },
+    // 판매할인이 실제로 출고가에 걸린 값인지, 공급가에 걸린 값인지 역산해 보여줍니다.
+    { key:"saleDiscountBase", label:"판매할인 기준",
+      get:it=> actualSaleBase(it), getRaw:it=> actualSaleBase(it) },
     { key:"subsidyAmount", label:"공시지원금", get:it=> (it.subsidyAmount!=null)?Number(it.subsidyAmount).toLocaleString():"-", getRaw:it=>it.subsidyAmount!=null?Number(it.subsidyAmount):"" },
     { key:"subsidyStatus", label:"공시지원금 상태", get:it=>it.subsidyStatus||"-" },
     { key:"clawbackAmount", label:"환수액", get:it=> (it.clawbackAmount!=null)?Number(it.clawbackAmount).toLocaleString():"-", getRaw:it=>it.clawbackAmount!=null?Number(it.clawbackAmount):"" },
@@ -5285,7 +5317,7 @@
     closePersonalSettingsModal();
   };
 
-  const ALL_PERM_KEYS = ["dashboard","menuInvWork","menuInvUpload","menuOrders","menuSaleReq","menuDataUpload","menuReservation","menuCompany","menuItemHistory","menuLgRefund","menuLedger","menuDataCheck","menuReqBoard","menuCashbook","menuTax","menuRecon","excelExport","bulkEdit","bulkModelApply","companyEdit","listPriceOverride","cancelDelete","accountView","depositApprove","paymentProcess","uiCustomize","userApproval","permissionManage","selfPermission","teamManage","inventorySettings","settlementSettings","siteSettings","dataReset"];
+  const ALL_PERM_KEYS = ["dashboard","menuInvWork","menuInvUpload","menuOrders","menuSaleReq","menuDataUpload","menuReservation","menuCompany","menuItemHistory","menuLgRefund","menuLedger","menuDataCheck","menuReqBoard","menuTax","menuRecon","excelExport","bulkEdit","bulkModelApply","companyEdit","listPriceOverride","cancelDelete","accountView","depositApprove","paymentProcess","uiCustomize","userApproval","permissionManage","selfPermission","teamManage","inventorySettings","settlementSettings","siteSettings","dataReset"];
 
   async function loadUserAdminList(){
     const listEl = document.getElementById("user-admin-list");
@@ -7883,7 +7915,7 @@
       }
       // ── 바뀐 값을 이어진 곳에도 반영합니다. (주문 품목 · 판매요청) ──
       //  재고만 고치면 주문의 타할인(클럽장려금 기준)과 판매요청 금액이 어긋납니다.
-      let ordFixed2 = 0, srFixed2 = 0, srBlocked = 0;
+      let ordFixed2 = 0, srFixed2 = 0, srBlocked = 0, srbFixed = 0;
       const cur0 = (lastRenderedItems||[]).find(x=> x.id === editingItemId) || {};
       const chg = (k)=>{
         const a = (cur0[k] === undefined || cur0[k] === null) ? "" : String(cur0[k]);
@@ -7919,6 +7951,60 @@
               saleDiscountPct:  base.saleDiscount != null ? Number(base.saleDiscount) : null,
               ...(base.destination ? { destination: base.destination } : {}) });
             srFixed2++;
+            // 판매요청이 바뀌면 그 묶음 합계도 다시 냅니다.
+            //  묶음 합계는 입금요청 금액이 되므로 안 맞으면 받을 돈이 틀어집니다.
+            const bId = sd.data().batchId || "";
+            if(bId){
+              try{
+                const sib = await getDocs(query(collection(db,"saleRequests"), where("batchId","==", bId)));
+                let sum = 0, cnt = 0;
+                sib.forEach(d2=>{
+                  const v = d2.data();
+                  if(v.status === "취소") return;
+                  const q = Number(v.quantity)||1;
+                  // 방금 저장한 건은 새 값으로 셉니다. (읽기 시점 차이 때문)
+                  const price = (d2.id === cur0.saleRequestId)
+                    ? (base.salePrice != null ? Number(base.salePrice) : 0)
+                    : (Number(v.salePrice)||0);
+                  sum += price * q; cnt++;
+                });
+                await updateDoc(doc(db,"saleRequestBatches", bId), {
+                  depositRequired: Math.round(sum), lineCount: cnt });
+                srbFixed++;
+              }catch(e){}
+            }
+          }
+        }
+      }catch(e){}
+
+      // ── 여신 차감액도 다시 냅니다. ──
+      //  여신으로 산 주문은 선할인까지 반영된 금액이 차감됩니다.
+      //  담보 계산서에 묶인 주문은 계산서 금액에 맞춰둔 것이라 건드리지 않습니다.
+      let creditFixed = 0, creditSkipped = 0;
+      try{
+        if(buyChanged && cur0.orderId){
+          const od = await getDoc(doc(db,"orders", cur0.orderId));
+          const bId = od.exists() ? String(od.data().batchId||"") : "";
+          if(bId){
+            const bd = await getDoc(doc(db,"orderBatches", bId));
+            const b = bd.exists() ? bd.data() : null;
+            if(b && b.paymentMethod === "b2b_credit" && b.status !== "취소"){
+              if(b.collateralId){
+                creditSkipped++;      // 담보 계산서에 묶인 주문
+              }else{
+                const ls = await getDocs(query(collection(db,"orders"), where("batchId","==", bId)));
+                const lines = [];
+                ls.forEach(d2=>{ const v = d2.data(); if(v.status === "취소") return;
+                  lines.push(d2.id === cur0.orderId
+                    ? { ...v, listPrice: base.listPrice, quantity: v.quantity,
+                        preDiscountAmt: base.purchaseDiscountAmt, preDiscountPct: base.purchaseDiscount }
+                    : v); });
+                const want = creditFromLines(b.source, lines);
+                await replaceB2BOrderUse(bId, want,
+                  b.depositPaidDate || b.orderDate || todayStr(), b.source || "-");
+                creditFixed++;
+              }
+            }
           }
         }
       }catch(e){}
@@ -7949,14 +8035,21 @@
 
       clearDashCache(); clearCache("inventory");
       if(ordFixed2) clearCache("orders");
-      if(srFixed2)  clearCache("saleRequests");
+      if(creditFixed) clearCache("loan");
+      if(srFixed2 || srbFixed) clearCache("saleRequests");
       logAction("재고 수정", docModelLabel(m)+" "+colorLabel+" / "+carrier
         + (ordFixed2 ? " / 주문 품목 함께 수정" : "")
         + (srFixed2  ? " / 판매요청 함께 수정" : "")
+        + (srbFixed  ? " / 묶음 합계 다시 계산" : "")
+        + (creditFixed ? " / 여신 차감액 다시 계산" : "")
+        + (creditSkipped ? " / 담보 계산서 주문이라 여신은 그대로" : "")
         + (srBlocked ? " / 입금완료라 판매요청은 그대로" : ""));
       showModelMsg("item-result-msg", "저장되었습니다."
         + (ordFixed2 ? " 주문 품목도 함께 맞췄습니다." : "")
         + (srFixed2  ? " 판매요청도 함께 맞췄습니다." : "")
+        + (srbFixed  ? " 묶음 합계도 다시 냈습니다." : "")
+        + (creditFixed ? " 여신 차감액도 다시 냈습니다." : "")
+        + (creditSkipped ? " <span style=\'color:#b8860b;\'>담보 계산서에 묶인 주문이라 여신은 그대로 두었습니다.</span>" : "")
         + (srBlocked ? " <span style=\'color:var(--danger);\'>입금이 끝난 판매요청은 그대로 두었습니다.</span>" : ""), false);
       loadInventoryList();
       setTimeout(closeItemModal, 600);
@@ -26889,6 +26982,10 @@
   let baseDiffCache = [];        // 할인 금액이 업체 기준과 다른 재고
   let baseDiffPaidSkip = [];     // 입금이 끝나 세지 않은 재고 (이미 정산된 금액)
   let sameBuyDiffCache = [];     // 입고동일인데 판매 금액이 매입과 다른 재고
+  let invOrderDiffCache = [];    // 재고 ↔ 주문 품목 매입 금액 불일치
+  let invSaleDiffCache = [];     // 재고 ↔ 판매요청 판매 금액 불일치
+  let invSaleDiffPaid = 0;
+  let srbSumDiffCache = [];      // 판매요청 묶음 합계 불일치
   let sameBuyDiffSkip = 0;
   let baseDiffGroups = {};       // 위를 매입처·기준·%·출고가로 묶은 것
   let baseDiffKeys = [];         // 묶음 순서 (체크박스 번호와 맞춥니다)
@@ -27920,6 +28017,155 @@
   };
 
   // 할인 금액이 업체 기준과 다른 재고 — 목록과 한 번에 맞추기
+  // ── 재고 ↔ 주문 품목 매입 금액 ──
+  window.showInvOrderDiffList = function(){
+    const el = document.getElementById("datacheck-detail");
+    if(!el || invOrderDiffCache.length === 0){ if(el) el.innerHTML = '<div class="list-empty">다른 것이 없습니다.</div>'; return; }
+    let h = '<div style="border:1px solid var(--navy);padding:10px 12px;margin-top:10px;">'
+      + '<div style="font-weight:700;margin-bottom:4px;">재고와 주문 품목의 매입 금액이 다름 — ' + invOrderDiffCache.length + '대</div>'
+      + '<div style="font-size:11.5px;color:var(--gray);line-height:1.7;margin-bottom:8px;">'
+      + '<b>재고 값을 기준</b>으로 주문 품목을 맞춥니다. 주문의 타할인은 클럽장려금 기준이라 맞아야 합니다.<br>'
+      + '재고 쪽이 틀렸다면 재고를 먼저 고치신 뒤 다시 점검해주세요.</div>'
+      + '<div style="max-height:340px;overflow-y:auto;border:1px solid var(--line);">'
+      + '<table class="data-table" style="width:100%;font-size:11.5px;"><thead><tr>'
+      + '<th>일련번호</th><th>모델</th><th>다른 값 (주문 → 재고 기준)</th></tr></thead><tbody>'
+      + invOrderDiffCache.slice(0,300).map(r=> '<tr>'
+          + '<td><b>'+comboEsc(r.it.serialNumber||"-")+'</b></td>'
+          + '<td>'+comboEsc(r.it.systemModel||"-")+'</td>'
+          + '<td>'+r.pairs.map(([k,a,b])=> comboEsc(k)+" "+(Number(b)||0).toLocaleString()
+              +" → <b>"+(Number(a)||0).toLocaleString()+"</b>").join(" · ")+'</td></tr>').join("")
+      + '</tbody></table></div>'
+      + '<button class="btn small" style="width:auto;margin-top:10px;" onclick="fixInvOrderDiffAll()">'
+      + '주문 품목을 재고에 맞추기 (' + invOrderDiffCache.length + '대)</button></div>';
+    el.innerHTML = h;
+  };
+  window.fixInvOrderDiffAll = async function(){
+    if(invOrderDiffCache.length === 0) return;
+    if(!confirm("주문 품목 " + invOrderDiffCache.length + "건을 재고 값에 맞춥니다.\n\n"
+      + "선할인 · 타할인 · 입고가 · 출고가를 재고와 같게 합니다.\n진행할까요?")) return;
+    const el = document.getElementById("datacheck-detail");
+    if(el) el.innerHTML = '<div class="list-empty">맞추는 중입니다...</div>';
+    let n = 0;
+    try{
+      const seen = new Set();
+      for(const r of invOrderDiffCache){
+        if(seen.has(r.orderId)) continue;
+        seen.add(r.orderId);
+        await updateDoc(doc(db,"orders", r.orderId), {
+          listPrice:        Number(r.it.listPrice)||0,
+          preDiscountAmt:   Number(r.it.purchaseDiscountAmt)||0,
+          otherDiscountAmt: Number(r.it.otherDiscountAmt)||0,
+          purchasePrice:    Number(r.it.purchasePrice)||0 });
+        n++;
+      }
+    }catch(e){ alert("맞추지 못했습니다.\n" + ((e&&e.message)?e.message:String(e))); return; }
+    logAction("데이터 점검 — 주문 품목을 재고에 맞춤", n + "건");
+    clearCache("orders"); clearCache("loan"); clearDashCache();
+    alert("주문 품목 " + n + "건을 맞췄습니다.");
+    invOrderDiffCache = []; runDataCheck();
+  };
+
+  // ── 재고 ↔ 판매요청 판매 금액 ──
+  window.showInvSaleDiffList = function(){
+    const el = document.getElementById("datacheck-detail");
+    if(!el || invSaleDiffCache.length === 0){ if(el) el.innerHTML = '<div class="list-empty">다른 것이 없습니다.</div>'; return; }
+    let h = '<div style="border:1px solid var(--navy);padding:10px 12px;margin-top:10px;">'
+      + '<div style="font-weight:700;margin-bottom:4px;">재고와 판매요청의 판매 금액이 다름 — ' + invSaleDiffCache.length + '대</div>'
+      + '<div style="font-size:11.5px;color:var(--gray);line-height:1.7;margin-bottom:8px;">'
+      + '<b>재고 값을 기준</b>으로 판매요청을 맞춥니다.'
+      + (invSaleDiffPaid ? '<br><b style="color:var(--danger);">입금이 끝난 ' + invSaleDiffPaid + '대는 붉은 줄로 표시하고 손대지 않습니다.</b>' : '')
+      + '</div>'
+      + '<div style="max-height:340px;overflow-y:auto;border:1px solid var(--line);">'
+      + '<table class="data-table" style="width:100%;font-size:11.5px;"><thead><tr>'
+      + '<th>일련번호</th><th>모델</th><th>다른 값 (판매요청 → 재고 기준)</th><th>입금</th></tr></thead><tbody>'
+      + invSaleDiffCache.slice(0,300).map(r=> '<tr'+(r.paid?' style="background:#fdecea;"':'')+'>'
+          + '<td><b>'+comboEsc(r.it.serialNumber||"-")+'</b></td>'
+          + '<td>'+comboEsc(r.it.systemModel||"-")+'</td>'
+          + '<td>'+r.pairs.map(([k,a,b])=> comboEsc(k)+" "+comboEsc(String(b||"-"))
+              +" → <b>"+comboEsc(String(a||"-"))+"</b>").join(" · ")+'</td>'
+          + '<td>'+(r.paid?'<span style="color:var(--danger);font-weight:700;">완료</span>':'-')+'</td></tr>').join("")
+      + '</tbody></table></div>'
+      + '<button class="btn small" style="width:auto;margin-top:10px;" onclick="fixInvSaleDiffAll()">'
+      + '판매요청을 재고에 맞추기 (' + invSaleDiffCache.filter(r=>!r.paid).length + '대)</button></div>';
+    el.innerHTML = h;
+  };
+  window.fixInvSaleDiffAll = async function(){
+    const rows = invSaleDiffCache.filter(r=> !r.paid);
+    if(rows.length === 0){ alert("맞출 건이 없습니다."); return; }
+    if(!confirm("판매요청 " + rows.length + "건을 재고 값에 맞춥니다.\n\n"
+      + "판매가 · 판매할인 · 판매할인% · 판매처를 재고와 같게 합니다.\n"
+      + (invSaleDiffPaid ? "\n입금이 끝난 " + invSaleDiffPaid + "대는 빼고 진행합니다.\n" : "")
+      + "\n진행할까요?")) return;
+    const el = document.getElementById("datacheck-detail");
+    if(el) el.innerHTML = '<div class="list-empty">맞추는 중입니다...</div>';
+    let n = 0;
+    try{
+      for(const r of rows){
+        await updateDoc(doc(db,"saleRequests", r.srId), {
+          salePrice:       Number(r.it.salePrice)||null,
+          saleDiscountAmt: Number(r.it.saleDiscountAmt)||null,
+          saleDiscountPct: Number(r.it.saleDiscount)||null,
+          ...(r.it.destination ? { destination: r.it.destination } : {}) });
+        n++;
+      }
+    }catch(e){ alert("맞추지 못했습니다.\n" + ((e&&e.message)?e.message:String(e))); return; }
+    logAction("데이터 점검 — 판매요청을 재고에 맞춤", n + "건"
+      + (invSaleDiffPaid ? " / 입금완료 " + invSaleDiffPaid + "대 제외" : ""));
+    clearCache("saleRequests"); clearDashCache();
+    alert("판매요청 " + n + "건을 맞췄습니다.\n\n묶음 합계도 함께 점검해주세요.");
+    invSaleDiffCache = []; runDataCheck();
+  };
+
+  // ── 판매요청 묶음 합계 ──
+  window.showSrbSumDiffList = function(){
+    const el = document.getElementById("datacheck-detail");
+    if(!el || srbSumDiffCache.length === 0){ if(el) el.innerHTML = '<div class="list-empty">다른 것이 없습니다.</div>'; return; }
+    let h = '<div style="border:1px solid var(--navy);padding:10px 12px;margin-top:10px;">'
+      + '<div style="font-weight:700;margin-bottom:4px;">판매요청 묶음 합계가 안 맞음 — ' + srbSumDiffCache.length + '건</div>'
+      + '<div style="font-size:11.5px;color:var(--gray);line-height:1.7;margin-bottom:8px;">'
+      + '묶음 합계는 <b>입금요청 금액</b>이 됩니다. 안에 든 판매요청의 합으로 맞춥니다.<br>'
+      + '<b style="color:var(--danger);">입금이 끝난 묶음</b>은 받은 돈이므로 붉게 표시하고 손대지 않습니다.</div>'
+      + '<div style="max-height:340px;overflow-y:auto;border:1px solid var(--line);">'
+      + '<table class="data-table" style="width:100%;font-size:11.5px;"><thead><tr>'
+      + '<th>판매처</th><th>요청일</th><th class="ta-right">지금 합계</th><th class="ta-right">맞춘 뒤</th>'
+      + '<th class="ta-right">차이</th><th>입금</th></tr></thead><tbody>'
+      + srbSumDiffCache.map(r=> '<tr'+(r.paid?' style="background:#fdecea;"':'')+'>'
+          + '<td>'+comboEsc(r.b.destination||"-")+'</td>'
+          + '<td>'+comboEsc(r.b.requestDate||"-")+'</td>'
+          + '<td class="ta-right">'+r.cur.toLocaleString()+'</td>'
+          + '<td class="ta-right"><b>'+r.want.toLocaleString()+'</b></td>'
+          + '<td class="ta-right" style="color:var(--danger);font-weight:700;">'
+          + ((r.want-r.cur>0?"+":"")+(r.want-r.cur).toLocaleString())+'</td>'
+          + '<td>'+(r.paid?'<span style="color:var(--danger);font-weight:700;">완료</span>':'-')+'</td></tr>').join("")
+      + '</tbody></table></div>'
+      + '<button class="btn small" style="width:auto;margin-top:10px;" onclick="fixSrbSumDiffAll()">'
+      + '묶음 합계 맞추기 (' + srbSumDiffCache.filter(r=>!r.paid).length + '건)</button></div>';
+    el.innerHTML = h;
+  };
+  window.fixSrbSumDiffAll = async function(){
+    const rows = srbSumDiffCache.filter(r=> !r.paid);
+    if(rows.length === 0){ alert("맞출 건이 없습니다. (모두 입금이 끝난 묶음입니다)"); return; }
+    const gap = rows.reduce((n,r)=> n + Math.abs(r.want - r.cur), 0);
+    if(!confirm("판매요청 묶음 " + rows.length + "건의 합계를 맞춥니다.\n\n"
+      + rows.slice(0,4).map(r=> "  " + (r.b.destination||"-") + " : "
+          + r.cur.toLocaleString() + " → " + r.want.toLocaleString()).join("\n")
+      + (rows.length > 4 ? "\n  ... 외 " + (rows.length-4) + "건" : "")
+      + "\n\n합계 차이 " + gap.toLocaleString() + "\n진행할까요?")) return;
+    const el = document.getElementById("datacheck-detail");
+    if(el) el.innerHTML = '<div class="list-empty">맞추는 중입니다...</div>';
+    let n = 0;
+    try{
+      for(const r of rows){
+        await updateDoc(doc(db,"saleRequestBatches", r.id), { depositRequired: r.want });
+        n++;
+      }
+    }catch(e){ alert("맞추지 못했습니다.\n" + ((e&&e.message)?e.message:String(e))); return; }
+    logAction("데이터 점검 — 판매요청 묶음 합계 맞춤", n + "건 / 차이 " + gap.toLocaleString());
+    clearCache("saleRequests"); clearDashCache();
+    alert("묶음 " + n + "건의 합계를 맞췄습니다.");
+    srbSumDiffCache = []; runDataCheck();
+  };
+
   // 입고동일인데 판매 금액이 매입과 다른 재고 — 목록과 한 번에 맞추기
   window.showSameBuyDiffList = function(){
     const el = document.getElementById("datacheck-detail");
@@ -28795,6 +29041,93 @@
           why:"판매가를 입고가로 맞춰둔 재고입니다. 판매할인·판매할인%도 사온 조건(선할인+타할인)과 같아야 하는데 다릅니다."
             + " 입금까지 끝난 건은 세지 않습니다" + (skip ? " (" + skip + "대 제외)" : "") + ".",
           fix: rows.length ? "showSameBuyDiffList()" : null, fixLabel:"확인하고 맞추기" });
+      }
+
+      // ⓪-4 재고와 주문 품목의 매입 금액이 다른 건
+      //  주문 품목 금액은 「대당」입니다. 재고 한 대의 값과 곧바로 견줍니다.
+      {
+        const rows = [];
+        Object.keys(items).forEach(id=>{
+          const it = items[id];
+          if(it.deleted === true) return;
+          if(!it.orderId) return;
+          const o = orders[it.orderId];
+          if(!o || o.status === "취소") return;
+          const pairs = [
+            ["출고가",  Number(it.listPrice)||0,           Number(o.listPrice)||0],
+            ["선할인",  Number(it.purchaseDiscountAmt)||0, Number(o.preDiscountAmt)||0],
+            ["타할인",  Number(it.otherDiscountAmt)||0,    Number(o.otherDiscountAmt)||0],
+            ["입고가",  Number(it.purchasePrice)||0,       Number(o.purchasePrice)||0]
+          ].filter(([k,a,b])=> a !== b);
+          if(pairs.length === 0) return;
+          rows.push({ id, it, orderId: it.orderId, o, pairs });
+        });
+        invOrderDiffCache = rows;
+        issues.push({ n:"재고와 주문 품목의 매입 금액이 다름", cnt:rows.length, unit:"대",
+          why:"재고를 고치고 주문 품목이 안 따라갔거나 그 반대입니다. 주문의 타할인은 클럽장려금 기준이라 맞아야 합니다.",
+          fix: rows.length ? "showInvOrderDiffList()" : null, fixLabel:"확인하고 맞추기" });
+      }
+
+      // ⓪-5 재고와 판매요청의 판매 금액이 다른 건
+      {
+        const srById2 = {}, srbById2 = {};
+        srSnap.forEach(d=> srById2[d.id] = d.data());
+        obSnapSale.forEach(d=> srbById2[d.id] = d.data());
+        const rows = [];
+        let paidCnt = 0;
+        Object.keys(items).forEach(id=>{
+          const it = items[id];
+          if(it.deleted === true) return;
+          if(!it.saleRequestId) return;
+          const sr = srById2[it.saleRequestId];
+          if(!sr || sr.status === "취소") return;
+          const pairs = [
+            ["판매가",   Number(it.salePrice)||0,       Number(sr.salePrice)||0],
+            ["판매할인", Number(it.saleDiscountAmt)||0, Number(sr.saleDiscountAmt)||0],
+            ["판매할인%",Number(it.saleDiscount)||0,    Number(sr.saleDiscountPct)||0],
+            ["판매처",   String(it.destination||""),    String(sr.destination||"")]
+          ].filter(([k,a,b])=> String(a) !== String(b));
+          if(pairs.length === 0) return;
+          const b = sr.batchId ? srbById2[sr.batchId] : null;
+          const paid = !!(b && b.depositReceived === true);
+          if(paid) paidCnt++;
+          rows.push({ id, it, srId: it.saleRequestId, sr, pairs, paid });
+        });
+        invSaleDiffCache = rows;
+        invSaleDiffPaid = paidCnt;
+        issues.push({ n:"재고와 판매요청의 판매 금액이 다름", cnt:rows.length, unit:"대",
+          why:"재고를 고치고 판매요청이 안 따라갔거나 그 반대입니다."
+            + (paidCnt ? " 입금이 끝난 " + paidCnt + "대는 손대지 않습니다." : ""),
+          fix: rows.length ? "showInvSaleDiffList()" : null, fixLabel:"확인하고 맞추기" });
+      }
+
+      // ⓪-6 판매요청 묶음의 합계가 그 안의 판매요청 합과 다른 건
+      //  묶음 합계는 입금요청 금액이 됩니다. 어긋나면 받을 돈이 틀어집니다.
+      {
+        const sumBy = {};
+        srSnap.forEach(d=>{
+          const sr = d.data();
+          if(sr.status === "취소") return;
+          if(!sr.batchId) return;
+          const q = Number(sr.quantity)||1;
+          const p = Number(sr.salePrice)||0;
+          sumBy[sr.batchId] = (sumBy[sr.batchId]||0) + p * q;
+        });
+        const rows = [];
+        obSnapSale.forEach(d=>{
+          const b = d.data();
+          if(b.status === "취소") return;
+          const want = Math.round(sumBy[d.id] || 0);
+          const cur  = Math.round(Number(b.depositRequired)||0);
+          if(want === cur) return;
+          if(!sumBy[d.id]) return;                       // 판매요청이 하나도 없으면 건너뜁니다
+          rows.push({ id:d.id, b, cur, want, paid: b.depositReceived === true });
+        });
+        srbSumDiffCache = rows;
+        const gapS = rows.reduce((n,r)=> n + Math.abs(r.want - r.cur), 0);
+        issues.push({ n:"판매요청 묶음 합계가 안 맞음", cnt:rows.length, unit:"차이 " + gapS.toLocaleString(),
+          why:"묶음 합계는 입금요청 금액이 됩니다. 판매가를 고쳤는데 묶음이 안 따라가면 받을 돈이 틀어집니다.",
+          fix: rows.length ? "showSrbSumDiffList()" : null, fixLabel:"확인하고 맞추기" });
       }
 
       // ① 주문이 지워졌는데 남은 판매요청
@@ -30405,6 +30738,9 @@
     const actions = (r)=>
       '<button class="btn small secondary" style="width:auto;" data-detail="'+r.id+'">상세</button>' +
       (!r.isLegacy && !r.cancelled ? '<button class="btn small secondary" style="width:auto;" data-edit-batch="'+r.id+'">수정</button>' : '') +
+      // 입금요청에 묶여 있고 아직 입금 전이면 여기서 바로 입금요청을 풀 수 있습니다.
+      ((!r.cancelled && r.b && r.b.depositRequestId && r.b.depositReceived !== true)
+        ? '<button class="btn small danger" style="width:auto;" data-cancel-dep="'+r.id+'">입금요청 취소</button>' : '') +
       (!r.cancelled ? '<button class="btn small danger" style="width:auto;" data-cancel-sr="'+r.id+'">취소</button>' : '') +
       (r.cancelled ? '<button class="btn small" style="width:auto;" data-restore-sr="'+r.id+'|'+(r.isLegacy?"1":"0")+'">되돌리기</button>' : '') +
       (r.cancelled && !r.isLegacy && hasPerm(currentUserPerms,"cancelDelete")
@@ -30456,6 +30792,52 @@
       const [id, lg] = btn.dataset.restoreSr.split("|");
       btn.onclick = ()=> restoreSaleRequest(id, lg === "1");
     });
+    // 입금요청만 풀기 — 판매요청·재고는 그대로 두고 입금요청 연결만 끊습니다.
+    listEl.querySelectorAll('[data-cancel-dep]').forEach(btn=>{
+      const r = rows.find(x=>x.id === btn.dataset.cancelDep);
+      btn.onclick = async ()=>{
+        if(!r || !r.b || !r.b.depositRequestId) return;
+        const reqId = String(r.b.depositRequestId);
+        // 그 입금요청에 몇 건이 묶여 있는지 먼저 확인합니다.
+        let together = [];
+        try{
+          for(const col of ["saleRequestBatches","saleRequests"]){
+            const snap = await getDocs(query(collection(db, col), where("depositRequestId","==", reqId)));
+            snap.forEach(d=> together.push({ id:d.id, col, ...d.data() }));
+          }
+        }catch(e){}
+        const others = together.filter(x=> x.id !== r.id);
+        if(!confirm("이 판매요청의 입금요청을 풉니다.\n\n"
+          + "  " + (r.b.destination || "-") + " · " + (Number(r.b.depositRequired)||0).toLocaleString() + "\n"
+          + (others.length
+              ? "\n※ 같은 입금요청에 다른 판매요청 " + others.length + "건이 함께 묶여 있습니다.\n"
+                + "   그 건들도 함께 풀립니다.\n" : "")
+          + "\n판매요청과 재고는 그대로 둡니다. 입금요청만 취소합니다.\n"
+          + "다시 묶어서 입금요청을 새로 만드실 수 있습니다.\n\n진행할까요?")) return;
+        const reason = prompt("취소 사유를 입력해주세요. (필수)", "");
+        if(reason === null) return;
+        if(!String(reason).trim()){ alert("취소 사유를 입력해주세요."); return; }
+        try{
+          // ① 입금요청 자체를 취소로 둡니다.
+          await updateDoc(doc(db,"saleDepositRequests", reqId), {
+            status:"취소", cancelReason:String(reason).trim(),
+            cancelledAt: serverTimestamp(), cancelledBy: currentUser.name });
+          // ② 그 입금요청에 묶인 판매요청의 연결을 모두 끊습니다.
+          for(const x of together){
+            await updateDoc(doc(db, x.col, x.id), { depositRequestId: null });
+          }
+        }catch(e){ alert("취소하지 못했습니다.\n" + ((e&&e.message)?e.message:String(e))); return; }
+        logAction("판매 입금요청 취소", (r.b.destination||"-") + " / "
+          + (Number(r.b.depositRequired)||0).toLocaleString()
+          + " / 판매요청 " + together.length + "건 / 사유: " + String(reason).trim());
+        clearCache("saleRequests");
+        alert("입금요청을 취소했습니다.\n\n  판매요청 " + together.length + "건이 다시 선택 가능합니다.");
+        loadSaleRequestList();
+        if(typeof loadSaleDepositRequestList === "function") loadSaleDepositRequestList();
+        if(typeof loadSettlementTab === "function") loadSettlementTab();
+      };
+    });
+
     listEl.querySelectorAll('[data-cancel-sr]').forEach(btn=>{
       const r = rows.find(x=>x.id === btn.dataset.cancelSr);
       btn.onclick = async ()=>{
@@ -38917,7 +39299,7 @@
     document.getElementById("signup-form").style.display="none";
     document.getElementById("login-form").style.display="block";
   };
-  const ADMIN_TAB_IDS = ["tab-site","tab-team","tab-users","tab-reqboard","tab-cashbook","tab-recon","tab-tax","tab-b2b","tab-loan","tab-accounts","tab-logs"];
+  const ADMIN_TAB_IDS = ["tab-site","tab-team","tab-users","tab-reqboard","tab-recon","tab-tax","tab-b2b","tab-loan","tab-accounts","tab-logs"];
   const INV_ADMIN_TAB_IDS = ["tab-inv-model","tab-inv-color","tab-inv-manufacturer","tab-inv-location","tab-inv-status","tab-inv-carrier"];
 
   window.toggleAdminMenu = function(){
@@ -39130,7 +39512,7 @@
         const added = INV_COLUMNS.map(c=>c.key).filter(k=> !known.includes(k));
         // 저장해 둔 순서를 그대로 지키고, 새로 생긴 열만 붙입니다.
         //  이어서 보는 게 나은 열은 짝이 되는 열 바로 뒤에 끼워 넣습니다.
-        const NEXT_TO = { discountBase: "purchasePrice" };
+        const NEXT_TO = { discountBase: "purchasePrice", saleDiscountBase: "saleDiscount" };
         const alive = saved.filter(k=> INV_COLUMNS.some(c=>c.key===k));
         const fresh = added.filter(k=> !alive.includes(k));
         fresh.forEach(k=>{
@@ -39222,9 +39604,8 @@
       //  예전 권한(menuReqBoard)을 가진 사람은 네 화면이 모두 보입니다. (쓰던 사람이 갑자기 못 보는 일이 없게)
       //  한 화면만 주시려면 menuReqBoard 를 끄고 그 화면 권한만 켜주세요.
       const allReq = hasPerm(perms, "menuReqBoard") || showSettlement;
-      const anyReq = allReq || hasPerm(perms, "menuCashbook") || hasPerm(perms, "menuTax") || hasPerm(perms, "menuRecon");
+      const anyReq = allReq || hasPerm(perms, "menuTax") || hasPerm(perms, "menuRecon");
       setMenu("tabbtn-reqboard", allReq);
-      setMenu("tabbtn-cashbook", allReq || hasPerm(perms, "menuCashbook"));
       setMenu("tabbtn-tax",      allReq || hasPerm(perms, "menuTax"));
       setMenu("tabbtn-recon",    allReq || hasPerm(perms, "menuRecon"));
       setMenu("tabbtn-b2b", showSettlement);
