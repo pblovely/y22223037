@@ -387,7 +387,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-28 v804</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-28 v805</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -28242,7 +28242,11 @@
         const patch = { purchaseDiscountAmt: r.wantPre, otherDiscountAmt: r.wantOther,
                         purchasePrice: r.wantBuy };
         if(!isPaidItem && it.salePriceFollowsBuy === true){
-          patch.salePrice = r.wantBuy; patch.saleDiscountAmt = L - r.wantBuy; patch.profit = 0;
+          // 판매할인 금액과 % 를 함께 바꿉니다. (금액만 바꾸면 %가 옛값으로 남습니다)
+          const sb = saleFromBuy({ ...it, purchaseDiscountAmt:r.wantPre,
+            otherDiscountAmt:r.wantOther, purchasePrice:r.wantBuy });
+          patch.salePrice = r.wantBuy; patch.saleDiscountAmt = sb.amt;
+          patch.saleDiscount = sb.pct; patch.profit = 0;
         }
         await updateDoc(doc(db,"inventoryItems", r.id), patch);
         ihRows.push({ id:r.id, serialNumber: it.serialNumber||"", systemModel: it.systemModel||"",
@@ -28251,8 +28255,10 @@
             + " (선할인 " + r.wantPre.toLocaleString() + " · 타할인 " + r.wantOther.toLocaleString() + ")" });
         n1++;
         if(!isPaidItem && it.salePriceFollowsBuy === true && it.saleRequestId){
+          const sb2 = saleFromBuy({ ...it, purchaseDiscountAmt:r.wantPre,
+            otherDiscountAmt:r.wantOther, purchasePrice:r.wantBuy });
           await updateDoc(doc(db,"saleRequests", it.saleRequestId),
-            { salePrice: r.wantBuy, saleDiscountAmt: L - r.wantBuy });
+            { salePrice: r.wantBuy, saleDiscountAmt: sb2.amt, saleDiscountPct: sb2.pct });
           n2++;
         }
         if(it.orderId && !seenOrder.has(it.orderId)){
@@ -32467,9 +32473,15 @@
         // 「판매가 = 입고가」로 맞춰둔 재고는 판매가도 함께 따라갑니다.
         if(it.salePriceFollowsBuy === true){
           sale = buy;
+          // 판매할인 금액과 %를 사온 조건(선할인+타할인)에 맞춰 함께 바꿉니다.
+          const sb = saleFromBuy({ ...it, purchasePrice: buy,
+            purchaseDiscountAmt: (p.purchaseDiscountAmt !== undefined ? p.purchaseDiscountAmt : it.purchaseDiscountAmt),
+            otherDiscountAmt:    (p.otherDiscountAmt    !== undefined ? p.otherDiscountAmt    : it.otherDiscountAmt),
+            purchaseDiscount:    (p.purchaseDiscount    !== undefined ? p.purchaseDiscount    : it.purchaseDiscount),
+            otherDiscountPct:    (p.otherDiscountPct    !== undefined ? p.otherDiscountPct    : it.otherDiscountPct) });
           p.salePrice = buy;
-          p.saleDiscountAmt = L - buy;
-          // 판매할인%는 적어두신 값 그대로 둡니다. 금액만 입고가에 맞춥니다.
+          p.saleDiscountAmt = sb.amt;
+          p.saleDiscount = sb.pct;
           p.profit = 0;
         }
       }
@@ -33018,8 +33030,10 @@
               + " (선할인 " + c.pre.toLocaleString() + " · 타할인 " + c.other.toLocaleString() + ")" });
           n1++;
           if(!isPaidItem && it.salePriceFollowsBuy === true && it.saleRequestId && c.L){
+            const sb2 = saleFromBuy({ ...it, purchaseDiscountAmt:c.pre,
+              otherDiscountAmt:c.other, purchasePrice:c.buy });
             await updateDoc(doc(db,"saleRequests", it.saleRequestId),
-              { salePrice: c.buy, saleDiscountAmt: c.L - c.buy });
+              { salePrice: c.buy, saleDiscountAmt: sb2.amt, saleDiscountPct: sb2.pct });
             n2++;
           }
           if(it.orderId && !seenOrderB.has(it.orderId)){
@@ -33093,7 +33107,10 @@
           const buy = L - np - no;
           const patch = { purchaseDiscountAmt: np, otherDiscountAmt: no, purchasePrice: buy };
           if(!paidR.has(it.id) && it.salePriceFollowsBuy === true){
-            patch.salePrice = buy; patch.saleDiscountAmt = L - buy; patch.profit = 0;
+            const sb = saleFromBuy({ ...it, purchaseDiscountAmt:np,
+              otherDiscountAmt:no, purchasePrice:buy });
+            patch.salePrice = buy; patch.saleDiscountAmt = sb.amt;
+            patch.saleDiscount = sb.pct; patch.profit = 0;
           }
           await updateDoc(doc(db,"inventoryItems", it.id), patch);
           ihRecalc.push({ id: it.id, serialNumber: it.serialNumber||"", systemModel: it.systemModel||"",
@@ -33103,8 +33120,10 @@
               + " (선할인 " + np.toLocaleString() + " · 타할인 " + no.toLocaleString() + ")" });
           n1++;
           if(!paidR.has(it.id) && it.salePriceFollowsBuy === true && it.saleRequestId){
+            const sb2 = saleFromBuy({ ...it, purchaseDiscountAmt:np,
+              otherDiscountAmt:no, purchasePrice:buy });
             await updateDoc(doc(db,"saleRequests", it.saleRequestId),
-              { salePrice: buy, saleDiscountAmt: L - buy });
+              { salePrice: buy, saleDiscountAmt: sb2.amt, saleDiscountPct: sb2.pct });
             n2++;
           }
           if(it.orderId && !seenOrder.has(it.orderId)){
