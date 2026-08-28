@@ -387,7 +387,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-28 v802</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-28 v804</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -26888,6 +26888,8 @@
   let priceDiffCache = [];
   let baseDiffCache = [];        // 할인 금액이 업체 기준과 다른 재고
   let baseDiffPaidSkip = [];     // 입금이 끝나 세지 않은 재고 (이미 정산된 금액)
+  let sameBuyDiffCache = [];     // 입고동일인데 판매 금액이 매입과 다른 재고
+  let sameBuyDiffSkip = 0;
   let baseDiffGroups = {};       // 위를 매입처·기준·%·출고가로 묶은 것
   let baseDiffKeys = [];         // 묶음 순서 (체크박스 번호와 맞춥니다)
 
@@ -27918,6 +27920,97 @@
   };
 
   // 할인 금액이 업체 기준과 다른 재고 — 목록과 한 번에 맞추기
+  // 입고동일인데 판매 금액이 매입과 다른 재고 — 목록과 한 번에 맞추기
+  window.showSameBuyDiffList = function(){
+    const el = document.getElementById("datacheck-detail");
+    if(!el) return;
+    if(sameBuyDiffCache.length === 0){ el.innerHTML = '<div class="list-empty">다른 것이 없습니다.</div>'; return; }
+    const fmtPct = v => (v == null) ? "-" : (v + "%");
+    let h = '<div style="border:1px solid var(--navy);padding:10px 12px;margin-top:10px;">'
+      + '<div style="font-weight:700;margin-bottom:4px;">입고동일인데 판매 금액이 매입과 다른 재고 — '
+      + sameBuyDiffCache.length + '대</div>'
+      + '<div style="font-size:11.5px;color:var(--gray);line-height:1.7;margin-bottom:8px;">'
+      + '판매가를 입고가로 맞춰둔 재고입니다. <b>판매할인·판매할인%도 사온 조건'
+      + '(선할인 + 타할인)</b>과 같아야 합니다.<br>'
+      + '예전에는 출고가에서 역산해 넣어 반올림만큼 어긋난 건이 있습니다. 여기서 한 번에 맞춥니다.'
+      + (sameBuyDiffSkip ? '<br>입금이 끝난 ' + sameBuyDiffSkip + '대는 세지 않았습니다.' : '') + '</div>'
+      + '<div style="max-height:360px;overflow-y:auto;border:1px solid var(--line);">'
+      + '<table class="data-table" style="width:100%;"><thead><tr>'
+      + '<th>일련번호</th><th>모델</th><th class="ta-right">출고가</th><th class="ta-right">입고가</th>'
+      + '<th class="ta-right">판매가</th><th class="ta-right">판매할인</th><th class="ta-right">판매할인%</th>'
+      + '</tr></thead><tbody>';
+    sameBuyDiffCache.slice(0,300).forEach(r=>{
+      const cell = (cur, want, fmt)=>{
+        const c = fmt ? fmt(cur) : (Number(cur)||0).toLocaleString();
+        const w = fmt ? fmt(want) : (Number(want)||0).toLocaleString();
+        return (String(cur) === String(want)) ? c
+          : c + ' → <b>' + w + '</b>';
+      };
+      h += '<tr>'
+        + '<td><b>'+comboEsc(r.it.serialNumber||"-")+'</b></td>'
+        + '<td>'+comboEsc(r.it.systemModel||"-")+'</td>'
+        + '<td class="ta-right">'+(Number(r.it.listPrice)||0).toLocaleString()+'</td>'
+        + '<td class="ta-right">'+(Number(r.it.purchasePrice)||0).toLocaleString()+'</td>'
+        + '<td class="ta-right">'+cell(r.curPrice, r.wantPrice)+'</td>'
+        + '<td class="ta-right">'+cell(r.curAmt, r.wantAmt)+'</td>'
+        + '<td class="ta-right">'+cell(r.curPct, r.wantPct, fmtPct)+'</td>'
+        + '</tr>';
+    });
+    h += '</tbody></table></div>'
+      + (sameBuyDiffCache.length > 300
+          ? '<div style="font-size:11.5px;color:var(--gray);margin-top:4px;">앞의 300대만 보여드립니다. 맞출 때는 '
+            + sameBuyDiffCache.length + '대 전부 처리합니다.</div>' : '')
+      + '<button class="btn small" style="width:auto;margin-top:10px;" onclick="fixSameBuyDiffAll()">'
+      + '전부 매입 조건으로 맞추기 (' + sameBuyDiffCache.length + '대)</button>'
+      + '</div>';
+    el.innerHTML = h;
+  };
+
+  window.fixSameBuyDiffAll = async function(){
+    if(sameBuyDiffCache.length === 0){ alert("맞출 재고가 없습니다."); return; }
+    const prev = sameBuyDiffCache.slice(0,4).map(r=>
+      "  " + (r.it.serialNumber||"-") + " : 판매할인 " + (Number(r.curAmt)||0).toLocaleString()
+      + " → " + (Number(r.wantAmt)||0).toLocaleString()
+      + " / " + (r.curPct == null ? "-" : r.curPct + "%") + " → " + (r.wantPct == null ? "-" : r.wantPct + "%")).join("\n");
+    if(!confirm("재고 " + sameBuyDiffCache.length + "대의 판매가·판매할인·판매할인%를\n"
+      + "사온 조건(선할인 + 타할인)과 똑같이 맞춥니다.\n\n"
+      + prev + (sameBuyDiffCache.length > 4 ? "\n  ... 외 " + (sameBuyDiffCache.length-4) + "대" : "")
+      + "\n\n매입 금액은 건드리지 않습니다.\n진행할까요?")) return;
+
+    const el = document.getElementById("datacheck-detail");
+    if(el) el.innerHTML = '<div class="list-empty">맞추는 중입니다...</div>';
+    let n1 = 0, n2 = 0;
+    const ihRows = [];
+    try{
+      for(const r of sameBuyDiffCache){
+        await updateDoc(doc(db,"inventoryItems", r.id), {
+          salePrice: r.wantPrice, saleDiscountAmt: r.wantAmt,
+          saleDiscount: r.wantPct, profit: 0 });
+        ihRows.push({ id:r.id, serialNumber:r.it.serialNumber||"", systemModel:r.it.systemModel||"",
+          detail: "입고동일 — 판매 금액을 매입 조건에 맞춤 · 판매할인 "
+            + (Number(r.curAmt)||0).toLocaleString() + " → " + (Number(r.wantAmt)||0).toLocaleString()
+            + " · 판매할인% " + (r.curPct == null ? "-" : r.curPct) + " → " + (r.wantPct == null ? "-" : r.wantPct) });
+        n1++;
+        if(r.it.saleRequestId){
+          await updateDoc(doc(db,"saleRequests", r.it.saleRequestId), {
+            salePrice: r.wantPrice, saleDiscountAmt: r.wantAmt, saleDiscountPct: r.wantPct });
+          n2++;
+        }
+      }
+    }catch(e){ alert("맞추지 못했습니다.\n" + ((e&&e.message)?e.message:String(e))); return; }
+
+    try{ await logItemsEach(ihRows, "price", {}); }catch(e){}
+    logAction("데이터 점검 — 입고동일 판매 금액 맞춤", n1 + "대"
+      + (n2 ? " / 판매요청 " + n2 + "건" : "")
+      + (sameBuyDiffSkip ? " / 입금완료 " + sameBuyDiffSkip + "대 제외" : ""));
+    clearCache("inventory"); clearCache("saleRequests"); clearDashCache();
+    alert("맞췄습니다.\n\n  재고 " + n1 + "대"
+      + (n2 ? "\n  판매요청 " + n2 + "건" : "")
+      + (sameBuyDiffSkip ? "\n\n입금이 끝난 " + sameBuyDiffSkip + "대는 그대로 두었습니다." : ""));
+    sameBuyDiffCache = [];
+    runDataCheck();
+  };
+
   window.showBaseDiffList = function(){
     const el = document.getElementById("datacheck-detail");
     if(!el) return;
@@ -28133,20 +28226,22 @@
       }
       picked.forEach(r=>{
         const bid = bOf[r.it.saleRequestId];
-        if(bid && paid[bid]) locked.add(r.id);
+        if(bid && paid[bid]) locked.add(r.id);      // 판매 쪽만 손대지 않을 대상입니다
       });
     }catch(e){}
 
-    const targets = picked.filter(r=> !locked.has(r.id));
+    // 입금이 끝난 건도 매입 금액은 맞춥니다. 판매가·판매할인만 그대로 둡니다.
+    const targets = picked;
     let n1=0, n2=0, n3=0;
     const ihRows = [];
     try{
       const seenOrder = new Set();
       for(const r of targets){
         const it = r.it, L = r.L;
+        const isPaidItem = locked.has(r.id);
         const patch = { purchaseDiscountAmt: r.wantPre, otherDiscountAmt: r.wantOther,
                         purchasePrice: r.wantBuy };
-        if(it.salePriceFollowsBuy === true){
+        if(!isPaidItem && it.salePriceFollowsBuy === true){
           patch.salePrice = r.wantBuy; patch.saleDiscountAmt = L - r.wantBuy; patch.profit = 0;
         }
         await updateDoc(doc(db,"inventoryItems", r.id), patch);
@@ -28155,7 +28250,7 @@
             + r.curBuy.toLocaleString() + " → " + r.wantBuy.toLocaleString()
             + " (선할인 " + r.wantPre.toLocaleString() + " · 타할인 " + r.wantOther.toLocaleString() + ")" });
         n1++;
-        if(it.salePriceFollowsBuy === true && it.saleRequestId){
+        if(!isPaidItem && it.salePriceFollowsBuy === true && it.saleRequestId){
           await updateDoc(doc(db,"saleRequests", it.saleRequestId),
             { salePrice: r.wantBuy, saleDiscountAmt: L - r.wantBuy });
           n2++;
@@ -28172,12 +28267,12 @@
     try{ await logItemsEach(ihRows, "price", {}); }catch(e){}
     logAction("데이터 점검 — 할인 금액 기준 맞춤", n1 + "대"
       + (n2 ? " / 판매요청 " + n2 + "건" : "") + (n3 ? " / 주문 품목 " + n3 + "건" : "")
-      + (locked.size ? " / 입금완료 " + locked.size + "대 제외" : ""));
+      + (locked.size ? " / 입금완료 " + locked.size + "대는 매입만" : ""));
     clearCache("inventory"); clearCache("saleRequests"); clearCache("orders"); clearCache("loan"); clearDashCache();
     alert("맞췄습니다.\n\n  재고 " + n1 + "대"
       + (n2 ? "\n  판매요청 " + n2 + "건" : "") + (n3 ? "\n  주문 품목 " + n3 + "건" : "")
-      + (locked.size ? "\n\n입금이 끝난 판매요청에 묶인 " + locked.size + "대는 그대로 두었습니다.\n"
-                     + "고치시려면 판매 관리에서 입금을 먼저 되돌려주세요." : ""));
+      + (locked.size ? "\n\n입금이 끝난 " + locked.size + "대는 매입 금액만 맞췄습니다.\n"
+                     + "판매가·판매할인은 받은 돈 그대로 두었습니다." : ""));
     const done = new Set(targets.map(r=> r.id));
     baseDiffCache = baseDiffCache.filter(r=> !done.has(r.id));
     runDataCheck();
@@ -28635,16 +28730,16 @@
           const curPre    = Number(it.purchaseDiscountAmt)||0;
           const curOther  = Number(it.otherDiscountAmt)||0;
           if(curPre === wantPre && curOther === wantOther) return;
-          // ★ 입금까지 끝난 건은 세지 않습니다. ★
-          //  그 금액으로 이미 정산이 끝났으므로 지금 기준으로 다시 잴 대상이 아닙니다.
+          // 입금이 끝난 건도 「매입」 금액은 맞출 수 있습니다. 입고와 판매는 별개입니다.
+          //  다만 그 건의 판매가·판매할인은 손대지 않습니다. (받은 돈 그대로)
           const paid = paidOf(it);
-          if(paid){ paidSkip.push({ id, it, paid }); return; }
+          if(paid) paidSkip.push({ id, it, paid });
           const wantBuy = L - wantPre - wantOther;
           rows.push({ id, it, L,
             curPre, wantPre, curOther, wantOther,
             curBuy: Number(it.purchasePrice)||0, wantBuy,
             base: (c.discountBase === "supply") ? "공급가" : "출고가",
-            paid: null,
+            paid: paid,
             source: String(it.source||"-") });
         });
         baseDiffCache = rows;
@@ -28652,9 +28747,48 @@
         const gap = rows.reduce((n,r)=> n + Math.abs(r.wantBuy - r.curBuy), 0);
         issues.push({ n:"할인 금액이 업체 기준과 다른 재고", cnt:rows.length, unit:"차이 " + gap.toLocaleString(),
           why:"%는 맞는데 금액이 업체의 할인 기준(공급가/출고가)과 다릅니다. 기준을 바꾸기 전에 등록한 재고입니다."
-            + " 입금까지 끝난 건은 이미 정산된 금액이라 세지 않습니다"
-            + (paidSkip.length ? " (" + paidSkip.length + "대 제외)" : "") + ".",
+            + " 입금이 끝난 건은 매입 금액만 맞추고 판매가·판매할인은 그대로 둡니다"
+            + (paidSkip.length ? " (" + paidSkip.length + "대)" : "") + ".",
           fix: rows.length ? "showBaseDiffList()" : null, fixLabel:"확인하고 맞추기" });
+      }
+
+      // ⓪-3 「입고동일」인데 판매 금액이 매입과 다른 재고
+      //  판매가 = 입고가로 맞춰둔 재고는 판매할인·판매할인%도 사온 조건(선할인+타할인)과
+      //  같아야 합니다. 예전에는 역산해서 넣어 반올림만큼 어긋난 건이 있습니다.
+      {
+        const srMap2 = {}, srbMap2 = {};
+        srSnap.forEach(d=> srMap2[d.id] = d.data());
+        obSnapSale.forEach(d=> srbMap2[d.id] = d.data());
+        const isPaid = (it)=>{
+          if(!it.saleRequestId) return false;
+          const sr = srMap2[it.saleRequestId];
+          if(!sr || !sr.batchId) return false;
+          const b = srbMap2[sr.batchId];
+          return !!(b && b.depositReceived === true);
+        };
+        const rows = [];
+        let skip = 0;
+        Object.keys(items).forEach(id=>{
+          const it = items[id];
+          if(it.deleted === true) return;
+          if(it.salePriceFollowsBuy !== true) return;      // 입고동일로 둔 것만
+          const buy = Number(it.purchasePrice)||0;
+          if(!buy) return;
+          const w = saleFromBuy(it);
+          const curP  = Number(it.salePrice)||0;
+          const curA  = Number(it.saleDiscountAmt)||0;
+          const curPc = (it.saleDiscount == null || it.saleDiscount === "") ? null : Number(it.saleDiscount);
+          if(curP === buy && curA === w.amt && curPc === w.pct) return;   // 이미 같습니다
+          if(isPaid(it)){ skip++; return; }                 // 입금 끝난 건은 세지 않습니다
+          rows.push({ id, it, wantPrice:buy, wantAmt:w.amt, wantPct:w.pct,
+                      curPrice:curP, curAmt:curA, curPct:curPc });
+        });
+        sameBuyDiffCache = rows;
+        sameBuyDiffSkip = skip;
+        issues.push({ n:"입고동일인데 판매 금액이 매입과 다른 재고", cnt:rows.length, unit:"대",
+          why:"판매가를 입고가로 맞춰둔 재고입니다. 판매할인·판매할인%도 사온 조건(선할인+타할인)과 같아야 하는데 다릅니다."
+            + " 입금까지 끝난 건은 세지 않습니다" + (skip ? " (" + skip + "대 제외)" : "") + ".",
+          fix: rows.length ? "showSameBuyDiffList()" : null, fixLabel:"확인하고 맞추기" });
       }
 
       // ① 주문이 지워졌는데 남은 판매요청
@@ -32832,11 +32966,11 @@
         }
         list.forEach(x=>{ const bid = bIds[x.saleRequestId]; if(bid && done[bid]) paidT.push(x); });
       }catch(e){}
-      const targets = list.filter(x=> paidT.indexOf(x) < 0);
-      if(targets.length === 0){
-        alert("고른 재고가 모두 입금이 끝난 건입니다.\n받은 돈과 달라지므로 바꿀 수 없습니다.");
-        return;
-      }
+      // 입금이 끝난 건도 「매입」 금액은 바꿉니다. 입고와 판매는 별개이기 때문입니다.
+      //  다만 「판매」 금액은 받은 돈과 달라지므로 손대지 않습니다.
+      const paidSet = new Set(paidT.map(x=> x.id));
+      const targets = list;
+      if(targets.length === 0){ alert("고른 재고가 없습니다."); return; }
 
       const calc = (it)=>{
         const L = Number(it.listPrice)||0;
@@ -32855,7 +32989,8 @@
         + prev + (targets.length > 4 ? "\n  ... 외 " + (targets.length-4) + "대" : "")
         + "\n\n%는 그대로 두고 선할인·타할인 금액과 입고가만 바꿉니다.\n"
         + "이 기준은 그 재고에 저장되어 업체정보보다 먼저 적용됩니다."
-        + (paidT.length ? "\n\n입금이 끝난 " + paidT.length + "대는 빼고 진행합니다." : "")
+        + (paidT.length ? "\n\n입금이 끝난 " + paidT.length + "대는 매입 금액만 바꾸고\n"
+                        + "   판매가·판매할인은 그대로 둡니다." : "")
         + "\n\n진행할까요?")) return;
 
       let n1=0, n2=0, n3=0;
@@ -32864,9 +32999,11 @@
         const seenOrderB = new Set();
         for(const it of targets){
           const c = calc(it);
+          const isPaidItem = paidSet.has(it.id);
           const patch = { discountBase: want,
                           purchaseDiscountAmt: c.pre, otherDiscountAmt: c.other, purchasePrice: c.buy };
-          if(it.salePriceFollowsBuy === true && c.L){
+          // 입금이 끝난 건은 판매가를 따라가게 하지 않습니다. (받은 돈 그대로 둡니다)
+          if(!isPaidItem && it.salePriceFollowsBuy === true && c.L){
             const sb = saleFromBuy({ ...it, purchaseDiscountAmt:c.pre,
               otherDiscountAmt:c.other, purchasePrice:c.buy });
             patch.salePrice = c.buy;
@@ -32880,7 +33017,7 @@
               + (Number(it.purchasePrice)||0).toLocaleString() + " → " + c.buy.toLocaleString()
               + " (선할인 " + c.pre.toLocaleString() + " · 타할인 " + c.other.toLocaleString() + ")" });
           n1++;
-          if(it.salePriceFollowsBuy === true && it.saleRequestId && c.L){
+          if(!isPaidItem && it.salePriceFollowsBuy === true && it.saleRequestId && c.L){
             await updateDoc(doc(db,"saleRequests", it.saleRequestId),
               { salePrice: c.buy, saleDiscountAmt: c.L - c.buy });
             n2++;
@@ -32897,14 +33034,15 @@
       try{ await logItemsEach(ihBase, "price", {}); }catch(e){}
       logAction("재고 일괄 변경", "할인 계산 기준 → " + baseLabel + " (" + n1 + "건"
         + (n2 ? " / 판매요청 " + n2 + "건" : "") + (n3 ? " / 주문 품목 " + n3 + "건" : "")
-        + (paidT.length ? " / 입금완료 " + paidT.length + "대 제외" : "") + ")");
+        + (paidT.length ? " / 입금완료 " + paidT.length + "대는 매입만" : "") + ")");
       clearCache("inventory"); clearCache("saleRequests"); clearCache("orders"); clearCache("loan"); clearDashCache();
       clearInvSelectAll();
       closeBulkChangeModal();
       alert(n1 + "대의 기준을 「" + baseLabel + "」으로 두고 금액을 다시 냈습니다."
         + (n2 ? "\n판매요청 " + n2 + "건도 함께 바꿨습니다." : "")
         + (n3 ? "\n주문 품목 " + n3 + "건도 함께 맞췄습니다." : "")
-        + (paidT.length ? "\n\n입금이 끝난 " + paidT.length + "대는 그대로 두었습니다." : ""));
+        + (paidT.length ? "\n\n입금이 끝난 " + paidT.length + "대는 매입 금액만 바꿨습니다.\n"
+                        + "판매가·판매할인은 그대로입니다." : ""));
       loadInventoryList();
       return;
     }
@@ -32926,6 +33064,22 @@
         + preview + (list.length > 4 ? "\n  ... 외 " + (list.length-4) + "대" : "")
         + "\n\n%는 그대로 두고 금액만 바꿉니다.\n진행할까요?")) return;
 
+      // 입금이 끝난 건은 판매가를 따라가게 하지 않습니다. (받은 돈 그대로)
+      const paidR = new Set();
+      try{
+        const bIdsR = {};
+        for(const sid of [...new Set(list.map(x=> x.saleRequestId).filter(Boolean))]){
+          const sd = await getDoc(doc(db,"saleRequests", sid));
+          if(sd.exists()) bIdsR[sid] = sd.data().batchId || "";
+        }
+        const doneR = {};
+        for(const bid of [...new Set(Object.values(bIdsR).filter(Boolean))]){
+          const bd = await getDoc(doc(db,"saleRequestBatches", bid));
+          if(bd.exists() && bd.data().depositReceived === true) doneR[bid] = true;
+        }
+        list.forEach(x=>{ const bid = bIdsR[x.saleRequestId]; if(bid && doneR[bid]) paidR.add(x.id); });
+      }catch(e){}
+
       let n1=0, n2=0, n3=0;
       const ihRecalc = [];
       try{
@@ -32938,7 +33092,7 @@
           const np = Math.round(B*pp/100), no = Math.round(B*op/100);
           const buy = L - np - no;
           const patch = { purchaseDiscountAmt: np, otherDiscountAmt: no, purchasePrice: buy };
-          if(it.salePriceFollowsBuy === true){
+          if(!paidR.has(it.id) && it.salePriceFollowsBuy === true){
             patch.salePrice = buy; patch.saleDiscountAmt = L - buy; patch.profit = 0;
           }
           await updateDoc(doc(db,"inventoryItems", it.id), patch);
@@ -32948,7 +33102,7 @@
               + " → " + buy.toLocaleString()
               + " (선할인 " + np.toLocaleString() + " · 타할인 " + no.toLocaleString() + ")" });
           n1++;
-          if(it.salePriceFollowsBuy === true && it.saleRequestId){
+          if(!paidR.has(it.id) && it.salePriceFollowsBuy === true && it.saleRequestId){
             await updateDoc(doc(db,"saleRequests", it.saleRequestId),
               { salePrice: buy, saleDiscountAmt: L - buy });
             n2++;
@@ -32963,13 +33117,16 @@
       }catch(e){ alert("다시 계산하지 못했습니다.\n" + ((e&&e.message)?e.message:String(e))); return; }
 
       logAction("재고 일괄 변경", "할인 금액 전부 다시 계산 (" + n1 + "건"
-        + (n2 ? " / 판매요청 " + n2 + "건" : "") + (n3 ? " / 주문 품목 " + n3 + "건" : "") + ")");
+        + (n2 ? " / 판매요청 " + n2 + "건" : "") + (n3 ? " / 주문 품목 " + n3 + "건" : "")
+        + (paidR.size ? " / 입금완료 " + paidR.size + "대는 매입만" : "") + ")");
       try{ await logItemsEach(ihRecalc, "price", {}); }catch(e){}
       clearCache("inventory"); clearCache("saleRequests"); clearCache("orders"); clearCache("loan"); clearDashCache();
       clearInvSelectAll();
       closeBulkChangeModal();
       alert("다시 계산했습니다.\n\n  재고 " + n1 + "대"
-        + (n2 ? "\n  판매요청 " + n2 + "건" : "") + (n3 ? "\n  주문 품목 " + n3 + "건" : ""));
+        + (n2 ? "\n  판매요청 " + n2 + "건" : "") + (n3 ? "\n  주문 품목 " + n3 + "건" : "")
+        + (paidR.size ? "\n\n입금이 끝난 " + paidR.size + "대는 매입 금액만 바꿨습니다.\n"
+                      + "판매가·판매할인은 그대로입니다." : ""));
       loadInventoryList();
       return;
     }
