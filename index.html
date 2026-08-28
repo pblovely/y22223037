@@ -387,7 +387,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-28 v836</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-28 v838</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -12667,7 +12667,7 @@
       }
       const it = cands[0];
       if(it.saleRequestId){ bad.push({ label, raw:line, reason:"이미 판매요청에 연결된 재고입니다" }); return; }
-      if(it.status === "반품"){ bad.push({ label, raw:line, reason:"반품된 재고입니다" }); return; }
+      if(String(it.status||"").indexOf("반품") >= 0){ bad.push({ label, raw:line, reason:"반품된 재고입니다" }); return; }
 
       // 모델·색상·통신사가 맞는 예약 찾기
       let rc = resvs.filter(r=> r._left > 0 && norm(r.systemModel) === norm(it.systemModel));
@@ -25858,7 +25858,7 @@
     const total = items.reduce((n,it)=> n + (Number(it.salePrice)||0), 0);
 
     // 반품한 재고는 팔 수 없습니다. 목록에는 남지만 판매요청 대상에서는 뺍니다.
-    const returned = items.filter(it=> it.status === "반품");
+    const returned = items.filter(it=> String(it.status||"").indexOf("반품") >= 0);
     if(returned.length){
       alert("반품된 재고가 " + returned.length + "대 있습니다.\n\n"
         + returned.slice(0,5).map(x=> "· " + (x.serialNumber||"-")).join("\n")
@@ -32767,9 +32767,14 @@
           // 반품한 단말기는 삼성이 장려금을 주지 않습니다.
           //  반품 안 했으면 받았을 돈이므로, 상태가 「반품」이면 누적에서 뺍니다.
           //  (여신이 언제 돌아왔는지와는 별개입니다)
-          if(String(it.status||"") === "반품"){
+          if(String(it.status||"").indexOf("반품") >= 0){
             rebateBack += amt; returnedCnt++;
             return;                               // 분기 표에도 넣지 않습니다
+          }
+          // 반품일이 적혀 있으면 그것도 반품으로 봅니다. (상태를 안 바꾼 건)
+          if(String(it.returnDate||"").replace(/\D/g,"").length === 8){
+            rebateBack += amt; returnedCnt++;
+            return;
           }
           if(!amt) return;
           const dt = String(it.inDate||"").replace(/\D/g,"");
@@ -32828,7 +32833,7 @@
            + (b2bPartnerPick ? " · " + comboEsc(b2bPartnerPick) : ""))
         : ((b2bOrderDate ? "주문일 " + b2bOrderDate + " · " : "")
            + "공급액 기준 · 누적 " + pendingRebate.toLocaleString()
-           + (returnedCnt ? " (반품 " + returnedCnt + "대 " + Math.round(rebateBack).toLocaleString() + " 뺌)" : "")
+           + " (반품 " + returnedCnt + "대 " + Math.round(rebateBack).toLocaleString() + " 뺌)"
            + " · 수령 " + clubIncentiveTotal.toLocaleString()
            + (notYet < 0 ? " · 받은 금액이 " + Math.abs(notYet).toLocaleString() + " 더 많습니다" : "")
            + (b2bPartnerPick ? " · " + comboEsc(b2bPartnerPick) : "")));
@@ -34253,8 +34258,8 @@
           + "\n\n먼저 판매를 취소한 뒤 반품해주세요.");
         return;
       }
-      const already = picked.filter(x=> x.status === "반품");
-      const targets = picked.filter(x=> x.status !== "반품");
+      const already = picked.filter(x=> String(x.status||"").indexOf("반품") >= 0);
+      const targets = picked.filter(x=> String(x.status||"").indexOf("반품") < 0);
       if(targets.length === 0){ alert("반품할 재고가 없습니다."); return; }
 
       // 되돌려 받을 여신 — 매입처 계산 방식 그대로, 한 대씩 계산합니다.
