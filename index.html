@@ -387,7 +387,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-28 v818</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-28 v819</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -29328,12 +29328,21 @@
           if(!it.saleRequestId) return;
           const sr = srById2[it.saleRequestId];
           if(!sr || sr.status === "취소") return;
+          // 판매가가 같으면 실제 금액은 맞는 것입니다.
+          //  할인 내역이 한쪽에만 적혀 있는 것은 「어긋남」이 아니라 「덜 적힘」이라 세지 않습니다.
+          const pSame = (Number(it.salePrice)||0) === (Number(sr.salePrice)||0);
+          const has = (a,b)=> (Number(a)||0) > 0 && (Number(b)||0) > 0;
           const pairs = [
             ["판매가",   Number(it.salePrice)||0,       Number(sr.salePrice)||0],
             ["판매할인", Number(it.saleDiscountAmt)||0, Number(sr.saleDiscountAmt)||0],
             ["판매할인%",Number(it.saleDiscount)||0,    Number(sr.saleDiscountPct)||0],
             ["판매처",   String(it.destination||""),    String(sr.destination||"")]
-          ].filter(([k,a,b])=> String(a) !== String(b));
+          ].filter(([k,a,b])=>{
+            if(String(a) === String(b)) return false;
+            // 판매가가 같은데 할인만 한쪽에 없으면 넘어갑니다.
+            if(pSame && (k === "판매할인" || k === "판매할인%") && !has(a,b)) return false;
+            return true;
+          });
           if(pairs.length === 0) return;
           const b = sr.batchId ? srbById2[sr.batchId] : null;
           const paid = !!(b && b.depositReceived === true);
@@ -29344,6 +29353,7 @@
         invSaleDiffPaid = paidCnt;
         issues.push({ n:"재고와 판매요청의 판매 금액이 다름", cnt:rows.length, unit:"대",
           why:"재고를 고치고 판매요청이 안 따라갔거나 그 반대입니다."
+            + " 판매가가 같은데 할인 내역만 한쪽에 없는 건은 금액이 맞으므로 세지 않습니다."
             + (paidCnt ? " 입금이 끝난 " + paidCnt + "대는 손대지 않습니다." : ""),
           fix: rows.length ? "showInvSaleDiffList()" : null, fixLabel:"확인하고 맞추기" });
       }
