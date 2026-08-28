@@ -387,7 +387,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-28 v835</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-28 v836</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -32755,21 +32755,6 @@
       //  주문에 안 붙은 재고도 잡히고, 재고 목록에서 눈으로 대조하실 수 있습니다.
       pendingRebate = 0;
       clubByQuarter = {};      // 분기별로도 나눠 둡니다. (입고일 기준)
-      // 여신 원장에 적어둔 「반품 (여신복구)」 기록도 함께 봅니다.
-      //  재고에 여신복구일을 안 넣고 원장에만 넣어두신 경우가 있습니다.
-      //  원장 기록에는 어느 단말기인지 없으므로 「매입처 + 반품일」로 재고를 찾습니다.
-      const retKey = new Set();
-      try{
-        const retSnap = await getDocs(query(collection(db,"b2bLedger"), where("category","==","return_credit")));
-        retSnap.forEach(d=>{
-          const e = d.data();
-          const cd = String(e.creditReturnDate||"").replace(/\D/g,"");
-          if(cd.length !== 8) return;                       // 복구일이 없으면 아직 안 돌아온 것
-          const src = String(e.partner || e.source || "").trim();
-          const rd  = String(e.returnDate||"").replace(/\D/g,"");
-          if(rd.length === 8) retKey.add(src + "|" + rd);
-        });
-      }catch(e){}
       try{
         const invAll = await getDocs(collection(db,"inventoryItems"));
         invAll.forEach(d=>{
@@ -32779,14 +32764,10 @@
           if(b2bPartnerPick && src !== b2bPartnerPick) return;
           const amt = Number(it.otherDiscountAmt)||0;
           pendingRebate += amt;
-          // 여신이 실제로 돌아온 반품 재고는 삼성이 장려금을 주지 않습니다. 그만큼 뺍니다.
-          //  재고에 적힌 「여신복구일」이 기준입니다.
-          //  (여신 원장의 반품 기록은 매입처별 한 줄이라 어느 단말기인지 알 수 없습니다)
-          const ownCd = String(it.creditReturnDate||"").replace(/\D/g,"").length === 8;
-          // 재고에 여신복구일이 있거나, 원장에 그 매입처·반품일로 복구 기록이 있으면 뺍니다.
-          const byLedger = (String(it.status||"") === "반품")
-            && retKey.has(src + "|" + String(it.returnDate||"").replace(/\D/g,""));
-          if(ownCd || byLedger){
+          // 반품한 단말기는 삼성이 장려금을 주지 않습니다.
+          //  반품 안 했으면 받았을 돈이므로, 상태가 「반품」이면 누적에서 뺍니다.
+          //  (여신이 언제 돌아왔는지와는 별개입니다)
+          if(String(it.status||"") === "반품"){
             rebateBack += amt; returnedCnt++;
             return;                               // 분기 표에도 넣지 않습니다
           }
