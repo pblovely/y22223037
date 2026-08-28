@@ -387,7 +387,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-28 v790</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-28 v793</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -3884,6 +3884,39 @@
   const discRaw    = v => isBlankDisc(v) ? ""  : Number(v);
 
   // ---------- 보기 설정 ----------
+  // 저장된 할인 금액이 「실제로」 어느 기준으로 나온 값인지 역산합니다.
+  //  적어둔 %를 출고가에 곱한 값인지, 공급가(출고가÷1.1)에 곱한 값인지 맞춰봅니다.
+  //  · none  : %가 없어 가릴 수 없음
+  //  · unit  : 출고가에 곱한 값
+  //  · supply: 공급가에 곱한 값
+  //  · mixed : 선할인과 타할인의 기준이 서로 다름
+  //  · etc   : 어느 쪽으로도 안 떨어짐 (금액을 직접 넣었거나 어긋난 값)
+  function actualDiscountBase(it){
+    const L = Number((it && it.listPrice)) || 0;
+    if(!L) return { kind:"none" };
+    const one = (pct, amt)=>{
+      const p = Number(pct)||0, a = Number(amt)||0;
+      if(!(p > 0)) return null;                       // %가 없으면 가릴 수 없습니다
+      const byList   = Math.round(L * p / 100);
+      const bySupply = Math.round((L/1.1) * p / 100);
+      if(byList === bySupply) return null;            // 두 값이 같으면 구분이 안 됩니다
+      if(a === byList)   return "unit";
+      if(a === bySupply) return "supply";
+      return "etc";
+    };
+    const pre   = one(it.purchaseDiscount, it.purchaseDiscountAmt);
+    const other = one(it.otherDiscountPct, it.otherDiscountAmt);
+    const list = [pre, other].filter(Boolean);
+    if(list.length === 0) return { kind:"none" };
+    if(list.indexOf("etc") >= 0 && list.every(x=> x === "etc")) return { kind:"etc" };
+    const clean = list.filter(x=> x !== "etc");
+    const uniq = [...new Set(clean)];
+    if(uniq.length === 1 && clean.length === list.length) return { kind:"one", base:uniq[0] };
+    const lab = v => (v === "supply") ? "공급가" : (v === "unit") ? "출고가" : "안 맞음";
+    return { kind:"mixed", preLab: lab(pre||"-"), otherLab: lab(other||"-") };
+  }
+  window.actualDiscountBase = actualDiscountBase;
+
   const INV_COLUMNS = [
     { key:"orderDate", label:"주문일", get:it=>it.orderDate||"-" },
     { key:"inDate", label:"입고일", get:it=>it.inDate||"-" },
@@ -3918,6 +3951,38 @@
     { key:"purchaseDiscountAmt", label:"선할인", get:it=> discFmt(preDiscountAmtOf(it)), getRaw:it=> discRaw(preDiscountAmtOf(it)) },
     { key:"purchaseDiscount", label:"선할인%", get:it=> discPctFmt(preDiscountPctOf(it)), getRaw:it=> discRaw(preDiscountPctOf(it)) },
     { key:"otherDiscountAmt", label:"타할인", get:it=> discFmt(it.otherDiscountAmt), getRaw:it=> discRaw(it.otherDiscountAmt) },
+    // 이 재고의 할인 금액이 「실제로」 어느 기준으로 계산돼 있는지 역산해 보여줍니다.
+    //  적어둔 %와 저장된 금액을 맞춰봐서, 출고가에 곱한 값인지 공급가에 곱한 값인지 가려냅니다.
+    //  설정된 기준과 다르면 그 자리에서 빨갛게 알려드립니다 — 잘못된 건을 찾는 열입니다.
+    { key:"discountBase", label:"할인 반영 기준",
+      get:it=>{
+        const r = actualDiscountBase(it);
+        const set = (typeof itemDiscountBase === "function") ? itemDiscountBase(it) : "unit";
+        const setLab = (set === "supply") ? "공급가" : "출고가";
+        if(r.kind === "none") return '<span style="color:var(--gray);">-</span>';
+        if(r.kind === "mixed")
+          return '<span style="color:var(--danger);font-weight:700;">선 ' + r.preLab + ' / 타 ' + r.otherLab + '</span>';
+        if(r.kind === "etc")
+          return '<span style="color:var(--danger);font-weight:700;">안 맞음</span>'
+            + ' <span style="color:var(--gray);font-size:10.5px;">%로 낸 값이 아님</span>';
+        const lab = (r.base === "supply") ? '<span style="color:#2e7d32;font-weight:700;">공급가</span>' : '출고가';
+        const own = String(it.discountBase||"");
+        return lab
+          + ((r.base !== set)
+              ? ' <span style="color:var(--danger);font-weight:700;">⚠ 설정 ' + setLab + '</span>'
+              : (own ? "" : ' <span style="color:var(--gray);font-size:10.5px;">(업체)</span>'));
+      },
+      getRaw:it=>{
+        const r = actualDiscountBase(it);
+        const set = (typeof itemDiscountBase === "function") ? itemDiscountBase(it) : "unit";
+        const setLab = (set === "supply") ? "공급가" : "출고가";
+        if(r.kind === "none") return "-";
+        if(r.kind === "mixed") return "선 " + r.preLab + " / 타 " + r.otherLab;
+        if(r.kind === "etc") return "안 맞음";
+        const lab = (r.base === "supply") ? "공급가" : "출고가";
+        return lab + ((r.base !== set) ? " (설정 " + setLab + " 와 다름)"
+                     : (String(it.discountBase||"") ? "" : " (업체)"));
+      } },
     // 삼성전자는 공급가(VAT 뺀 금액)에 할인율을 곱합니다. 그 기준으로 환산한 값입니다.
     { key:"returnDate", label:"반품일", get:it=> it.returnDate || "-", getRaw:it=> it.returnDate || "-" },
     { key:"creditReturnDate", label:"여신복구일", get:it=> it.creditReturnDate || "-", getRaw:it=> it.creditReturnDate || "-" },
@@ -32208,6 +32273,8 @@
     { key:"otherDiscountAmt",    label:"타할인",     type:"number", link:"otheramt" },
     { key:"otherDiscountPct",    label:"타할인%",    type:"number", link:"otherpct" },
     { key:"purchasePrice",    label:"입고가",        type:"number", link:"buy" },
+    { key:"discountBase",     label:"할인 계산 기준", type:"options",
+      options:["unit","total","supply"], link:"base" },
     { key:"destination",      label:"판매처",        type:"names",  col:"outboundDestinations" },
     { key:"salePrice",        label:"판매가",        type:"number", link:"saleprice" },
     { key:"saleDiscountAmt",  label:"판매할인",      type:"number", link:"saleamt" },
@@ -32227,6 +32294,9 @@
 
   // 금액·할인 연동 (다른 화면과 같은 규칙)
   window.multiRecalc = function(src){
+    // 이 창에서 고른 「할인 계산 기준」으로 금액을 냅니다. (안 고르면 원래 기준 그대로)
+    { const bEl = document.getElementById(meId("discountBase"));
+      if(bEl && bEl.value) itemBaseOverride = bEl.value; }
     const g = k => { const el = document.getElementById(meId(k)); return el && el.value !== "" ? Number(el.value) : null; };
     const set = (k, v)=>{
       const el = document.getElementById(meId(k)); if(!el) return;
@@ -32238,6 +32308,20 @@
     if(src==="prepct")  set("purchaseDiscountAmt", amtFromPct(document.getElementById(meId("purchaseDiscount")).value, L));
     if(src==="otheramt") set("otherDiscountPct", pctFromAmt(document.getElementById(meId("otherDiscountAmt")).value, L));
     if(src==="otherpct") set("otherDiscountAmt", amtFromPct(document.getElementById(meId("otherDiscountPct")).value, L));
+    if(src==="base" && L){
+      // 기준이 바뀌면 %는 그대로 두고 금액만 다시 냅니다.
+      const pp = document.getElementById(meId("purchaseDiscount"));
+      const op = document.getElementById(meId("otherDiscountPct"));
+      const sp = document.getElementById(meId("saleDiscount"));
+      if(pp && String(pp.value||"").trim() !== "") set("purchaseDiscountAmt", amtFromPct(pp.value, L));
+      if(op && String(op.value||"").trim() !== "") set("otherDiscountAmt", amtFromPct(op.value, L));
+      if(sp && String(sp.value||"").trim() !== ""){
+        const a = amtFromPct(sp.value, L);
+        set("saleDiscountAmt", a);
+        if(a !== "") set("salePrice", L - Number(a));
+      }
+      set("purchasePrice", L - (g("purchaseDiscountAmt")||0) - (g("otherDiscountAmt")||0));
+    }
     if(["preamt","prepct","otheramt","otherpct","list"].includes(src) && L){
       set("purchasePrice", L - (g("purchaseDiscountAmt")||0) - (g("otherDiscountAmt")||0));
     }
@@ -32334,9 +32418,14 @@
           + (nameCache[f.col]||[]).map(n=>'<option value="'+comboEsc(n)+'"'+(preset===comboEsc(n)?' selected':'')+'>'+comboEsc(n)+'</option>').join("")
           + '</select>';
       }else if(f.type === "options"){
-        input = '<select id="'+meId(f.key)+'" style="flex:1;border:none;padding:5px 8px;font-size:12.5px;">'
+        // 값과 화면에 보일 이름이 다른 항목(할인 계산 기준 등)을 위해 이름표를 씁니다.
+        const OPT_LABEL = { unit:"출고가 기준 (대당)", total:"출고가 기준 (합계)", supply:"공급가 기준 (삼성전자 방식)" };
+        input = '<select id="'+meId(f.key)+'"'
+          + (f.link ? ' onchange="multiRecalc(\''+f.link+'\')"' : '')
+          + ' style="flex:1;border:none;padding:5px 8px;font-size:12.5px;">'
           + '<option value="">(선택)</option>'
-          + f.options.map(n=>'<option value="'+n+'"'+(preset===n?' selected':'')+'>'+n+'</option>').join("")
+          + f.options.map(n=>'<option value="'+n+'"'+(preset===n?' selected':'')+'>'
+              +(OPT_LABEL[n]||n)+'</option>').join("")
           + '</select>';
       }else{
         const lockPrice = (f.key === "listPrice" && modelPrices.length === 1 && !canOverridePrice);
@@ -37550,10 +37639,20 @@
       syncSearchableSelect("paste-sale-dest-select");
     }catch(e){} }, 0);
     html += '<div class="stack-row"><label>출고일</label><input type="text" id="paste-sale-outdate-input" maxlength="8" inputmode="numeric" value="'+(matchedDate||todayStr())+'"></div>';
+    html += '<div class="stack-row"><label>판매가 <span class="info-tip" title="입고동일로 두면 그 단말기를 사온 값(입고가) 그대로 넘깁니다. 계산이 아니라 복사라 1원도 안 틀립니다.">ⓘ</span></label>'
+      + '<span><label style="display:inline-flex;align-items:center;gap:5px;cursor:pointer;">'
+      + '<input type="checkbox" id="paste-sale-samebuy" onchange="onPasteSaleSameBuy()">'
+      + '<b style="color:var(--navy);">입고동일 — 판매가를 입고가와 똑같이</b></label>'
+      + ' <span style="color:var(--gray);font-size:11.5px;margin-left:6px;">앞으로 입고가가 바뀌면 판매가도 따라갑니다</span></span></div>';
+    html += '<div class="stack-row"><label>할인 계산 기준 <span class="info-tip" title="판매할인%를 어디에 곱할지 정합니다. 삼성전자처럼 공급가에 곱하는 곳만 공급가 기준으로 두세요.">ⓘ</span></label>'
+      + '<span><select id="paste-sale-base" onchange="onPasteSaleDisc(\'pct\')" style="height:28px;">'
+      + '<option value="unit">출고가 기준 (VAT 포함)</option>'
+      + '<option value="supply">공급가 기준 (삼성전자 방식)</option>'
+      + '</select> <span style="color:var(--gray);font-size:11.5px;margin-left:6px;">판매할인%를 곱할 금액</span></span></div>';
     html += '<div class="stack-row"><label>판매할인 <span class="info-tip" title="모든 줄에 똑같이 넣습니다. 금액이나 %% 중 하나만 넣으시면 나머지는 알아서 계산합니다. 안 넣으시면 할인 없이 판매가 그대로 들어갑니다.">ⓘ</span></label>'
       + '<span><input type="number" id="paste-sale-discamt" placeholder="할인 금액" style="width:120px;" oninput="onPasteSaleDisc(\'amt\')"> 원'
       + ' &nbsp; <input type="number" id="paste-sale-discpct" placeholder="할인%" step="0.01" style="width:90px;" oninput="onPasteSaleDisc(\'pct\')"> %'
-      + ' <span style="color:var(--gray);font-size:11.5px;margin-left:6px;">비우면 할인 없음</span></span></div>';
+      + ' <span id="paste-sale-disc-note" style="color:var(--gray);font-size:11.5px;margin-left:6px;">비우면 할인 없음</span></span></div>';
     html += '</div>';
 
     html += '<p class="desc" style="margin-top:10px;margin-bottom:4px;font-weight:700;color:var(--navy);">인식된 품목 미리보기</p>';
@@ -37584,7 +37683,8 @@
     analysisEl.dataset.rows = JSON.stringify(dataRows.map(r=>{
       const it = foundMap[r.serial];
       const p = (r.price != null) ? Number(r.price) : (it && it.listPrice ? Number(it.listPrice) : null);
-      return { ...r, price: p, itemId: it ? it.id : null };
+      return { ...r, price: p, itemId: it ? it.id : null,
+               buyPrice: (it && it.purchasePrice) ? Number(it.purchasePrice) : null };
     }));
 
     const destSel = document.getElementById("paste-sale-dest-select");
@@ -37593,6 +37693,26 @@
   };
 
   // 판매할인 — 금액이나 %% 중 하나만 넣으면 나머지를 채웁니다. 기준은 판매가입니다.
+  // 입고동일을 켜면 판매가가 입고가로 정해지므로 할인 칸은 잠급니다.
+  window.onPasteSaleSameBuy = function(){
+    const on = !!(document.getElementById("paste-sale-samebuy")||{}).checked;
+    const aEl = document.getElementById("paste-sale-discamt");
+    const pEl = document.getElementById("paste-sale-discpct");
+    const bEl = document.getElementById("paste-sale-base");
+    const note = document.getElementById("paste-sale-disc-note");
+    [aEl, pEl].forEach(e=>{
+      if(!e) return;
+      e.disabled = on;
+      e.style.background = on ? "#eee" : "";
+      if(on) e.value = "";
+    });
+    if(bEl){ bEl.disabled = on; bEl.style.background = on ? "#eee" : ""; }
+    if(note) note.innerHTML = on
+      ? '<span style="color:var(--navy);">입고가를 그대로 넘기므로 할인은 넣지 않습니다.</span>'
+      : "비우면 할인 없음";
+    renderPasteSalePreview();
+  };
+
   window.onPasteSaleDisc = function(from){
     const rows = JSON.parse(document.getElementById("paste-sale-analysis").dataset.rows||"[]");
     const base = rows.reduce((n,r)=> n + (Number(r.price)||0), 0);   // 판매가 합계
@@ -37600,7 +37720,9 @@
     const pEl = document.getElementById("paste-sale-discpct");
     if(!aEl || !pEl) return;
     if(!(base > 0)) return;
-    const unit = base / rows.length;      // 대당 평균 판매가
+    const bSel = String((document.getElementById("paste-sale-base")||{}).value||"unit");
+    // 판매할인%를 곱할 금액입니다. 공급가 기준이면 VAT를 뺍니다.
+    const unit = (base / rows.length) / ((bSel === "supply") ? 1.1 : 1);
     if(from === "amt"){
       const a = Number(aEl.value);
       pEl.value = (aEl.value === "" || !(a > 0)) ? "" : Number(((a / unit) * 100).toFixed(2));
@@ -37617,9 +37739,18 @@
     if(!el) return;
     const rows = JSON.parse(document.getElementById("paste-sale-analysis").dataset.rows||"[]");
     const dAmt = Number((document.getElementById("paste-sale-discamt")||{}).value) || 0;
-    const cut = dAmt;
+    const same = !!(document.getElementById("paste-sale-samebuy")||{}).checked;
+    const cut = same ? 0 : dAmt;
     el.querySelectorAll("[data-ps-final]").forEach((td,i)=>{
-      const p = Number(rows[i] && rows[i].price) || 0;
+      const r = rows[i] || {};
+      if(same){
+        const b = Number(r.buyPrice)||0;
+        td.innerHTML = b
+          ? '<b>' + b.toLocaleString() + '</b> <span style="color:var(--navy);font-size:10.5px;">입고동일</span>'
+          : '<span style="color:var(--danger);font-size:10.5px;">입고가 없음</span>';
+        return;
+      }
+      const p = Number(r.price) || 0;
       const f = Math.max(0, p - cut);
       td.innerHTML = cut
         ? '<b>' + f.toLocaleString() + '</b> <span style="color:var(--danger);font-size:10.5px;">-' + cut.toLocaleString() + '</span>'
@@ -37631,10 +37762,21 @@
     const dataRows = JSON.parse(document.getElementById("paste-sale-analysis").dataset.rows||"[]");
     const dest = document.getElementById("paste-sale-dest-select").value;
     const outDate = document.getElementById("paste-sale-outdate-input").value || todayStr();
-    const discAmt = Number((document.getElementById("paste-sale-discamt")||{}).value) || 0;
+    const sameBuy = !!(document.getElementById("paste-sale-samebuy")||{}).checked;
+    const discAmt = sameBuy ? 0 : (Number((document.getElementById("paste-sale-discamt")||{}).value) || 0);
+    const baseSel = String((document.getElementById("paste-sale-base")||{}).value||"unit");
     const resultEl = document.getElementById("paste-sale-result");
     if(!dest){ alert("판매처를 선택해주세요."); return; }
     if(discAmt < 0){ alert("판매할인은 0 이상으로 넣어주세요."); return; }
+    if(sameBuy){
+      const noBuy = dataRows.filter(r=> !(Number(r.buyPrice) > 0));
+      if(noBuy.length){
+        alert("입고가가 없는 재고가 " + noBuy.length + "대 있습니다.\n\n"
+          + noBuy.slice(0,5).map(r=> "· " + r.serial).join("\n")
+          + "\n\n입고동일로 넘길 수 없습니다. 그 건들을 빼고 다시 해주세요.");
+        return;
+      }
+    }
 
     let sold = 0; const notFound = [];
     const madeLines = [];   // 판매요청으로 묶을 품목들
@@ -37646,16 +37788,34 @@
       if(!snap0.exists()){ notFound.push(r.serial); continue; }
       const it = snap0.data();
       const patch = { destination: dest, status:"판매", outDate };
-      const salePrice = r.price!=null ? r.price : it.listPrice;
+      // 입고동일이면 그 단말기의 입고가를 그대로 넘깁니다. (계산이 아니라 복사)
+      const salePrice = sameBuy
+        ? (Number(it.purchasePrice)||0)
+        : (r.price!=null ? r.price : it.listPrice);
       if(salePrice){
         patch.salePrice = Number(salePrice);
-        // 판매할인 — 넣으셨으면 그대로 적고, 수익은 할인 뒤 금액으로 계산합니다.
-        if(discAmt > 0){
-          patch.saleDiscountAmt = discAmt;
-          patch.saleDiscount = Number(((discAmt / Number(salePrice)) * 100).toFixed(2));
+        if(sameBuy){
+          const L = Number(it.listPrice)||0;
+          patch.salePriceFollowsBuy = true;      // 앞으로 입고가가 바뀌면 판매가도 따라갑니다
+          patch.profit = 0;                      // 사온 값 그대로 넘기므로 수익 0
+          if(L){
+            // 판매할인%는 그 재고의 할인 계산 기준으로 냅니다.
+            const sBase = (typeof itemDiscountAmountBase === "function")
+              ? itemDiscountAmountBase(it, L) : L;
+            patch.saleDiscountAmt = L - Number(salePrice);
+            patch.saleDiscount = sBase
+              ? Number((((L - Number(salePrice))/sBase)*100).toFixed(2)) : null;
+          }
+        }else{
+          // 판매할인 — 넣으셨으면 그대로 적고, 수익은 할인 뒤 금액으로 계산합니다.
+          if(discAmt > 0){
+            const dBase = (baseSel === "supply") ? (Number(salePrice)/1.1) : Number(salePrice);
+            patch.saleDiscountAmt = discAmt;
+            patch.saleDiscount = dBase ? Number(((discAmt / dBase) * 100).toFixed(2)) : null;
+          }
+          const net = Number(salePrice) - discAmt;
+          if(it.purchasePrice) patch.profit = net - Number(it.purchasePrice);
         }
-        const net = Number(salePrice) - discAmt;
-        if(it.purchasePrice) patch.profit = net - Number(it.purchasePrice);
       }
       await updateDoc(doc(db,"inventoryItems", itemDoc.id), patch);
       sold++;
