@@ -387,7 +387,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-28 v830</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-28 v832</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -28243,6 +28243,11 @@
     const lab = v => (v === "supply") ? "공급가" : (v === "unit") ? "출고가" : "-";
     let h = '<div style="border:1px solid var(--navy);padding:10px 12px;margin-top:10px;">'
       + '<div style="font-weight:700;margin-bottom:4px;">할인 기준 칸이 비어 있는 재고 — ' + baseFillCache.length + '대</div>'
+      + '<div style="font-size:12px;margin-bottom:6px;">'
+      + '역산으로 채울 수 있는 것 — <b>매입 기준 ' + baseFillCache.filter(r=>r.buyWant).length + '대</b>'
+      + ' · <b>판매 기준 ' + baseFillCache.filter(r=>r.saleWant).length + '대</b>'
+      + (askN ? ' · <b style="color:var(--danger);">골라야 하는 것 ' + askN + '대</b>' : '')
+      + '</div>'
       + '<div style="font-size:11.5px;color:var(--gray);line-height:1.7;margin-bottom:8px;">'
       + '<b>금액과 %는 손대지 않습니다.</b> 저장된 할인 금액을 역산해 '
       + '「출고가 기준인지 공급가 기준인지」만 적어 넣습니다.<br>'
@@ -33055,6 +33060,8 @@
     // 이 재고에서만 쓰는 할인 계산 기준입니다. 업체정보 값보다 먼저 적용됩니다.
     //  기준을 고르면 선할인·타할인 금액과 입고가를 그 기준으로 다시 냅니다.
     { key:"__baseFix", label:"할인 계산 기준 (금액까지 다시 계산)", type:"basefix" },
+    // 클럽장려금 타할인 — 입고일이 속한 분기의 지급률로 채웁니다.
+    { key:"__clubRebate", label:"클럽장려금 타할인 채우기 (분기 지급률)", type:"club" },
     { key:"profit", label:"수익", type:"number" },
     // 매입가 그대로 넘길 때 씁니다. %로 계산하면 매입처마다 절사가 달라 1원씩 어긋납니다.
     { key:"__salePriceFromBuy", label:"판매가 = 입고가로 맞추기", type:"same" },
@@ -33186,6 +33193,37 @@
         + '<input type="hidden" id="bulk-edit-value" value="=입고가">';
       const linkBox0 = document.getElementById("bulk-link-box");
       if(linkBox0) linkBox0.style.display = "none";
+      return;
+    }
+    if(fieldDef.type === "club"){
+      // 고른 재고의 입고일 분기를 모아 그 분기만 물어봅니다.
+      const list0 = ids.map(id=> (lastRenderedItems||[]).find(x=> x.id === id)).filter(Boolean);
+      const qs = {};
+      list0.forEach(it=>{
+        const dt = String(it.inDate||"").replace(/\D/g,"");
+        const k = (dt.length === 8)
+          ? (dt.slice(0,4) + "-" + (Math.floor((Number(dt.slice(4,6))-1)/3)+1) + "Q") : "입고일 없음";
+        qs[k] = (qs[k]||0) + 1;
+      });
+      const keys = Object.keys(qs).sort();
+      const DEF = { "2022-2Q":"1.30", "2022-3Q":"1.56" };   // 확인된 분기
+      wrap.innerHTML = '<div style="font-size:12.5px;line-height:1.8;">'
+        + '<b>입고일이 속한 분기의 지급률</b>을 넣어주세요. 재고마다 그 분기 값으로 채웁니다.<br>'
+        + '<span style="color:var(--gray);">타할인 금액 = 공급가(출고가÷1.1) × 지급률. '
+        + '이미 타할인이 들어 있는 재고는 건드리지 않습니다.</span></div>'
+        + '<table class="data-table" style="width:auto;margin-top:6px;"><thead><tr>'
+        + '<th>입고 분기</th><th class="ta-right">대수</th><th>지급률 %</th></tr></thead><tbody>'
+        + keys.map(k=> '<tr><td>' + comboEsc(k) + '</td>'
+            + '<td class="ta-right">' + qs[k] + '</td>'
+            + '<td><input type="number" step="0.01" class="club-q" data-q="' + comboEsc(k) + '" '
+            + 'value="' + (DEF[k]||"") + '" placeholder="예: 1.56" style="width:90px;"'
+            + (k === "입고일 없음" ? ' disabled' : '') + '></td></tr>').join("")
+        + '</tbody></table>'
+        + '<div style="font-size:11.5px;color:var(--gray);margin-top:4px;">'
+        + '비워두면 그 분기는 건너뜁니다. 입고일이 없는 재고는 분기를 알 수 없어 채우지 않습니다.</div>'
+        + '<input type="hidden" id="bulk-edit-value" value="=클럽">';
+      const linkBoxC = document.getElementById("bulk-link-box");
+      if(linkBoxC) linkBoxC.style.display = "none";
       return;
     }
     if(fieldDef.type === "basefix"){
@@ -33841,6 +33879,83 @@
           + "(입금이 끝난 건은 없습니다 — 확인했습니다)\n\n진행할까요?")) return;
         saleLinkedIds = locked.map(x=> x.id);
       }
+    }
+
+    // 클럽장려금 타할인 — 입고일 분기의 지급률로 채웁니다. (공급가 × 지급률)
+    if(fieldDef.type === "club"){
+      const rate = {};
+      document.querySelectorAll(".club-q").forEach(e=>{
+        const v = String(e.value||"").trim();
+        if(v !== "" && Number(v) > 0) rate[e.dataset.q] = Number(v);
+      });
+      if(Object.keys(rate).length === 0){ alert("지급률을 하나 이상 넣어주세요."); return; }
+
+      const list = ids.map(id=> (lastRenderedItems||[]).find(x=> x.id === id)).filter(Boolean);
+      const qOf = (it)=>{
+        const dt = String(it.inDate||"").replace(/\D/g,"");
+        return (dt.length === 8)
+          ? (dt.slice(0,4) + "-" + (Math.floor((Number(dt.slice(4,6))-1)/3)+1) + "Q") : "입고일 없음";
+      };
+      const plan = [];
+      let skipHave = 0, skipNoRate = 0, skipNoPrice = 0;
+      list.forEach(it=>{
+        const L = Number(it.listPrice)||0;
+        if(!L){ skipNoPrice++; return; }
+        if((Number(it.otherDiscountAmt)||0) > 0){ skipHave++; return; }   // 이미 들어 있으면 건드리지 않습니다
+        const r = rate[qOf(it)];
+        if(!(r > 0)){ skipNoRate++; return; }
+        const amt = Math.round((L/1.1) * r / 100);      // 공급가 기준
+        plan.push({ it, pct:r, amt, buy: L - (Number(it.purchaseDiscountAmt)||0) - amt });
+      });
+      if(plan.length === 0){
+        alert("채울 재고가 없습니다.\n\n"
+          + (skipHave ? "  이미 타할인이 있는 재고 " + skipHave + "대\n" : "")
+          + (skipNoRate ? "  지급률을 안 넣은 분기 " + skipNoRate + "대\n" : "")
+          + (skipNoPrice ? "  출고가가 없는 재고 " + skipNoPrice + "대\n" : ""));
+        return;
+      }
+      const prev = plan.slice(0,5).map(x=>
+        "  " + (x.it.serialNumber||"-") + " : 출고가 " + (Number(x.it.listPrice)||0).toLocaleString()
+        + " × " + x.pct + "% → 타할인 " + x.amt.toLocaleString()).join("\n");
+      if(!confirm("재고 " + plan.length + "대에 클럽장려금 타할인을 채웁니다.\n\n"
+        + prev + (plan.length > 5 ? "\n  ... 외 " + (plan.length-5) + "대" : "")
+        + "\n\n타할인 합계 " + plan.reduce((n,x)=> n+x.amt, 0).toLocaleString()
+        + "\n공급가(출고가÷1.1)에 지급률을 곱합니다. 입고가도 그만큼 내려갑니다.\n"
+        + (skipHave ? "\n이미 타할인이 있는 " + skipHave + "대는 건너뜁니다." : "")
+        + (skipNoRate ? "\n지급률을 안 넣은 " + skipNoRate + "대는 건너뜁니다." : "")
+        + "\n\n진행할까요?")) return;
+
+      let n1 = 0;
+      const ihClub = [];
+      try{
+        for(const x of plan){
+          await updateDoc(doc(db,"inventoryItems", x.it.id), {
+            otherDiscountPct: x.pct, otherDiscountAmt: x.amt, purchasePrice: x.buy });
+          ihClub.push({ id:x.it.id, serialNumber:x.it.serialNumber||"", systemModel:x.it.systemModel||"",
+            detail: "클럽장려금 타할인 채움 · " + x.pct + "% (공급가 기준) · 타할인 "
+              + x.amt.toLocaleString() + " · 입고가 "
+              + (Number(x.it.purchasePrice)||0).toLocaleString() + " → " + x.buy.toLocaleString() });
+          n1++;
+        }
+      }catch(e){ alert("채우지 못했습니다.\n" + ((e&&e.message)?e.message:String(e))); return; }
+
+      try{ await logItemsEach(ihClub, "price", {}); }catch(e){}
+      let linkOutC = {};
+      try{
+        linkOutC = await syncItemLinks(plan.map(x=>({
+          id: x.it.id, before: x.it,
+          after: { ...x.it, otherDiscountPct:x.pct, otherDiscountAmt:x.amt, purchasePrice:x.buy } })));
+      }catch(e){}
+      logAction("재고 일괄 변경", "클럽장려금 타할인 채움 (" + n1 + "건 · "
+        + Object.keys(rate).map(k=> k + " " + rate[k] + "%").join(" · ") + ")" + syncLinksText(linkOutC));
+      clearCache("inventory"); clearDashCache();
+      clearInvSelectAll();
+      closeBulkChangeModal();
+      alert(n1 + "대에 타할인을 채웠습니다.\n\n타할인 합계 "
+        + plan.reduce((n,x)=> n+x.amt, 0).toLocaleString()
+        + "\n\n삼성여신 화면에서 「클럽장려금 받을 금액」을 확인해주세요.");
+      loadInventoryList();
+      return;
     }
 
     // 할인 계산 기준 — 그 재고에 기준을 저장하고 금액까지 그 기준으로 다시 냅니다.
