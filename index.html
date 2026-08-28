@@ -387,7 +387,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-28 v779</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-28 v781</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -2973,6 +2973,13 @@
         <h3 style="margin-top:0;margin-bottom:4px;">텍스트로 붙여넣기 판매처리</h3>
         <p class="desc">보유중인 재고를 여러 대 한 번에 판매 처리합니다. 한 줄에 "일련번호" 만 있어도 되고, "일련번호  판매가"처럼 써도 됩니다. 나머지 줄(업체명·날짜 등)에서 판매처·출고일을 최대한 찾아드려요.</p>
         <textarea id="paste-sale-textarea" rows="8" style="width:100%;box-sizing:border-box;padding:8px;border:1px solid #c7c7c7;font-size:12.5px;font-family:monospace;" placeholder="예:&#10;에이스 판매 7/24&#10;55762   396000&#10;79798   396000"></textarea>
+        <label style="display:flex;align-items:flex-start;gap:6px;margin-top:8px;border:1px solid var(--danger);background:#fff;padding:8px 10px;font-size:12.5px;line-height:1.7;cursor:pointer;">
+          <input type="checkbox" id="paste-sale-loose" onchange="analyzePasteSale()" style="margin-top:3px;">
+          <span><b style="color:var(--danger);">한 줄을 통째로 일련번호로 보기 (형식 검사 안 함)</b><br>
+          <span style="color:var(--gray);">숫자가 아닌 시리얼번호(예: RT0067-GP9689197)를 그대로 씁니다.
+          <b>한 줄에 한 개</b>씩 적어주세요. 판매가를 함께 적으려면 <b>탭이나 두 칸 이상 띄어서</b> 뒤에 적으시면 됩니다.<br>
+          이 때는 <b>업체명·날짜 줄을 알아보지 못합니다</b> — 판매처와 출고일은 아래에서 직접 골라주세요.</span></span>
+        </label>
         <button class="btn small" style="width:auto;margin-top:8px;" onclick="analyzePasteSale()">분석하기</button>
         <div id="paste-sale-analysis" style="margin-top:14px;"></div>
       </div>
@@ -11992,6 +11999,14 @@
     }
     document.getElementById("arrival-bulk-rows").innerHTML = "";
     document.getElementById("arrival-bulk-result").innerHTML = "";
+    // 붙여넣기 칸도 비웁니다. 앞 품목에 넣은 일련번호가 남아 있으면
+    //  다른 색상 품목에 그대로 들어갈 수 있어서입니다.
+    {
+      const pt = document.getElementById("arrival-paste-text");   if(pt) pt.value = "";
+      const pm = document.getElementById("arrival-paste-msg");    if(pm) pm.innerHTML = "";
+      const pl = document.getElementById("arrival-paste-loose");  if(pl) pl.checked = false;
+      const pb = document.getElementById("arrival-paste-box");    if(pb) pb.style.display = "none";
+    }
     for(let i=0;i<remain;i++) addArrivalRow();
     document.getElementById("arrival-bulk-modal-overlay").style.display = "flex";
   };
@@ -12786,6 +12801,7 @@
     box.style.display = show ? "block" : "none";
     if(!show) return;
     document.getElementById("bulk-arrival-text").value = "";
+    { const bl = document.getElementById("bulk-arrival-loose"); if(bl) bl.checked = false; }
     // 입고일 기본값은 주문의 도착예정일입니다. 없으면 오늘로 둡니다.
     const bDue = (currentPoBatch && currentPoBatch.b) ? (currentPoBatch.b.expectedArrivalDate||"") : "";
     document.getElementById("bulk-arrival-indate").value = bDue || todayStr();
@@ -36768,6 +36784,7 @@
   window.openPasteSaleModal = function(){
     document.getElementById("paste-sale-textarea").value = "";
     document.getElementById("paste-sale-analysis").innerHTML = "";
+    { const pl = document.getElementById("paste-sale-loose"); if(pl) pl.checked = false; }
     document.getElementById("paste-sale-modal-overlay").style.display = "flex";
   };
   window.closePasteSaleModal = function(){
@@ -36813,6 +36830,36 @@
     return { dataRows, contextLines };
   }
 
+  // 한 줄 = 일련번호 1개. 형식을 따지지 않고 적은 그대로 씁니다.
+  //  액세서리처럼 영문·기호가 섞인 시리얼번호를 판매처리할 때 씁니다.
+  //  판매가는 탭이나 두 칸 이상 띄어 뒤에 적으면 읽습니다. (시리얼 안의 한 칸은 건드리지 않습니다)
+  function parsePasteSaleTextLoose(text){
+    const norm = v => String(v||"").trim().toLowerCase();
+    const modelSet = new Set(), colorSet = new Set();
+    (modelsCache||[]).forEach(m=>{
+      [m.systemModel, m.baseModel, m.petName].forEach(v=>{ if(v) modelSet.add(norm(v)); });
+      (m.colors||[]).forEach(c=>{
+        [c.manufacturerColor, c.systemColor].forEach(v=>{ if(v) colorSet.add(norm(v)); });
+      });
+    });
+    const dataRows = [], contextLines = [];
+    String(text||"").split(/\r?\n/).forEach(l=>{
+      const t = String(l).trim();
+      if(!t) return;
+      if(modelSet.has(norm(t)) || colorSet.has(norm(t))){ contextLines.push(t); return; }
+      const parts = t.split(/\t+| {2,}/).map(p=>p.trim()).filter(p=>p);
+      const sn = normSerial(parts[0]);
+      if(!sn) return;
+      let price = null;
+      for(let i=1;i<parts.length;i++){
+        const v = parts[i].replace(/,/g,"");
+        if(/^[0-9]+$/.test(v)){ price = Number(v); break; }
+      }
+      dataRows.push({ serial: sn, price });
+    });
+    return { dataRows, contextLines };
+  }
+
   let pasteSaleCarrier = "LG";        // 텍스트 판매처리에서 고른 통신사 (기본 LG)
   let pasteSaleCache = { key:"", allMap:null };   // 같은 일련번호 목록이면 다시 읽지 않습니다
   window.onPasteSaleCarrier = function(v){ pasteSaleCarrier = v || "LG"; window.analyzePasteSale(); };
@@ -36820,10 +36867,18 @@
   window.analyzePasteSale = async function(){
     const text = document.getElementById("paste-sale-textarea").value;
     try{ await fetchModelsCache(); }catch(e){}   // 모델·색상 칸을 건너뛰려면 목록이 필요합니다.
-    const { dataRows, contextLines } = parsePasteSaleText(text);
+    const looseSaleEl = document.getElementById("paste-sale-loose");
+    const looseSale = !!(looseSaleEl && looseSaleEl.checked);
+    const { dataRows, contextLines } = looseSale
+      ? parsePasteSaleTextLoose(text) : parsePasteSaleText(text);
     const analysisEl = document.getElementById("paste-sale-analysis");
     if(dataRows.length===0){
-      analysisEl.innerHTML = '<div class="list-empty">일련번호 줄을 찾지 못했습니다. "일련번호" 또는 "일련번호  판매가" 형식으로 써주세요.</div>';
+      analysisEl.innerHTML = '<div class="list-empty">'
+        + (looseSale
+            ? '넣을 줄이 없습니다.'
+            : '일련번호 줄을 찾지 못했습니다. "일련번호" 또는 "일련번호  판매가" 형식으로 써주세요.<br>'
+              + '<span style="color:var(--gray);">숫자가 아닌 시리얼번호라면 아래 「형식 검사 안 함」을 켜주세요.</span>')
+        + '</div>';
       return;
     }
 
