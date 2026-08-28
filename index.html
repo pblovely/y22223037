@@ -387,7 +387,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-28 v825</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-28 v827</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -3688,6 +3688,7 @@
             </select>
           </div>
           <div class="stack-row" id="item-serial-field" style="display:none;"><label>일련번호</label><input type="text" id="item-serial-input"></div>
+          <div id="item-serial-count-msg" style="display:none;font-size:12px;color:var(--navy);background:#eef4ff;padding:6px 8px;margin-bottom:8px;"></div>
           <div class="stack-row" id="item-qty-field"><label>수량</label><input type="number" id="item-qty-input" value="1"></div>
           <div class="stack-row"><label>IMEI</label><input type="text" id="item-imei-input"></div>
           <div class="stack-row"><label>출고가</label><input type="number" id="item-listprice-input"></div>
@@ -3714,6 +3715,7 @@
           <div class="stack-row"><label>판매가</label><input type="number" id="item-saleprice-input" oninput="onSalePriceInput()"></div>
           <div class="stack-row"><label>판매할인</label><input type="number" id="item-salediscountamt-input" placeholder="예: 10000" oninput="onSaleDiscountAmtInput()"></div>
           <div class="stack-row"><label>판매할인%</label><input type="number" step="0.01" id="item-salediscount-input" placeholder="예: 0.20" oninput="onSaleDiscountInput()"></div>
+          <div id="item-saledisc-note" style="display:none;border:1px solid var(--navy);background:#f4f7fb;padding:8px 10px;margin-bottom:10px;font-size:12px;line-height:1.7;"></div>
           <div class="stack-row"><label>판매할인 기준 <span class="info-tip" title="판매할인%를 어디에 곱할지 정합니다. 매입과 판매는 별개라 따로 정합니다. 판매처에 저장해둔 기준이 자동으로 들어옵니다.">ⓘ</span></label>
             <select id="item-salebase-select" onchange="onItemSaleBaseChange()">
               <option value="unit">출고가 기준 (대당)</option>
@@ -6209,7 +6211,14 @@
       alert("맞추는 중 오류가 났습니다.\n" + ((e && e.message) ? e.message : String(e)));
       return;
     }
-    logAction("재고 출고가 일괄 맞춤", plan.length + "건 (모델 기준)");
+    // 딸린 곳(주문 품목 · 여신 · 판매요청 · 묶음 합계)도 함께 맞춥니다.
+    let linkOutL = {};
+    try{
+      linkOutL = await syncItemLinks(plan.map(x=>({
+        id: x.id, before: x.it,
+        after: { ...x.it, listPrice: x.to, ...computeLinkedPatch(x.it, "listPrice", x.to) } })));
+    }catch(e){}
+    logAction("재고 출고가 일괄 맞춤", plan.length + "건 (모델 기준)" + syncLinksText(linkOutL));
     alert(plan.length + "건의 출고가를 모델 기준으로 맞췄습니다."
       + (noModel.length ? "\n\n모델을 못 찾은 " + noModel.length + "건은 전산모델명을 확인해주세요." : "")
       + (noPrice.length ? "\n모델에 출고가가 없는 " + noPrice.length + "건은 모델 등록에서 출고가를 먼저 넣어주세요." : ""));
@@ -24979,7 +24988,8 @@
       let invItemsForFix = null;
       if(fixItems && itemTargets.length){
         invItemsForFix = {};
-        try{
+        const linkRowsBE = [];
+    try{
           for(const t of itemTargets){
             const sn = await getDoc(doc(db,"inventoryItems", t.iid));
             if(sn.exists()) invItemsForFix[t.iid] = sn.data();
@@ -25019,10 +25029,17 @@
               const bp = (patch.purchasePrice != null) ? patch.purchasePrice : Number(it0.purchasePrice);
               if(sp && bp) patch.profit = sp - bp;
             }
-            if(Object.keys(patch).length) bt.update(doc(db,"inventoryItems", t.iid), patch);
+            if(Object.keys(patch).length){
+              bt.update(doc(db,"inventoryItems", t.iid), patch);
+              linkRowsBE.push({ id: t.iid,
+                before: (invItemsForFix && invItemsForFix[t.iid]) || {},
+                after: { ...((invItemsForFix && invItemsForFix[t.iid]) || {}), ...patch } });
+            }
           });
           await bt.commit();
         }
+        // 재고가 바뀌었으면 판매요청·묶음 합계도 함께 맞춥니다. (주문 품목은 이미 여기서 고쳤습니다)
+        try{ if(linkRowsBE.length) await syncItemLinks(linkRowsBE); }catch(e){}
         // 색상을 바꿨으면 그 재고와 이어진 다른 곳도 함께 맞춥니다.
         try{
           const byColor = {};
