@@ -387,7 +387,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-28 v833</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-28 v835</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -26192,6 +26192,7 @@
     if(!rows || rows.length === 0) return out;
     const BUY  = ["listPrice","purchaseDiscount","purchaseDiscountAmt",
                   "otherDiscountPct","otherDiscountAmt","purchasePrice","discountBase"];
+    const RET  = ["creditReturnDate"];      // 반품 여신복구일 — 여신 원장에도 같이 적혀 있습니다
     const SALE = ["salePrice","saleDiscount","saleDiscountAmt","destination","saleDiscountBase"];
     const changed = (b,a,keys)=> keys.some(k=>{
       if(a[k] === undefined) return false;
@@ -26240,6 +26241,27 @@
         }catch(e){}
       }
 
+      // ── 반품 여신복구일 ── 재고에서 고치면 여신 원장의 반품 기록에도 넣습니다.
+      if(changed(b,a,RET)){
+        try{
+          const src = String(val(b,a,"source") || b.source || "").trim();
+          const rd  = String(val(b,a,"returnDate") || b.returnDate || "").replace(/\D/g,"");
+          const cd  = String(val(b,a,"creditReturnDate") || "").replace(/\D/g,"");
+          if(src && rd.length === 8){
+            const led = await getDocs(query(collection(db,"b2bLedger"),
+              where("category","==","return_credit"), where("returnDate","==", rd)));
+            for(const dd of led.docs){
+              const e = dd.data();
+              const p2 = String(e.partner || e.source || "").trim();
+              if(p2 !== src) continue;
+              if(String(e.creditReturnDate||"").replace(/\D/g,"") === cd) continue;
+              await updateDoc(doc(db,"b2bLedger", dd.id), { creditReturnDate: cd });
+              out.ledger = (out.ledger||0) + 1;
+            }
+          }
+        }catch(e){}
+      }
+
       // ── 판매 쪽 ── 입금이 끝난 판매요청은 받은 돈이라 손대지 않습니다.
       if(changed(b,a,SALE) && b.saleRequestId){
         try{
@@ -26282,7 +26304,7 @@
       }
     }
     if(out.order || out.credit) clearCache("orders");
-    if(out.credit) clearCache("loan");
+    if(out.credit || out.ledger) clearCache("loan");
     if(out.sale || out.batch) clearCache("saleRequests");
     clearDashCache();
     return out;
@@ -26295,6 +26317,7 @@
     const p = [];
     if(o.order)  p.push("주문 품목 " + o.order + "건");
     if(o.credit) p.push("여신 차감액 " + o.credit + "건");
+    if(o.ledger) p.push("여신 원장 반품 기록 " + o.ledger + "건");
     if(o.sale)   p.push("판매요청 " + o.sale + "건");
     if(o.batch)  p.push("묶음 합계 " + o.batch + "건");
     let t = p.length ? (" · " + p.join(" · ") + " 함께 맞춤") : "";
@@ -32072,12 +32095,61 @@
     if(v == null) return;
     const d = String(v).replace(/\D/g,"");
     if(d && d.length !== 8){ alert("8자리로 넣어주세요. (예: 20221005)"); return; }
+    let e0 = null;
     try{
+      const sn0 = await getDoc(doc(db,"b2bLedger", id));
+      if(sn0.exists()) e0 = sn0.data();
       // 거래일자(반품일)는 그대로 두고, 여신복구일만 따로 담습니다.
       await updateDoc(doc(db,"b2bLedger", id), { creditReturnDate: d });
     }catch(e){ alert("바꾸지 못했습니다.\n" + ((e&&e.message)?e.message:String(e))); return; }
-    logAction("반품 여신복구일 " + (d ? "입력" : "지움"), (cur||"-") + " → " + (d||"-"));
-    clearCache("loan");
+
+    // ── 그 반품 재고에도 여신복구일을 함께 넣습니다. ──
+    //  재고 목록 하나만 보고도 알 수 있게 맞춥니다.
+    //  원장 기록에는 어느 단말기인지 없으므로 「매입처 + 반품일」로 찾습니다.
+    let invFixed = 0;
+    try{
+      const src = String((e0 && (e0.partner || e0.source)) || "").trim();
+      const rd  = String((e0 && e0.returnDate) || "").replace(/\D/g,"");
+      if(src && rd.length === 8){
+        const snap = await getDocs(query(collection(db,"inventoryItems"),
+          where("source","==", src), where("returnDate","==", rd)));
+        const targets = [];
+        snap.forEach(dd=>{
+          const it = dd.data();
+          if(it.deleted === true) return;
+          if(String(it.status||"") !== "반품") return;
+          if(String(it.creditReturnDate||"").replace(/\D/g,"") === d) return;   // 이미 같음
+          targets.push({ id: dd.id, it });
+        });
+        if(targets.length){
+          const ok = confirm("이 반품에 해당하는 재고 " + targets.length + "대에도\n"
+            + "여신복구일을 " + (d ? d : "(지움)") + " 으로 넣을까요?\n\n"
+            + targets.slice(0,5).map(x=> "  " + (x.it.serialNumber||"-") + " "
+                + (x.it.systemModel||"")).join("\n")
+            + (targets.length > 5 ? "\n  ... 외 " + (targets.length-5) + "대" : "")
+            + "\n\n재고 목록에서도 바로 보이게 됩니다.\n금액은 바뀌지 않습니다.");
+          if(ok){
+            for(const x of targets){
+              await updateDoc(doc(db,"inventoryItems", x.id), { creditReturnDate: d });
+              invFixed++;
+            }
+            try{
+              await logItemsEach(targets.map(x=>({ id:x.id,
+                serialNumber:x.it.serialNumber||"", systemModel:x.it.systemModel||"",
+                detail: "여신복구일 " + (String(x.it.creditReturnDate||"") || "(없음)")
+                        + " → " + (d || "(없음)") + " (여신 원장에서 함께 넣음)" })), "edited", {});
+            }catch(err){}
+            clearCache("inventory");
+          }
+        }
+      }
+    }catch(err){}
+
+    logAction("반품 여신복구일 " + (d ? "입력" : "지움"), (cur||"-") + " → " + (d||"-")
+      + (invFixed ? " / 재고 " + invFixed + "대에도 넣음" : ""));
+    clearCache("loan"); clearDashCache();
+    if(invFixed) alert("여신복구일을 넣었습니다.\n\n  재고 " + invFixed + "대에도 함께 넣었습니다.\n"
+      + "재고 목록의 「여신복구일」 칸에서 보실 수 있습니다.");
     loadB2BTab();
   };
 
@@ -32683,6 +32755,21 @@
       //  주문에 안 붙은 재고도 잡히고, 재고 목록에서 눈으로 대조하실 수 있습니다.
       pendingRebate = 0;
       clubByQuarter = {};      // 분기별로도 나눠 둡니다. (입고일 기준)
+      // 여신 원장에 적어둔 「반품 (여신복구)」 기록도 함께 봅니다.
+      //  재고에 여신복구일을 안 넣고 원장에만 넣어두신 경우가 있습니다.
+      //  원장 기록에는 어느 단말기인지 없으므로 「매입처 + 반품일」로 재고를 찾습니다.
+      const retKey = new Set();
+      try{
+        const retSnap = await getDocs(query(collection(db,"b2bLedger"), where("category","==","return_credit")));
+        retSnap.forEach(d=>{
+          const e = d.data();
+          const cd = String(e.creditReturnDate||"").replace(/\D/g,"");
+          if(cd.length !== 8) return;                       // 복구일이 없으면 아직 안 돌아온 것
+          const src = String(e.partner || e.source || "").trim();
+          const rd  = String(e.returnDate||"").replace(/\D/g,"");
+          if(rd.length === 8) retKey.add(src + "|" + rd);
+        });
+      }catch(e){}
       try{
         const invAll = await getDocs(collection(db,"inventoryItems"));
         invAll.forEach(d=>{
@@ -32695,7 +32782,11 @@
           // 여신이 실제로 돌아온 반품 재고는 삼성이 장려금을 주지 않습니다. 그만큼 뺍니다.
           //  재고에 적힌 「여신복구일」이 기준입니다.
           //  (여신 원장의 반품 기록은 매입처별 한 줄이라 어느 단말기인지 알 수 없습니다)
-          if(String(it.creditReturnDate||"").replace(/\D/g,"").length === 8){
+          const ownCd = String(it.creditReturnDate||"").replace(/\D/g,"").length === 8;
+          // 재고에 여신복구일이 있거나, 원장에 그 매입처·반품일로 복구 기록이 있으면 뺍니다.
+          const byLedger = (String(it.status||"") === "반품")
+            && retKey.has(src + "|" + String(it.returnDate||"").replace(/\D/g,""));
+          if(ownCd || byLedger){
             rebateBack += amt; returnedCnt++;
             return;                               // 분기 표에도 넣지 않습니다
           }
