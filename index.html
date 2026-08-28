@@ -387,7 +387,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-28 v798</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-28 v799</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -3889,36 +3889,58 @@
   // ---------- 보기 설정 ----------
   // 저장된 할인 금액이 「실제로」 어느 기준으로 나온 값인지 역산합니다.
   //  적어둔 %를 출고가에 곱한 값인지, 공급가(출고가÷1.1)에 곱한 값인지 맞춰봅니다.
-  //  · none  : %가 없어 가릴 수 없음
-  //  · unit  : 출고가에 곱한 값
-  //  · supply: 공급가에 곱한 값
-  //  · mixed : 선할인과 타할인의 기준이 서로 다름
-  //  · etc   : 어느 쪽으로도 안 떨어짐 (금액을 직접 넣었거나 어긋난 값)
+  //  딱 떨어지지 않으면 「안 맞음」이라고 뭉뚱그리지 않고, 그 금액이 실제로 몇 %인지 돌려줍니다.
+  //   · none : %가 없거나 두 기준 결과가 같아 가릴 수 없음
+  //   · one  : 한 기준으로 딱 맞음            { base:"unit"|"supply" }
+  //   · mixed: 선할인과 타할인의 기준이 서로 다름
+  //   · off  : 적어둔 %로 낸 값이 아님        { base, pct } ← 실제 비율을 함께 돌려줍니다
   function actualDiscountBase(it){
     const L = Number((it && it.listPrice)) || 0;
     if(!L) return { kind:"none" };
+    const S = L / 1.1;
     const one = (pct, amt)=>{
       const p = Number(pct)||0, a = Number(amt)||0;
       if(!(p > 0)) return null;                       // %가 없으면 가릴 수 없습니다
       const byList   = Math.round(L * p / 100);
-      const bySupply = Math.round((L/1.1) * p / 100);
+      const bySupply = Math.round(S * p / 100);
       if(byList === bySupply) return null;            // 두 값이 같으면 구분이 안 됩니다
-      if(a === byList)   return "unit";
-      if(a === bySupply) return "supply";
-      return "etc";
+      if(a === byList)   return { k:"unit" };
+      if(a === bySupply) return { k:"supply" };
+      // 딱 안 맞으면 그 금액이 실제로 몇 %인지 냅니다.
+      //  적어둔 %에 더 가까운 쪽을 기준으로 삼아 보여드립니다.
+      const pList   = (a / L) * 100;
+      const pSupply = (a / S) * 100;
+      const useList = Math.abs(pList - p) <= Math.abs(pSupply - p);
+      return { k:"off", base: useList ? "unit" : "supply",
+               pct: Number((useList ? pList : pSupply).toFixed(2)) };
     };
     const pre   = one(it.purchaseDiscount, it.purchaseDiscountAmt);
     const other = one(it.otherDiscountPct, it.otherDiscountAmt);
-    const list = [pre, other].filter(Boolean);
+    const list  = [pre, other].filter(Boolean);
     if(list.length === 0) return { kind:"none" };
-    if(list.indexOf("etc") >= 0 && list.every(x=> x === "etc")) return { kind:"etc" };
-    const clean = list.filter(x=> x !== "etc");
-    const uniq = [...new Set(clean)];
-    if(uniq.length === 1 && clean.length === list.length) return { kind:"one", base:uniq[0] };
-    const lab = v => (v === "supply") ? "공급가" : (v === "unit") ? "출고가" : "안 맞음";
-    return { kind:"mixed", preLab: lab(pre||"-"), otherLab: lab(other||"-") };
+    const lab = v => !v ? "-" : (v.k === "off")
+      ? ((v.base === "supply" ? "공급가" : "출고가") + " " + v.pct + "%")
+      : (v.k === "supply" ? "공급가" : "출고가");
+    // 하나라도 딱 안 맞으면 실제 비율을 보여줍니다.
+    if(list.some(x=> x.k === "off")){
+      if(pre && other) return { kind:"mixed", preLab: lab(pre), otherLab: lab(other) };
+      return { kind:"off", label: lab(pre || other) };
+    }
+    const uniq = [...new Set(list.map(x=> x.k))];
+    if(uniq.length === 1) return { kind:"one", base: uniq[0] };
+    return { kind:"mixed", preLab: lab(pre), otherLab: lab(other) };
   }
   window.actualDiscountBase = actualDiscountBase;
+
+  // 위 결과를 목록에 쓸 글자로 만듭니다. (엑셀다운도 같은 글자를 씁니다)
+  function discountBaseLabel(it){
+    const r = actualDiscountBase(it);
+    if(r.kind === "none")  return "-";
+    if(r.kind === "off")   return r.label;
+    if(r.kind === "mixed") return "선 " + r.preLab + " / 타 " + r.otherLab;
+    return (r.base === "supply") ? "공급가" : "출고가";
+  }
+  window.discountBaseLabel = discountBaseLabel;
 
   const INV_COLUMNS = [
     { key:"orderDate", label:"주문일", get:it=>it.orderDate||"-" },
@@ -3955,20 +3977,8 @@
     // 이 재고의 할인 금액이 「실제로」 어느 기준으로 계산돼 있는지 역산해 보여줍니다.
     //  적어둔 %와 저장된 금액을 맞춰봐서, 출고가에 곱한 값인지 공급가에 곱한 값인지 가려냅니다.
     { key:"discountBase", label:"할인 반영 기준",
-      get:it=>{
-        const r = actualDiscountBase(it);
-        if(r.kind === "none")  return "-";
-        if(r.kind === "etc")   return "안 맞음";
-        if(r.kind === "mixed") return "선 " + r.preLab + " / 타 " + r.otherLab;
-        return (r.base === "supply") ? "공급가" : "출고가";
-      },
-      getRaw:it=>{
-        const r = actualDiscountBase(it);
-        if(r.kind === "none")  return "-";
-        if(r.kind === "etc")   return "안 맞음";
-        if(r.kind === "mixed") return "선 " + r.preLab + " / 타 " + r.otherLab;
-        return (r.base === "supply") ? "공급가" : "출고가";
-      } },
+      get:it=> discountBaseLabel(it),
+      getRaw:it=> discountBaseLabel(it) },
     { key:"purchaseDiscountAmt", label:"선할인", get:it=> discFmt(preDiscountAmtOf(it)), getRaw:it=> discRaw(preDiscountAmtOf(it)) },
     { key:"purchaseDiscount", label:"선할인%", get:it=> discPctFmt(preDiscountPctOf(it)), getRaw:it=> discRaw(preDiscountPctOf(it)) },
     { key:"otherDiscountAmt", label:"타할인", get:it=> discFmt(it.otherDiscountAmt), getRaw:it=> discRaw(it.otherDiscountAmt) },
