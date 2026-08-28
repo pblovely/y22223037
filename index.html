@@ -387,7 +387,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-28 v823</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-28 v825</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -3672,8 +3672,6 @@
           <div class="stack-row"><label>주문일</label><input type="text" id="item-orderdate-input" placeholder="예: 20260724" maxlength="8" inputmode="numeric"></div>
           <div class="stack-row"><label>입고일</label><input type="text" id="item-indate-input" placeholder="예: 20260724" maxlength="8" inputmode="numeric"></div>
           <div class="stack-row"><label>판매예정일</label><input type="text" id="item-expectedsaledate-input" placeholder="예: 20260724" maxlength="8" inputmode="numeric"></div>
-          <div class="stack-row"><label>반품일 <span class="info-tip" title="삼성전자로 되돌려 보낸 날입니다. 상태를 「반품」으로 두었을 때 씁니다.">ⓘ</span></label><input type="text" id="item-returndate-input" placeholder="예: 20220920" maxlength="8" inputmode="numeric"></div>
-          <div class="stack-row"><label>여신복구일 <span class="info-tip" title="반품한 뒤 여신이 실제로 되돌아온 날입니다. 여신 거래 내역의 「반품 (여신복구)」 거래일자와 맞추면 됩니다.">ⓘ</span></label><input type="text" id="item-creditreturndate-input" placeholder="예: 20221005" maxlength="8" inputmode="numeric"></div>
           <div class="stack-row"><label>판매일</label><input type="text" id="item-outdate-input" placeholder="예: 20260724" maxlength="8" inputmode="numeric"></div>
           <div class="stack-row"><label>개통일 <span class="info-tip" title="포피플에서 직접 개통한 날입니다. 상태를 개통으로 바꿀 때 함께 적어주세요.">ⓘ</span></label><input type="text" id="item-activatedate-input" placeholder="예: 20260724" maxlength="8" inputmode="numeric"></div>
           <div class="stack-row"><label>입고처</label><select id="item-source-select"><option value="">선택</option></select></div>
@@ -3681,33 +3679,19 @@
           <div class="stack-row"><label>통신사</label><select id="item-carrier-select"></select></div>
           <div class="stack-row"><label>위치</label><select id="item-location-select"><option value="">선택</option></select></div>
           <div class="stack-row"><label>모델 (전산모델명)</label><select id="item-model-select" onchange="onItemModelChange()"><option value="">모델을 선택하세요</option></select></div>
-          <div class="stack-row"><label>전산색상</label><select id="item-syscolor-select" onchange="onSysColorChange()"><option value="">모델을 먼저 선택하세요</option></select></div>
           <div class="stack-row"><label>제조사색상</label><select id="item-manucolor-select" onchange="onManuColorChange()"><option value="">모델을 먼저 선택하세요</option></select></div>
-          <div class="stack-row"><label>현재상태</label><select id="item-status-select"></select></div>
+          <div class="stack-row"><label>전산색상</label><select id="item-syscolor-select" onchange="onSysColorChange()"><option value="">모델을 먼저 선택하세요</option></select></div>
           <div class="stack-row"><label>입고 방식</label>
             <select id="item-entry-type" onchange="toggleEntryType()">
               <option value="qty">수량으로 입력</option>
               <option value="imei">일련번호 개별 입력</option>
             </select>
           </div>
-          <div class="stack-row" id="item-qty-field"><label>수량</label><input type="number" id="item-qty-input" value="1"></div>
           <div class="stack-row" id="item-serial-field" style="display:none;"><label>일련번호</label><input type="text" id="item-serial-input"></div>
-          <div id="item-serial-count-msg" style="display:none;font-size:12px;color:var(--navy);background:#eef4ff;padding:6px 8px;margin-bottom:8px;"></div>
+          <div class="stack-row" id="item-qty-field"><label>수량</label><input type="number" id="item-qty-input" value="1"></div>
           <div class="stack-row"><label>IMEI</label><input type="text" id="item-imei-input"></div>
           <div class="stack-row"><label>출고가</label><input type="number" id="item-listprice-input"></div>
           <div class="stack-row"><label>입고가</label><input type="number" id="item-purchaseprice-input" oninput="onPurchasePriceInput()"></div>
-          <div class="stack-row"><label>선할인</label><input type="number" id="item-purchasediscountamt-input" placeholder="예: 20000" oninput="onPurchaseDiscountAmtInput()"></div>
-          <div class="stack-row"><label>선할인%</label><input type="number" step="0.01" id="item-purchasediscount-input" placeholder="예: 0.20" oninput="onPurchaseDiscountInput()"></div>
-          <div class="stack-row"><label>타할인</label><input type="number" id="item-otherdiscountamt-input" placeholder="여신 등 추가 할인" oninput="onOtherDiscountAmtInput()"></div>
-          <div class="stack-row"><label>타할인%</label><input type="number" step="0.01" id="item-otherdiscountpct-input" oninput="onOtherDiscountPctInput()"></div>
-          <div class="stack-row"><label>입고할인 <span class="info-tip" title="선할인은 주문 시 즉시 받습니다. 타할인은 3개월 뒤 클럽장려금으로 받지만 거래처에도 미리 깎아 넘기므로 입고가에 함께 반영합니다. 다만 여신에서는 선할인까지만 차감됩니다.">ⓘ</span></label><input type="text" id="item-totaldiscount-display" disabled style="background:#fff;"></div>
-          <div class="stack-row"><label>판매처</label><select id="item-dest-select"><option value="">해당없음</option></select></div>
-          <div class="stack-row"><label>판매가 연동 <span class="info-tip" title="켜면 판매가를 그 재고의 입고가와 똑같이 두고, 앞으로 입고가가 바뀔 때 판매가도 따라갑니다. 판매할인은 사온 조건(선할인+타할인)을 그대로 씁니다.">ⓘ</span></label>
-            <span><label style="display:inline-flex;align-items:center;gap:5px;cursor:pointer;">
-              <input type="checkbox" id="item-samebuy-input" onchange="onItemSameBuyChange()">
-              <b style="color:var(--navy);">입고동일 — 판매가를 입고가와 똑같이</b></label></span></div>
-          <div class="stack-row"><label>판매가</label><input type="number" id="item-saleprice-input" oninput="onSalePriceInput()"></div>
-          <div class="stack-row"><label>판매할인</label><input type="number" id="item-salediscountamt-input" placeholder="예: 10000" oninput="onSaleDiscountAmtInput()"></div>
           <div class="stack-row"><label>할인 반영 기준 <span class="info-tip" title="선할인%·타할인%를 어디에 곱할지 정합니다. 매입처에 저장해둔 기준이 자동으로 들어옵니다. 이 재고에서만 다르게 하려면 바꾸세요.">ⓘ</span></label>
             <select id="item-base-select" onchange="onItemBaseChange()">
               <option value="unit">출고가 기준 (대당)</option>
@@ -3715,6 +3699,21 @@
               <option value="supply">공급가 기준 (삼성전자 방식)</option>
             </select>
           </div>
+          <div class="stack-row"><label>선할인</label><input type="number" id="item-purchasediscountamt-input" placeholder="예: 20000" oninput="onPurchaseDiscountAmtInput()"></div>
+          <div class="stack-row"><label>선할인%</label><input type="number" step="0.01" id="item-purchasediscount-input" placeholder="예: 0.20" oninput="onPurchaseDiscountInput()"></div>
+          <div class="stack-row"><label>타할인</label><input type="number" id="item-otherdiscountamt-input" placeholder="여신 등 추가 할인" oninput="onOtherDiscountAmtInput()"></div>
+          <div class="stack-row"><label>타할인%</label><input type="number" step="0.01" id="item-otherdiscountpct-input" oninput="onOtherDiscountPctInput()"></div>
+          <div class="stack-row"><label>입고할인 <span class="info-tip" title="선할인은 주문 시 즉시 받습니다. 타할인은 3개월 뒤 클럽장려금으로 받지만 거래처에도 미리 깎아 넘기므로 입고가에 함께 반영합니다. 다만 여신에서는 선할인까지만 차감됩니다.">ⓘ</span></label><input type="text" id="item-totaldiscount-display" disabled style="background:#fff;"></div>
+          <div class="stack-row"><label>반품일 <span class="info-tip" title="삼성전자로 되돌려 보낸 날입니다. 상태를 「반품」으로 두었을 때 씁니다.">ⓘ</span></label><input type="text" id="item-returndate-input" placeholder="예: 20220920" maxlength="8" inputmode="numeric"></div>
+          <div class="stack-row"><label>여신복구일 <span class="info-tip" title="반품한 뒤 여신이 실제로 되돌아온 날입니다. 여신 거래 내역의 「반품 (여신복구)」 거래일자와 맞추면 됩니다.">ⓘ</span></label><input type="text" id="item-creditreturndate-input" placeholder="예: 20221005" maxlength="8" inputmode="numeric"></div>
+          <div class="stack-row"><label>판매가 연동 <span class="info-tip" title="켜면 판매가를 그 재고의 입고가와 똑같이 두고, 앞으로 입고가가 바뀔 때 판매가도 따라갑니다. 판매할인은 사온 조건(선할인+타할인)을 그대로 씁니다.">ⓘ</span></label>
+            <span><label style="display:inline-flex;align-items:center;gap:5px;cursor:pointer;">
+              <input type="checkbox" id="item-samebuy-input" onchange="onItemSameBuyChange()">
+              <b style="color:var(--navy);">입고동일 — 판매가를 입고가와 똑같이</b></label></span></div>
+          <div class="stack-row"><label>판매처</label><select id="item-dest-select"><option value="">해당없음</option></select></div>
+          <div class="stack-row"><label>판매가</label><input type="number" id="item-saleprice-input" oninput="onSalePriceInput()"></div>
+          <div class="stack-row"><label>판매할인</label><input type="number" id="item-salediscountamt-input" placeholder="예: 10000" oninput="onSaleDiscountAmtInput()"></div>
+          <div class="stack-row"><label>판매할인%</label><input type="number" step="0.01" id="item-salediscount-input" placeholder="예: 0.20" oninput="onSaleDiscountInput()"></div>
           <div class="stack-row"><label>판매할인 기준 <span class="info-tip" title="판매할인%를 어디에 곱할지 정합니다. 매입과 판매는 별개라 따로 정합니다. 판매처에 저장해둔 기준이 자동으로 들어옵니다.">ⓘ</span></label>
             <select id="item-salebase-select" onchange="onItemSaleBaseChange()">
               <option value="unit">출고가 기준 (대당)</option>
@@ -3722,8 +3721,6 @@
               <option value="supply">공급가 기준 (삼성전자 방식)</option>
             </select>
           </div>
-          <div class="stack-row"><label>판매할인%</label><input type="number" step="0.01" id="item-salediscount-input" placeholder="예: 0.20" oninput="onSaleDiscountInput()"></div>
-          <div id="item-saledisc-note" style="display:none;border:1px solid var(--navy);background:#f4f7fb;padding:8px 10px;margin-bottom:10px;font-size:12px;line-height:1.7;"></div>
           <div class="stack-row"><label>공시지원금</label><input type="number" id="item-subsidyamount-input" placeholder="본사에서 유치수수료로 주는 금액"></div>
           <div class="stack-row"><label>공시지원금 상태</label>
             <select id="item-subsidystatus-select" onchange="onSubsidyStatusChange()">
@@ -3735,6 +3732,7 @@
           </div>
           <div class="stack-row" id="item-clawback-row" style="display:none;"><label>환수액</label><input type="number" id="item-clawbackamount-input"></div>
           <div class="stack-row" id="item-subsidymonth-row"><label>공시지원금 귀속월</label><input type="text" id="item-subsidymonth-input" placeholder="YYYYMM" maxlength="6" inputmode="numeric"></div>
+          <div class="stack-row"><label>현재상태</label><select id="item-status-select"></select></div>
           <div class="stack-row"><label>비고1 <span class="info-tip" title="자유롭게 적어두는 칸입니다. 나중에 검색·엑셀다운으로 대조할 때 쓰세요.">ⓘ</span></label><input type="text" id="item-note1-input" placeholder="자유 입력 (선택)"></div>
           <div class="stack-row"><label>비고2</label><input type="text" id="item-note2-input" placeholder="자유 입력 (선택)"></div>
           <div class="stack-row"><label>수익</label><input type="text" id="item-profit-display" disabled style="background:#fff;"></div>
@@ -8043,10 +8041,20 @@
       {
         const cur = (lastRenderedItems||[]).find(x=> x.id === editingItemId);
         if(cur && cur.saleRequestId){
-          const changed = SALE_LOCKED_FIELDS.filter(k=>{
+          let changed = SALE_LOCKED_FIELDS.filter(k=>{
             const a = (cur[k] === undefined || cur[k] === null) ? "" : String(cur[k]);
             const b = (base[k] === undefined || base[k] === null) ? "" : String(base[k]);
             return a !== b;
+          });
+          // 「비어 있던 칸을 채우기만 한 것」은 어긋남이 아니므로 묻지 않습니다.
+          //  예) 판매할인·판매할인%가 저장돼 있지 않아 목록과 같은 값으로 채워 저장하는 경우
+          changed = changed.filter(k=>{
+            const before = cur[k];
+            if(before !== undefined && before !== null && before !== "") return true;  // 값이 있던 칸
+            // 비어 있던 칸 — 판매가가 그대로면 금액이 달라지지 않으므로 넘어갑니다.
+            const pSame = (Number(cur.salePrice)||0) === (Number(base.salePrice)||0);
+            if(pSame && (k === "saleDiscountAmt" || k === "saleDiscount" || k === "profit")) return false;
+            return true;
           });
           if(changed.length > 0){
             if(!confirm("이 재고는 판매요청에 묶여 있습니다.\n\n"
