@@ -387,7 +387,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-28 v812</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-28 v815</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -3701,10 +3701,21 @@
           <div class="stack-row"><label>타할인%</label><input type="number" step="0.01" id="item-otherdiscountpct-input" oninput="onOtherDiscountPctInput()"></div>
           <div class="stack-row"><label>할인 내역 <span class="info-tip" title="선할인은 주문 시 즉시 받습니다. 타할인은 3개월 뒤 클럽장려금으로 받지만 거래처에도 미리 깎아 넘기므로 입고가에 함께 반영합니다. 다만 여신에서는 선할인까지만 차감됩니다.">ⓘ</span></label><input type="text" id="item-totaldiscount-display" disabled style="background:#fff;"></div>
           <div class="stack-row"><label>판매처 (선택)</label><select id="item-dest-select"><option value="">해당없음</option></select></div>
+          <div class="stack-row"><label>판매가 연동 <span class="info-tip" title="켜면 판매가를 그 재고의 입고가와 똑같이 두고, 앞으로 입고가가 바뀔 때 판매가도 따라갑니다. 판매할인은 사온 조건(선할인+타할인)을 그대로 씁니다.">ⓘ</span></label>
+            <span><label style="display:inline-flex;align-items:center;gap:5px;cursor:pointer;">
+              <input type="checkbox" id="item-samebuy-input" onchange="onItemSameBuyChange()">
+              <b style="color:var(--navy);">입고동일 — 판매가를 입고가와 똑같이</b></label></span></div>
           <div class="stack-row"><label>판매가 (선택)</label><input type="number" id="item-saleprice-input" oninput="onSalePriceInput()"></div>
           <div class="stack-row"><label>판매할인</label><input type="number" id="item-salediscountamt-input" placeholder="예: 10000" oninput="onSaleDiscountAmtInput()"></div>
-          <div class="stack-row"><label>할인 계산 기준 <span class="info-tip" title="매입처·판매처에 저장해둔 기준이 자동으로 들어옵니다. 이 재고에서만 다르게 하려면 바꾸세요.">ⓘ</span></label>
+          <div class="stack-row"><label>매입 할인 기준 <span class="info-tip" title="선할인%·타할인%를 어디에 곱할지 정합니다. 매입처에 저장해둔 기준이 자동으로 들어옵니다. 이 재고에서만 다르게 하려면 바꾸세요.">ⓘ</span></label>
             <select id="item-base-select" onchange="onItemBaseChange()">
+              <option value="unit">대당 (출고가에 걸기)</option>
+              <option value="total">합계 (출고가에 걸기)</option>
+              <option value="supply">공급가 기준 (삼성전자 방식)</option>
+            </select>
+          </div>
+          <div class="stack-row"><label>판매 할인 기준 <span class="info-tip" title="판매할인%를 어디에 곱할지 정합니다. 매입과 판매는 별개라 따로 정합니다. 판매처에 저장해둔 기준이 자동으로 들어옵니다.">ⓘ</span></label>
+            <select id="item-salebase-select" onchange="onItemSaleBaseChange()">
               <option value="unit">대당 (출고가에 걸기)</option>
               <option value="total">합계 (출고가에 걸기)</option>
               <option value="supply">공급가 기준 (삼성전자 방식)</option>
@@ -7403,19 +7414,29 @@
   }
   //  업체정보에 저장한 기준으로 계산 밑금액을 냅니다. (공급가면 VAT 제외)
   //  재고 창에서 기준을 바꾸면 그 자리에서 금액을 다시 냅니다.
+  //  매입 기준을 바꾸면 선할인·타할인 금액만 다시 냅니다. (판매는 판매 기준으로 따로)
   window.onItemBaseChange = function(){
     itemBaseOverride = String((document.getElementById("item-base-select")||{}).value||"") || null;
     const L = Number((document.getElementById("item-listprice-input")||{}).value) || 0;
     [["item-purchasediscount-input","item-purchasediscountamt-input"],
-     ["item-otherdiscountpct-input","item-otherdiscountamt-input"],
-     ["item-salediscount-input","item-salediscountamt-input"]].forEach(([pctId, amtId])=>{
+     ["item-otherdiscountpct-input","item-otherdiscountamt-input"]].forEach(([pctId, amtId])=>{
       const pe = document.getElementById(pctId), ae = document.getElementById(amtId);
       if(!pe || !ae) return;
       if(String(pe.value||"").trim() !== "") ae.value = amtFromPct(pe.value, L);
     });
     if(typeof recalcItemPrices === "function") recalcItemPrices();
   };
+  //  판매 기준을 바꾸면 판매할인 금액만 다시 냅니다.
+  window.onItemSaleBaseChange = function(){
+    itemSaleBaseOverride = String((document.getElementById("item-salebase-select")||{}).value||"") || null;
+    const L = Number((document.getElementById("item-listprice-input")||{}).value) || 0;
+    const pe = document.getElementById("item-salediscount-input");
+    const ae = document.getElementById("item-salediscountamt-input");
+    if(pe && ae && String(pe.value||"").trim() !== "") ae.value = saleAmtFromPct(pe.value, L);
+    if(typeof recalcItemPrices === "function") recalcItemPrices();
+  };
   let itemBaseOverride = null;
+  let itemSaleBaseOverride = null;
 
   window.baseByCompany = function(companyName, listPrice, override){
     const L = Number(listPrice)||0;
@@ -7437,6 +7458,22 @@
     if(!listPrice) return "";
     return Math.round(discBase(listPrice) * Number(pctRaw)/100);
   }
+  //  판매할인%를 곱할 금액입니다. 매입과 따로 정합니다.
+  function saleDiscBase(listPrice){
+    const b = itemSaleBaseOverride || "";
+    return (b === "supply") ? (Number(listPrice)||0)/1.1 : (Number(listPrice)||0);
+  }
+  function saleAmtFromPct(pctRaw, listPrice){
+    if(pctRaw === "" || pctRaw == null) return "";
+    if(!listPrice) return "";
+    return Math.round(saleDiscBase(listPrice) * Number(pctRaw)/100);
+  }
+  function salePctFromAmt(amtRaw, listPrice){
+    if(amtRaw === "" || amtRaw == null) return "";
+    if(!listPrice) return "";
+    const B = saleDiscBase(listPrice);
+    return B ? ((Number(amtRaw)/B)*100).toFixed(2) : "";
+  }
 
   function updateTotalDiscountDisplay(){
     const preAmt = Number(document.getElementById("item-purchasediscountamt-input").value) || 0;
@@ -7456,9 +7493,33 @@
     updateTotalDiscountDisplay();
     updateProfitDisplay();
   };
+  //  입고동일 — 사온 조건(선할인+타할인)을 판매 쪽에 그대로 옮기고 칸을 잠급니다.
+  window.onItemSameBuyChange = function(){
+    const on = !!(document.getElementById("item-samebuy-input")||{}).checked;
+    const L   = Number((document.getElementById("item-listprice-input")||{}).value) || 0;
+    const buy = Number((document.getElementById("item-purchaseprice-input")||{}).value) || 0;
+    const pre = Number((document.getElementById("item-purchasediscountamt-input")||{}).value) || 0;
+    const oth = Number((document.getElementById("item-otherdiscountamt-input")||{}).value) || 0;
+    const pPct= Number((document.getElementById("item-purchasediscount-input")||{}).value) || 0;
+    const oPct= Number((document.getElementById("item-otherdiscountpct-input")||{}).value) || 0;
+    if(on){
+      const amt = (pre + oth) || (L ? (L - buy) : 0);
+      const pct = (pPct + oPct) ? Number((pPct + oPct).toFixed(2))
+                : (L ? Number(((amt / L) * 100).toFixed(2)) : "");
+      const set=(id,v)=>{ const e=document.getElementById(id); if(e) e.value=(v==null||v==="")?"":v; };
+      set("item-saleprice-input", buy);
+      set("item-salediscountamt-input", amt);
+      set("item-salediscount-input", pct);
+    }
+    ["item-saleprice-input","item-salediscountamt-input","item-salediscount-input","item-salebase-select"]
+      .forEach(id=>{ const e=document.getElementById(id); if(!e) return;
+        e.disabled = on; e.style.background = on ? "#eee" : ""; });
+    if(typeof updateProfitDisplay === "function") updateProfitDisplay();
+  };
+
   window.onSaleDiscountInput = function(){
     const listPrice = Number(document.getElementById("item-listprice-input").value) || 0;
-    const amt = amtFromPct(document.getElementById("item-salediscount-input").value, listPrice);
+    const amt = saleAmtFromPct(document.getElementById("item-salediscount-input").value, listPrice);
     document.getElementById("item-salediscountamt-input").value = amt;
     if(amt !== "") document.getElementById("item-saleprice-input").value = listPrice - Number(amt);
     updateProfitDisplay();
@@ -7502,7 +7563,7 @@
   window.onSaleDiscountAmtInput = function(){
     const listPrice = Number(document.getElementById("item-listprice-input").value) || 0;
     const amt = document.getElementById("item-salediscountamt-input").value;
-    document.getElementById("item-salediscount-input").value = pctFromAmt(amt, listPrice);
+    document.getElementById("item-salediscount-input").value = salePctFromAmt(amt, listPrice);
     if(listPrice && amt !== "") document.getElementById("item-saleprice-input").value = listPrice - Number(amt);
     updateProfitDisplay();
   };
@@ -7526,7 +7587,7 @@
     if(listPrice && price !== ""){
       const amt = listPrice - Number(price);
       document.getElementById("item-salediscountamt-input").value = amt;
-      document.getElementById("item-salediscount-input").value = pctFromAmt(amt, listPrice);
+      document.getElementById("item-salediscount-input").value = salePctFromAmt(amt, listPrice);
     }
   };
 
@@ -7553,6 +7614,9 @@
   let serialAddCount = 0;
   window.openItemModal = function(){
     itemBaseOverride = null;   // 창을 열 때마다 초기화합니다.
+    itemSaleBaseOverride = null;
+    { const e = document.getElementById("item-samebuy-input"); if(e) e.checked = false;
+      if(typeof onItemSameBuyChange === "function") onItemSameBuyChange(); }
     editingItemId = null;
     serialAddCount = 0;
     document.getElementById("item-serial-count-msg").style.display = "none";
@@ -7683,13 +7747,31 @@
     document.getElementById("item-otherdiscountpct-input").value = it.otherDiscountPct || "";
     updateTotalDiscountDisplay();
     document.getElementById("item-clawback-row").style.display = (it.subsidyStatus==="환수") ? "flex" : "none";
-    { // 이 재고에 저장된 기준이 있으면 그것을, 없으면 업체정보 값을 넣습니다.
+    { // 매입 기준 — 이 재고에 저장된 값이 먼저, 없으면 매입처 설정
       const own = String(it.discountBase||"");
       const c0 = (companiesCache||[]).find(x=> String(x.name||"").trim() === String(it.source||"").trim());
       const bs = document.getElementById("item-base-select");
       if(bs) bs.value = (own === "unit" || own === "total" || own === "supply") ? own
         : ((c0 && (c0.discountBase === "total" || c0.discountBase === "supply")) ? c0.discountBase : "unit");
       itemBaseOverride = (bs ? String(bs.value||"") : "") || null; }
+    { // 판매 기준 — 저장된 값이 먼저, 없으면 판매처 설정, 그것도 없으면 실제 금액에서 역산
+      const ownS = String(it.saleDiscountBase||"");
+      const cD = (companiesCache||[]).find(x=> String(x.name||"").trim() === String(it.destination||"").trim());
+      let v = (ownS === "unit" || ownS === "total" || ownS === "supply") ? ownS : "";
+      if(!v && cD){
+        const sb = String(cD.saleDiscountBase||"");
+        if(sb === "supply" || sb === "total" || sb === "unit") v = sb;
+        else if(sb === "follow") v = (itemBaseOverride || "unit");
+      }
+      if(!v && typeof actualSaleBase === "function"){
+        v = (String(actualSaleBase(it)).indexOf("공급가") === 0) ? "supply" : "";
+      }
+      const bs2 = document.getElementById("item-salebase-select");
+      if(bs2) bs2.value = v || "unit";
+      itemSaleBaseOverride = (bs2 ? String(bs2.value||"") : "") || null; }
+    { const e = document.getElementById("item-samebuy-input");
+      if(e) e.checked = (it.salePriceFollowsBuy === true);
+      if(typeof onItemSameBuyChange === "function") onItemSameBuyChange(); }
     { const e = document.getElementById("item-returndate-input"); if(e) e.value = it.returnDate || ""; }
     { const e = document.getElementById("item-creditreturndate-input"); if(e) e.value = it.creditReturnDate || ""; }
     currentOrderLinkId = it.orderId || null;
@@ -7871,6 +7953,9 @@
       // 이 재고에서만 쓰는 할인 계산 기준입니다. 업체정보 값은 「기본으로 들어오는 값」일 뿐이고,
       //  여기 저장된 값이 있으면 이후 다시 계산할 때도 이것을 먼저 씁니다.
       discountBase: String((document.getElementById("item-base-select")||{}).value||"") || null,
+      // 판매할인%를 곱한 기준입니다. 매입과 따로 저장합니다.
+      saleDiscountBase: String((document.getElementById("item-salebase-select")||{}).value||"") || null,
+      salePriceFollowsBuy: !!(document.getElementById("item-samebuy-input")||{}).checked,
       returnDate: (document.getElementById("item-returndate-input")||{}).value || "",
       creditReturnDate: (document.getElementById("item-creditreturndate-input")||{}).value || "",
       orderId: currentOrderLinkId||null,
@@ -7913,100 +7998,16 @@
         showModelMsg("item-result-msg", "<b>저장에 실패했습니다.</b><br>" + comboEsc((e && e.message) ? e.message : String(e)), true);
         return;
       }
-      // ── 바뀐 값을 이어진 곳에도 반영합니다. (주문 품목 · 판매요청) ──
-      //  재고만 고치면 주문의 타할인(클럽장려금 기준)과 판매요청 금액이 어긋납니다.
-      let ordFixed2 = 0, srFixed2 = 0, srBlocked = 0, srbFixed = 0;
+      // ── 딸린 곳을 한 번에 맞춥니다. (주문 품목 · 여신 · 판매요청 · 묶음 합계) ──
       const cur0 = (lastRenderedItems||[]).find(x=> x.id === editingItemId) || {};
       const chg = (k)=>{
-        const a = (cur0[k] === undefined || cur0[k] === null) ? "" : String(cur0[k]);
-        const b = (base[k]  === undefined || base[k]  === null) ? "" : String(base[k]);
-        return a !== b;
+        const x = (cur0[k] === undefined || cur0[k] === null) ? "" : String(cur0[k]);
+        const y = (base[k]  === undefined || base[k]  === null) ? "" : String(base[k]);
+        return x !== y;
       };
-      const buyChanged  = ["purchaseDiscount","purchaseDiscountAmt","otherDiscountPct",
-                           "otherDiscountAmt","purchasePrice","listPrice","discountBase"].some(chg);
-      const saleChanged = ["salePrice","saleDiscount","saleDiscountAmt","destination"].some(chg);
+      let linkOut = {};
       try{
-        if(buyChanged && cur0.orderId){
-          await updateDoc(doc(db,"orders", cur0.orderId), {
-            preDiscountAmt:   Number(base.purchaseDiscountAmt)||0,
-            otherDiscountAmt: Number(base.otherDiscountAmt)||0,
-            purchasePrice:    Number(base.purchasePrice)||0 });
-          ordFixed2++;
-        }
-      }catch(e){}
-      try{
-        if(saleChanged && cur0.saleRequestId){
-          // 입금까지 끝난 판매요청은 건드리지 않습니다. (받은 돈과 달라집니다)
-          let paid = false;
-          const sd = await getDoc(doc(db,"saleRequests", cur0.saleRequestId));
-          if(sd.exists() && sd.data().batchId){
-            const bd = await getDoc(doc(db,"saleRequestBatches", sd.data().batchId));
-            if(bd.exists() && bd.data().depositReceived === true) paid = true;
-          }
-          if(paid){ srBlocked++; }
-          else{
-            await updateDoc(doc(db,"saleRequests", cur0.saleRequestId), {
-              salePrice:        base.salePrice != null ? Number(base.salePrice) : null,
-              saleDiscountAmt:  base.saleDiscountAmt != null ? Number(base.saleDiscountAmt) : null,
-              saleDiscountPct:  base.saleDiscount != null ? Number(base.saleDiscount) : null,
-              ...(base.destination ? { destination: base.destination } : {}) });
-            srFixed2++;
-            // 판매요청이 바뀌면 그 묶음 합계도 다시 냅니다.
-            //  묶음 합계는 입금요청 금액이 되므로 안 맞으면 받을 돈이 틀어집니다.
-            const bId = sd.data().batchId || "";
-            if(bId){
-              try{
-                const sib = await getDocs(query(collection(db,"saleRequests"), where("batchId","==", bId)));
-                let sum = 0, cnt = 0;
-                sib.forEach(d2=>{
-                  const v = d2.data();
-                  if(v.status === "취소") return;
-                  const q = Number(v.quantity)||1;
-                  // 방금 저장한 건은 새 값으로 셉니다. (읽기 시점 차이 때문)
-                  const price = (d2.id === cur0.saleRequestId)
-                    ? (base.salePrice != null ? Number(base.salePrice) : 0)
-                    : (Number(v.salePrice)||0);
-                  sum += price * q; cnt++;
-                });
-                await updateDoc(doc(db,"saleRequestBatches", bId), {
-                  depositRequired: Math.round(sum), lineCount: cnt });
-                srbFixed++;
-              }catch(e){}
-            }
-          }
-        }
-      }catch(e){}
-
-      // ── 여신 차감액도 다시 냅니다. ──
-      //  여신으로 산 주문은 선할인까지 반영된 금액이 차감됩니다.
-      //  담보 계산서에 묶인 주문은 계산서 금액에 맞춰둔 것이라 건드리지 않습니다.
-      let creditFixed = 0, creditSkipped = 0;
-      try{
-        if(buyChanged && cur0.orderId){
-          const od = await getDoc(doc(db,"orders", cur0.orderId));
-          const bId = od.exists() ? String(od.data().batchId||"") : "";
-          if(bId){
-            const bd = await getDoc(doc(db,"orderBatches", bId));
-            const b = bd.exists() ? bd.data() : null;
-            if(b && b.paymentMethod === "b2b_credit" && b.status !== "취소"){
-              if(b.collateralId){
-                creditSkipped++;      // 담보 계산서에 묶인 주문
-              }else{
-                const ls = await getDocs(query(collection(db,"orders"), where("batchId","==", bId)));
-                const lines = [];
-                ls.forEach(d2=>{ const v = d2.data(); if(v.status === "취소") return;
-                  lines.push(d2.id === cur0.orderId
-                    ? { ...v, listPrice: base.listPrice, quantity: v.quantity,
-                        preDiscountAmt: base.purchaseDiscountAmt, preDiscountPct: base.purchaseDiscount }
-                    : v); });
-                const want = creditFromLines(b.source, lines);
-                await replaceB2BOrderUse(bId, want,
-                  b.depositPaidDate || b.orderDate || todayStr(), b.source || "-");
-                creditFixed++;
-              }
-            }
-          }
-        }
+        linkOut = await syncItemLinks([{ id: editingItemId, before: cur0, after: base }]);
       }catch(e){}
 
       // 단말 이력에 무엇이 어떻게 바뀌었는지 남깁니다.
@@ -8034,23 +8035,9 @@
       }catch(e){}
 
       clearDashCache(); clearCache("inventory");
-      if(ordFixed2) clearCache("orders");
-      if(creditFixed) clearCache("loan");
-      if(srFixed2 || srbFixed) clearCache("saleRequests");
-      logAction("재고 수정", docModelLabel(m)+" "+colorLabel+" / "+carrier
-        + (ordFixed2 ? " / 주문 품목 함께 수정" : "")
-        + (srFixed2  ? " / 판매요청 함께 수정" : "")
-        + (srbFixed  ? " / 묶음 합계 다시 계산" : "")
-        + (creditFixed ? " / 여신 차감액 다시 계산" : "")
-        + (creditSkipped ? " / 담보 계산서 주문이라 여신은 그대로" : "")
-        + (srBlocked ? " / 입금완료라 판매요청은 그대로" : ""));
+      logAction("재고 수정", docModelLabel(m)+" "+colorLabel+" / "+carrier + syncLinksText(linkOut));
       showModelMsg("item-result-msg", "저장되었습니다."
-        + (ordFixed2 ? " 주문 품목도 함께 맞췄습니다." : "")
-        + (srFixed2  ? " 판매요청도 함께 맞췄습니다." : "")
-        + (srbFixed  ? " 묶음 합계도 다시 냈습니다." : "")
-        + (creditFixed ? " 여신 차감액도 다시 냈습니다." : "")
-        + (creditSkipped ? " <span style=\'color:#b8860b;\'>담보 계산서에 묶인 주문이라 여신은 그대로 두었습니다.</span>" : "")
-        + (srBlocked ? " <span style=\'color:var(--danger);\'>입금이 끝난 판매요청은 그대로 두었습니다.</span>" : ""), false);
+        + comboEsc(syncLinksText(linkOut)), false);
       loadInventoryList();
       setTimeout(closeItemModal, 600);
       return;
@@ -26086,6 +26073,130 @@
     }catch(e){ console.error("단말 이력 기록 실패", e); }
   }
 
+  // ================= 재고를 바꾸면 딸린 곳을 한 번에 맞춥니다 =================
+  //  재고 값은 주문 품목 · 판매요청 · 묶음 합계 · 여신에도 저장돼 있습니다.
+  //  어느 화면에서 고치든 이 함수 하나만 부르면 전부 따라갑니다.
+  //  ※ 새 기능을 만들 때도 재고를 바꿨으면 반드시 이 함수를 부르세요.
+  //
+  //  rows : [{ id, before, after }]   before/after 는 그 재고의 값(부분만 있어도 됩니다)
+  //  돌려주는 값 : { order, sale, batch, credit, blocked, skipped }
+  async function syncItemLinks(rows){
+    const out = { order:0, sale:0, batch:0, credit:0, blocked:0, skipped:0 };
+    if(!rows || rows.length === 0) return out;
+    const BUY  = ["listPrice","purchaseDiscount","purchaseDiscountAmt",
+                  "otherDiscountPct","otherDiscountAmt","purchasePrice","discountBase"];
+    const SALE = ["salePrice","saleDiscount","saleDiscountAmt","destination","saleDiscountBase"];
+    const changed = (b,a,keys)=> keys.some(k=>{
+      if(a[k] === undefined) return false;
+      const x = (b && b[k] != null) ? String(b[k]) : "";
+      const y = (a[k] != null) ? String(a[k]) : "";
+      return x !== y;
+    });
+    const val = (b,a,k)=> (a[k] !== undefined) ? a[k] : (b ? b[k] : null);
+
+    const seenOrder = new Set(), seenBatch = new Set(), seenCredit = new Set();
+    for(const r of rows){
+      const b = r.before || {}, a = r.after || {};
+
+      // ── 매입 쪽 ──
+      if(changed(b,a,BUY) && b.orderId){
+        try{
+          if(!seenOrder.has(b.orderId)){
+            seenOrder.add(b.orderId);
+            await updateDoc(doc(db,"orders", b.orderId), {
+              listPrice:        Number(val(b,a,"listPrice"))||0,
+              preDiscountAmt:   Number(val(b,a,"purchaseDiscountAmt"))||0,
+              otherDiscountAmt: Number(val(b,a,"otherDiscountAmt"))||0,
+              purchasePrice:    Number(val(b,a,"purchasePrice"))||0 });
+            out.order++;
+          }
+          // 여신 차감액 — 담보 계산서에 묶인 주문은 계산서에 맞춰둔 것이라 건드리지 않습니다.
+          const od = await getDoc(doc(db,"orders", b.orderId));
+          const bId = od.exists() ? String(od.data().batchId||"") : "";
+          if(bId && !seenCredit.has(bId)){
+            seenCredit.add(bId);
+            const bd = await getDoc(doc(db,"orderBatches", bId));
+            const ob = bd.exists() ? bd.data() : null;
+            if(ob && ob.paymentMethod === "b2b_credit" && ob.status !== "취소"){
+              if(ob.collateralId){ out.skipped++; }
+              else{
+                const ls = await getDocs(query(collection(db,"orders"), where("batchId","==", bId)));
+                const lines = [];
+                ls.forEach(d2=>{ const v = d2.data(); if(v.status !== "취소") lines.push(v); });
+                const want = creditFromLines(ob.source, lines);
+                await replaceB2BOrderUse(bId, want,
+                  ob.depositPaidDate || ob.orderDate || todayStr(), ob.source || "-");
+                out.credit++;
+              }
+            }
+          }
+        }catch(e){}
+      }
+
+      // ── 판매 쪽 ── 입금이 끝난 판매요청은 받은 돈이라 손대지 않습니다.
+      if(changed(b,a,SALE) && b.saleRequestId){
+        try{
+          const sd = await getDoc(doc(db,"saleRequests", b.saleRequestId));
+          if(sd.exists()){
+            const bId = String(sd.data().batchId||"");
+            let paid = false;
+            if(bId){
+              const bd = await getDoc(doc(db,"saleRequestBatches", bId));
+              if(bd.exists() && bd.data().depositReceived === true) paid = true;
+            }
+            if(paid){ out.blocked++; }
+            else{
+              const sp = val(b,a,"salePrice");
+              await updateDoc(doc(db,"saleRequests", b.saleRequestId), {
+                salePrice:       sp != null ? Number(sp) : null,
+                saleDiscountAmt: val(b,a,"saleDiscountAmt") != null ? Number(val(b,a,"saleDiscountAmt")) : null,
+                saleDiscountPct: val(b,a,"saleDiscount")    != null ? Number(val(b,a,"saleDiscount"))    : null,
+                ...(val(b,a,"destination") ? { destination: val(b,a,"destination") } : {}) });
+              out.sale++;
+              // 묶음 합계 — 입금요청 금액이 되므로 다시 셉니다.
+              if(bId && !seenBatch.has(bId)){
+                seenBatch.add(bId);
+                const sib = await getDocs(query(collection(db,"saleRequests"), where("batchId","==", bId)));
+                let sum = 0, cnt = 0;
+                sib.forEach(d2=>{
+                  const v = d2.data();
+                  if(v.status === "취소") return;
+                  const q = Number(v.quantity)||1;
+                  const price = (d2.id === b.saleRequestId) ? (Number(sp)||0) : (Number(v.salePrice)||0);
+                  sum += price * q; cnt++;
+                });
+                await updateDoc(doc(db,"saleRequestBatches", bId), {
+                  depositRequired: Math.round(sum), lineCount: cnt });
+                out.batch++;
+              }
+            }
+          }
+        }catch(e){}
+      }
+    }
+    if(out.order || out.credit) clearCache("orders");
+    if(out.credit) clearCache("loan");
+    if(out.sale || out.batch) clearCache("saleRequests");
+    clearDashCache();
+    return out;
+  }
+  window.syncItemLinks = syncItemLinks;
+
+  // 위 결과를 사람이 읽는 한 줄로 만듭니다.
+  function syncLinksText(o){
+    if(!o) return "";
+    const p = [];
+    if(o.order)  p.push("주문 품목 " + o.order + "건");
+    if(o.credit) p.push("여신 차감액 " + o.credit + "건");
+    if(o.sale)   p.push("판매요청 " + o.sale + "건");
+    if(o.batch)  p.push("묶음 합계 " + o.batch + "건");
+    let t = p.length ? (" · " + p.join(" · ") + " 함께 맞춤") : "";
+    if(o.blocked) t += " · 입금완료 " + o.blocked + "건은 그대로";
+    if(o.skipped) t += " · 담보 계산서 주문 " + o.skipped + "건은 여신 그대로";
+    return t;
+  }
+  window.syncLinksText = syncLinksText;
+
   // 건마다 내용이 다른 이력을 남깁니다. (일괄 변경처럼 「전 → 후」가 대마다 다를 때)
   //  일자는 언제나 작업한 날로 둡니다 — 내용에 적힌 날짜 숫자에 정렬이 끌려가지 않게 합니다.
   async function logItemsEach(rows, type, extra){
@@ -33232,7 +33343,16 @@
     }
     clearDashCache(); clearCache("inventory");
     logAction("재고 일괄 수정(다중항목)", ids.length + "건 / " + changed.length + "개 항목"
-      + (srFixed ? " / 판매요청 " + srFixed + "건 함께 수정" : ""));
+      + (srFixed ? " / 판매요청 " + srFixed + "건 함께 수정" : "") + syncLinksText(linkOutM));
+    // 딸린 곳을 한 번에 맞춥니다.
+    let linkOutM = {};
+    try{
+      linkOutM = await syncItemLinks(ids.map(id=>{
+        const it = lastRenderedItems.find(x=>x.id===id);
+        return it ? { id, before: it, after: { ...it, ...patch } } : null;
+      }).filter(Boolean));
+    }catch(e){}
+
     // 단말기마다 이력을 남깁니다. 대마다 「전 → 후」를 따로 적습니다.
     try{
       await logItemsEach(ids.map(id=>{
@@ -33428,6 +33548,12 @@
       }catch(e){ alert("바꾸지 못했습니다.\n" + ((e&&e.message)?e.message:String(e))); return; }
 
       try{ await logItemsEach(ihBase, "price", {}); }catch(e){}
+      try{ await syncItemLinks(targets.map(it=>{
+        const c = calc(it);
+        return { id: it.id, before: it,
+                 after: { ...it, discountBase: want, purchaseDiscountAmt: c.pre,
+                          otherDiscountAmt: c.other, purchasePrice: c.buy } };
+      })); }catch(e){}
       logAction("재고 일괄 변경", "할인 계산 기준 → " + baseLabel + " (" + n1 + "건"
         + (n2 ? " / 판매요청 " + n2 + "건" : "") + (n3 ? " / 주문 품목 " + n3 + "건" : "")
         + (paidT.length ? " / 입금완료 " + paidT.length + "대는 매입만" : "") + ")");
@@ -33521,6 +33647,16 @@
         + (n2 ? " / 판매요청 " + n2 + "건" : "") + (n3 ? " / 주문 품목 " + n3 + "건" : "")
         + (paidR.size ? " / 입금완료 " + paidR.size + "대는 매입만" : "") + ")");
       try{ await logItemsEach(ihRecalc, "price", {}); }catch(e){}
+      try{ await syncItemLinks(list.map(it=>{
+        const L2 = Number(it.listPrice)||0;
+        if(!L2) return null;
+        const B2 = baseFor(it, L2);
+        const np2 = Math.round(B2*(Number(it.purchaseDiscount)||0)/100);
+        const no2 = Math.round(B2*(Number(it.otherDiscountPct)||0)/100);
+        return { id: it.id, before: it,
+                 after: { ...it, purchaseDiscountAmt: np2, otherDiscountAmt: no2,
+                          purchasePrice: L2 - np2 - no2 } };
+      }).filter(Boolean)); }catch(e){}
       clearCache("inventory"); clearCache("saleRequests"); clearCache("orders"); clearCache("loan"); clearDashCache();
       clearInvSelectAll();
       closeBulkChangeModal();
@@ -33740,6 +33876,17 @@
         + (n2 ? " / 판매요청 " + n2 + "건 함께 수정" : "")
         + (n3 ? " / 주문 품목 " + n3 + "건 함께 수정" : "") + ")");
       try{ await logItemsEach(ihSame, "price", {}); }catch(e){}
+      try{ await syncItemLinks(targets.map(it=>{
+        const f = buyFix[it.id];
+        const buy2 = f ? f.buy : (Number(it.purchasePrice)||0);
+        const sb2 = saleFromBuy({ ...it,
+          purchaseDiscountAmt: f ? f.pre : it.purchaseDiscountAmt,
+          otherDiscountAmt:    f ? f.other : it.otherDiscountAmt,
+          purchasePrice: buy2 });
+        return { id: it.id, before: it, after: { ...it,
+          ...(f ? { purchaseDiscountAmt:f.pre, otherDiscountAmt:f.other, purchasePrice:f.buy } : {}),
+          salePrice: buy2, saleDiscountAmt: sb2.amt, saleDiscount: sb2.pct } };
+      })); }catch(e){}
       clearCache("inventory"); clearCache("saleRequests"); clearCache("orders"); clearCache("loan"); clearDashCache();
       clearInvSelectAll();
       closeBulkChangeModal();
@@ -33855,6 +34002,19 @@
             + (alsoTxt ? " (함께 " + alsoTxt + ")" : "") }); }
       await updateDoc(doc(db,"inventoryItems", id), patch);
     }
+    // 딸린 곳(주문 품목 · 여신 · 판매요청 · 묶음 합계)을 한 번에 맞춥니다.
+    let linkOutB = {};
+    try{
+      linkOutB = await syncItemLinks(ids.map(id=>{
+        const it = (lastRenderedItems||[]).find(x=> x.id === id);
+        if(!it) return null;
+        const after = { ...it };
+        after[key] = parsedVal;
+        if(useLink) Object.assign(after, computeLinkedPatch(it, key, parsedVal));
+        return { id, before: it, after };
+      }).filter(Boolean));
+    }catch(e){}
+
     // 재고의 할인을 바꾸면 그 재고가 붙어 있는 주문 품목도 같은 값으로 맞춥니다.
     //  주문의 타할인은 여신 화면의 「클럽장려금 받을 금액」 기준이 됩니다.
     let ordFixed = 0;
@@ -33950,7 +34110,7 @@
       + " (" + ids.length + "건" + (useLink ? " / 연동계산 " + linkedCount + "건" : " / 연동 없음")
       + (srFixed ? " / 판매요청 " + srFixed + "건 함께 수정" : "")
       + (followFixed ? " / 판매가 따라가기 " + followFixed + "건" : "")
-      + (ordFixed ? " / 주문 품목 " + ordFixed + "건 함께 수정" : "") + ")");
+      + (ordFixed ? " / 주문 품목 " + ordFixed + "건 함께 수정" : "") + ")" + syncLinksText(linkOutB));
     // 단말기마다 이력을 남깁니다. (일련번호를 눌러 보는 <단말 이력>에 나옵니다)
     try{ await logItemsEach(ihRows, "edited", {}); }catch(e){}
     // 담아둔 자료도 함께 비웁니다. 안 비우면 방금 바꾼 값이 화면에 안 보입니다.
