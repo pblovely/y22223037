@@ -387,7 +387,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-28 v817</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-28 v818</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -31256,7 +31256,11 @@
           destination: dest, modelId: o.modelId, baseModel:o.baseModel, capacity:o.capacity,
           systemModel:o.systemModel, petName:o.petName||"", carrier: o.carrier||"",
           quantity: o.quantity, fulfilledCount:0, matchedItemIds:[],
-          salePrice: o.salePrice, requestDate, status:"대기중",
+          salePrice: o.salePrice,
+          saleDiscountAmt: (o.saleDiscountAmt != null) ? Number(o.saleDiscountAmt) : null,
+          saleDiscountPct: (o.saleDiscount    != null) ? Number(o.saleDiscount)
+                          : ((o.saleDiscountPct != null) ? Number(o.saleDiscountPct) : null),
+          requestDate, status:"대기중",
           fromOrderId: id,
           createdBy: currentUser.name, createdByUsername: currentUser.username, createdAt: serverTimestamp()
         });
@@ -38887,7 +38891,9 @@
       }
       await updateDoc(doc(db,"inventoryItems", itemDoc.id), patch);
       sold++;
-      if(salePrice) madeLines.push({ id:itemDoc.id, it, salePrice:Number(salePrice) });
+      if(salePrice) madeLines.push({ id:itemDoc.id, it, salePrice:Number(salePrice),
+        saleDiscountAmt: (patch.saleDiscountAmt != null) ? patch.saleDiscountAmt : null,
+        saleDiscountPct: (patch.saleDiscount    != null) ? patch.saleDiscount    : null });
     }
 
     // 판매요청도 한 묶음으로 만듭니다. 그래야 판매 관리에 뜨고 입금요청을 만들 수 있습니다.
@@ -38911,6 +38917,9 @@
             carrier: x.it.carrier||"",
             quantity: 1, fulfilledCount: 1, matchedItemIds: [x.id],
             salePrice: x.salePrice, listPrice: x.it.listPrice || null,
+            // 판매할인·%도 함께 담습니다. 안 담으면 재고와 판매요청이 어긋납니다.
+            saleDiscountAmt: (x.saleDiscountAmt != null) ? Number(x.saleDiscountAmt) : null,
+            saleDiscountPct: (x.saleDiscountPct != null) ? Number(x.saleDiscountPct) : null,
             requestDate: outDate, status: "매칭완료",
             createdBy: currentUser.name, createdByUsername: currentUser.username, createdAt: serverTimestamp()
           });
