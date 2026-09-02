@@ -387,7 +387,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-02 v864</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-02 v867</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -28338,6 +28338,7 @@
   let noSaleReqCache = [];       // 판매요청이 없는데 나간 재고
   let halfSoldCache = [];        // 한 판매요청인데 상태가 섞인 건
   let cancelReSoldCache = [];    // 판매 취소를 거쳐 다시 판 재고
+  let soldDupCache = [];         // 판매한 건 중 통신사·모델·일련번호가 겹침
   let sameBuyDiffSkip = 0;
   let baseDiffGroups = {};       // 위를 매입처·기준·%·출고가로 묶은 것
   let baseDiffKeys = [];         // 묶음 순서 (체크박스 번호와 맞춥니다)
@@ -29555,6 +29556,258 @@
     clearCache("inventory"); clearDashCache();
     alert("채웠습니다.\n\n  재고 " + n + "대\n\n금액은 하나도 바뀌지 않았습니다.");
     baseFillCache = []; runDataCheck();
+  };
+
+  // 중복된 그 한 대만 판매요청에서 뺍니다. (나머지 건은 그대로 둡니다)
+  window.removeOneFromSaleReq = async function(srId, itemId, serial){
+    if(!srId || !itemId){ alert("찾을 수 없습니다."); return; }
+    let sr = null;
+    try{
+      const d = await getDoc(doc(db,"saleRequests", srId));
+      if(d.exists()) sr = d.data();
+    }catch(e){}
+    if(!sr){ alert("판매요청을 찾을 수 없습니다."); return; }
+    if(sr.status === "취소"){ alert("이미 취소된 판매요청입니다."); runDataCheck(); return; }
+    const ids = Array.isArray(sr.matchedItemIds) ? sr.matchedItemIds.slice() : [];
+    if(ids.indexOf(itemId) < 0){ alert("이 판매요청에 그 재고가 없습니다."); return; }
+    const one = Number(sr.salePrice)||0;
+    const qty = Number(sr.quantity)||ids.length;
+    if(!confirm("이 판매요청에서 " + serial + " 한 대만 뺍니다.\n\n"
+      + "  판매처   " + (sr.destination||"-") + "\n"
+      + "  요청일   " + (sr.requestDate||"-") + "\n"
+      + "  지금     " + qty + "대 · " + (one*qty).toLocaleString() + "\n"
+      + "  뺀 뒤    " + (qty-1) + "대 · " + (one*(qty-1)).toLocaleString() + "\n\n"
+      + "나머지 " + (qty-1) + "대는 그대로 둡니다.\n"
+      + "이 재고는 앞의 판매요청으로 되돌립니다.\n\n진행할까요?")) return;
+    const reason = prompt("사유를 입력해주세요. (필수)", "중복 판매 정리");
+    if(reason === null) return;
+    if(!String(reason).trim()){ alert("사유를 입력해주세요."); return; }
+    try{
+      const rest = ids.filter(function(x){ return x !== itemId; });
+      if(rest.length === 0){
+        alert("이 판매요청에는 이 재고 하나뿐입니다.\n판매요청 전체를 취소해주세요.");
+        return;
+      }
+      await updateDoc(doc(db,"saleRequests", srId), {
+        matchedItemIds: rest,
+        quantity: rest.length,
+        matchedCount: rest.length
+      });
+      // 묶음 합계도 다시 맞춥니다.
+      if(sr.batchId){
+        try{
+          const q2 = await getDocs(query(collection(db,"saleRequests"), where("batchId","==", sr.batchId)));
+          let tot = 0, cnt = 0;
+          q2.forEach(function(d){
+            const v = d.data();
+            if(v.status === "취소") return;
+            const n = (d.id === srId) ? rest.length : (Number(v.quantity)||(v.matchedItemIds||[]).length);
+            tot += (Number(v.salePrice)||0) * n; cnt++;
+          });
+          await updateDoc(doc(db,"saleRequestBatches", sr.batchId), { depositRequired: tot, lineCount: cnt });
+        }catch(e){}
+      }
+      // 뺀 재고를 앞의 판매요청으로 되돌립니다.
+      let prev = null;
+      try{
+        const all = await getDocs(query(collection(db,"saleRequests"), where("matchedItemIds","array-contains", itemId)));
+        all.docs.forEach(function(d){
+          if(d.id === srId) return;
+          const v = d.data();
+          if(v.status === "취소" || v.deleted === true) return;
+          if(!prev || String(v.requestDate||"") < String(prev.requestDate||"")) prev = { id:d.id, ...v };
+        });
+      }catch(e){}
+      const isnap = await getDoc(doc(db,"inventoryItems", itemId));
+      const it = isnap.exists() ? isnap.data() : {};
+      await updateDoc(doc(db,"inventoryItems", itemId),
+        prev ? { saleRequestId: prev.id, destination: prev.destination || it.destination || "",
+                 outDate: it.outDate || prev.requestDate || "" }
+             : { saleRequestId: null });
+      await logItem(itemId, it.serialNumber||serial, "status",
+        "중복 판매요청에서 뺐습니다 · " + (sr.destination||"-") + " " + (sr.requestDate||"")
+          + (prev ? " → 앞의 판매요청(" + (prev.destination||"-") + " " + (prev.requestDate||"") + ")으로 되돌림"
+                  : " → 판매요청 연결 없음")
+          + " · 사유: " + String(reason).trim(),
+        { systemModel: it.systemModel||"" });
+      logAction("중복 판매 한 대 빼기", serial + " / " + (sr.destination||"-") + " " + (sr.requestDate||"")
+        + " / " + qty + "대 → " + rest.length + "대 / 사유: " + String(reason).trim());
+      clearCache("inventory"); clearCache("saleRequests"); clearDashCache();
+      alert("뺐습니다.\n\n판매요청은 " + rest.length + "대로 줄었습니다."
+        + (prev ? "\n이 재고는 앞의 판매요청으로 되돌렸습니다." : ""));
+      runDataCheck();
+    }catch(e){
+      alert("빼지 못했습니다.\n" + ((e&&e.message)?e.message:String(e)));
+    }
+  };
+
+
+  // 중복 판매요청을 여기서 바로 취소합니다.
+  //  나중에 만든 것을 지우고, 앞의 판매요청은 그대로 둡니다.
+  window.cancelDupSaleReq = async function(srId, serial){
+    if(!srId){ alert("판매요청을 찾을 수 없습니다."); return; }
+    let sr = null;
+    try{
+      const d = await getDoc(doc(db,"saleRequests", srId));
+      if(d.exists()) sr = d.data();
+    }catch(e){}
+    if(!sr){ alert("판매요청을 찾을 수 없습니다. 이미 지워졌을 수 있습니다."); return; }
+    if(sr.status === "취소"){ alert("이미 취소된 판매요청입니다."); runDataCheck(); return; }
+    // 이 판매요청에 몇 대가 묶여 있는지 봅니다.
+    const ids = Array.isArray(sr.matchedItemIds) ? sr.matchedItemIds : [];
+    if(!confirm("이 판매요청을 취소합니다.\n\n"
+      + "  판매처   " + (sr.destination||"-") + "\n"
+      + "  요청일   " + (sr.requestDate||"-") + "\n"
+      + "  금액     " + ((Number(sr.salePrice)||0).toLocaleString()) + "\n"
+      + "  묶인 재고 " + ids.length + "대\n\n"
+      + (ids.length > 1
+          ? "※ 이 판매요청에는 " + serial + " 말고 다른 재고도 " + (ids.length-1) + "대 함께 묶여 있습니다.\n"
+            + "   취소하면 그 건들도 함께 취소됩니다. 정말 진행할까요?\n\n"
+          : "")
+      + "앞의 판매요청은 그대로 둡니다.\n진행할까요?")) return;
+    const reason = prompt("취소 사유를 입력해주세요. (필수)", "중복 판매요청 정리");
+    if(reason === null) return;
+    if(!String(reason).trim()){ alert("취소 사유를 입력해주세요."); return; }
+    try{
+      await updateDoc(doc(db,"saleRequests", srId), {
+        status:"취소", cancelReason:String(reason).trim(),
+        cancelledAt: serverTimestamp(), cancelledBy: currentUser.name });
+      if(sr.batchId){
+        // 묶음에 살아 있는 줄이 없으면 묶음도 취소로 바꿉니다.
+        try{
+          const q2 = await getDocs(query(collection(db,"saleRequests"), where("batchId","==", sr.batchId)));
+          const alive = q2.docs.filter(d=> d.id !== srId && d.data().status !== "취소");
+          if(alive.length === 0){
+            await updateDoc(doc(db,"saleRequestBatches", sr.batchId), {
+              status:"취소", cancelReason:String(reason).trim(),
+              cancelledAt: serverTimestamp(), cancelledBy: currentUser.name });
+          }
+        }catch(e){}
+      }
+      // 이 판매요청만 가리키던 재고는 연결을 풉니다. (앞의 판매요청이 있으면 그쪽으로 돌립니다)
+      let back = 0;
+      for(const iid of ids){
+        try{
+          const isnap = await getDoc(doc(db,"inventoryItems", iid));
+          if(!isnap.exists()) continue;
+          const it = isnap.data();
+          if(it.saleRequestId !== srId) continue;
+          // 이 재고를 가리키는 다른(살아 있는) 판매요청을 찾습니다.
+          let prev = null;
+          try{
+            const all = await getDocs(query(collection(db,"saleRequests"), where("matchedItemIds","array-contains", iid)));
+            all.docs.forEach(d=>{
+              if(d.id === srId) return;
+              const v = d.data();
+              if(v.status === "취소" || v.deleted === true) return;
+              if(!prev || String(v.requestDate||"") < String(prev.requestDate||"")) prev = { id:d.id, ...v };
+            });
+          }catch(e){}
+          await updateDoc(doc(db,"inventoryItems", iid),
+            prev ? { saleRequestId: prev.id, destination: prev.destination || it.destination || "",
+                     outDate: it.outDate || prev.requestDate || "" }
+                 : { saleRequestId: null });
+          await logItem(iid, it.serialNumber||"", "status",
+            prev ? ("중복 판매요청 취소 · 앞의 판매요청(" + (prev.destination||"-") + " " + (prev.requestDate||"") + ")으로 되돌림")
+                 : ("중복 판매요청 취소 · 판매요청 연결을 풀었습니다 · 사유: " + String(reason).trim()),
+            { systemModel: it.systemModel||"" });
+          back++;
+        }catch(e){}
+      }
+      logAction("중복 판매요청 취소", (sr.destination||"-") + " " + (sr.requestDate||"")
+        + " / 재고 " + back + "대 / 사유: " + String(reason).trim());
+      clearCache("inventory"); clearCache("saleRequests"); clearDashCache();
+      alert("취소했습니다.\n\n재고 " + back + "대의 연결을 정리했습니다.");
+      runDataCheck();
+    }catch(e){
+      alert("취소하지 못했습니다.\n" + ((e&&e.message)?e.message:String(e)));
+    }
+  };
+
+  // ── 판매한 건 중 통신사·모델·일련번호가 겹침 ──
+  window.showSoldDupList = function(){
+    const el = document.getElementById("datacheck-detail");
+    if(!el || soldDupCache.length === 0){ if(el) el.innerHTML = '<div class="list-empty">겹친 것이 없습니다.</div>'; return; }
+    const extra = soldDupCache.reduce((n,r)=> n + (r.list.length - 1), 0);
+    const money = soldDupCache.reduce((n,r)=>{
+      const one = Number(r.srs[0] && r.srs[0].salePrice) || 0;
+      return n + one * (r.list.length - 1);
+    }, 0);
+    let h = '<div style="border:1px solid var(--danger);padding:10px 12px;margin-top:10px;">'
+      + '<div style="font-weight:700;margin-bottom:4px;color:var(--danger);">판매한 건 중 겹침 — '
+      + soldDupCache.length + '건 · 남는 ' + extra + '대</div>'
+      + '<div style="font-size:11.5px;color:var(--gray);line-height:1.7;margin-bottom:8px;">'
+      + '판매요청에 들어간 재고 중 <b>통신사·모델·일련번호가 같은 것</b>이 여럿입니다.<br>'
+      + '한 대를 두 번 판 셈이라 매출·입금요청 금액이 <b style="color:var(--danger);">약 '
+      + Math.round(money).toLocaleString() + '원</b> 부풀려져 있습니다.<br>'
+      + '<b>나중에 만든 판매요청을 판매 관리에서 취소</b>해주세요. 입금요청에 묶여 있으면 그것부터 푸셔야 합니다.</div>'
+      + '<div style="max-height:360px;overflow:auto;border:1px solid var(--line);">'
+      + '<table class="data-table" style="width:100%;font-size:11.5px;"><thead><tr>'
+      + '<th>통신사</th><th>모델</th><th>색상</th><th>일련번호</th><th class="ta-right">겹친 대수</th>'
+      + '<th>각각의 판매처 · 요청일 · 금액 · 상태</th></tr></thead><tbody>'
+      + soldDupCache.slice(0,200).map(function(r){
+          var f = r.list[0].it;
+          return '<tr>'
+            + '<td>'+comboEsc(f.carrier||"-")+'</td>'
+            + '<td>'+comboEsc(f.systemModel||f.baseModel||"-")+'</td>'
+            + '<td>'+comboEsc(f.systemColor||f.manufacturerColor||"-")+'</td>'
+            + '<td><b>'+comboEsc(f.serialNumber||"-")+'</b></td>'
+            + '<td class="ta-right" style="color:var(--danger);font-weight:700;">'+r.list.length+'</td>'
+            + '<td>' + (r.srs.length
+                ? r.srs.slice().sort(function(a,b){ return String(a.requestDate||"").localeCompare(String(b.requestDate||"")); })
+                    .map(function(x,i){
+                      return '<div style="margin:2px 0;">'
+                        + (i===0 ? '<span style="color:#2e7d32;font-weight:700;">[첫 건]</span> '
+                                 : '<span style="color:var(--danger);font-weight:700;">[나중]</span> ')
+                        + comboEsc((x.destination||"-") + " " + (x.requestDate||"-")
+                          + " " + ((Number(x.salePrice)||0)?Number(x.salePrice).toLocaleString():"-")
+                          + " · " + (x.status||"-"))
+                        + (i>0 && x.status !== "취소"
+                            ? (function(){
+                                var cnt = (x.matchedItemIds||[]).length;
+                                var mine = r.list.filter(function(y){
+                                  return (x.matchedItemIds||[]).indexOf(y.iid) >= 0; })[0];
+                                var iid = mine ? mine.iid : "";
+                                return ' <span style="color:var(--gray);font-size:10.5px;">묶인 ' + cnt + '대</span>'
+                                  + (cnt > 1 && iid
+                                      ? ' <button class="btn small danger" style="width:auto;padding:1px 7px;font-size:10.5px;" '
+                                        + 'title="이 판매요청에서 이 한 대만 뺍니다. 나머지는 그대로 둡니다." '
+                                        + 'onclick="removeOneFromSaleReq(\'' + comboEsc(x.id) + '\',\''
+                                        + comboEsc(iid) + '\',\'' + comboEsc(f.serialNumber||"") + '\')">이 한 대만 빼기</button>'
+                                      : '')
+                                  + ' <button class="btn small secondary" style="width:auto;padding:1px 7px;font-size:10.5px;" '
+                                    + 'title="이 판매요청 전체를 취소합니다." '
+                                    + 'onclick="cancelDupSaleReq(\'' + comboEsc(x.id) + '\',\''
+                                    + comboEsc(f.serialNumber||"") + '\')">전체 취소</button>';
+                              })()
+                            : '')
+                        + '</div>';
+                    }).join("")
+                : r.list.map(function(x){ return comboEsc((x.it.destination||"-") + " " + (x.it.outDate||"-")); }).join("<br>"))
+              + '</td></tr>';
+        }).join("")
+      + '</tbody></table></div>'
+      + '<span class="btn-row" style="margin-top:10px;">'
+      + '<button class="btn small secondary" style="width:auto;" onclick="downloadSoldDup()">엑셀로 받기</button>'
+      + '</span></div>';
+    el.innerHTML = h;
+  };
+  window.downloadSoldDup = function(){
+    if(soldDupCache.length === 0){ alert("받을 것이 없습니다."); return; }
+    const head = ["통신사","전산모델명","색상","일련번호","겹친대수","판매처들","요청일들","금액들"];
+    const body = soldDupCache.map(function(r){
+      var f = r.list[0].it;
+      return [f.carrier||"", f.systemModel||f.baseModel||"", f.systemColor||f.manufacturerColor||"",
+        f.serialNumber||"", r.list.length,
+        r.srs.map(function(x){ return x.destination||""; }).join(" / "),
+        r.srs.map(function(x){ return x.requestDate||""; }).join(" / "),
+        r.srs.map(function(x){ return Number(x.salePrice)||0; }).join(" / ")];
+    });
+    try{
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([head].concat(body)), "판매중복");
+      XLSX.writeFile(wb, "판매중복_" + todayStr() + ".xlsx");
+    }catch(e){ alert("엑셀을 만들지 못했습니다."); }
   };
 
   // ── 판매 취소를 거쳐 다시 판 재고 ──
@@ -30789,6 +31042,59 @@
           why:"판매가를 입고가로 맞춰둔 재고입니다. 판매할인·판매할인%도 사온 조건(선할인+타할인)과 같아야 하는데 다릅니다."
             + " 입금까지 끝난 건은 세지 않습니다" + (skip ? " (" + skip + "대 제외)" : "") + ".",
           fix: rows.length ? "showSameBuyDiffList()" : null, fixLabel:"확인하고 맞추기" });
+      }
+
+      // ⓪-3x 판매요청에 들어간 건들 중 통신사·모델·일련번호가 겹치는 것
+      //  ★ 판매요청에 실제로 들어간 재고만 모아 셋을 대조합니다. 두 번 팔린 것을 찾습니다.
+      {
+        const inReq = [];
+        Object.keys(items).forEach(iid=>{
+          const it = items[iid];
+          if(it.deleted === true) return;
+          if(!it.saleRequestId) return;
+          if(!String(it.serialNumber||"").trim()) return;
+          inReq.push({ iid, it });
+        });
+        srSnap.forEach(d=>{
+          const sr = d.data();
+          if(sr.status === "취소" || sr.deleted === true) return;
+          (sr.matchedItemIds||[]).forEach(iid=>{
+            if(inReq.some(x=> x.iid === iid)) return;
+            const it = items[iid];
+            if(!it || it.deleted === true) return;
+            if(!String(it.serialNumber||"").trim()) return;
+            inReq.push({ iid, it, srId: d.id });
+          });
+        });
+        const keyX = x => [String(x.it.carrier||"").trim(),
+                          modelDupKey(String(x.it.systemModel||x.it.baseModel||"")),
+                          normSerial(String(x.it.serialNumber||""))].join("|");
+        const byKeyX = {};
+        inReq.forEach(x=>{ (byKeyX[keyX(x)] = byKeyX[keyX(x)] || []).push(x); });
+        const srAllX = {};
+        srSnap.forEach(d=> srAllX[d.id] = d.data());
+        const rowsX = [];
+        Object.keys(byKeyX).forEach(k=>{
+          const g2 = byKeyX[k];
+          if(g2.length < 2) return;
+          if(g2.some(x=> x.it.isRebuy || x.it.rebuyToItemId)) return;
+          const srs = [];
+          g2.forEach(x=>{
+            const sid = x.srId || x.it.saleRequestId;
+            if(sid && !srs.some(y=> y.id === sid)){
+              const sr = srAllX[sid];
+              if(sr) srs.push({ id:sid, ...sr });
+            }
+          });
+          rowsX.push({ list:g2, srs });
+        });
+        rowsX.sort((a,b)=> String(a.list[0].it.serialNumber||"").localeCompare(String(b.list[0].it.serialNumber||"")));
+        soldDupCache = rowsX;
+        const extraX = rowsX.reduce((n,r)=> n + (r.list.length - 1), 0);
+        issues.push({ n:"판매한 건 중 통신사·모델·일련번호가 겹침", cnt:rowsX.length,
+          unit:"건 (남는 " + extraX + "대)",
+          why:"판매요청에 들어간 재고 중 통신사·모델·일련번호가 같은 것이 여럿입니다. 한 대를 두 번 판 셈이라 매출·입금요청 금액이 부풀려집니다.",
+          fix: rowsX.length ? "showSoldDupList()" : null, fixLabel:"확인하기" });
       }
 
       // ⓪-3y 판매 취소를 거쳐 다시 판매된 건
