@@ -387,7 +387,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-29 v844</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-02 v845</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -26373,7 +26373,7 @@
     if(list.length === 0){ try{ list = (parseSerialPasteLoose(raw)||[]).map(e=> e.sn); }catch(e){} }
     if(list.length === 0){ if(msg) msg.innerHTML = '<span style="color:var(--danger);">일련번호를 찾지 못했습니다.</span>'; return; }
     if(msg) msg.innerHTML = '<span style="color:var(--gray);">찾는 중입니다...</span>';
-    const added = [], notFound = [], notSold = [], already = [];
+    const added = [], notFound = [], notSold = [], already = [], ambiguous = [];
     for(const sn of [...new Set(list)]){
       if(rebuyItems.some(x=> String(x.serialNumber||"") === sn)){ already.push(sn); continue; }
       try{
@@ -26384,6 +26384,14 @@
         const sold = cands.filter(x=> String(x.status||"").indexOf("판매") >= 0 || x.destination);
         if(sold.length === 0){ notSold.push(sn); continue; }
         sold.sort((a,b)=> String(b.outDate||"").localeCompare(String(a.outDate||"")));
+        // 판매 기록이 여럿이면(전에도 되사온 적이 있으면) 어느 것인지 확인받습니다.
+        if(sold.length > 1){
+          const pick = confirm("일련번호 " + sn + " 은 판매 기록이 " + sold.length + "건 있습니다.\n\n"
+            + sold.map((x,i)=> "  " + (i+1) + ") " + (x.systemModel||"-") + " " + (x.systemColor||x.manufacturerColor||"-")
+                + " · " + (x.carrier||"-") + " · " + (x.destination||"-") + " " + (x.outDate||"-")).join("\n")
+            + "\n\n가장 나중에 판 1) 로 넣을까요?\n「아니오」를 누르시면 이 번호는 건너뜁니다.");
+          if(!pick){ ambiguous.push(sn); continue; }
+        }
         // 이미 되사온 재고는 빼줍니다. (두 번 되사오는 것을 막습니다)
         const rb = await getDocs(query(collection(db,"inventoryItems"), where("rebuyFromItemId","==", sold[0].id)));
         if(rb.docs.some(d=> d.data().deleted !== true)){ already.push(sn + "(이미 되사옴)"); continue; }
@@ -26394,6 +26402,7 @@
       '<span style="color:#2e7d32;">' + added.length + '대를 넣었습니다.</span>'
       + (notFound.length ? ' <span style="color:var(--danger);">없는 일련번호 ' + notFound.length + '개: ' + comboEsc(notFound.slice(0,5).join(", ")) + '</span>' : '')
       + (notSold.length ? ' <span style="color:var(--danger);">아직 안 판 재고 ' + notSold.length + '개: ' + comboEsc(notSold.slice(0,5).join(", ")) + '</span>' : '')
+      + (ambiguous.length ? ' <span style="color:var(--danger);">판매 기록이 여럿이라 건너뜀 ' + ambiguous.length + '개: ' + comboEsc(ambiguous.slice(0,5).join(", ")) + '</span>' : '')
       + (already.length ? ' <span style="color:var(--gray);">건너뜀 ' + already.length + '개</span>' : '');
     document.getElementById("rebuy-head").innerHTML =
       '<b>' + rebuyItems.length + '대</b>를 되사옵니다 · 1차 판매처 '
@@ -26418,9 +26427,11 @@
     const addAmt = Number((document.getElementById("rb-add")||{}).value)||0;
     const newPct = Number((document.getElementById("rb-pct")||{}).value)||0;
     let h = '<table class="data-table" style="width:100%;font-size:11.5px;"><thead><tr>'
-      + '<th>일련번호</th><th>모델</th><th>1차 판매처</th><th class="ta-right">출고가</th>'
+      + '<th>일련번호</th><th>모델</th><th>색상</th><th>통신사</th>'
+      + '<th>입고일</th><th>판매일</th><th>1차 판매처</th><th class="ta-right">출고가</th>'
       + '<th class="ta-right">1차 판매가</th><th>기준</th>'
       + '<th class="ta-right">선할인</th><th class="ta-right">선할인%</th><th class="ta-right">입고가</th>'
+      + '<th>빼기</th>'
       + '</tr></thead><tbody>';
     let sum = 0;
     rebuyItems.forEach((it,i)=>{
@@ -26429,6 +26440,10 @@
       h += '<tr>'
         + '<td><b>'+comboEsc(it.serialNumber||"-")+'</b></td>'
         + '<td>'+comboEsc(it.systemModel||"-")+'</td>'
+        + '<td>'+comboEsc(it.systemColor||it.manufacturerColor||"-")+'</td>'
+        + '<td>'+comboEsc(it.carrier||"-")+'</td>'
+        + '<td>'+comboEsc(it.inDate||"-")+'</td>'
+        + '<td>'+comboEsc(it.outDate||"-")+'</td>'
         + '<td>'+comboEsc(it.destination||"-")+'</td>'
         + '<td class="ta-right">'+c.L.toLocaleString()+'</td>'
         + '<td class="ta-right">'+c.soldPrice.toLocaleString()+'</td>'
@@ -26439,11 +26454,27 @@
         + (mode === "each"
             ? '<input type="number" class="rb-buy" data-i="'+i+'" value="'+Math.round(c.buy)+'" style="width:110px;text-align:right;">'
             : '<b>'+Math.round(c.buy).toLocaleString()+'</b>')
-        + '</td></tr>';
+        + '</td>'
+        + '<td><button class="btn small secondary" style="width:auto;padding:1px 6px;" onclick="removeRebuyRow('+i+')">✕</button></td>'
+        + '</tr>';
     });
-    h += '</tbody><tfoot><tr><td colspan="8" class="ta-right"><b>합계</b></td>'
-      + '<td class="ta-right"><b>'+Math.round(sum).toLocaleString()+'</b></td></tr></tfoot></table>';
+    h += '</tbody><tfoot><tr><td colspan="12" class="ta-right"><b>합계</b></td>'
+      + '<td class="ta-right"><b>'+Math.round(sum).toLocaleString()+'</b></td><td></td></tr></tfoot></table>';
     el.innerHTML = h;
+  };
+
+  // 미리보기에서 한 줄 빼기 — 잘못 잡힌 재고를 그 자리에서 뺍니다.
+  window.removeRebuyRow = function(i){
+    if(i < 0 || i >= rebuyItems.length) return;
+    const it = rebuyItems[i];
+    if(!confirm("이 재고를 목록에서 뺄까요?\n\n  " + (it.serialNumber||"-") + "  " + (it.systemModel||"")
+      + "\n  " + (it.systemColor||it.manufacturerColor||"") + " · " + (it.carrier||"")
+      + " · 판매일 " + (it.outDate||"-"))) return;
+    rebuyItems.splice(i,1);
+    document.getElementById("rebuy-head").innerHTML =
+      '<b>' + rebuyItems.length + '대</b>를 되사옵니다'
+      + (rebuyItems.length ? ' · 1차 판매처 ' + comboEsc([...new Set(rebuyItems.map(x=> x.destination||"-"))].join(", ")) : '');
+    renderRebuyPreview();
   };
 
   window.submitRebuy = async function(){
@@ -29577,12 +29608,29 @@
           const key = modelDupKey(it.systemModel || it.baseModel || "") + "|" + normSerial(sn);
           (byKey[key] = byKey[key] || []).push(id);
         });
-        const dupKeys = Object.keys(byKey).filter(k=> byKey[k].length > 1);
+        // 되사오기로 이어진 건은 겹친 것이 아닙니다. 같은 단말기를 다시 사온 것이라 정상입니다.
+        //  1차와 2차가 서로를 가리키고 있으면 한 묶음으로 보고 세지 않습니다.
+        const isRebuyChain = (ids)=>{
+          if(ids.length < 2) return false;
+          const linked = ids.filter(id=>{
+            const v = items[id];
+            return v.isRebuy === true || !!v.rebuyToItemId;
+          });
+          //  전부 되사오기 사슬에 들어 있어야 정상으로 봅니다.
+          return linked.length === ids.length;
+        };
+        let rebuyPairs = 0;
+        const dupKeys = Object.keys(byKey).filter(k=>{
+          if(byKey[k].length <= 1) return false;
+          if(isRebuyChain(byKey[k])){ rebuyPairs++; return false; }
+          return true;
+        });
         const dupExtra = dupKeys.reduce((n,k)=> n + (byKey[k].length - 1), 0);
         dupSerialCache = {};
         dupKeys.forEach(k=> dupSerialCache[k] = byKey[k].map(id=> ({ id, ...items[id] })));
         issues.push({ n:"같은 모델·일련번호가 여러 건", cnt:dupKeys.length, unit:"남는 " + dupExtra + "건",
-          why:"모델과 일련번호가 둘 다 같으면 같은 단말기입니다. 모델이 다르면 다른 단말기라 세지 않습니다.",
+          why:"모델과 일련번호가 둘 다 같으면 같은 단말기입니다. 모델이 다르면 다른 단말기라 세지 않습니다."
+            + (rebuyPairs ? " 되사오기로 이어진 " + rebuyPairs + "건은 정상이라 세지 않았습니다." : ""),
           fix: dupKeys.length ? "showDupSerialList()" : null, fixLabel:"확인하고 정리" });
       }
 
