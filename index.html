@@ -387,7 +387,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-29 v840</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-08-29 v843</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -2854,6 +2854,7 @@
             <label class="tbar-chk"><input type="checkbox" id="bulk-select-all" onclick="toggleAllInventoryRows(this)"> 전체</label>
             <button class="btn small secondary" onclick="openBulkChangeModal()">변경</button>
             <button class="btn small secondary" onclick="openReturnModal()" title="고른 재고를 삼성전자로 반품 처리합니다. 여신이 되돌아옵니다.">반품</button>
+            <button class="btn small secondary" onclick="openRebuy()" title="판매했던 단말기를 다시 사옵니다. 1차 판매 기록은 그대로 두고 새 재고로 등록합니다.">되사오기</button>
             <button class="btn small secondary" id="inv-sort-toggle-btn" onclick="toggleInventorySortField()">정렬: 판매일 ▾</button>
             <button class="btn small secondary" onclick="toggleViewPanel()">보기 설정</button>
             <button class="btn small secondary" id="inv-deleted-toggle-btn" style="display:none;" onclick="toggleDeletedInventory()">삭제함</button>
@@ -3659,6 +3660,56 @@
       </div>
     </div>
 
+    <!-- 되사오기(재매입) 팝업 -->
+    <div id="rebuy-overlay" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.55);z-index:1120;align-items:center;justify-content:center;">
+      <div style="background:#fff;border:2px solid var(--navy);max-width:900px;width:96%;max-height:92vh;overflow-y:auto;padding:22px;position:relative;">
+        <button onclick="closeRebuy()" style="position:absolute;top:12px;right:12px;background:none;border:1px solid var(--navy);width:26px;height:26px;cursor:pointer;font-size:13px;">✕</button>
+        <h3 style="margin-top:0;margin-bottom:4px;">되사오기 (재매입)</h3>
+        <p class="desc" style="margin-top:0;">판매했던 단말기를 다시 사옵니다. <b>1차 판매 기록은 그대로 두고</b> 새 재고로 등록합니다.
+          일련번호가 같아도 재고마다 코드가 달라 서로 섞이지 않습니다.</p>
+        <div id="rebuy-head" style="font-size:12.5px;color:var(--navy);margin-bottom:10px;"></div>
+        <div style="border:1px solid var(--line);background:#f7f7f7;padding:10px 12px;margin-bottom:10px;">
+          <div style="font-size:12.5px;font-weight:700;margin-bottom:4px;">일련번호로 한 번에 넣기</div>
+          <div style="font-size:11.5px;color:var(--gray);line-height:1.7;margin-bottom:6px;">
+            재고 목록에서 체크하지 않고도, 일련번호를 붙여넣어 되사올 재고를 모을 수 있습니다.
+            <b>판매한 재고만</b> 잡히고, 같은 일련번호가 여럿이면 <b>가장 나중에 판 것</b>을 씁니다.</div>
+          <textarea id="rb-paste" rows="4" style="width:100%;box-sizing:border-box;padding:8px;border:1px solid #c7c7c7;font-size:12.5px;font-family:monospace;" placeholder="1038307&#10;1038472&#10;1038215"></textarea>
+          <span class="btn-row" style="margin-top:6px;"><button class="btn small secondary" style="width:auto;" onclick="addRebuyBySerial()">이 일련번호 넣기</button><button class="btn small secondary" style="width:auto;" onclick="clearRebuyList()">목록 비우기</button></span>
+          <div id="rb-paste-msg" style="font-size:12px;margin-top:6px;"></div>
+        </div>
+        <div class="stack-form">
+          <div class="stack-row"><label>매입처</label><select id="rb-source"><option value="">선택</option></select></div>
+          <div class="stack-row"><label>주문일</label><input type="text" id="rb-orderdate" maxlength="8" inputmode="numeric" placeholder="예: 20260829"></div>
+          <div class="stack-row"><label>입고일</label><input type="text" id="rb-indate" maxlength="8" inputmode="numeric" placeholder="예: 20260829"></div>
+          <div class="stack-row"><label>위치</label><select id="rb-location"><option value="">선택</option></select></div>
+          <div class="stack-row"><label>결제방식</label>
+            <select id="rb-paymethod">
+              <option value="normal">일반 (계좌이체 — 출금요청 필요)</option>
+              <option value="b2b_credit">삼성전자 여신결제</option>
+            </select></div>
+        </div>
+        <p class="desc" style="margin-top:12px;margin-bottom:4px;font-weight:700;color:var(--navy);">금액을 어떻게 할까요</p>
+        <div style="border:1px solid var(--line);padding:10px 12px;font-size:12.5px;line-height:2;">
+          <label style="display:block;cursor:pointer;"><input type="radio" name="rb-mode" value="same" checked onchange="onRebuyMode()">
+            <b>판매했던 값 그대로</b>
+            <span style="color:var(--gray);font-size:11.5px;"> — 1차와 이어둡니다. 나중에 1차 금액이 바뀌면 이 재고도 함께 바뀝니다.</span></label>
+          <label style="display:block;cursor:pointer;"><input type="radio" name="rb-mode" value="add" onchange="onRebuyMode()">
+            대당 얼마 붙여서 <input type="number" id="rb-add" style="width:120px;" oninput="renderRebuyPreview()"> 원
+            <span style="color:var(--gray);font-size:11.5px;"> — 그 값으로 굳어집니다.</span></label>
+          <label style="display:block;cursor:pointer;"><input type="radio" name="rb-mode" value="pct" onchange="onRebuyMode()">
+            할인율을 새로 <input type="number" step="0.01" id="rb-pct" style="width:100px;" oninput="renderRebuyPreview()"> %
+            <span style="color:var(--gray);font-size:11.5px;"> — 1차 판매할인 기준으로 계산합니다.</span></label>
+          <label style="display:block;cursor:pointer;"><input type="radio" name="rb-mode" value="each" onchange="onRebuyMode()">
+            한 대씩 직접 넣기
+            <span style="color:var(--gray);font-size:11.5px;"> — 아래 표의 입고가 칸에 넣으시면 됩니다.</span></label>
+        </div>
+        <p class="desc" style="margin-top:12px;margin-bottom:4px;font-weight:700;color:var(--navy);">미리보기</p>
+        <div id="rebuy-preview" style="max-height:300px;overflow:auto;border:1px solid var(--line);"></div>
+        <div id="rebuy-msg" style="font-size:12.5px;margin:8px 0;"></div>
+        <span class="btn-row"><button class="btn small" style="width:auto;" onclick="submitRebuy()">이 내용으로 되사오기</button><button class="btn small secondary" style="width:auto;" onclick="closeRebuy()">닫기</button></span>
+      </div>
+    </div>
+
     <!-- 재고 1건 등록 팝업 -->
     <div id="item-modal-overlay" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.55);z-index:1000;align-items:center;justify-content:center;">
       <div style="background:#fff;border:2px solid var(--navy);max-width:600px;width:94%;max-height:90vh;overflow-y:auto;padding:22px;position:relative;">
@@ -4118,6 +4169,19 @@
     { key:"taxState", label:"세금계산서",
       get:it=>{ const p = payStatusOf(it); return p ? (p.taxDone ? "발행완료" : "미발행") : "-"; },
       getRaw:it=>{ const p = payStatusOf(it); return p ? (p.taxDone ? "발행완료" : "미발행") : ""; } },
+    // 되사온 재고인지 표시합니다. 1차 판매처와 연동 여부도 함께 보입니다.
+    // 되사오기 — 2차는 「되사옴」, 1차는 「되사감」으로 양쪽에 표시합니다.
+    { key:"isRebuy", label:"되사오기",
+      get:it=> it.isRebuy
+          ? ("되사옴" + (it.rebuyFromDest ? " (" + it.rebuyFromDest + ")" : "")
+             + (it.buyPriceFollowsSale === true ? " · 판매값연동" : ""))
+        : (it.rebuyToItemId
+          ? ("되사감" + (it.rebuyBackAt ? " (" + it.rebuyBackAt + ")" : "")) : "-"),
+      getRaw:it=> it.isRebuy
+          ? ("되사옴" + (it.rebuyFromDest ? " (" + it.rebuyFromDest + ")" : "")
+             + (it.buyPriceFollowsSale === true ? " · 판매값연동" : ""))
+        : (it.rebuyToItemId
+          ? ("되사감" + (it.rebuyBackAt ? " (" + it.rebuyBackAt + ")" : "")) : "-") },
     { key:"note1", label:"비고1", get:it=>it.note1||"-", getRaw:it=>it.note1||"" },
     { key:"note2", label:"비고2", get:it=>it.note2||"-", getRaw:it=>it.note2||"" },
     { key:"profit", label:"수익", get:it=> (it.profit!=null)?Number(it.profit).toLocaleString():"-", getRaw:it=>it.profit!=null?Number(it.profit):"" }
@@ -12665,6 +12729,16 @@
         if(narrowed.length > 0) cands = narrowed;
       });
 
+      // 되사오기 등으로 같은 일련번호가 여럿이면, 아직 안 판 재고만 남깁니다.
+      if(cands.length > 1){
+        const live = cands.filter(x=> String(x.status||"").indexOf("판매") < 0
+          && String(x.status||"").indexOf("반품") < 0 && !x.saleRequestId);
+        if(live.length === 1) cands = live;
+        else if(live.length > 1){
+          live.sort((a,b)=> String(b.inDate||"").localeCompare(String(a.inDate||"")));
+          cands = [live[0]];
+        }
+      }
       if(cands.length > 1){
         bad.push({ label, raw:line,
           reason:"일련번호가 겹칩니다 → " + cands.map(x=> (x.systemModel||"-") + " " + (x.systemColor||x.manufacturerColor||"-")).join(" / ")
@@ -23275,9 +23349,10 @@
       for(const sn of serials){
         const q = await getDocs(query(collection(db,"inventoryItems"), where("serialNumber","==",sn)));
         if(q.empty){ msg("등록되지 않은 일련번호입니다: <b>"+comboEsc(sn)+"</b>", true); return; }
-        const d0 = q.docs[0];
+        const d0 = pickLiveItemDoc(q.docs);
+        if(!d0){ msg("쓸 수 있는 재고가 없습니다: <b>"+comboEsc(sn)+"</b>", true); return; }
         const it = d0.data();
-        if(it.status === "판매"){ msg("이미 판매 처리된 재고입니다: <b>"+comboEsc(sn)+"</b>", true); return; }
+        if(String(it.status||"").indexOf("판매") >= 0){ msg("이미 판매 처리된 재고입니다: <b>"+comboEsc(sn)+"</b>", true); return; }
         matchedDocs.push({ id:d0.id, it });
       }
     }
@@ -26198,6 +26273,310 @@
     }catch(e){ console.error("단말 이력 기록 실패", e); }
   }
 
+  // 같은 일련번호로 재고가 여럿일 때 (되사오기 등) 어느 것을 쓸지 고릅니다.
+  //  ① 삭제하지 않은 것  ② 아직 안 판 것(보유중)  ③ 그중 가장 나중에 들어온 것
+  //  이렇게 골라야 1차(판매완료)와 2차(되사온 것)가 섞이지 않습니다.
+  function pickLiveItemDoc(docs){
+    const alive = docs.filter(d=> d.data().deleted !== true);
+    if(alive.length === 0) return null;
+    const live = alive.filter(d=>{
+      const v = d.data();
+      const st = String(v.status||"");
+      return st.indexOf("판매") < 0 && st.indexOf("반품") < 0 && !v.saleRequestId;
+    });
+    const pool = live.length ? live : alive;
+    // 입고일이 늦은 것을 먼저 씁니다. (되사온 것이 나중)
+    pool.sort((a,b)=> String(b.data().inDate||"").localeCompare(String(a.data().inDate||"")));
+    return pool[0];
+  }
+  window.pickLiveItemDoc = pickLiveItemDoc;
+
+  // ================= 되사오기 (재매입) =================
+  //  판매했던 단말기를 다시 사옵니다. 1차 판매 기록은 그대로 두고 새 재고로 등록합니다.
+  //  「판매했던 값 그대로」를 고르면 1차와 이어두어, 나중에 1차 금액이 바뀌면 함께 바뀝니다.
+  let rebuyItems = [];
+
+  // 1차 판매 조건을 2차 매입 조건으로 옮깁니다.
+  //  판매할인 기준을 그대로 써야 %가 흔들리지 않습니다. (삼성은 공급가 기준)
+  function rebuyCalcOne(it, mode, addAmt, newPct){
+    const L = Number(it.listPrice)||0;
+    const base = (typeof actualSaleBase === "function" && String(actualSaleBase(it)).indexOf("공급가") === 0)
+      ? "supply" : (String(it.saleDiscountBase||"") || "unit");
+    const B = (base === "supply") ? (L/1.1) : L;
+    const soldPrice = Number(it.salePrice)||0;
+    const soldAmt   = (Number(it.saleDiscountAmt)||0) || (L ? L - soldPrice : 0);
+    const soldPct   = (it.saleDiscount != null && it.saleDiscount !== "")
+      ? Number(it.saleDiscount) : (B ? Number(((soldAmt/B)*100).toFixed(2)) : null);
+    let buy, pre, pct;
+    if(mode === "add"){
+      buy = soldPrice + (Number(addAmt)||0);
+      pre = L ? L - buy : 0;
+      pct = B ? Number(((pre/B)*100).toFixed(2)) : null;
+    }else if(mode === "pct"){
+      pct = Number(newPct)||0;
+      pre = L ? Math.round(B * pct / 100) : 0;
+      buy = L - pre;
+    }else{                                  // same / each
+      buy = soldPrice; pre = soldAmt; pct = soldPct;
+    }
+    return { L, base, buy, pre, pct, soldPrice, soldAmt, soldPct };
+  }
+
+  window.openRebuy = async function(){
+    const ids = getCheckedInventoryIds();
+    // 체크를 안 하셨어도 창을 엽니다. 안에서 일련번호를 붙여넣어 모으실 수 있습니다.
+    const picked = ids.map(id=> (lastRenderedItems||[]).find(x=> x.id === id)).filter(Boolean);
+    // 판매가 끝난 재고만 되사올 수 있습니다.
+    const bad = picked.filter(x=> !(String(x.status||"").indexOf("판매") >= 0 || x.destination));
+    if(bad.length){
+      alert("판매한 재고만 되사올 수 있습니다.\n\n"
+        + bad.slice(0,5).map(x=> "  " + (x.serialNumber||"-") + "  상태 " + (x.status||"-")).join("\n")
+        + (bad.length > 5 ? "\n  ... 외 " + (bad.length-5) + "대" : "")
+        + "\n\n그 건들을 빼고 다시 해주세요.");
+      return;
+    }
+    rebuyItems = picked;
+    { const e = document.getElementById("rb-paste"); if(e) e.value = ""; }
+    { const e = document.getElementById("rb-paste-msg"); if(e) e.innerHTML = ""; }
+    document.getElementById("rebuy-head").innerHTML =
+      '<b>' + picked.length + '대</b>를 되사옵니다 · 1차 판매처 '
+      + comboEsc([...new Set(picked.map(x=> x.destination||"-"))].join(", "));
+    // 매입처 목록 — 1차 판매처를 기본으로 고릅니다.
+    const src = document.getElementById("rb-source");
+    src.innerHTML = '<option value="">선택</option>';
+    try{
+      const names = await fetchNamesList("inboundSources");
+      const dests = [...new Set(picked.map(x=> String(x.destination||"").trim()).filter(Boolean))];
+      dests.forEach(d=>{ if(!names.includes(d)) names.push(d); });
+      names.forEach(n=>{ const o=document.createElement("option"); o.value=n; o.textContent=n;
+        if(dests.length === 1 && n === dests[0]) o.selected = true; src.appendChild(o); });
+    }catch(e){}
+    const loc = document.getElementById("rb-location");
+    loc.innerHTML = '<option value="">선택</option>';
+    try{ (await fetchNamesList("locations")).forEach(n=>{
+      const o=document.createElement("option"); o.value=n; o.textContent=n; loc.appendChild(o); }); }catch(e){}
+    document.getElementById("rb-orderdate").value = todayStr();
+    document.getElementById("rb-indate").value = todayStr();
+    document.getElementById("rb-add").value = "";
+    document.getElementById("rb-pct").value = "";
+    document.querySelector('input[name="rb-mode"][value="same"]').checked = true;
+    document.getElementById("rebuy-msg").innerHTML = "";
+    renderRebuyPreview();
+    document.getElementById("rebuy-overlay").style.display = "flex";
+  };
+  // 일련번호를 붙여넣어 되사올 재고를 모읍니다.
+  window.addRebuyBySerial = async function(){
+    const raw = String((document.getElementById("rb-paste")||{}).value||"");
+    const msg = document.getElementById("rb-paste-msg");
+    let list = [];
+    try{ list = (parseSerialPaste(raw)||[]).map(e=> e.sn); }catch(e){}
+    if(list.length === 0){ try{ list = (parseSerialPasteLoose(raw)||[]).map(e=> e.sn); }catch(e){} }
+    if(list.length === 0){ if(msg) msg.innerHTML = '<span style="color:var(--danger);">일련번호를 찾지 못했습니다.</span>'; return; }
+    if(msg) msg.innerHTML = '<span style="color:var(--gray);">찾는 중입니다...</span>';
+    const added = [], notFound = [], notSold = [], already = [];
+    for(const sn of [...new Set(list)]){
+      if(rebuyItems.some(x=> String(x.serialNumber||"") === sn)){ already.push(sn); continue; }
+      try{
+        const q = await getDocs(query(collection(db,"inventoryItems"), where("serialNumber","==", sn)));
+        const cands = q.docs.map(d=> ({ id:d.id, ...d.data() })).filter(x=> x.deleted !== true);
+        if(cands.length === 0){ notFound.push(sn); continue; }
+        // 판매한 재고만 되사올 수 있습니다. 여럿이면 가장 나중에 판 것을 씁니다.
+        const sold = cands.filter(x=> String(x.status||"").indexOf("판매") >= 0 || x.destination);
+        if(sold.length === 0){ notSold.push(sn); continue; }
+        sold.sort((a,b)=> String(b.outDate||"").localeCompare(String(a.outDate||"")));
+        // 이미 되사온 재고는 빼줍니다. (두 번 되사오는 것을 막습니다)
+        const rb = await getDocs(query(collection(db,"inventoryItems"), where("rebuyFromItemId","==", sold[0].id)));
+        if(rb.docs.some(d=> d.data().deleted !== true)){ already.push(sn + "(이미 되사옴)"); continue; }
+        rebuyItems.push(sold[0]); added.push(sn);
+      }catch(e){ notFound.push(sn); }
+    }
+    if(msg) msg.innerHTML =
+      '<span style="color:#2e7d32;">' + added.length + '대를 넣었습니다.</span>'
+      + (notFound.length ? ' <span style="color:var(--danger);">없는 일련번호 ' + notFound.length + '개: ' + comboEsc(notFound.slice(0,5).join(", ")) + '</span>' : '')
+      + (notSold.length ? ' <span style="color:var(--danger);">아직 안 판 재고 ' + notSold.length + '개: ' + comboEsc(notSold.slice(0,5).join(", ")) + '</span>' : '')
+      + (already.length ? ' <span style="color:var(--gray);">건너뜀 ' + already.length + '개</span>' : '');
+    document.getElementById("rebuy-head").innerHTML =
+      '<b>' + rebuyItems.length + '대</b>를 되사옵니다 · 1차 판매처 '
+      + comboEsc([...new Set(rebuyItems.map(x=> x.destination||"-"))].join(", "));
+    renderRebuyPreview();
+  };
+  window.clearRebuyList = function(){
+    rebuyItems = [];
+    document.getElementById("rebuy-head").innerHTML = '<b>0대</b>';
+    const m = document.getElementById("rb-paste-msg"); if(m) m.innerHTML = "";
+    renderRebuyPreview();
+  };
+
+  window.closeRebuy = function(){ document.getElementById("rebuy-overlay").style.display = "none"; };
+
+  window.onRebuyMode = function(){ renderRebuyPreview(); };
+
+  window.renderRebuyPreview = function(){
+    const el = document.getElementById("rebuy-preview");
+    if(!el) return;
+    const mode = (document.querySelector('input[name="rb-mode"]:checked')||{}).value || "same";
+    const addAmt = Number((document.getElementById("rb-add")||{}).value)||0;
+    const newPct = Number((document.getElementById("rb-pct")||{}).value)||0;
+    let h = '<table class="data-table" style="width:100%;font-size:11.5px;"><thead><tr>'
+      + '<th>일련번호</th><th>모델</th><th>1차 판매처</th><th class="ta-right">출고가</th>'
+      + '<th class="ta-right">1차 판매가</th><th>기준</th>'
+      + '<th class="ta-right">선할인</th><th class="ta-right">선할인%</th><th class="ta-right">입고가</th>'
+      + '</tr></thead><tbody>';
+    let sum = 0;
+    rebuyItems.forEach((it,i)=>{
+      const c = rebuyCalcOne(it, mode, addAmt, newPct);
+      sum += c.buy;
+      h += '<tr>'
+        + '<td><b>'+comboEsc(it.serialNumber||"-")+'</b></td>'
+        + '<td>'+comboEsc(it.systemModel||"-")+'</td>'
+        + '<td>'+comboEsc(it.destination||"-")+'</td>'
+        + '<td class="ta-right">'+c.L.toLocaleString()+'</td>'
+        + '<td class="ta-right">'+c.soldPrice.toLocaleString()+'</td>'
+        + '<td>'+(c.base === "supply" ? "공급가" : "출고가")+'</td>'
+        + '<td class="ta-right">'+Math.round(c.pre).toLocaleString()+'</td>'
+        + '<td class="ta-right">'+(c.pct == null ? "-" : c.pct + "%")+'</td>'
+        + '<td class="ta-right">'
+        + (mode === "each"
+            ? '<input type="number" class="rb-buy" data-i="'+i+'" value="'+Math.round(c.buy)+'" style="width:110px;text-align:right;">'
+            : '<b>'+Math.round(c.buy).toLocaleString()+'</b>')
+        + '</td></tr>';
+    });
+    h += '</tbody><tfoot><tr><td colspan="8" class="ta-right"><b>합계</b></td>'
+      + '<td class="ta-right"><b>'+Math.round(sum).toLocaleString()+'</b></td></tr></tfoot></table>';
+    el.innerHTML = h;
+  };
+
+  window.submitRebuy = async function(){
+    if(rebuyItems.length === 0){ alert("되사올 재고가 없습니다."); return; }
+    const mode   = (document.querySelector('input[name="rb-mode"]:checked')||{}).value || "same";
+    const addAmt = Number((document.getElementById("rb-add")||{}).value)||0;
+    const newPct = Number((document.getElementById("rb-pct")||{}).value)||0;
+    const source = String(document.getElementById("rb-source").value||"").trim();
+    const orderDate = String(document.getElementById("rb-orderdate").value||"").replace(/\D/g,"");
+    const inDate    = String(document.getElementById("rb-indate").value||"").replace(/\D/g,"");
+    const location  = String(document.getElementById("rb-location").value||"").trim();
+    const payMethod = String(document.getElementById("rb-paymethod").value||"normal");
+    if(!source){ alert("매입처를 골라주세요."); return; }
+    if(orderDate.length !== 8){ alert("주문일을 8자리로 넣어주세요."); return; }
+    if(inDate.length !== 8){ alert("입고일을 8자리로 넣어주세요."); return; }
+
+    // 한 대씩 넣은 값 읽기
+    const eachBuy = {};
+    if(mode === "each"){
+      document.querySelectorAll(".rb-buy").forEach(e=>{ eachBuy[Number(e.dataset.i)] = Number(e.value)||0; });
+    }
+    const plan = rebuyItems.map((it,i)=>{
+      const c = rebuyCalcOne(it, mode, addAmt, newPct);
+      if(mode === "each" && eachBuy[i] != null){
+        c.buy = eachBuy[i];
+        c.pre = c.L ? c.L - c.buy : 0;
+        const B = (c.base === "supply") ? (c.L/1.1) : c.L;
+        c.pct = B ? Number(((c.pre/B)*100).toFixed(2)) : null;
+      }
+      return { it, c };
+    });
+    const total = plan.reduce((n,x)=> n + x.c.buy, 0);
+    const modeTxt = { same:"판매했던 값 그대로", add:"대당 "+addAmt.toLocaleString()+"원 붙여서",
+                      pct:"할인율 "+newPct+"%", each:"한 대씩 직접" }[mode];
+    if(!confirm("되사오기를 진행합니다.\n\n"
+      + "  매입처   " + source + "\n  주문일   " + orderDate + "\n  입고일   " + inDate
+      + "\n  방식     " + modeTxt + "\n  대수     " + plan.length + "대"
+      + "\n  입고가 합계 " + Math.round(total).toLocaleString()
+      + "\n\n1차 판매 기록은 그대로 둡니다. 새 재고로 등록합니다."
+      + (mode === "same" ? "\n1차와 이어두어 나중에 1차 금액이 바뀌면 함께 바뀝니다." : "")
+      + "\n\n진행할까요?")) return;
+
+    const msg = document.getElementById("rebuy-msg");
+    if(msg) msg.innerHTML = '<span style="color:var(--gray);">등록 중입니다...</span>';
+    let n = 0;
+    try{
+      // ① 주문 묶음 · 품목
+      const batchRef = await addDoc(collection(db,"orderBatches"), {
+        orderDate, source, carrier: rebuyItems[0].carrier || "",
+        paymentMethod: payMethod, status: "진행",
+        depositRequired: Math.round(total), memo: "되사오기 (재매입)",
+        isRebuy: true,
+        createdBy: currentUser.name, createdByUsername: currentUser.username, createdAt: serverTimestamp()
+      });
+      // 모델·색상이 같은 것끼리 묶어 주문 품목을 만듭니다.
+      const byKey = {};
+      plan.forEach(x=>{
+        const k = [x.it.systemModel||"", x.it.systemColor||x.it.manufacturerColor||"", x.c.L, Math.round(x.c.pre)].join("|");
+        (byKey[k] = byKey[k] || []).push(x);
+      });
+      const orderIdOf = {};
+      for(const k of Object.keys(byKey)){
+        const g = byKey[k], f = g[0];
+        const ref = await addDoc(collection(db,"orders"), {
+          batchId: batchRef.id, orderDate, source, carrier: f.it.carrier || "",
+          systemModel: f.it.systemModel||"", baseModel: f.it.baseModel||"",
+          petName: f.it.petName||"", capacity: f.it.capacity||"",
+          manufacturerColor: f.it.manufacturerColor||"", systemColor: f.it.systemColor||"",
+          sku: f.it.sku||"", quantity: g.length, arrivedCount: g.length,
+          listPrice: f.c.L, preDiscountAmt: Math.round(f.c.pre),
+          preDiscountPct: f.c.pct, otherDiscountAmt: 0, otherDiscountPct: null,
+          purchasePrice: Math.round(f.c.buy),
+          paymentMethod: payMethod, status: "진행", isRebuy: true,
+          createdBy: currentUser.name, createdAt: serverTimestamp()
+        });
+        g.forEach(x=> orderIdOf[x.it.id] = ref.id);
+      }
+      // ② 재고 — 새 코드로 등록합니다. 1차와 이어둡니다.
+      const ihRows = [];
+      for(const x of plan){
+        const it = x.it, c = x.c;
+        const ref = await addDoc(collection(db,"inventoryItems"), {
+          orderDate, inDate, source, location: location || it.location || "",
+          carrier: it.carrier||"", manufacturer: it.manufacturer||"",
+          petName: it.petName||"", systemModel: it.systemModel||"", baseModel: it.baseModel||"",
+          capacity: it.capacity||"", manufacturerColor: it.manufacturerColor||"",
+          systemColor: it.systemColor||"", sku: it.sku||"",
+          entryType: "imei", quantity: 1, serialNumber: it.serialNumber||"",
+          listPrice: c.L, purchaseDiscount: c.pct, purchaseDiscountAmt: Math.round(c.pre),
+          otherDiscountPct: null, otherDiscountAmt: null,
+          purchasePrice: Math.round(c.buy), discountBase: c.base,
+          status: "보유중", orderId: orderIdOf[it.id] || null,
+          // ── 되사오기 표시 ──
+          isRebuy: true, rebuyFromItemId: it.id,
+          rebuySerial: it.serialNumber||"", rebuyFromDest: it.destination||"",
+          rebuyFromOutDate: it.outDate||"",
+          //  「판매했던 값 그대로」일 때만 1차와 이어둡니다. 1차가 바뀌면 함께 바뀝니다.
+          buyPriceFollowsSale: (mode === "same"),
+          createdBy: currentUser.name, createdByUsername: currentUser.username, createdAt: serverTimestamp()
+        });
+        // 1차 재고에도 「되사감」 표시를 남깁니다. 양쪽에서 서로 보이게 합니다.
+        try{
+          await updateDoc(doc(db,"inventoryItems", it.id), {
+            rebuyToItemId: ref.id, rebuyBackAt: inDate, rebuyBackSource: source });
+          await logItemsEach([{ id: it.id, serialNumber: it.serialNumber||"", systemModel: it.systemModel||"",
+            detail: "이 단말기를 되사왔습니다 · " + source + " · " + inDate
+              + " · 입고가 " + Math.round(c.buy).toLocaleString()
+              + " (1차 판매 " + (it.destination||"-") + " " + (it.outDate||"-") + " 는 그대로입니다)" }], "edited", {});
+        }catch(e){}
+        ihRows.push({ id: ref.id, serialNumber: it.serialNumber||"", systemModel: it.systemModel||"",
+          detail: "되사오기로 다시 매입 · " + source + " · 입고가 " + Math.round(c.buy).toLocaleString()
+            + " (1차 판매 " + (it.destination||"-") + " " + (it.outDate||"-")
+            + " · 판매가 " + (Number(it.salePrice)||0).toLocaleString() + ")"
+            + (mode === "same" ? " · 1차와 이어둠" : " · " + modeTxt) });
+        n++;
+      }
+      try{ await logItemsEach(ihRows, "inbound", {}); }catch(e){}
+      logAction("되사오기 (재매입)", source + " / " + n + "대 / " + modeTxt
+        + " / 입고가 합계 " + Math.round(total).toLocaleString());
+      clearCache("inventory"); clearCache("orders"); clearDashCache();
+    }catch(e){
+      if(msg) msg.innerHTML = '<span style="color:var(--danger);">등록하지 못했습니다. '
+        + comboEsc((e&&e.message)?e.message:String(e)) + '</span>';
+      return;
+    }
+    if(msg) msg.innerHTML = '<span style="color:#2e7d32;">' + n + '대를 되사왔습니다.</span>';
+    alert(n + "대를 되사왔습니다.\n\n주문 1건과 재고 " + n + "줄이 새로 만들어졌습니다.\n"
+      + "1차 판매 기록은 그대로입니다.");
+    clearInvSelectAll();
+    closeRebuy();
+    loadInventoryList();
+  };
+
   // ================= 재고를 바꾸면 딸린 곳을 한 번에 맞춥니다 =================
   //  재고 값은 주문 품목 · 판매요청 · 묶음 합계 · 여신에도 저장돼 있습니다.
   //  어느 화면에서 고치든 이 함수 하나만 부르면 전부 따라갑니다.
@@ -26255,6 +26634,31 @@
                 out.credit++;
               }
             }
+          }
+        }catch(e){}
+      }
+
+      // ── 되사오기 ── 이 재고를 되사간 2차 재고의 매입 조건을 함께 맞춥니다.
+      //  「판매했던 값 그대로」로 되사온 건만 따라갑니다. (값을 따로 넣으신 건은 그대로 둡니다)
+      if(changed(b,a,SALE)){
+        try{
+          const rb = await getDocs(query(collection(db,"inventoryItems"),
+            where("rebuyFromItemId","==", r.id)));
+          for(const dd of rb.docs){
+            const v = dd.data();
+            if(v.deleted === true) continue;
+            if(v.buyPriceFollowsSale !== true) continue;
+            const L2 = Number(val(b,a,"listPrice") || b.listPrice) || Number(v.listPrice) || 0;
+            const buy2 = Number(val(b,a,"salePrice")) || 0;
+            if(!L2 || !buy2) continue;
+            const base2 = String(v.discountBase||"") || "unit";
+            const B2 = (base2 === "supply") ? (L2/1.1) : L2;
+            const pre2 = L2 - buy2;
+            const pct2 = B2 ? Number(((pre2/B2)*100).toFixed(2)) : null;
+            await updateDoc(doc(db,"inventoryItems", dd.id), {
+              listPrice: L2, purchaseDiscountAmt: Math.round(pre2),
+              purchaseDiscount: pct2, purchasePrice: buy2 });
+            out.rebuy = (out.rebuy||0) + 1;
           }
         }catch(e){}
       }
@@ -26324,6 +26728,7 @@
     if(out.order || out.credit) clearCache("orders");
     if(out.credit || out.ledger) clearCache("loan");
     if(out.sale || out.batch) clearCache("saleRequests");
+    if(out.rebuy) clearCache("inventory");
     clearDashCache();
     return out;
   }
@@ -26336,6 +26741,7 @@
     if(o.order)  p.push("주문 품목 " + o.order + "건");
     if(o.credit) p.push("여신 차감액 " + o.credit + "건");
     if(o.ledger) p.push("여신 원장 반품 기록 " + o.ledger + "건");
+    if(o.rebuy)  p.push("되사온 재고 " + o.rebuy + "대");
     if(o.sale)   p.push("판매요청 " + o.sale + "건");
     if(o.batch)  p.push("묶음 합계 " + o.batch + "건");
     let t = p.length ? (" · " + p.join(" · ") + " 함께 맞춤") : "";
@@ -26682,9 +27088,21 @@
       let list = []; iq.forEach(d=> list.push({ id:d.id, ...d.data() }));
       list = list.filter(x=> x.deleted !== true);
       if(list.length > 1){
-        // 같은 일련번호가 모델이 달라 여러 건이면 모두 보여줍니다.
-        head = '<div style="border:1px solid var(--danger);background:#fdecea;padding:8px 10px;margin-bottom:8px;font-size:12.5px;">'
-          + '<b>같은 일련번호가 ' + list.length + '건 있습니다.</b> 모델이 다릅니다 — 아래 이력에는 ' + list.length + '건이 섞여 있습니다.</div>';
+        // 되사오기로 여러 건인 경우와, 잘못 겹친 경우를 나눠 알려드립니다.
+        const rb = list.filter(x=> x.isRebuy || x.rebuyToItemId);
+        if(rb.length){
+          head = '<div style="border:1px solid var(--navy);background:#f4f7fb;padding:8px 10px;margin-bottom:8px;font-size:12.5px;line-height:1.8;">'
+            + '<b>되사오기로 이어진 재고 ' + list.length + '건입니다.</b> 같은 단말기이지만 재고 코드가 각각 달라 서로 섞이지 않습니다.<br>'
+            + list.slice().sort((a,b)=> String(a.inDate||"").localeCompare(String(b.inDate||"")))
+                .map((x,i)=> '&nbsp;&nbsp;' + (i+1) + '차 · 입고 ' + comboEsc(x.inDate||"-")
+                  + ' · ' + comboEsc(x.source||"-") + ' 매입'
+                  + (x.destination ? ' → ' + comboEsc(x.destination) + ' 판매 ' + comboEsc(x.outDate||"") : '')
+                  + ' · <b>' + comboEsc(x.status||"-") + '</b>').join("<br>")
+            + '</div>';
+        }else{
+          head = '<div style="border:1px solid var(--danger);background:#fdecea;padding:8px 10px;margin-bottom:8px;font-size:12.5px;">'
+            + '<b>같은 일련번호가 ' + list.length + '건 있습니다.</b> 모델이 다릅니다 — 아래 이력에는 ' + list.length + '건이 섞여 있습니다.</div>';
+        }
       }
       list.forEach(it=>{
         const stColor = (it.status === "개통") ? "#6a1b9a"
@@ -31517,7 +31935,8 @@
     const outDate = document.getElementById("salereq-match-outdate-input").value || todayStr();
     const snap = await getDocs(query(collection(db,"inventoryItems"), where("serialNumber","==",serial)));
     if(snap.empty){ alert("해당 일련번호의 재고를 찾을 수 없습니다."); return; }
-    const itemDoc = snap.docs[0];
+    // 같은 일련번호가 여럿이면(되사오기 등) 아직 안 판 재고를 씁니다.
+    const itemDoc = pickLiveItemDoc(snap.docs) || snap.docs[0];
     const it = itemDoc.data();
     if(it.status === "판매"){ if(!confirm("이미 판매 처리된 재고입니다. 그래도 이 판매요청으로 매칭하시겠습니까?")) return; }
 
@@ -31651,9 +32070,9 @@
 
     const snap = await getDocs(query(collection(db,"inventoryItems"), where("serialNumber","==",serial)));
     if(snap.empty){ resultEl.innerHTML = '<span style="color:var(--danger);">해당 일련번호의 재고를 찾을 수 없습니다.</span>'; return; }
-    const itemDoc = snap.docs[0];
+    const itemDoc = pickLiveItemDoc(snap.docs) || snap.docs[0];
     const it = itemDoc.data();
-    if(it.status === "판매"){
+    if(String(it.status||"").indexOf("판매") >= 0){
       if(!confirm("이미 판매 처리된 재고입니다. 그래도 다시 판매 처리하시겠습니까?")) return;
     }
 
@@ -40275,7 +40694,8 @@
         const added = INV_COLUMNS.map(c=>c.key).filter(k=> !known.includes(k));
         // 저장해 둔 순서를 그대로 지키고, 새로 생긴 열만 붙입니다.
         //  이어서 보는 게 나은 열은 짝이 되는 열 바로 뒤에 끼워 넣습니다.
-        const NEXT_TO = { discountBase: "purchasePrice", saleDiscountBase: "saleDiscount" };
+        const NEXT_TO = { discountBase: "purchasePrice", saleDiscountBase: "saleDiscount",
+                          isRebuy: "source" };
         const alive = saved.filter(k=> INV_COLUMNS.some(c=>c.key===k));
         const fresh = added.filter(k=> !alive.includes(k));
         fresh.forEach(k=>{
