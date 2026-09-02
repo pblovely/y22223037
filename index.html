@@ -387,7 +387,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-02 v880</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-02 v881</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -13348,6 +13348,26 @@
     const noPrice = Object.keys(groups).filter(k=> !groups[k].resv.salePrice);
     if(noPrice.length){ alert("판매가가 없는 예약이 있습니다. 예약을 먼저 수정해주세요."); return; }
 
+    // 이미 판매된 재고는 두 번 팔 수 없습니다.
+    {
+      const sold = rbPlan.filter(function(x){
+        const it = x.item || {};
+        return String(it.status||"").indexOf("판매") >= 0 || !!it.saleRequestId;
+      });
+      if(sold.length){
+        alert("이미 판매된 재고가 " + sold.length + "대 있습니다.\n\n"
+          + sold.slice(0,8).map(function(x){
+              const it = x.item||{};
+              return "  " + (it.serialNumber||"-") + "  " + (it.systemModel||"")
+                   + "  →  " + (it.destination||it.status||"-") + " " + (it.outDate||"");
+            }).join("\n")
+          + (sold.length > 8 ? "\n  ... 외 " + (sold.length-8) + "대" : "")
+          + "\n\n두 번 팔 수 없습니다. 그 건들을 빼고 다시 해주세요.\n"
+          + "정말 다시 파실 것이라면 판매 관리에서 그 판매요청을 먼저 취소해주세요.");
+        return;
+      }
+    }
+
     const planTotal = Object.keys(groups).reduce((n,k)=>
       n + (Number(groups[k].resv.salePrice)||0) * groups[k].list.length, 0);
     if(!confirm(rbPlan.length + "대를 배정하고 판매처리합니다.\n\n"
@@ -23639,7 +23659,12 @@
         const d0 = pickLiveItemDoc(q.docs);
         if(!d0){ msg("쓸 수 있는 재고가 없습니다: <b>"+comboEsc(sn)+"</b>", true); return; }
         const it = d0.data();
-        if(String(it.status||"").indexOf("판매") >= 0){ msg("이미 판매 처리된 재고입니다: <b>"+comboEsc(sn)+"</b>", true); return; }
+        if(String(it.status||"").indexOf("판매") >= 0 || it.saleRequestId){
+          msg("이미 판매된 재고입니다: <b>"+comboEsc(sn)+"</b> ("
+            + comboEsc(it.destination||it.status||"-") + " " + comboEsc(it.outDate||"") + ")<br>"
+            + "두 번 팔 수 없습니다. 다시 파실 것이라면 판매 관리에서 그 판매요청을 먼저 취소해주세요.", true);
+          return;
+        }
         matchedDocs.push({ id:d0.id, it });
       }
     }
