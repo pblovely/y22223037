@@ -387,7 +387,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-02 v856</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-02 v857</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -27594,7 +27594,7 @@
       await updateDoc(doc(db,"inventoryItems", itemId), { location: nv });
       await logItem(itemId, serial, "location", (cur||"없음") + " → " + (nv||"없음"), { systemModel: it.systemModel||"" });
       logAction("위치 이동", serial + " : " + (cur||"-") + " → " + (nv||"-"));
-      alert("옮겼습니다."); openItemHistory(serial); clearDashCache(); clearCache("inventory");
+      alert("옮겼습니다."); openItemHistory(serial, String(it.systemModel||it.baseModel||"")); clearDashCache(); clearCache("inventory");
       return;
     }
 
@@ -27606,7 +27606,7 @@
       await updateDoc(doc(db,"inventoryItems", itemId), { status:"개통", activateDate: date });
       await logItem(itemId, serial, "activate", "개통일 " + date + (it.carrier ? " · " + it.carrier : ""), { systemModel: it.systemModel||"" });
       logAction("개통 처리", serial + " / " + date);
-      alert("개통 처리했습니다."); openItemHistory(serial); clearDashCache(); clearCache("inventory");
+      alert("개통 처리했습니다."); openItemHistory(serial, String(it.systemModel||it.baseModel||"")); clearDashCache(); clearCache("inventory");
       return;
     }
 
@@ -27641,7 +27641,7 @@
       await logItem(itemId, serial, "deactivate", date + " · 사유: " + String(reason).trim() + " · 재판매 가능", { systemModel: it.systemModel||"" });
       logAction("개통취소", serial + " / " + String(reason).trim());
       alert("개통취소 처리했습니다. 다시 판매할 수 있습니다.");
-      openItemHistory(serial); clearDashCache(); clearCache("inventory");
+      openItemHistory(serial, String(it.systemModel||it.baseModel||"")); clearDashCache(); clearCache("inventory");
       if(typeof loadSaleRequestList === "function") loadSaleRequestList();
       return;
     }
@@ -27660,7 +27660,7 @@
         + " · 출고가 " + (Number(it.listPrice)||0).toLocaleString(), { systemModel: it.systemModel||"" });
       logAction("삼성 반품", serial + " / " + String(reason||"").trim());
       alert("반품 처리했습니다.\n교체품을 받으시면 재고 등록에서 <신품입고>로 넣어주세요.");
-      openItemHistory(serial); clearDashCache(); clearCache("inventory");
+      openItemHistory(serial, String(it.systemModel||it.baseModel||"")); clearDashCache(); clearCache("inventory");
       return;
     }
 
@@ -27676,25 +27676,35 @@
       await updateDoc(doc(db,"inventoryItems", itemId), patch);
       await logItem(itemId, serial, "price", "판매가 " + cur.toLocaleString() + " → " + nv.toLocaleString() + (memo ? " · " + memo : ""), { systemModel: it.systemModel||"" });
       logAction("판매가 변경", serial + " : " + cur.toLocaleString() + " → " + nv.toLocaleString());
-      alert("바꿨습니다."); openItemHistory(serial); clearDashCache(); clearCache("inventory");
+      alert("바꿨습니다."); openItemHistory(serial, String(it.systemModel||it.baseModel||"")); clearDashCache(); clearCache("inventory");
       return;
     }
   };
 
   // 일련번호를 눌렀을 때 뜨는 팝업
   window.closeItemHistoryModal = function(){ document.getElementById("ih-modal-overlay").style.display = "none"; };
-  window.openItemHistory = async function(serial){
+  //  wantModel 을 주시면 그 모델의 이력만 보여줍니다.
+  //  일련번호는 모델마다 따로 붙으므로, 번호만 같은 다른 단말기의 이력이 섞이면 안 됩니다.
+  window.openItemHistory = async function(serial, wantModel){
     if(!serial){ alert("일련번호가 없습니다."); return; }
     const body = document.getElementById("ih-modal-body");
-    document.getElementById("ih-modal-title").textContent = "단말 이력 — " + serial;
+    const wantKey = wantModel ? modelDupKey(String(wantModel)) : "";
+    document.getElementById("ih-modal-title").textContent =
+      "단말 이력 — " + serial + (wantModel ? "  ·  " + wantModel : "");
     body.innerHTML = '<div class="list-empty">불러오는 중...</div>';
     document.getElementById("ih-modal-overlay").style.display = "flex";
 
     let head = "";
+    let otherModels = [];
     try{
       const iq = await getDocs(query(collection(db,"inventoryItems"), where("serialNumber","==",serial)));
       let list = []; iq.forEach(d=> list.push({ id:d.id, ...d.data() }));
       list = list.filter(x=> x.deleted !== true);
+      if(wantKey){
+        // 번호는 같은데 모델이 다른 재고는 빼고, 몇 건인지만 알려드립니다.
+        otherModels = list.filter(x=> modelDupKey(String(x.systemModel||x.baseModel||"")) !== wantKey);
+        list = list.filter(x=> modelDupKey(String(x.systemModel||x.baseModel||"")) === wantKey);
+      }
       if(list.length > 1){
         // 되사오기로 여러 건인 경우와, 잘못 겹친 경우를 나눠 알려드립니다.
         const rb = list.filter(x=> x.isRebuy || x.rebuyToItemId);
@@ -27746,7 +27756,14 @@
     let rows = [];
     try{
       const snap = await getDocs(query(collection(db,"itemHistory"), where("serialNumber","==",serial)));
-      snap.forEach(d=> rows.push({ id:d.id, ...d.data() }));
+      //  모델을 주셨으면 그 모델의 이력만 남깁니다. (번호만 같은 다른 단말기 이력 제외)
+      const keepRow = (v)=>{
+        if(!wantKey) return true;
+        const m = String(v.systemModel || v.baseModel || "").trim();
+        if(!m) return true;                       // 모델이 안 적힌 옛 기록은 그대로 둡니다
+        return modelDupKey(m) === wantKey;
+      };
+      snap.forEach(d=>{ const v = d.data(); if(keepRow(v)) rows.push({ id:d.id, ...v }); });
     }catch(e){}
     rows.sort((a,b)=>{
       // 실제로 일어난 날짜순으로 세웁니다. (기록한 시각이 아니라)
@@ -27763,6 +27780,16 @@
                      status:6, deactivate:6, returned:7, deleted:8 };
       return (RANK[a.type] || 5) - (RANK[b.type] || 5);
     });
+    if(otherModels.length){
+      head += '<div style="border:1px solid var(--line);background:#f7f7f7;padding:7px 10px;margin-bottom:8px;font-size:11.5px;line-height:1.7;">'
+        + '같은 일련번호가 다른 모델에도 <b>' + otherModels.length + '건</b> 있습니다. 그 이력은 여기 안 보입니다.<br>'
+        + otherModels.slice(0,3).map(x=> '&nbsp;&nbsp;· ' + comboEsc(String(x.systemModel||x.baseModel||"-"))
+            + ' ' + comboEsc(String(x.systemColor||x.manufacturerColor||"-"))
+            + ' · ' + comboEsc(String(x.destination||x.status||"-"))
+            + ' <a href="javascript:void(0)" style="color:var(--navy);" onclick="openItemHistory(\''
+            + comboEsc(serial) + '\',\'' + comboEsc(String(x.systemModel||x.baseModel||"")) + '\')">이력 보기</a>').join("<br>")
+        + '</div>';
+    }
     body.innerHTML = head + (rows.length
       ? renderItemHistoryTable(rows, true)
       : '<div class="list-empty">아직 기록이 없습니다.<br><span style="color:var(--gray);">이력은 이 기능을 넣은 뒤 작업부터 쌓입니다.</span></div>');
@@ -38585,7 +38612,7 @@
             td.style.textDecoration = "underline";
             td.style.fontWeight = "700";
             td.title = "단말 이력 보기";
-            td.onclick = ()=> openItemHistory(sn);
+            td.onclick = ()=> openItemHistory(sn, String(it.systemModel || it.baseModel || ""));
           }
         }
         if(c.getRaw) td.className = "ta-right";   // 금액·율 컬럼은 오른쪽 정렬
@@ -39863,7 +39890,7 @@
     pageItems.forEach(it=>{
       const sub = Number(it.subsidyAmount)||0;
       const btns = (canDo ? '<button class="btn small secondary" style="width:auto;" data-act-sub="'+it.id+'">공시지원금</button>' : '')
-        + '<button class="btn small secondary" style="width:auto;margin-left:4px;" data-act-hist="'+comboEsc(it.serialNumber||"")+'">이력</button>';
+        + '<button class="btn small secondary" style="width:auto;margin-left:4px;" data-act-hist="'+comboEsc(it.serialNumber||"")+'" data-act-model="'+comboEsc(it.systemModel||it.baseModel||"")+'">이력</button>';
       h += '<tr class="rbd-clickable" data-row-act="act|'+it.id+'">'
         + '<td><b>'+comboEsc(it.serialNumber||"-")+'</b></td>'
         + '<td>'+comboEsc(it.systemModel||"-")+'</td>'
@@ -39882,7 +39909,7 @@
     foldActionColumn("activation-list");
     bindRowActions("activation-list");
     listEl.querySelectorAll("[data-act-sub]").forEach(b=> b.onclick = ()=> setPublicSubsidy(b.dataset.actSub));
-    listEl.querySelectorAll("[data-act-hist]").forEach(b=> b.onclick = ()=> openItemHistory(b.dataset.actHist));
+    listEl.querySelectorAll("[data-act-hist]").forEach(b=> b.onclick = ()=> openItemHistory(b.dataset.actHist, b.dataset.actModel||""));
     addDownloadBtn("dl-activation", "activation-list", "개통목록");
     addViewCfgBtn("dl-activation", "activation-list");
   };
