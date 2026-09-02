@@ -387,7 +387,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-02 v872</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-02 v873</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -3681,10 +3681,10 @@
               업체 정보 (매입처 · 판매처 · 할인 기준)<br>
               모델 · 색상 · 삼성모델명(SKU)<br>
               위치 · 통신사 · 제조사 · 상태 목록<br>
-              계좌 · 카드 · 팀<br>
+              팀<br>
               세금계산서 발행 정보 · 견적서 발행 정보<br>
               목록 열 설정 · 화면 설정 · 공지<br>
-              여신 약정 · 여신 이자 조건
+              계좌 · 카드 · 여신 약정 <span style="color:var(--gray);">(아래에서 고르시면 지웁니다)</span>
             </div>
           </div>
           <div style="flex:1;min-width:280px;border:1px solid var(--danger);padding:10px 12px;">
@@ -3714,6 +3714,12 @@
           <label style="display:block;font-size:12.5px;line-height:2;cursor:pointer;">
             <input type="checkbox" id="wipe-log"> 작업 이력 (누가 언제 무엇을 했는지)
             <span style="color:var(--gray);font-size:11px;"> — 남기시면 지난 기록을 계속 보실 수 있습니다.</span></label>
+          <label style="display:block;font-size:12.5px;line-height:2;cursor:pointer;">
+            <input type="checkbox" id="wipe-loan"> B2B 대출 · 대출 이자
+            <span style="color:var(--gray);font-size:11px;"> — 받으신 대출 건과 이자 기록입니다.</span></label>
+          <label style="display:block;font-size:12.5px;line-height:2;cursor:pointer;">
+            <input type="checkbox" id="wipe-acct"> 계좌 · 카드 목록
+            <span style="color:var(--gray);font-size:11px;"> — 등록해두신 계좌·카드입니다. 지우면 다시 등록하셔야 합니다.</span></label>
         </div>
 
         <div id="wipe-count" style="font-size:12.5px;line-height:1.9;margin-bottom:10px;"></div>
@@ -26604,11 +26610,16 @@
     ["quotations",         "견적서"]
   ];
   const WIPE_PICK = [
-    ["taxInvoices",  "세금계산서 발행 내역", "wipe-tax"],
-    ["taxUploads",   "세금계산서 올린 자료", "wipe-tax"],
-    ["bankDeposits", "입출금 내역",         "wipe-bank"],
-    ["bankRecon",    "통장 대사",           "wipe-bank"],
-    ["activityLogs", "작업 이력",           "wipe-log"]
+    ["taxInvoices",      "세금계산서 발행 내역", "wipe-tax"],
+    ["taxUploads",       "세금계산서 올린 자료", "wipe-tax"],
+    ["bankDeposits",     "입출금 내역",         "wipe-bank"],
+    ["bankRecon",        "통장 대사",           "wipe-bank"],
+    ["activityLogs",     "작업 이력",           "wipe-log"],
+    ["b2bLoans",         "B2B 대출",           "wipe-loan"],
+    ["b2bLoanCost",      "B2B 대출 이자",       "wipe-loan"],
+    ["bankAccountsList", "계좌 목록",           "wipe-acct"],
+    ["cardList",         "카드 목록",           "wipe-acct"],
+    ["bankAccounts",     "계좌 이름",           "wipe-acct"]
   ];
 
   function wipeTargets(){
@@ -26624,7 +26635,7 @@
     { const e=document.getElementById("wipe-confirm"); if(e) e.value=""; }
     { const e=document.getElementById("wipe-count"); if(e) e.innerHTML=""; }
     { const e=document.getElementById("wipe-msg"); if(e) e.innerHTML=""; }
-    ["wipe-tax","wipe-bank","wipe-log"].forEach(function(id){
+    ["wipe-tax","wipe-bank","wipe-log","wipe-loan","wipe-acct"].forEach(function(id){
       const e=document.getElementById(id); if(e) e.checked=false; });
     document.getElementById("wipe-overlay").style.display="flex";
   };
