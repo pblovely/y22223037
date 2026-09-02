@@ -387,7 +387,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-02 v846</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-02 v847</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -26335,7 +26335,7 @@
         + "\n\n그 건들을 빼고 다시 해주세요.");
       return;
     }
-    rebuyItems = picked;
+    rebuyItems = picked; rebuyTyped = {};
     { const e = document.getElementById("rb-paste"); if(e) e.value = ""; }
     { const e = document.getElementById("rb-paste-msg"); if(e) e.innerHTML = ""; }
     document.getElementById("rebuy-head").innerHTML =
@@ -26365,9 +26365,33 @@
     document.getElementById("rebuy-overlay").style.display = "flex";
   };
   // 일련번호를 붙여넣어 되사올 재고를 모읍니다.
+  //  붙여넣은 줄에서 「모델 · 색상 · 일련번호」를 함께 읽어둡니다.
+  //  나중에 찾은 재고와 대조해서 다르면 미리보기에 알려드립니다. (검수용)
+  let rebuyTyped = {};      // 일련번호 → { model, color }
+  function readRebuyPasteHints(raw){
+    const out = {};
+    String(raw||"").split(/\r?\n/).forEach(line=>{
+      const t = String(line).trim();
+      if(!t) return;
+      const parts = t.split(/\t+| {2,}|\s+/).map(x=>x.trim()).filter(x=>x);
+      if(parts.length < 2) return;
+      // 마지막 칸을 일련번호로 봅니다. 앞에 모델·색상이 옵니다.
+      const sn = normSerial(parts[parts.length-1]);
+      if(!sn) return;
+      const rest = parts.slice(0, parts.length-1);
+      out[sn] = {
+        model: rest.find(x=> /^[A-Za-z]/.test(x)) || "",
+        color: rest.filter(x=> !/^[A-Za-z]/.test(x)).join(" ") || ""
+      };
+    });
+    return out;
+  }
+
   window.addRebuyBySerial = async function(){
     const raw = String((document.getElementById("rb-paste")||{}).value||"");
     const msg = document.getElementById("rb-paste-msg");
+    // 넣으신 모델·색상을 기억해 둡니다. (미리보기에서 대조합니다)
+    Object.assign(rebuyTyped, readRebuyPasteHints(raw));
     let list = [];
     try{ list = (parseSerialPaste(raw)||[]).map(e=> e.sn); }catch(e){}
     if(list.length === 0){ try{ list = (parseSerialPasteLoose(raw)||[]).map(e=> e.sn); }catch(e){} }
@@ -26410,7 +26434,7 @@
     renderRebuyPreview();
   };
   window.clearRebuyList = function(){
-    rebuyItems = [];
+    rebuyItems = []; rebuyTyped = {};
     document.getElementById("rebuy-head").innerHTML = '<b>0대</b>';
     const m = document.getElementById("rb-paste-msg"); if(m) m.innerHTML = "";
     renderRebuyPreview();
@@ -26427,13 +26451,15 @@
     const addAmt = Number((document.getElementById("rb-add")||{}).value)||0;
     const newPct = Number((document.getElementById("rb-pct")||{}).value)||0;
     let h = '<table class="data-table" style="width:100%;font-size:11.5px;"><thead><tr>'
-      + '<th>일련번호</th><th>모델</th><th>색상</th><th>통신사</th>'
+      + '<th style="width:28px;"><input type="checkbox" id="rb-all" onclick="toggleRebuyAll(this)"></th>'
+      + '<th>일련번호</th><th>모델<br><span style="font-weight:400;color:var(--gray);font-size:10.5px;">넣으신 것</span></th>'
+      + '<th>색상<br><span style="font-weight:400;color:var(--gray);font-size:10.5px;">넣으신 것</span></th><th>통신사</th>'
       + '<th>입고일</th><th>판매일</th><th>1차 판매처</th><th class="ta-right">출고가</th>'
       + '<th class="ta-right">1차 판매가</th><th>기준</th>'
       + '<th class="ta-right">선할인</th><th class="ta-right">선할인%</th><th class="ta-right">입고가</th>'
       + '<th>빼기</th>'
       + '</tr></thead><tbody>';
-    let sum = 0;
+    let sum = 0, mismatch = 0;
     rebuyItems.forEach((it,i)=>{
       const c = rebuyCalcOne(it, mode, addAmt, newPct);
       sum += c.buy;
@@ -26450,9 +26476,16 @@
       }
       if(chk.modelBad || chk.colorBad) mismatch++;
       h += '<tr'+((chk.modelBad||chk.colorBad) ? ' style="background:#fdecea;"' : '')+'>'
+        + '<td><input type="checkbox" class="rb-ck" data-i="'+i+'"'+((chk.modelBad||chk.colorBad)?' checked':'')+'></td>'
         + '<td><b>'+comboEsc(it.serialNumber||"-")+'</b></td>'
-        + '<td>'+comboEsc(it.systemModel||"-")+'</td>'
-        + '<td>'+comboEsc(it.systemColor||it.manufacturerColor||"-")+'</td>'
+        + '<td>'+comboEsc(it.systemModel||"-")
+          + ((typed && typed.model)
+              ? '<br><span style="font-size:10.5px;color:' + (chk.modelBad ? 'var(--danger);font-weight:700;">★ ' : 'var(--gray);">')
+                + comboEsc(typed.model) + '</span>' : '')+'</td>'
+        + '<td>'+comboEsc(it.systemColor||it.manufacturerColor||"-")
+          + ((typed && typed.color)
+              ? '<br><span style="font-size:10.5px;color:' + (chk.colorBad ? 'var(--danger);font-weight:700;">★ ' : 'var(--gray);">')
+                + comboEsc(typed.color) + '</span>' : '')+'</td>'
         + '<td>'+comboEsc(it.carrier||"-")+'</td>'
         + '<td>'+comboEsc(it.inDate||"-")+'</td>'
         + '<td>'+comboEsc(it.outDate||"-")+'</td>'
@@ -26470,12 +26503,41 @@
         + '<td><button class="btn small secondary" style="width:auto;padding:1px 6px;" onclick="removeRebuyRow('+i+')">✕</button></td>'
         + '</tr>';
     });
-    h += '</tbody><tfoot><tr><td colspan="12" class="ta-right"><b>합계</b></td>'
+    h += '</tbody><tfoot><tr><td colspan="13" class="ta-right"><b>합계</b></td>'
       + '<td class="ta-right"><b>'+Math.round(sum).toLocaleString()+'</b></td><td></td></tr></tfoot></table>';
+    if(mismatch){
+      h = '<div style="border:1px solid var(--danger);background:#fdecea;padding:8px 10px;margin-bottom:8px;font-size:12.5px;line-height:1.7;">'
+        + '<b style="color:var(--danger);">넣으신 모델·색상과 다른 재고가 ' + mismatch + '대 있습니다.</b><br>'
+        + '<span style="color:var(--gray);">붉은 줄은 체크가 되어 있습니다. 보시고 맞으면 체크를 풀고 그대로 진행하시고, '
+        + '아니면 아래 버튼으로 한 번에 빼주세요. 일련번호만 맞고 다른 단말기일 수 있습니다.</span><br>'
+        + '<button class="btn small danger" style="width:auto;margin-top:6px;" onclick="removeRebuyChecked()">체크한 줄 빼기</button>'
+        + '</div>' + h;
+    }
     el.innerHTML = h;
   };
 
   // 미리보기에서 한 줄 빼기 — 잘못 잡힌 재고를 그 자리에서 뺍니다.
+  // 체크한 줄을 한 번에 뺍니다. (모델·색상이 다른 줄은 미리 체크돼 있습니다)
+  window.toggleRebuyAll = function(cb){
+    document.querySelectorAll(".rb-ck").forEach(e=> e.checked = cb.checked);
+  };
+  window.removeRebuyChecked = function(){
+    const idx = [];
+    document.querySelectorAll(".rb-ck").forEach(e=>{ if(e.checked) idx.push(Number(e.dataset.i)); });
+    if(idx.length === 0){ alert("뺄 줄을 체크해주세요."); return; }
+    const list = idx.map(i=> rebuyItems[i]).filter(Boolean);
+    if(!confirm(idx.length + "대를 목록에서 뺍니다.\n\n"
+      + list.slice(0,6).map(x=> "  " + (x.serialNumber||"-") + "  " + (x.systemModel||"")
+          + " " + (x.systemColor||x.manufacturerColor||"")).join("\n")
+      + (list.length > 6 ? "\n  ... 외 " + (list.length-6) + "대" : "")
+      + "\n\n재고 자체는 그대로입니다. 되사오기 목록에서만 뺍니다.")) return;
+    idx.sort((a,b)=> b-a).forEach(i=> rebuyItems.splice(i,1));
+    document.getElementById("rebuy-head").innerHTML =
+      '<b>' + rebuyItems.length + '대</b>를 되사옵니다'
+      + (rebuyItems.length ? ' · 1차 판매처 ' + comboEsc([...new Set(rebuyItems.map(x=> x.destination||"-"))].join(", ")) : '');
+    renderRebuyPreview();
+  };
+
   window.removeRebuyRow = function(i){
     if(i < 0 || i >= rebuyItems.length) return;
     const it = rebuyItems[i];
