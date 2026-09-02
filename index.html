@@ -387,7 +387,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-02 v867</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-02 v868</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -25979,6 +25979,7 @@
       if(it.deleted === true) return;
       allItems.push(it);
       if(it.saleRequestId) return;                    // 이미 판매요청에 연결된 건 제외
+      if(String(it.status||"").indexOf("판매") >= 0 && it.saleRequestId) return;
       if(field === "all"){ i2sRows.push(it); return; }
       const v = String(it[field]||"").trim().toLowerCase();
       if(!v) return;
@@ -26114,15 +26115,17 @@
       if(items.length === 0) return;
     }
     // ── 같은 단말기가 이미 판매요청에 있으면 저장 전에 한 번 더 막습니다. ──
-    const dupPick = items.filter(it=> it._dup && it._dup.length);
+    // 같은 단말기가 이미 판매요청에 있으면 만들 수 없습니다.
+    const dupPick = items.filter(it=> (it._dup && it._dup.length) || it.saleRequestId
+                    || String(it.status||"").indexOf("판매") >= 0);
     if(dupPick.length){
-      if(!confirm("고르신 재고 중 " + dupPick.length + "대는 같은 단말기가 이미 판매요청에 있습니다.\n\n"
-        + dupPick.slice(0,6).map(x=> "  " + (x.serialNumber||"-") + "  " + (x.systemModel||"")
-            + "  →  " + (x._dup[0]||"")).join("\n")
-        + (dupPick.length > 6 ? "\n  ... 외 " + (dupPick.length-6) + "대" : "")
-        + "\n\n통신사·모델·일련번호가 같은 재고가 다른 판매요청에 들어가 있습니다.\n"
-        + "그래도 새 판매요청을 만들까요?\n\n"
-        + "[취소] 를 누르시면 이 건들을 빼고 다시 고르실 수 있습니다.")) return;
+      alert("이미 판매된 재고가 " + dupPick.length + "대 있습니다.\n\n"
+        + dupPick.slice(0,8).map(x=> "  " + (x.serialNumber||"-") + "  " + (x.systemModel||"")
+            + "  →  " + ((x._dup && x._dup[0]) || x.destination || x.status || "-")).join("\n")
+        + (dupPick.length > 8 ? "\n  ... 외 " + (dupPick.length-8) + "대" : "")
+        + "\n\n두 번 팔 수 없습니다. 그 건들의 체크를 풀고 다시 해주세요.\n"
+        + "정말 다시 파실 것이라면 판매 관리에서 그 판매요청을 먼저 취소해주세요.");
+      return;
     }
     const notSold = items.filter(it=> it.status !== "판매");
     let markSold = false;
@@ -33284,7 +33287,13 @@
     // 같은 일련번호가 여럿이면(되사오기 등) 아직 안 판 재고를 씁니다.
     const itemDoc = pickLiveItemDoc(snap.docs) || snap.docs[0];
     const it = itemDoc.data();
-    if(it.status === "판매"){ if(!confirm("이미 판매 처리된 재고입니다. 그래도 이 판매요청으로 매칭하시겠습니까?")) return; }
+    // 이미 판매된 재고는 다른 판매요청에 또 매칭할 수 없습니다.
+    if(String(it.status||"").indexOf("판매") >= 0 || it.saleRequestId){
+      alert("이미 판매된 재고입니다.\n\n  " + (it.serialNumber||serial) + "  " + (it.systemModel||"")
+        + "\n  → " + (it.destination||it.status||"-") + " " + (it.outDate||"")
+        + "\n\n두 번 팔 수 없습니다.\n다시 파실 것이라면 판매 관리에서 그 판매요청을 먼저 취소해주세요.");
+      return;
+    }
 
     const s = currentSaleReqData;
     const patch = {
@@ -33418,8 +33427,12 @@
     if(snap.empty){ resultEl.innerHTML = '<span style="color:var(--danger);">해당 일련번호의 재고를 찾을 수 없습니다.</span>'; return; }
     const itemDoc = pickLiveItemDoc(snap.docs) || snap.docs[0];
     const it = itemDoc.data();
-    if(String(it.status||"").indexOf("판매") >= 0){
-      if(!confirm("이미 판매 처리된 재고입니다. 그래도 다시 판매 처리하시겠습니까?")) return;
+    // 이미 판매된 재고는 두 번 팔 수 없습니다.
+    if(String(it.status||"").indexOf("판매") >= 0 || it.saleRequestId){
+      resultEl.innerHTML = '<span style="color:var(--danger);">이미 판매된 재고입니다. ('
+        + comboEsc(it.destination||it.status||"-") + " " + comboEsc(it.outDate||"") + ')<br>'
+        + '두 번 팔 수 없습니다. 다시 파실 것이라면 <b>판매 관리</b> 에서 그 판매요청을 먼저 취소해주세요.</span>';
+      return;
     }
 
     const patch = { destination: dest, status: "판매", outDate };
