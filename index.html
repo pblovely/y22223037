@@ -387,7 +387,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-02 v852</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-02 v854</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -8190,9 +8190,32 @@
       const serialNumber = entryType==="imei" ? normSerial(document.getElementById("item-serial-input").value) : "";
       if(entryType==="imei"){
         if(!serialNumber){ alert("일련번호를 입력해주세요."); return; }
+        // 일련번호는 모델마다 따로 붙습니다. 「모델 + 일련번호」 가 둘 다 같을 때만 겹친 것입니다.
         const dupSnap = await getDocs(query(collection(db,"inventoryItems"), where("serialNumber","==",serialNumber)));
-        const conflict = dupSnap.docs.find(d=>d.id !== editingItemId);
-        if(conflict){ alert("이미 등록된 일련번호입니다 (" + serialNumber + ")."); return; }
+        const myModel = modelDupKey(String(base.systemModel || base.baseModel || ""));
+        const conflict = dupSnap.docs.find(d=>{
+          if(d.id === editingItemId) return false;
+          const v = d.data();
+          if(v.deleted === true) return false;
+          return modelDupKey(String(v.systemModel || v.baseModel || "")) === myModel;
+        });
+        if(conflict){
+          alert("이미 등록된 일련번호입니다 (" + serialNumber + ").\n\n"
+            + "같은 모델에 같은 번호가 있습니다.\n"
+            + "  " + String(conflict.data().systemModel||"-") + " · "
+            + String(conflict.data().systemColor || conflict.data().manufacturerColor || "-") + " · "
+            + (conflict.data().destination || conflict.data().status || "-"));
+          return;
+        }
+        // 모델이 다른데 번호가 같으면 알려만 드리고 진행합니다.
+        const others = dupSnap.docs.filter(d=> d.id !== editingItemId && d.data().deleted !== true);
+        if(others.length){
+          if(!confirm("같은 일련번호가 다른 모델에 " + others.length + "건 있습니다.\n\n"
+            + others.slice(0,4).map(d=> "  " + String(d.data().systemModel||"-") + " · "
+                + String(d.data().systemColor || d.data().manufacturerColor || "-") + " · "
+                + (d.data().destination || d.data().status || "-")).join("\n")
+            + "\n\n일련번호는 모델마다 따로 붙으므로 다른 단말기일 수 있습니다.\n진행할까요?")) return;
+        }
       }
       try{
         showModelMsg("item-result-msg", "저장 중...", false);
@@ -8259,15 +8282,26 @@
     }else{
       const serialNumber = normSerial(document.getElementById("item-serial-input").value);
       if(!serialNumber){ alert("일련번호를 입력해주세요."); return; }
+      // 일련번호는 모델마다 따로 붙습니다. 「모델 + 일련번호」 가 둘 다 같을 때만 겹친 것입니다.
       const dupSnap = await getDocs(query(collection(db,"inventoryItems"), where("serialNumber","==",serialNumber)));
       const dupLive = dupSnap.docs.filter(d=> d.data().deleted !== true && d.id !== editingItemId);
-      if(dupLive.length){
+      const myKey = modelDupKey(String(m.systemModel || m.baseModel || ""));
+      const same = dupLive.filter(d=>{ const v=d.data();
+        return modelDupKey(String(v.systemModel || v.baseModel || "")) === myKey; });
+      if(same.length){
         alert("이미 등록된 일련번호입니다.\n\n  " + serialNumber
-          + "\n  " + dupLive.map(d=>{ const v=d.data();
+          + "\n  " + same.map(d=>{ const v=d.data();
               return (v.systemModel||v.baseModel||"-") + " " + (v.systemColor||v.manufacturerColor||"") + " · " + (v.status||"-");
             }).join("\n  ")
           + "\n\n같은 모델·일련번호는 두 번 등록할 수 없습니다.");
         return;
+      }
+      if(dupLive.length){
+        if(!confirm("같은 일련번호가 다른 모델에 " + dupLive.length + "건 있습니다.\n\n  "
+          + dupLive.slice(0,4).map(d=>{ const v=d.data();
+              return (v.systemModel||v.baseModel||"-") + " " + (v.systemColor||v.manufacturerColor||"") + " · " + (v.status||"-");
+            }).join("\n  ")
+          + "\n\n일련번호는 모델마다 따로 붙으므로 다른 단말기일 수 있습니다.\n등록할까요?")) return;
       }
       const newItemRef = await addDoc(collection(db,"inventoryItems"), { ...base, entryType:"imei", quantity:1, serialNumber });
       clearDashCache(); clearCache("inventory"); logAction("재고 입고(일련번호)", docModelLabel(m)+" "+colorLabel+" / "+carrier+" / 일련번호 "+serialNumber);
@@ -13846,14 +13880,27 @@
       const chunk = serials.slice(i,i+30);
       const existingSnap = await getDocs(query(collection(db,"inventoryItems"), where("serialNumber","in", chunk)));
       const live = existingSnap.docs.filter(d=> d.data().deleted !== true);   // 삭제함은 뺍니다
-      if(live.length){
-        const dupSerials = [...new Set(live.map(d=>{
+      // 일련번호는 모델마다 따로 붙습니다. 「모델 + 일련번호」 가 둘 다 같을 때만 막습니다.
+      const myKey = modelDupKey(String(m.systemModel || m.baseModel || ""));
+      const same = live.filter(d=>{ const v=d.data();
+        return modelDupKey(String(v.systemModel || v.baseModel || "")) === myKey; });
+      if(same.length){
+        const dupSerials = [...new Set(same.map(d=>{
           const v = d.data();
-          return String(v.serialNumber||"") + " (" + (v.systemModel||v.baseModel||"-") + ")";
+          return String(v.serialNumber||"") + " (" + (v.systemModel||v.baseModel||"-") + " · "
+               + (v.systemColor||v.manufacturerColor||"-") + " · " + (v.destination||v.status||"-") + ")";
         }))];
         alert("이미 등록된 일련번호가 있습니다.\n\n  " + dupSerials.join("\n  ")
           + "\n\n같은 모델·일련번호는 두 번 등록할 수 없습니다.");
         return;
+      }
+      const other = live.filter(d=> !same.includes(d));
+      if(other.length){
+        if(!confirm("같은 일련번호가 다른 모델에 " + other.length + "건 있습니다.\n\n  "
+          + [...new Set(other.slice(0,5).map(d=>{ const v=d.data();
+              return String(v.serialNumber||"") + " (" + (v.systemModel||v.baseModel||"-") + " · "
+                   + (v.destination||v.status||"-") + ")"; }))].join("\n  ")
+          + "\n\n일련번호는 모델마다 따로 붙으므로 다른 단말기일 수 있습니다.\n등록할까요?")) return;
       }
     }
 
@@ -35842,23 +35889,64 @@
     }
     const out = {};
 
-    // 재고에 적힌 orderId 로 주문 품목을 바로 찾습니다.
-    //  linkedItemIds 가 비어 있어도 이 길로 찾아집니다.
+    // ── 주문 품목 ──
+    //  한 주문 줄에 재고가 여럿 묶여 있을 수 있습니다.
+    //  그 줄의 재고를 「전부」 바꾸는 경우에만 그 줄을 바꿉니다.
+    //  일부만 바꾸는 경우에는 그만큼을 새 줄로 떼어냅니다. (나머지는 그대로 둡니다)
     try{
-      const oids = new Set();
+      const byOrder = {};                       // 주문품목 → 이번에 바꾸는 재고들
       for(const iid of idSet){
         const sn = await getDoc(doc(db,"inventoryItems", iid));
-        if(sn.exists() && sn.data().orderId) oids.add(sn.data().orderId);
-      }
-      if(oids.size){
-        const arr = [...oids];
-        for(let i=0; i<arr.length; i+=300){
-          const bt = writeBatch(db);
-          arr.slice(i, i+300).forEach(id=> bt.update(doc(db,"orders", id), patch));
-          await bt.commit();
+        if(sn.exists() && sn.data().orderId){
+          (byOrder[sn.data().orderId] = byOrder[sn.data().orderId] || []).push(iid);
         }
-        out["주문"] = arr.length;
       }
+      let whole = 0, split = 0;
+      for(const oid of Object.keys(byOrder)){
+        const od = await getDoc(doc(db,"orders", oid));
+        if(!od.exists()) continue;
+        const o = od.data();
+        // 그 주문 품목에 붙어 있는 재고를 모두 셉니다.
+        let all = [];
+        try{
+          const inv = await getDocs(query(collection(db,"inventoryItems"), where("orderId","==", oid)));
+          inv.forEach(d=>{ if(d.data().deleted !== true) all.push(d.id); });
+        }catch(e){}
+        if(all.length === 0) all = Array.isArray(o.linkedItemIds) ? o.linkedItemIds.slice() : [];
+        const mine = byOrder[oid];
+        if(all.length && mine.length < all.length){
+          // 일부만 바꿉니다 → 그만큼 새 주문 품목으로 떼어냅니다.
+          const restIds = all.filter(x=> !idSet.has(x));
+          const ref = await addDoc(collection(db,"orders"), {
+            ...o, ...patch,
+            quantity: mine.length,
+            fulfilledCount: Math.min(Number(o.fulfilledCount)||0, mine.length),
+            arrivedCount: Math.min(Number(o.arrivedCount)||mine.length, mine.length),
+            linkedItemIds: mine.slice(),
+            splitFromOrderId: oid,
+            createdAt: serverTimestamp()
+          });
+          // 원래 줄은 남은 대수로 줄입니다. (색상은 그대로)
+          await updateDoc(doc(db,"orders", oid), {
+            quantity: Math.max(0, (Number(o.quantity)||all.length) - mine.length),
+            fulfilledCount: Math.max(0, (Number(o.fulfilledCount)||0) - mine.length),
+            arrivedCount: Math.max(0, (Number(o.arrivedCount)||all.length) - mine.length),
+            linkedItemIds: restIds
+          });
+          // 바꾼 재고를 새 줄에 붙입니다.
+          for(let i=0; i<mine.length; i+=300){
+            const bt = writeBatch(db);
+            mine.slice(i, i+300).forEach(iid=> bt.update(doc(db,"inventoryItems", iid), { orderId: ref.id }));
+            await bt.commit();
+          }
+          split++;
+        }else{
+          await updateDoc(doc(db,"orders", oid), patch);
+          whole++;
+        }
+      }
+      if(whole) out["주문"] = whole;
+      if(split) out["주문(나눔)"] = split;
     }catch(e){}
     const jobs = [
       ["orders", "주문", o=> Array.isArray(o.linkedItemIds) ? o.linkedItemIds : []],
@@ -35876,7 +35964,15 @@
         snap.forEach(d=>{
           const v = d.data();
           if(v.status === "취소" || v.deleted === true) return;
-          if((pick(v)||[]).some(x=> idSet.has(x))) hit.push(d.id);
+          const ids = pick(v)||[];
+          if(!ids.some(x=> idSet.has(x))) return;
+          // 그 줄의 재고를 전부 바꾸는 경우에만 바꿉니다.
+          //  일부만 바꾸는 경우에는 손대지 않고 몇 건인지 알려드립니다.
+          if(ids.length > 1 && !ids.every(x=> idSet.has(x))){
+            out[label + "(일부라 그대로)"] = (out[label + "(일부라 그대로)"]||0) + 1;
+            return;
+          }
+          hit.push(d.id);
         });
         for(let i=0; i<hit.length; i+=300){
           const bt = writeBatch(db);
@@ -39510,21 +39606,27 @@
     const resultEl = document.getElementById("paste-register-result");
     if(!source){ alert("입고처를 선택해주세요."); return; }
 
-    // 일련번호 중복 확인
+    // 일련번호 중복 확인 — 「모델 + 일련번호」 가 둘 다 같을 때만 겹친 것으로 봅니다.
     const serials = dataRows.map(r=>r.serial);
-    for(let i=0;i<serials.length;i+=30){
-      const chunk = serials.slice(i,i+30);
-      const existingSnap = await getDocs(query(collection(db,"inventoryItems"), where("serialNumber","in", chunk)));
-      if(!existingSnap.empty){
-        const dupSerials = existingSnap.docs.map(d=>d.data().serialNumber);
-        if(!confirm("이미 등록된 일련번호가 있습니다: "+dupSerials.join(", ")+"\n이 건들은 제외하고 나머지만 등록할까요?")) return;
-      }
-    }
+    const modelOf = {};
+    dataRows.forEach(r=> modelOf[r.serial] = modelDupKey(String(r.systemModel || r.baseModel || r.model || "")));
     const existingAll = new Set();
+    const dupList = [];
     for(let i=0;i<serials.length;i+=30){
       const chunk = serials.slice(i,i+30);
-      const s = await getDocs(query(collection(db,"inventoryItems"), where("serialNumber","in", chunk)));
-      s.forEach(d=> existingAll.add(d.data().serialNumber));
+      const snap = await getDocs(query(collection(db,"inventoryItems"), where("serialNumber","in", chunk)));
+      snap.forEach(d=>{
+        const v = d.data();
+        if(v.deleted === true) return;
+        const sn = String(v.serialNumber||"");
+        const same = modelDupKey(String(v.systemModel || v.baseModel || "")) === (modelOf[sn] || "");
+        if(same){ existingAll.add(sn); dupList.push(sn + " (" + (v.systemModel||v.baseModel||"-") + ")"); }
+      });
+    }
+    if(dupList.length){
+      if(!confirm("이미 등록된 일련번호가 있습니다.\n\n  " + [...new Set(dupList)].slice(0,10).join("\n  ")
+        + (dupList.length > 10 ? "\n  ... 외 " + (dupList.length-10) + "건" : "")
+        + "\n\n이 건들은 빼고 나머지만 등록할까요?")) return;
     }
 
     let created = 0, skipped = 0;
