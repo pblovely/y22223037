@@ -387,7 +387,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-02 v862</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-02 v864</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -26133,7 +26133,9 @@
     if(notSold.length > 0){
       markSold = confirm("선택한 재고 중 상태가 <판매>가 아닌 것이 " + notSold.length + "대 있습니다.\n\n"
         + "이 재고들의 상태를 <판매>로 바꿀까요?\n\n"
-        + "[확인] 판매로 바꿈   /   [취소] 상태는 그대로 두고 판매요청만 생성");
+        + "[확인] 판매로 바꿈   /   [취소] 상태는 그대로 두고 판매요청만 생성\n\n"
+        + "※ [취소] 를 고르시면 재고는 「보유중」으로 남습니다.\n"
+        + "   나중에 데이터 점검의 「한 판매요청인데 상태가 섞인 건」 에서 잡힙니다.");
     }
 
     try{
@@ -26163,15 +26165,27 @@
         });
         // 재고에 판매요청 연결 + 매칭 이력
         const b = writeBatch(db);
+        const keptHold = [];
         g.forEach(x=>{
           const patch = { saleRequestId: srRef.id };
           if(markSold && x.status !== "판매"){
             patch.status = "판매";
             if(!x.outDate) patch.outDate = date;
+          }else if(!markSold && x.status !== "판매"){
+            keptHold.push(x);            // 상태를 안 바꾼 건 — 이력에 남깁니다
           }
           b.update(doc(db,"inventoryItems", x.id), patch);
         });
         await b.commit();
+        // 상태를 안 바꾸기로 하신 건은 왜 그런지 이력에 남깁니다.
+        if(keptHold.length){
+          try{
+            await logItemsEach(keptHold.map(x=>({ id:x.id, serialNumber:x.serialNumber||"",
+              systemModel:x.systemModel||"",
+              detail:"판매요청은 만들었으나 상태는 그대로 둠 (" + (x.status||"-") + ") · "
+                     + dest + " " + date + " · 만드실 때 「상태는 그대로」를 고르셨습니다" })), "salereq", {});
+          }catch(e){}
+        }
         await writeMatchLogs(srRef.id, { destination:dest, systemModel:f.systemModel, petName:f.petName, salePrice:f.salePrice },
           g, "재고에서 판매요청 생성", date);
       }
@@ -26179,8 +26193,11 @@
       alert("만드는 데 실패했습니다.\n" + ((e && e.message) ? e.message : String(e)));
       return;
     }
-    logAction("재고에서 판매요청 생성", dest + " / " + items.length + "대 / " + total.toLocaleString());
-    alert("판매요청을 만들었습니다.\n판매 관리 목록에서 확인하고 입금요청에 묶어주세요.");
+    logAction("재고에서 판매요청 생성", dest + " / " + items.length + "대 / " + total.toLocaleString()
+      + (markSold ? "" : " / 상태는 그대로 둠"));
+    alert("판매요청을 만들었습니다.\n판매 관리 목록에서 확인하고 입금요청에 묶어주세요."
+      + (markSold ? "" : "\n\n※ 재고 상태는 그대로 두었습니다.\n"
+          + "데이터 점검의 「한 판매요청인데 상태가 섞인 건」 에서 나중에 맞추실 수 있습니다."));
     closeInvToSaleReq();
     loadSaleRequestList();
     loadInventoryList();
@@ -28319,6 +28336,8 @@
   let baseFillCache = [];        // 할인 기준 칸이 비어 있는 재고
   let dupSaleCache = [];         // 같은 단말기가 판매요청에 두 번 이상
   let noSaleReqCache = [];       // 판매요청이 없는데 나간 재고
+  let halfSoldCache = [];        // 한 판매요청인데 상태가 섞인 건
+  let cancelReSoldCache = [];    // 판매 취소를 거쳐 다시 판 재고
   let sameBuyDiffSkip = 0;
   let baseDiffGroups = {};       // 위를 매입처·기준·%·출고가로 묶은 것
   let baseDiffKeys = [];         // 묶음 순서 (체크박스 번호와 맞춥니다)
@@ -29538,6 +29557,106 @@
     baseFillCache = []; runDataCheck();
   };
 
+  // ── 판매 취소를 거쳐 다시 판 재고 ──
+  window.showCancelReSoldList = function(){
+    const el = document.getElementById("datacheck-detail");
+    if(!el || cancelReSoldCache.length === 0){ if(el) el.innerHTML = '<div class="list-empty">해당하는 재고가 없습니다.</div>'; return; }
+    let h = '<div style="border:1px solid var(--navy);padding:10px 12px;margin-top:10px;">'
+      + '<div style="font-weight:700;margin-bottom:4px;">판매 취소를 거쳐 다시 판 재고 — ' + cancelReSoldCache.length + '대</div>'
+      + '<div style="font-size:11.5px;color:var(--gray);line-height:1.7;margin-bottom:8px;">'
+      + '판매를 취소했다가 다시 판 재고입니다. <b>그 자체는 문제가 아닙니다.</b><br>'
+      + '다만 앞의 판매요청이 남아 있거나 정산이 두 번 잡히지 않았는지 확인해주세요.<br>'
+      + '일련번호를 누르시면 그 재고의 이력을 보실 수 있습니다.</div>'
+      + '<div style="max-height:340px;overflow:auto;border:1px solid var(--line);">'
+      + '<table class="data-table" style="width:100%;font-size:11.5px;"><thead><tr>'
+      + '<th>일련번호</th><th>모델</th><th>통신사</th><th>지금 판매처</th><th>판매일</th><th>상태</th>'
+      + '<th>취소 기록</th></tr></thead><tbody>'
+      + cancelReSoldCache.slice(0,200).map(r=>{
+          const x = r.it;
+          return '<tr>'
+            + '<td><a href="javascript:void(0)" style="color:var(--navy);font-weight:700;" '
+              + 'onclick="openItemHistory(\'' + comboEsc(x.serialNumber||"") + '\',\''
+              + comboEsc(x.systemModel||x.baseModel||"") + '\')">' + comboEsc(x.serialNumber||"-") + '</a></td>'
+            + '<td>'+comboEsc(x.systemModel||x.baseModel||"-")+'</td>'
+            + '<td>'+comboEsc(x.carrier||"-")+'</td>'
+            + '<td>'+comboEsc(x.destination||"-")+'</td>'
+            + '<td>'+comboEsc(x.outDate||"-")+'</td>'
+            + '<td>'+comboEsc(x.status||"-")+'</td>'
+            + '<td style="font-size:11px;color:var(--gray);">'
+              + r.logs.slice(0,2).map(l=> comboEsc(String(l.eventDate||"") + " " + String(l.detail||"").slice(0,40))).join("<br>")
+              + (r.logs.length>2 ? "<br>외 " + (r.logs.length-2) + "건" : "") + '</td>'
+            + '</tr>';
+        }).join("")
+      + '</tbody></table></div></div>';
+    el.innerHTML = h;
+  };
+
+  // ── 한 판매요청인데 상태가 섞인 건 ──
+  window.showHalfSoldList = function(){
+    const el = document.getElementById("datacheck-detail");
+    if(!el || halfSoldCache.length === 0){ if(el) el.innerHTML = '<div class="list-empty">섞인 것이 없습니다.</div>'; return; }
+    const holdTotal = halfSoldCache.reduce((n,r)=> n + r.hold.length, 0);
+    let h = '<div style="border:1px solid var(--danger);padding:10px 12px;margin-top:10px;">'
+      + '<div style="font-weight:700;margin-bottom:4px;color:var(--danger);">한 판매요청인데 상태가 섞인 건 — '
+      + halfSoldCache.length + '건 · 안 바뀐 재고 ' + holdTotal + '대</div>'
+      + '<div style="font-size:11.5px;color:var(--gray);line-height:1.7;margin-bottom:8px;">'
+      + '한 번에 넘긴 판매요청인데 어떤 재고는 「판매」, 어떤 재고는 「보유중」입니다.<br>'
+      + '<b>판매요청과 금액은 이미 잡혀 있습니다.</b> 재고 상태만 안 바뀐 것이라 상태만 맞추면 됩니다.</div>'
+      + '<div style="max-height:340px;overflow:auto;border:1px solid var(--line);">'
+      + '<table class="data-table" style="width:100%;font-size:11.5px;"><thead><tr>'
+      + '<th>판매처</th><th>요청일</th><th class="ta-right">판매요청 수량</th>'
+      + '<th class="ta-right">판매됨</th><th class="ta-right">안 바뀜</th><th>안 바뀐 일련번호</th>'
+      + '</tr></thead><tbody>'
+      + halfSoldCache.map(r=> '<tr>'
+          + '<td>'+comboEsc(r.sr.destination||"-")+'</td>'
+          + '<td>'+comboEsc(r.sr.requestDate||"-")+'</td>'
+          + '<td class="ta-right">'+r.reqQty+'</td>'
+          + '<td class="ta-right" style="color:#2e7d32;">'+r.sold.length+'</td>'
+          + '<td class="ta-right" style="color:var(--danger);font-weight:700;">'+r.hold.length+'</td>'
+          + '<td>'+r.hold.slice(0,6).map(x=> comboEsc((x.it.serialNumber||"-")
+              + " (" + (x.it.status||"-") + ")")).join(" · ')
+              + (r.hold.length>6 ? ' 외 '+(r.hold.length-6) : '')+'</td>'
+          + '</tr>').join("")
+      + '</tbody></table></div>'
+      + '<span class="btn-row" style="margin-top:10px;">'
+      + '<button class="btn small" style="width:auto;" onclick="fixHalfSoldAll()">안 바뀐 재고를 판매로 맞추기 ('
+      + holdTotal + '대)</button></span>'
+      + '<div style="font-size:11.5px;color:var(--gray);margin-top:6px;">'
+      + '재고 상태만 「판매」로 바꿉니다. 금액·판매요청·입금요청은 건드리지 않습니다.</div>'
+      + '</div>';
+    el.innerHTML = h;
+  };
+  window.fixHalfSoldAll = async function(){
+    const targets = [];
+    halfSoldCache.forEach(r=> r.hold.forEach(x=> targets.push({ ...x, sr:r.sr })));
+    if(targets.length === 0){ alert("맞출 것이 없습니다."); return; }
+    if(!confirm("재고 " + targets.length + "대의 상태를 「판매」로 맞춥니다.\n\n"
+      + targets.slice(0,6).map(x=> "  " + (x.it.serialNumber||"-") + "  "
+          + (x.it.status||"-") + " → 판매   (" + (x.sr.destination||"-") + ")").join("\n")
+      + (targets.length > 6 ? "\n  ... 외 " + (targets.length-6) + "대" : "")
+      + "\n\n금액·판매요청·입금요청은 건드리지 않습니다.\n진행할까요?")) return;
+    const el = document.getElementById("datacheck-detail");
+    if(el) el.innerHTML = '<div class="list-empty">맞추는 중입니다...</div>';
+    let n = 0; const ih = [];
+    try{
+      for(const x of targets){
+        const patch = { status: "판매" };
+        if(!x.it.destination && x.sr.destination) patch.destination = x.sr.destination;
+        if(!x.it.outDate && x.sr.requestDate) patch.outDate = x.sr.requestDate;
+        await updateDoc(doc(db,"inventoryItems", x.iid), patch);
+        ih.push({ id:x.iid, serialNumber:x.it.serialNumber||"", systemModel:x.it.systemModel||"",
+          detail:"상태 " + (x.it.status||"-") + " → 판매 (같은 판매요청의 다른 건에 맞춤 · "
+                 + (x.sr.destination||"-") + " " + (x.sr.requestDate||"") + ")" });
+        n++;
+      }
+    }catch(e){ alert("맞추지 못했습니다.\n" + ((e&&e.message)?e.message:String(e))); return; }
+    try{ await logItemsEach(ih, "status", {}); }catch(e){}
+    logAction("데이터 점검 — 판매요청 상태 맞춤", n + "대");
+    clearCache("inventory"); clearDashCache();
+    alert(n + "대의 상태를 판매로 맞췄습니다.");
+    halfSoldCache = []; runDataCheck();
+  };
+
   // ── 판매요청이 없는데 나간 재고 ──
   window.showNoSaleReqList = function(){
     const el = document.getElementById("datacheck-detail");
@@ -30672,7 +30791,70 @@
           fix: rows.length ? "showSameBuyDiffList()" : null, fixLabel:"확인하고 맞추기" });
       }
 
-      // ⓪-3a 판매처는 적혀 있는데 판매요청이 없는 재고
+      // ⓪-3y 판매 취소를 거쳐 다시 판매된 건
+      //  취소했다가 다시 판 재고입니다. 정산이 두 번 잡히지 않았는지 봐주셔야 합니다.
+      {
+        const rows = [];
+        try{
+          const hs = await getDocs(query(collection(db,"itemHistory"), where("type","==","status")));
+          const byItem = {};
+          hs.forEach(d=>{
+            const v = d.data();
+            const t = String(v.detail||"");
+            if(t.indexOf("판매 취소") < 0 && t.indexOf("취소로") < 0) return;
+            if(!v.itemId) return;
+            (byItem[v.itemId] = byItem[v.itemId] || []).push(v);
+          });
+          Object.keys(byItem).forEach(iid=>{
+            const it = items[iid];
+            if(!it || it.deleted === true) return;
+            const sold = String(it.status||"").indexOf("판매") >= 0
+                      || String(it.status||"").indexOf("개통") >= 0;
+            if(!sold && !it.saleRequestId) return;      // 취소 뒤 안 팔았으면 정상
+            rows.push({ iid, it, logs: byItem[iid] });
+          });
+        }catch(e){}
+        rows.sort((a,b)=> String(a.it.serialNumber||"").localeCompare(String(b.it.serialNumber||"")));
+        cancelReSoldCache = rows;
+        issues.push({ n:"판매 취소를 거쳐 다시 판 재고", cnt:rows.length, unit:"대",
+          why:"판매를 취소했다가 다시 판 재고입니다. 앞의 판매요청이 남아 있거나 정산이 두 번 잡히지 않았는지 확인해주세요.",
+          fix: rows.length ? "showCancelReSoldList()" : null, fixLabel:"확인하기" });
+      }
+
+      // ⓪-3z 판매요청 안에서 재고 상태가 서로 다른 건      // ⓪-3z 판매요청 안에서 재고 상태가 서로 다른 건
+      //  한 번에 넘긴 건데 어떤 건 「판매」, 어떤 건 「보유중」이면 중간에 멈춘 것입니다.
+      {
+        const srAll0 = {};
+        srSnap.forEach(d=> srAll0[d.id] = d.data());
+        const byReq = {};
+        Object.keys(items).forEach(iid=>{
+          const it = items[iid];
+          if(it.deleted === true || !it.saleRequestId) return;
+          (byReq[it.saleRequestId] = byReq[it.saleRequestId] || []).push({ iid, it });
+        });
+        const rows = [];
+        Object.keys(byReq).forEach(sid=>{
+          const sr = srAll0[sid];
+          if(!sr || sr.status === "취소") return;
+          const g2 = byReq[sid];
+          const sold = g2.filter(x=> String(x.it.status||"").indexOf("판매") >= 0
+                                  || String(x.it.status||"").indexOf("개통") >= 0);
+          const hold = g2.filter(x=> !(String(x.it.status||"").indexOf("판매") >= 0
+                                    || String(x.it.status||"").indexOf("개통") >= 0));
+          if(sold.length === 0 || hold.length === 0) return;       // 전부 같으면 정상
+          rows.push({ sid, sr, sold, hold,
+            reqQty: Number(sr.quantity)||g2.length,
+            reqAmt: Number(sr.salePrice)||0 });
+        });
+        halfSoldCache = rows;
+        const holdTotal = rows.reduce((n,r)=> n + r.hold.length, 0);
+        issues.push({ n:"한 판매요청인데 상태가 섞인 건", cnt:rows.length,
+          unit:"건 (안 바뀐 재고 " + holdTotal + "대)",
+          why:"한 번에 넘긴 판매요청인데 어떤 재고는 「판매」, 어떤 재고는 「보유중」입니다. 판매처리가 중간에 멈춘 것입니다. 상태만 맞추면 됩니다.",
+          fix: rows.length ? "showHalfSoldList()" : null, fixLabel:"확인하고 맞추기" });
+      }
+
+      // ⓪-3a 판매처는 적혀 있는데 판매요청이 없는 재고      // ⓪-3a 판매처는 적혀 있는데 판매요청이 없는 재고
       //  이대로 두면 입금요청을 만들 수 없어 돈을 못 받습니다.
       {
         const rows = [];
