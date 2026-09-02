@@ -387,7 +387,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-02 v854</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-02 v855</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -25955,9 +25955,11 @@
     const snap = await getDocs(collection(db,"inventoryItems"));
     i2sRows = [];
     const notFound = new Set(lower);
+    const allItems = [];
     snap.forEach(d=>{
       const it = { id:d.id, ...d.data() };
       if(it.deleted === true) return;
+      allItems.push(it);
       if(it.saleRequestId) return;                    // 이미 판매요청에 연결된 건 제외
       if(field === "all"){ i2sRows.push(it); return; }
       const v = String(it[field]||"").trim().toLowerCase();
@@ -25965,6 +25967,36 @@
       // 업체·통신사·위치는 정확히 같은 것만, 글자 검색은 부분 일치도 봅니다.
       const hit = useList ? lower.find(t=> v === t) : lower.find(t=> v === t || v.includes(t));
       if(hit){ i2sRows.push(it); notFound.delete(hit); }
+    });
+
+    // ── 같은 단말기(통신사·모델·일련번호)가 이미 판매요청에 들어가 있는지 봅니다. ──
+    //  일련번호가 같아도 모델이 다르면 다른 단말기이므로 셋을 다 봅니다.
+    const key = x => [String(x.carrier||"").trim(),
+                      modelDupKey(String(x.systemModel||x.baseModel||"")),
+                      normSerial(String(x.serialNumber||""))].join("|");
+    const already = {};
+    allItems.forEach(x=>{
+      if(!x.saleRequestId) return;
+      const k = key(x);
+      (already[k] = already[k] || []).push(x);
+    });
+    // 판매요청 정보를 붙여 어디로 나갔는지 보여줍니다.
+    const srIds = [...new Set(Object.values(already).flat().map(x=> x.saleRequestId))];
+    const srInfo = {};
+    for(const sid of srIds.slice(0,300)){
+      try{
+        const sd = await getDoc(doc(db,"saleRequests", sid));
+        if(sd.exists()) srInfo[sid] = sd.data();
+      }catch(e){}
+    }
+    i2sRows.forEach(it=>{
+      const dup = (already[key(it)]||[]).filter(x=> x.id !== it.id);
+      if(dup.length){
+        it._dup = dup.map(x=>{
+          const sr = srInfo[x.saleRequestId] || {};
+          return (x.destination || sr.destination || "-") + " " + (x.outDate || sr.requestDate || "");
+        });
+      }
     });
 
     if(i2sRows.length === 0){
@@ -25987,11 +26019,14 @@
       '<table class="data-table resv-dest-fit" style="width:auto;"><thead><tr>' +
       '<th style="width:34px;"><input type="checkbox" onclick="toggleI2sAll(this)"></th>' +
       '<th>모델</th><th>색상</th><th>통신사</th><th>일련번호</th><th>입고일</th><th>판매일</th>' +
-      '<th>저장된 판매처</th><th>상태</th><th class="ta-right">판매가</th>' +
+      '<th>저장된 판매처</th><th>상태</th><th class="ta-right">판매가</th><th>확인</th>' +
       '</tr></thead><tbody>';
+    let dupCnt = 0;
     i2sRows.forEach(it=>{
-      h += '<tr>' +
-        '<td><input type="checkbox" class="i2s-cb" data-id="'+it.id+'" data-price="'+(Number(it.salePrice)||0)+'"></td>' +
+      if(it._dup) dupCnt++;
+      h += '<tr' + (it._dup ? ' style="background:#fdecea;"' : '') + '>' +
+        '<td><input type="checkbox" class="i2s-cb" data-id="'+it.id+'" data-price="'+(Number(it.salePrice)||0)+'"'
+          + (it._dup ? '' : ' checked') + '></td>' +
         '<td>'+comboEsc(docModelLabel(it))+'</td>' +
         '<td>'+comboEsc(it.systemColor||it.manufacturerColor||"-")+'</td>' +
         '<td>'+comboEsc(it.carrier||"-")+'</td>' +
@@ -26000,9 +26035,19 @@
         '<td>'+comboEsc(it.outDate||"-")+'</td>' +
         '<td>'+comboEsc(it.destination||"-")+'</td>' +
         '<td>'+comboEsc(it.status||"-")+'</td>' +
-        '<td class="ta-right">'+(it.salePrice ? Number(it.salePrice).toLocaleString() : '<span style="color:var(--danger);">미입력</span>')+'</td></tr>';
+        '<td class="ta-right">'+(it.salePrice ? Number(it.salePrice).toLocaleString() : '<span style="color:var(--danger);">미입력</span>')+'</td>' +
+        '<td style="font-size:11px;">' + (it._dup
+            ? '<b style="color:var(--danger);">이미 판매요청 있음</b><br><span style="color:var(--gray);">'
+              + comboEsc(it._dup.slice(0,2).join(" · ")) + '</span>'
+            : '') + '</td></tr>';
     });
     h += '</tbody></table></div>';
+    if(dupCnt){
+      h = '<div style="border:1px solid var(--danger);background:#fdecea;padding:8px 10px;margin-bottom:8px;font-size:12.5px;line-height:1.7;">'
+        + '<b style="color:var(--danger);">같은 단말기가 이미 판매요청에 들어간 것이 ' + dupCnt + '대 있습니다.</b><br>'
+        + '<span style="color:var(--gray);">통신사·모델·일련번호가 같은 재고가 다른 판매요청에 있습니다. '
+        + '붉은 줄은 체크를 풀어뒀습니다. 정말 다시 파실 것만 체크해주세요.</span></div>' + h;
+    }
     el.innerHTML = h;
     el.querySelectorAll(".i2s-cb").forEach(cb=> cb.onchange = updateI2sSum);
     updateI2sSum();
