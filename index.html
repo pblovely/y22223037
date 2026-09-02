@@ -387,7 +387,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-02 v857</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-02 v858</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -40463,6 +40463,31 @@
         alert("입고가가 없는 재고가 " + noBuy.length + "대 있습니다.\n\n"
           + noBuy.slice(0,5).map(r=> "· " + r.serial).join("\n")
           + "\n\n입고동일로 넘길 수 없습니다. 그 건들을 빼고 다시 해주세요.");
+        return;
+      }
+    }
+
+    // ── 이미 판매된 재고가 섞여 있으면 저장 전에 막습니다. ──
+    //  두 번 팔면 매출·정산이 부풀려집니다.
+    {
+      const already = [];
+      for(const r of dataRows){
+        if(!r.itemId) continue;
+        try{
+          const sn = await getDoc(doc(db,"inventoryItems", r.itemId));
+          if(!sn.exists()) continue;
+          const v = sn.data();
+          const isSold = String(v.status||"").indexOf("판매") >= 0 || !!v.saleRequestId;
+          if(isSold) already.push({ serial:r.serial, m:v.systemModel||"", dest:v.destination||"", out:v.outDate||"" });
+        }catch(e){}
+      }
+      if(already.length){
+        alert("이미 판매된 재고가 " + already.length + "대 있습니다.\n\n"
+          + already.slice(0,8).map(x=> "  " + x.serial + "  " + x.m
+              + "  →  " + (x.dest||"-") + " " + (x.out||"")).join("\n")
+          + (already.length > 8 ? "\n  ... 외 " + (already.length-8) + "대" : "")
+          + "\n\n두 번 팔 수 없습니다. 그 건들을 빼고 다시 해주세요.\n"
+          + "정말 다시 파실 것이라면 <판매 관리> 에서 먼저 취소해주세요.");
         return;
       }
     }
