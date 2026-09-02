@@ -387,7 +387,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-02 v847</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-02 v848</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -3706,7 +3706,7 @@
         <p class="desc" style="margin-top:12px;margin-bottom:4px;font-weight:700;color:var(--navy);">미리보기</p>
         <div id="rebuy-preview" style="max-height:300px;overflow:auto;border:1px solid var(--line);"></div>
         <div id="rebuy-msg" style="font-size:12.5px;margin:8px 0;"></div>
-        <span class="btn-row"><button class="btn small" style="width:auto;" onclick="submitRebuy()">이 내용으로 되사오기</button><button class="btn small secondary" style="width:auto;" onclick="closeRebuy()">닫기</button></span>
+        <span class="btn-row"><button class="btn small" style="width:auto;" onclick="submitRebuy()">이 내용으로 되사오기</button><button class="btn small secondary" style="width:auto;" onclick="makeRebuyQuotation()" title="지금 목록으로 견적서를 발행합니다. 되사오기는 진행되지 않습니다.">견적서 발행</button><button class="btn small secondary" style="width:auto;" onclick="closeRebuy()">닫기</button></span>
       </div>
     </div>
 
@@ -9630,7 +9630,9 @@
   // 표로 보여주고, 원하는 열만 켜고 끌 수 있습니다. 열 제목을 누르면 정렬됩니다.
   const ORDER_COLS = [
     { key:"orderDate",  label:"주문일",   get:r=> r.b.orderDate||"-", sort:r=> r.b.orderDate||"" },
-    { key:"source",     label:"매입처",   get:r=> comboEsc(r.b.source||"-"), sort:r=> r.b.source||"" },
+    { key:"source",     label:"매입처",   get:r=> comboEsc(r.b.source||"-")
+        + (r.b.isRebuy ? ' <span style="color:#6a1b9a;font-weight:700;font-size:10.5px;">되사오기</span>' : ''),
+      sort:r=> r.b.source||"" },
     { key:"carrier",    label:"통신사",   get:r=> comboEsc(r.b.carrier || [...new Set((r.lines||[]).map(l=>l.carrier).filter(Boolean))].join(",") || "-") },
     { key:"lineCount",  label:"품목",     get:r=> (r.lines||[]).length, num:true, sort:r=> (r.lines||[]).length },
     // 어떤 모델을 주문했는지 목록에서 바로 보이게 합니다. (상세를 안 열어도 되게)
@@ -26549,6 +26551,65 @@
       '<b>' + rebuyItems.length + '대</b>를 되사옵니다'
       + (rebuyItems.length ? ' · 1차 판매처 ' + comboEsc([...new Set(rebuyItems.map(x=> x.destination||"-"))].join(", ")) : '');
     renderRebuyPreview();
+  };
+
+  // 되사오기 목록으로 견적서를 발행합니다. (되사오기는 따로 진행하셔야 합니다)
+  //  구매 견적(P-) 서식으로 냅니다. 우리가 사오는 것이기 때문입니다.
+  window.makeRebuyQuotation = async function(){
+    if(rebuyItems.length === 0){ alert("견적서에 담을 재고가 없습니다."); return; }
+    const mode   = (document.querySelector('input[name="rb-mode"]:checked')||{}).value || "same";
+    const addAmt = Number((document.getElementById("rb-add")||{}).value)||0;
+    const newPct = Number((document.getElementById("rb-pct")||{}).value)||0;
+    const source = String(document.getElementById("rb-source").value||"").trim();
+    if(!source){ alert("매입처를 먼저 골라주세요. 견적서의 거래처가 됩니다."); return; }
+    const eachBuy = {};
+    if(mode === "each"){
+      document.querySelectorAll(".rb-buy").forEach(e=>{ eachBuy[Number(e.dataset.i)] = Number(e.value)||0; });
+    }
+    // 모델·색상·금액이 같은 것끼리 묶습니다.
+    const byKey = {};
+    rebuyItems.forEach((it,i)=>{
+      const c = rebuyCalcOne(it, mode, addAmt, newPct);
+      if(mode === "each" && eachBuy[i] != null) c.buy = eachBuy[i];
+      const model = String(it.systemModel || it.baseModel || "-");
+      const color = String(it.systemColor || it.manufacturerColor || "-");
+      const k = model + "|" + color + "|" + c.L + "|" + Math.round(c.buy);
+      if(!byKey[k]) byKey[k] = { model, color, listPrice: c.L, unitPrice: Math.round(c.buy), qty:0, amount:0 };
+      byKey[k].qty += 1;
+      byKey[k].amount += Math.round(c.buy);
+    });
+    const items = Object.keys(byKey).sort().map(k=> byKey[k]);
+    const totalQty = items.reduce((n,x)=> n + x.qty, 0);
+    const totalAmount = items.reduce((n,x)=> n + x.amount, 0);
+    if(!confirm("되사오기 견적서를 발행합니다.\n\n"
+      + "  거래처   " + source + "\n  품목     " + items.length + "종 · " + totalQty + "대\n"
+      + "  합계     " + totalAmount.toLocaleString()
+      + "\n\n※ 견적서만 만듭니다. 되사오기는 따로 [이 내용으로 되사오기] 를 눌러주세요.\n\n진행할까요?")) return;
+    const msg = document.getElementById("rebuy-msg");
+    try{
+      if(msg) msg.innerHTML = '<span style="color:var(--gray);">견적서를 만드는 중입니다...</span>';
+      const today = todayStr();
+      const qSnap = await getDocs(collection(db,"quotations"));
+      let seq = 1;
+      qSnap.forEach(d=>{ if(String(d.data().code||"").startsWith("P-"+today)) seq++; });
+      const code = "P-" + today + "-" + String(seq).padStart(2,"0");
+      const ref = await addDoc(collection(db,"quotations"), {
+        code, kind:"buy", destination: source, issueDate: today, validUntil:"",
+        discMode:"none", showListPrice: true,
+        note: "되사오기(재매입) 견적",
+        isRebuy: true,
+        items: items.map(x=> ({ model:x.model, color:x.color, qty:x.qty,
+          listPrice:x.listPrice, unitPrice:x.unitPrice, amount:x.amount })),
+        totalQty, totalAmount, status:"발행",
+        createdBy: currentUser.name, createdByUsername: currentUser.username, createdAt: serverTimestamp()
+      });
+      logAction("견적서 발행 (되사오기)", code + " / " + source + " / " + totalQty + "대 / " + totalAmount.toLocaleString());
+      if(msg) msg.innerHTML = '<span style="color:#2e7d32;">견적서 ' + code + ' 을 만들었습니다.</span>';
+      openQuotationView(ref.id);
+    }catch(e){
+      if(msg) msg.innerHTML = '<span style="color:var(--danger);">견적서를 만들지 못했습니다. '
+        + comboEsc((e&&e.message)?e.message:String(e)) + '</span>';
+    }
   };
 
   window.submitRebuy = async function(){
