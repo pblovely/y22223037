@@ -387,7 +387,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-02 v858</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-02 v862</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -4194,6 +4194,20 @@
     // 판매할인이 실제로 출고가에 걸린 값인지, 공급가에 걸린 값인지 역산해 보여줍니다.
     { key:"saleDiscountBase", label:"판매할인 기준",
       get:it=> actualSaleBase(it), getRaw:it=> actualSaleBase(it) },
+    // 판매요청이 걸려 있는지 한눈에 보여줍니다. 없으면 돈을 못 받습니다.
+    { key:"saleReqState", label:"판매요청",
+      get:it=>{
+        const sold = String(it.status||"").indexOf("판매") >= 0
+                  || String(it.status||"").indexOf("개통") >= 0 || !!it.destination;
+        if(it.saleRequestId) return '<span style="color:#2e7d32;font-weight:700;">있음</span>';
+        if(sold) return '<span style="color:var(--danger);font-weight:700;">없음</span>';
+        return "-";
+      },
+      getRaw:it=>{
+        const sold = String(it.status||"").indexOf("판매") >= 0
+                  || String(it.status||"").indexOf("개통") >= 0 || !!it.destination;
+        return it.saleRequestId ? "있음" : (sold ? "없음" : "-");
+      }, html:true },
     { key:"subsidyAmount", label:"공시지원금", get:it=> (it.subsidyAmount!=null)?Number(it.subsidyAmount).toLocaleString():"-", getRaw:it=>it.subsidyAmount!=null?Number(it.subsidyAmount):"" },
     { key:"subsidyStatus", label:"공시지원금 상태", get:it=>it.subsidyStatus||"-" },
     { key:"clawbackAmount", label:"환수액", get:it=> (it.clawbackAmount!=null)?Number(it.clawbackAmount).toLocaleString():"-", getRaw:it=>it.clawbackAmount!=null?Number(it.clawbackAmount):"" },
@@ -4201,7 +4215,11 @@
     { key:"payState", label:"입금",
       get:it=>{
         const p = payStatusOf(it);
-        if(!p) return (it.status === "판매" || it.status === "개통") ? "판매요청 없음" : "-";
+        if(!p){
+          const sold = String(it.status||"").indexOf("판매") >= 0
+                    || String(it.status||"").indexOf("개통") >= 0 || !!it.destination;
+          return sold ? "판매요청 없음" : "-";
+        }
         return p.label + (p.state === "part" ? " " + (p.received||0).toLocaleString() : "");
       },
       getRaw:it=>{ const p = payStatusOf(it); return p ? p.label : ((it.status==="판매"||it.status==="개통") ? "판매요청 없음" : ""); } },
@@ -28300,6 +28318,7 @@
   let srbSumDiffCache = [];      // 판매요청 묶음 합계 불일치
   let baseFillCache = [];        // 할인 기준 칸이 비어 있는 재고
   let dupSaleCache = [];         // 같은 단말기가 판매요청에 두 번 이상
+  let noSaleReqCache = [];       // 판매요청이 없는데 나간 재고
   let sameBuyDiffSkip = 0;
   let baseDiffGroups = {};       // 위를 매입처·기준·%·출고가로 묶은 것
   let baseDiffKeys = [];         // 묶음 순서 (체크박스 번호와 맞춥니다)
@@ -29519,6 +29538,61 @@
     baseFillCache = []; runDataCheck();
   };
 
+  // ── 판매요청이 없는데 나간 재고 ──
+  window.showNoSaleReqList = function(){
+    const el = document.getElementById("datacheck-detail");
+    if(!el || noSaleReqCache.length === 0){ if(el) el.innerHTML = '<div class="list-empty">해당하는 재고가 없습니다.</div>'; return; }
+    const halfway = noSaleReqCache.filter(r=> r.it.destination && String(r.it.status||"") === "보유중");
+    let h = '<div style="border:1px solid var(--danger);padding:10px 12px;margin-top:10px;">'
+      + '<div style="font-weight:700;margin-bottom:4px;color:var(--danger);">판매요청이 없는데 나간 재고 — ' + noSaleReqCache.length + '대</div>'
+      + '<div style="font-size:11.5px;color:var(--gray);line-height:1.7;margin-bottom:8px;">'
+      + '판매요청이 없으면 <b>입금요청을 만들 수 없어 돈을 못 받습니다.</b><br>'
+      + '<b>판매 관리 → [재고에서 판매요청]</b> 으로 만들어주세요. 상태도 함께 판매로 바꿔줍니다.<br>'
+      + (halfway.length
+          ? '<b style="color:var(--danger);">그중 ' + halfway.length + '대는 판매처는 적혀 있는데 상태가 「보유중」입니다. '
+            + '판매처리가 중간에 멈춘 건입니다. 붉은 줄로 표시했습니다.</b>'
+          : '')
+      + '</div>'
+      + '<div style="max-height:340px;overflow:auto;border:1px solid var(--line);">'
+      + '<table class="data-table" style="width:100%;font-size:11.5px;"><thead><tr>'
+      + '<th>일련번호</th><th>모델</th><th>색상</th><th>통신사</th><th>입고일</th>'
+      + '<th>판매처</th><th>판매일</th><th>상태</th><th class="ta-right">판매가</th>'
+      + '</tr></thead><tbody>'
+      + noSaleReqCache.slice(0,300).map(r=>{
+          const x = r.it;
+          const warn = x.destination && String(x.status||"") === "보유중";
+          return '<tr'+(warn?' style="background:#fdecea;"':'')+'>'
+            + '<td><b>'+comboEsc(x.serialNumber||"-")+'</b></td>'
+            + '<td>'+comboEsc(x.systemModel||x.baseModel||"-")+'</td>'
+            + '<td>'+comboEsc(x.systemColor||x.manufacturerColor||"-")+'</td>'
+            + '<td>'+comboEsc(x.carrier||"-")+'</td>'
+            + '<td>'+comboEsc(x.inDate||"-")+'</td>'
+            + '<td>'+comboEsc(x.destination||"-")+'</td>'
+            + '<td>'+comboEsc(x.outDate||"-")+'</td>'
+            + '<td'+(warn?' style="color:var(--danger);font-weight:700;"':'')+'>'+comboEsc(x.status||"-")+'</td>'
+            + '<td class="ta-right">'+((Number(x.salePrice)||0)?Number(x.salePrice).toLocaleString():"-")+'</td>'
+            + '</tr>';
+        }).join("")
+      + '</tbody></table></div>'
+      + (noSaleReqCache.length > 300 ? '<div style="font-size:11.5px;color:var(--gray);margin-top:4px;">앞의 300대만 보여드립니다.</div>' : '')
+      + '<span class="btn-row" style="margin-top:10px;">'
+      + '<button class="btn small secondary" style="width:auto;" onclick="downloadNoSaleReq()">엑셀로 받기</button>'
+      + '</span></div>';
+    el.innerHTML = h;
+  };
+  window.downloadNoSaleReq = function(){
+    if(noSaleReqCache.length === 0){ alert("받을 것이 없습니다."); return; }
+    const head = ["일련번호","전산모델명","색상","통신사","입고일","판매처","판매일","상태","판매가"];
+    const body = noSaleReqCache.map(r=>{ const x=r.it;
+      return [x.serialNumber||"", x.systemModel||x.baseModel||"", x.systemColor||x.manufacturerColor||"",
+        x.carrier||"", x.inDate||"", x.destination||"", x.outDate||"", x.status||"", Number(x.salePrice)||0]; });
+    try{
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([head].concat(body)), "판매요청없음");
+      XLSX.writeFile(wb, "판매요청없는재고_" + todayStr() + ".xlsx");
+    }catch(e){ alert("엑셀을 만들지 못했습니다."); }
+  };
+
   // ── 같은 단말기가 판매요청에 두 번 이상 ──
   window.showDupSaleList = function(){
     const el = document.getElementById("datacheck-detail");
@@ -29531,16 +29605,20 @@
       + '<b>판매 관리에서 잘못된 판매요청을 취소</b>해주세요.</div>'
       + '<div style="max-height:340px;overflow:auto;border:1px solid var(--line);">'
       + '<table class="data-table" style="width:100%;font-size:11.5px;"><thead><tr>'
-      + '<th>통신사</th><th>모델</th><th>일련번호</th><th>대수</th><th>각각의 판매처 · 판매일</th>'
+      + '<th>통신사</th><th>모델</th><th>색상</th><th>일련번호</th><th class="ta-right">판매요청</th>'
+      + '<th>각각의 판매처 · 요청일 · 금액</th>'
       + '</tr></thead><tbody>'
       + dupSaleCache.slice(0,200).map(r=>{
-          const f = r.list[0];
+          const f = r.it;
           return '<tr>'
             + '<td>'+comboEsc(f.carrier||"-")+'</td>'
             + '<td>'+comboEsc(f.systemModel||f.baseModel||"-")+'</td>'
+            + '<td>'+comboEsc(f.systemColor||f.manufacturerColor||"-")+'</td>'
             + '<td><b>'+comboEsc(f.serialNumber||"-")+'</b></td>'
-            + '<td class="ta-right" style="color:var(--danger);font-weight:700;">'+r.list.length+'</td>'
-            + '<td>'+r.list.map(x=> comboEsc((x.destination||"-") + " " + (x.outDate||"-"))).join(' · ')+'</td>'
+            + '<td class="ta-right" style="color:var(--danger);font-weight:700;">'+r.srs.length+'</td>'
+            + '<td>'+r.srs.map(x=> comboEsc((x.destination||"-") + " " + (x.requestDate||"-")
+                + " " + ((Number(x.salePrice)||0)?Number(x.salePrice).toLocaleString():"-"))).join('<br>')+'</td>'
+            + '<td style="font-size:11px;color:var(--gray);">'+comboEsc(r.why||"")+'</td>'
             + '</tr>';
         }).join("")
       + '</tbody></table></div>'
@@ -30594,31 +30672,98 @@
           fix: rows.length ? "showSameBuyDiffList()" : null, fixLabel:"확인하고 맞추기" });
       }
 
-      // ⓪-3b 같은 단말기가 판매요청에 두 번 이상 들어간 건
-      //  통신사·모델·일련번호가 같으면 같은 단말기입니다. 두 번 팔릴 수 없습니다.
+      // ⓪-3a 판매처는 적혀 있는데 판매요청이 없는 재고
+      //  이대로 두면 입금요청을 만들 수 없어 돈을 못 받습니다.
       {
-        const key = x => [String(x.carrier||"").trim(),
-                          modelDupKey(String(x.systemModel||x.baseModel||"")),
-                          normSerial(String(x.serialNumber||""))].join("|");
-        const byKey = {};
+        const rows = [];
         Object.keys(items).forEach(id=>{
           const it = items[id];
           if(it.deleted === true) return;
-          if(!it.saleRequestId) return;                       // 판매요청에 묶인 것만
-          if(!String(it.serialNumber||"").trim()) return;
-          (byKey[key(it)] = byKey[key(it)] || []).push({ id, ...it });
+          if(it.saleRequestId) return;                    // 판매요청이 있으면 정상
+          const sold = String(it.status||"").indexOf("판매") >= 0
+                    || String(it.status||"").indexOf("개통") >= 0
+                    || !!String(it.destination||"").trim();
+          if(!sold) return;
+          if(String(it.status||"").indexOf("반품") >= 0) return;
+          rows.push({ id, it });
+        });
+        noSaleReqCache = rows;
+        const halfway = rows.filter(r=> r.it.destination && String(r.it.status||"") === "보유중").length;
+        issues.push({ n:"판매요청이 없는데 나간 재고", cnt:rows.length, unit:"대"
+            + (halfway ? " (그중 상태가 보유중 " + halfway + ")" : ""),
+          why:"판매처나 상태는 나간 것으로 되어 있는데 판매요청이 없습니다. 판매요청이 없으면 입금요청을 만들 수 없어 돈을 못 받습니다."
+            + " 판매 관리 → 재고에서 판매요청 으로 만들어주세요.",
+          fix: rows.length ? "showNoSaleReqList()" : null, fixLabel:"확인하기" });
+      }
+
+      // ⓪-3b 같은 단말기가 판매요청에 두 번 이상 들어간 건
+      //  ★ 재고의 saleRequestId 는 하나만 저장되므로(나중 것이 덮어씀) 판매요청 쪽에서 셉니다. ★
+      //  두 가지 경우를 다 봅니다.
+      //   ① 한 재고를 여러 판매요청이 가리킴
+      //   ② 같은 단말기(통신사·모델·일련번호)가 재고 여러 줄로 있고 각각 다른 판매요청에 걸림
+      {
+        const byItem = {};                       // 재고 코드 → 그 재고를 가리키는 판매요청들
+        srSnap.forEach(d=>{
+          const sr = d.data();
+          if(sr.status === "취소" || sr.deleted === true) return;
+          (sr.matchedItemIds||[]).forEach(iid=>{
+            (byItem[iid] = byItem[iid] || []).push({ id:d.id, ...sr });
+          });
+        });
+        // 판매요청을 코드로 찾을 수 있게 담아둡니다.
+        const srAll = {};
+        srSnap.forEach(d=> srAll[d.id] = d.data());
+        // 재고에만 saleRequestId 가 있고 판매요청에 matchedItemIds 가 없는 경우도 챙깁니다.
+        Object.keys(items).forEach(iid=>{
+          const it = items[iid];
+          if(it.deleted === true || !it.saleRequestId) return;
+          const list = byItem[iid] = byItem[iid] || [];
+          if(!list.some(x=> x.id === it.saleRequestId)){
+            const sr = srAll[it.saleRequestId];
+            if(sr && sr.status !== "취소") list.push({ id: it.saleRequestId, ...sr });
+          }
         });
         const rows = [];
-        Object.keys(byKey).forEach(k=>{
-          const g2 = byKey[k];
-          if(g2.length < 2) return;
-          // 판매요청이 서로 다를 때만 문제입니다. (같은 요청에 두 번 들어간 건 매칭 문제)
-          const srs = [...new Set(g2.map(x=> x.saleRequestId))];
-          rows.push({ key:k, list:g2, srCount: srs.length });
+        const seenSr = {};
+        // ① 한 재고에 판매요청 여럿
+        Object.keys(byItem).forEach(iid=>{
+          const srs = byItem[iid];
+          if(srs.length < 2) return;
+          const it = items[iid];
+          if(!it || it.deleted === true) return;
+          rows.push({ itemId: iid, it, srs, why:"한 재고에 판매요청이 여럿" });
+          seenSr[iid] = true;
         });
+        // ② 같은 단말기가 재고 여러 줄 → 각각 다른 판매요청
+        {
+          const key = x => [String(x.carrier||"").trim(),
+                            modelDupKey(String(x.systemModel||x.baseModel||"")),
+                            normSerial(String(x.serialNumber||""))].join("|");
+          const byKey = {};
+          Object.keys(items).forEach(iid=>{
+            const it = items[iid];
+            if(it.deleted === true) return;
+            if(!String(it.serialNumber||"").trim()) return;
+            const srs = byItem[iid] || [];
+            if(srs.length === 0) return;                  // 판매요청이 있는 것만
+            if(it.isRebuy || it.rebuyToItemId) return;     // 되사오기는 정상입니다
+            (byKey[key(it)] = byKey[key(it)] || []).push({ iid, it, srs });
+          });
+          Object.keys(byKey).forEach(k=>{
+            const g2 = byKey[k];
+            if(g2.length < 2) return;
+            const allSr = [];
+            g2.forEach(x=> x.srs.forEach(sr=>{ if(!allSr.some(y=> y.id === sr.id)) allSr.push(sr); }));
+            if(allSr.length < 2) return;
+            if(g2.some(x=> seenSr[x.iid])) return;          // 위에서 이미 잡음
+            rows.push({ itemId: g2[0].iid, it: g2[0].it, srs: allSr,
+                        why:"같은 단말기가 재고 " + g2.length + "줄로 나뉘어 각각 판매요청" });
+          });
+        }
+        rows.sort((a,b)=> String(a.it.serialNumber||"").localeCompare(String(b.it.serialNumber||"")));
         dupSaleCache = rows;
         issues.push({ n:"같은 단말기가 판매요청에 두 번 이상", cnt:rows.length, unit:"건",
-          why:"통신사·모델·일련번호가 같은 재고가 판매요청에 여러 번 들어가 있습니다. 한 대를 두 번 판 셈이라 매출·정산이 부풀려집니다.",
+          why:"한 재고를 여러 판매요청이 가리키고 있습니다. 한 대를 두 번 판 셈이라 매출·정산이 부풀려집니다. 나중에 만든 판매요청을 취소해주세요.",
           fix: rows.length ? "showDupSaleList()" : null, fixLabel:"확인하기" });
       }
 
@@ -40332,6 +40477,37 @@
       + ' <span id="paste-sale-disc-note" style="color:var(--gray);font-size:11.5px;margin-left:6px;">비우면 할인 없음</span></span></div>';
     html += '</div>';
 
+    // ── 이미 판매된 재고는 목록에서 아예 뺍니다. 두 번 팔 수 없습니다. ──
+    const soldOut = [];
+    dataRows = dataRows.filter(r=>{
+      const it = foundMap[r.serial];
+      if(!it) return true;                       // 못 찾은 건 아래에서 따로 알려줍니다
+      const isSold = String(it.status||"").indexOf("판매") >= 0
+                  || String(it.status||"").indexOf("개통") >= 0 || !!it.saleRequestId;
+      if(isSold){
+        soldOut.push({ serial:r.serial, m:it.systemModel||it.baseModel||"",
+                       dest:it.destination||"", out:it.outDate||"", st:it.status||"" });
+        return false;
+      }
+      return true;
+    });
+    if(soldOut.length){
+      html += '<div style="border:1px solid var(--danger);background:#fdecea;padding:9px 11px;margin-top:10px;font-size:12.5px;line-height:1.8;">'
+        + '<b style="color:var(--danger);">이미 판매된 재고 ' + soldOut.length + '대는 목록에서 뺐습니다.</b><br>'
+        + '<span style="color:var(--gray);">두 번 팔 수 없습니다. 정말 다시 파실 것이라면 '
+        + '<b>판매 관리</b> 에서 그 판매요청을 먼저 취소해주세요.</span><br>'
+        + soldOut.slice(0,8).map(x=> '&nbsp;&nbsp;· <b>' + comboEsc(x.serial) + '</b> '
+            + comboEsc(x.m) + '  →  ' + comboEsc(x.dest||x.st) + ' ' + comboEsc(x.out)).join('<br>')
+        + (soldOut.length > 8 ? '<br>&nbsp;&nbsp;... 외 ' + (soldOut.length-8) + '대' : '')
+        + '</div>';
+    }
+    if(dataRows.length === 0){
+      html += '<div style="border:1px solid var(--line);background:#f7f7f7;padding:10px 12px;margin-top:10px;font-size:12.5px;">'
+        + '판매처리할 재고가 없습니다.</div>';
+      analysisEl.innerHTML = html;
+      analysisEl.dataset.rows = JSON.stringify([]);
+      return;
+    }
     html += '<p class="desc" style="margin-top:10px;margin-bottom:4px;font-weight:700;color:var(--navy);">인식된 품목 미리보기</p>';
     html += '<div style="overflow-x:auto;border:1px solid var(--line);max-height:260px;overflow-y:auto;"><table class="data-table"><thead><tr><th>일련번호</th><th>모델 (전산모델명)</th><th>통신사</th><th class="ta-right">출고가</th><th class="ta-right">판매할인</th><th class="ta-right">판매가</th><th>상태</th></tr></thead><tbody id="paste-sale-preview-body">';
     dataRows.forEach((r,ri)=>{
@@ -40347,7 +40523,7 @@
         '<td class="ta-right">'+((it&&it.listPrice)?Number(it.listPrice).toLocaleString():'-')+'</td>' +
         '<td class="ta-right" data-ps-disc="'+ri+'"><span style="color:var(--gray);">-</span></td>' +
         '<td class="ta-right" data-ps-final="'+ri+'">'+(p?p.toLocaleString():'<span style="color:var(--gray);">-</span>')+'</td>' +
-        '<td>'+(it ? (it.status==='판매'?'이미 판매됨':'✓ 보유중')
+        '<td>'+(it ? ('✓ ' + comboEsc(it.status||"보유중"))
                    : (otherMap[r.serial] ? comboEsc(car)+'에는 없습니다 ('+comboEsc(otherMap[r.serial].join(", "))+'에 있음)'
                                          : '재고를 찾을 수 없음'))+'</td>' +
         '</tr>';
@@ -41488,7 +41664,7 @@
         // 저장해 둔 순서를 그대로 지키고, 새로 생긴 열만 붙입니다.
         //  이어서 보는 게 나은 열은 짝이 되는 열 바로 뒤에 끼워 넣습니다.
         const NEXT_TO = { discountBase: "purchasePrice", saleDiscountBase: "saleDiscount",
-                          isRebuy: "source" };
+                          isRebuy: "source", saleReqState: "destination" };
         const alive = saved.filter(k=> INV_COLUMNS.some(c=>c.key===k));
         const fresh = added.filter(k=> !alive.includes(k));
         fresh.forEach(k=>{
