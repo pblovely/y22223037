@@ -390,7 +390,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-03 v899</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-03 v901</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -25366,7 +25366,14 @@
     alert(n + "줄에 적용했습니다." + (rows.length - n > 0 ? "\n(잠긴 " + (rows.length-n) + "줄 제외)" : ""));
   };
 
+  let beSaving = false;      // 저장 중 두 번 눌러 두 번 저장되는 것을 막습니다
   window.submitBatchEdit = async function(){
+    if(beSaving){ alert("저장하는 중입니다. 잠시만 기다려주세요."); return; }
+    beSaving = true;
+    try{ await submitBatchEditInner(); }
+    finally{ beSaving = false; }
+  };
+  async function submitBatchEditInner(){
     if(!editingBatch) return;
     const { kind, id, b, lines, col, lineCol } = editingBatch;
     const msg = (t, err)=> showModelMsg("be-msg", t, err);
@@ -25597,14 +25604,17 @@
       for(let i=0; i<oldLines.length; i+=300){
         const bt = writeBatch(db);
         oldLines.slice(i, i+300).forEach(l=>{
-          bt.update(doc(db, lineCol, l.id), { ...linePatch, ...(perLine[l.id] || {}) });
+          const patch = { ...linePatch, ...(perLine[l.id] || {}) };
+          Object.keys(patch).forEach(function(k){ if(patch[k] === undefined) delete patch[k]; });
+          bt.update(doc(db, lineCol, l.id), patch);
         });
-        await bt.commit();
+        await withTimeout(bt.commit(), 15000, "품목 저장");
       }
       let addedLines = 0;
       for(const l of newLines){
         const p = perLine[l.id] || {};
         if(!p.systemModel && !l.systemModel) continue;      // 모델을 안 고른 줄은 건너뜁니다
+        msg("품목을 더하는 중... (" + (addedLines+1) + "/" + newLines.length + ")", false);
         const row = {
           batchId: id,
           orderDate: batchPatch.orderDate || b.orderDate || "",
@@ -25632,7 +25642,9 @@
           status: b.status || "진행",
           createdBy: currentUser.name, createdAt: serverTimestamp()
         };
-        await addDoc(collection(db, lineCol), row);
+        // 값이 undefined 이면 Firestore 가 거부합니다. 비어 있는 칸은 지우고 보냅니다.
+        Object.keys(row).forEach(function(k){ if(row[k] === undefined) delete row[k]; });
+        await withTimeout(addDoc(collection(db, lineCol), row), 12000, "품목 추가");
         addedLines++;
       }
       // 재고의 금액을 같이 맞춥니다. (고른 경우에만)
