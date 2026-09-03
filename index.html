@@ -400,7 +400,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-03 v906</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-03 v910</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -1788,16 +1788,7 @@
         <p class="desc">아는 항목만 채워도 등록됩니다. 색상은 등록 후 "색상" 버튼에서 따로 추가합니다.</p>
         <div class="stack-form">
           <div class="stack-row"><label>구분 <span class="info-tip" title="단말기·TV·모니터·액세서리 등으로 나눠두면 나중에 재고와 매출을 종류별로 볼 수 있습니다.">ⓘ</span></label>
-            <select id="ms-kind-select">
-              <option value="단말기">단말기</option>
-              <option value="태블릿">태블릿</option>
-              <option value="워치">워치</option>
-              <option value="액세서리">액세서리</option>
-              <option value="TV">TV</option>
-              <option value="모니터">모니터</option>
-              <option value="가전">가전</option>
-              <option value="기타">기타</option>
-            </select></div>
+            <select id="ms-kind-select"><option value="">선택</option></select></div>
           <div class="stack-row"><label>제조사</label><select id="ms-manufacturer-select"></select></div>
           <div class="stack-row"><label>펫네임</label><input type="text" id="ms-pet-input" placeholder="예: 갤럭시Z 폴드7"></div>
           <div class="stack-row"><label>전산모델명 <span class="info-tip" title="LG 마스터재고 파일의 '모델코드'와 맞춰야 하는 값입니다. 입력하면 아래에 파일 속 펫네임을 찾아 보여줍니다.">ⓘ</span></label><input type="text" id="ms-system-input" list="model-system-datalist" placeholder="예: SM-F976N256 (타이핑하면 목록)" oninput="checkMasterPetName('ms')"></div>
@@ -1835,16 +1826,7 @@
         <div class="stack-form">
           <div class="stack-row"><label>표시 순서 <span class="info-tip" title="작은 숫자가 드롭다운에서 먼저 나옵니다. 자주 쓰는 모델에 1, 2, 3 을 주세요. 비우면 맨 뒤로 갑니다.">ⓘ</span></label><input type="number" id="me-sortorder-input" placeholder="예: 1 (비우면 맨 뒤)"></div>
           <div class="stack-row"><label>구분 <span class="info-tip" title="단말기·TV·모니터·액세서리 등으로 나눠두면 나중에 재고와 매출을 종류별로 볼 수 있습니다.">ⓘ</span></label>
-            <select id="me-kind-select">
-              <option value="단말기">단말기</option>
-              <option value="태블릿">태블릿</option>
-              <option value="워치">워치</option>
-              <option value="액세서리">액세서리</option>
-              <option value="TV">TV</option>
-              <option value="모니터">모니터</option>
-              <option value="가전">가전</option>
-              <option value="기타">기타</option>
-            </select></div>
+            <select id="me-kind-select"><option value="">선택</option></select></div>
           <div class="stack-row"><label>제조사</label><select id="me-manufacturer-select"></select></div>
           <div class="stack-row"><label>펫네임</label><input type="text" id="me-pet-input"></div>
           <div class="stack-row"><label>전산모델명 <span class="info-tip" title="LG 마스터재고 파일의 '모델코드'와 맞춰야 하는 값입니다. 입력하면 아래에 파일 속 펫네임을 찾아 보여줍니다.">ⓘ</span></label><input type="text" id="me-system-input" list="model-system-datalist" oninput="checkMasterPetName('me')"></div>
@@ -4282,6 +4264,10 @@
     { key:"outDate", label:"판매일", get:it=>it.outDate||"-" },
     { key:"activateDate", label:"개통일", get:it=>it.activateDate||"-" },
     { key:"source", label:"입고처", get:it=>it.source||"-" },
+    { key:"manufacturer", label:"제조사", get:it=>it.manufacturer||"-" },
+    { key:"carrier", label:"통신사", get:it=>it.carrier||"-" },
+    { key:"location", label:"위치", get:it=>it.location||"-" },
+    { key:"petName", label:"펫네임", get:it=>it.petName||"-" },
     // 모델의 구분(단말기·TV·모니터·액세서리 등)입니다. 모델 등록에서 정합니다.
     { key:"kind", label:"구분",
       get:it=>{
@@ -4296,10 +4282,6 @@
           || (x.systemModel && it.systemModel && modelDupKey(x.systemModel) === modelDupKey(it.systemModel)));
         return (m && m.kind) ? m.kind : "";
       } },
-    { key:"manufacturer", label:"제조사", get:it=>it.manufacturer||"-" },
-    { key:"carrier", label:"통신사", get:it=>it.carrier||"-" },
-    { key:"location", label:"위치", get:it=>it.location||"-" },
-    { key:"petName", label:"펫네임", get:it=>it.petName||"-" },
     { key:"systemModel", label:"전산모델명", get:it=>it.systemModel||"-" },
     { key:"baseModel", label:"모델명", get:it=>it.baseModel||"-" },
     { key:"capacity", label:"기가수", get:it=>it.capacity||"-" },
@@ -5460,10 +5442,25 @@
           await updateDoc(doc(db, opts.collectionName, d.id), { name:newVal });
           if(opts.cascadeList){
             for(const c of opts.cascadeList){ await cascadeRenameField(c.collection, c.field, val, newVal); }
+            // 함께 바꾼 자료의 캐시를 비우고 다시 읽습니다. (안 그러면 화면에 옛 이름이 남습니다)
+            try{
+              const cols = opts.cascadeList.map(function(c){ return c.collection; });
+              if(cols.indexOf("inventoryModels") >= 0){ clearCache("models"); await fetchModelsCache(); }
+              if(cols.indexOf("inventoryItems") >= 0){ clearCache("inventory"); }
+              if(cols.indexOf("companies") >= 0){ clearCache("companies"); await fetchCompanies(); }
+              if(cols.indexOf("orders") >= 0) clearCache("orders");
+              if(cols.indexOf("saleRequests") >= 0) clearCache("saleRequests");
+              clearDashCache();
+            }catch(e){}
           }
           logAction(opts.label + " 수정", val + " → " + newVal);
           opts.reload();
           if(opts.afterChange) opts.afterChange();
+          if(opts.cascadeList && opts.cascadeList.length){
+            alert("「" + val + "」 을 「" + newVal + "」 로 바꿨습니다.\n\n"
+              + "이 이름을 쓰던 자료도 함께 바뀌었습니다.\n"
+              + "화면에 옛 이름이 보이면 목록을 다시 조회해주세요.");
+          }
         };
       };
       delBtn.onclick = async ()=>{
@@ -5971,12 +5968,17 @@
       const sel = document.getElementById(id);
       if(!sel) return;
       const keep = sel.value;
-      sel.innerHTML = "";
+      sel.innerHTML = '<option value="">선택</option>';
       names.forEach(function(n){
         const o = document.createElement("option");
         o.value = n; o.textContent = n; sel.appendChild(o);
       });
-      if(keep && names.indexOf(keep) >= 0) sel.value = keep;
+      // 저장돼 있던 값이 목록에 없으면(=지웠거나 이름이 바뀐 경우) 그대로 보여줍니다.
+      if(keep && names.indexOf(keep) < 0){
+        const o = document.createElement("option");
+        o.value = keep; o.textContent = keep + " (구분 관리에 없음)"; sel.appendChild(o);
+      }
+      if(keep) sel.value = keep;
     });
   }
   window.loadKindsIntoSelects = loadKindsIntoSelects;
@@ -6716,7 +6718,7 @@
         '<td style="color:var(--gray);">'+rowNum+'</td>' +
         '<td class="ta-right">'+(m.sortOrder != null ? '<b>'+m.sortOrder+'</b>' : '<span style="color:var(--gray);">-</span>')+'</td>' +
         '<td>'+(m.needsReview ? '<input type="checkbox" data-review-model="'+m.id+'" style="accent-color:var(--danger);width:16px;height:16px;cursor:pointer;">' : '<span style="color:var(--gray);">✓</span>')+'</td>' +
-        '<td>'+comboEsc(m.kind||"단말기")+'</td>' +
+        '<td>'+comboEsc(m.kind||"-")+'</td>' +
         '<td>'+(m.manufacturer||'<span style="color:var(--danger);">미지정</span>')+'</td>' +
         '<td>'+(m.petName||"-")+'</td>' +
         '<td>'+(m.systemModel ? comboEsc(m.systemModel) : '<span style="color:var(--danger);font-weight:700;">미입력</span>')+'</td>' +
@@ -6789,7 +6791,7 @@
     if(!m) return;
     currentEditingModelId = modelId;
     document.getElementById("me-sortorder-input").value = (m.sortOrder != null ? m.sortOrder : "");
-    { const e = document.getElementById("me-kind-select"); if(e) e.value = m.kind || "단말기"; }
+    { const e = document.getElementById("me-kind-select"); if(e) e.value = m.kind || ""; }
     document.getElementById("me-pet-input").value = m.petName || "";
     document.getElementById("me-system-input").value = m.systemModel || "";
     document.getElementById("me-base-input").value = m.baseModel || "";
@@ -6819,7 +6821,7 @@
       priceIncVat, priceExVat: priceIncVat ? Math.round(priceIncVat/1.1) : null,
       nickname: document.getElementById("me-nick-input").value.trim(),
       manufacturer: document.getElementById("me-manufacturer-select").value,
-      kind: String((document.getElementById("me-kind-select")||{}).value || "단말기"),
+      kind: String((document.getElementById("me-kind-select")||{}).value || ""),
       sortOrder: document.getElementById("me-sortorder-input").value !== "" ? Number(document.getElementById("me-sortorder-input").value) : null,
       updatedAt: serverTimestamp()
     };
@@ -7327,7 +7329,7 @@
         baseModel: fields.baseModel||"", capacity: fields.capacity||"", systemModel: fields.systemModel||"",
         priceExVat: fields.priceExVat||null, priceIncVat: fields.priceIncVat||null,
         petName: fields.petName||"", nickname: fields.nickname||"", manufacturer: fields.manufacturer||"", colors: [],
-        kind: fields.kind || "단말기",     // 단말기 · TV · 모니터 · 액세서리 등
+        kind: fields.kind || "",           // 구분 관리에서 고르신 값
         createdAt: serverTimestamp(), updatedAt: serverTimestamp()
       });
       markModelTouched(ref && ref.id);      // 방금 등록한 모델을 맨 위로 올려 바로 고칠 수 있게 합니다
@@ -7366,7 +7368,7 @@
     const priceInput = document.getElementById("ms-price-input").value;
     const nickname = document.getElementById("ms-nick-input").value.trim();
     const manufacturer = document.getElementById("ms-manufacturer-select").value;
-    const kind = String((document.getElementById("ms-kind-select")||{}).value||"단말기");
+    const kind = String((document.getElementById("ms-kind-select")||{}).value||"");
 
     if(!petName && !systemModel && !baseModel){
       showModelMsg("ms-result-msg", "펫네임 · 전산모델명 · 모델명 중 최소 하나는 입력해주세요.", true);
@@ -8469,6 +8471,7 @@
       subsidyAccrualMonth: subsidyAccrualMonth||null,
       note1: document.getElementById("item-note1-input").value.trim(),
       note2: document.getElementById("item-note2-input").value.trim(),
+      kind: (m && m.kind) ? m.kind : "",      // 모델의 구분을 그대로 씁니다
       // 이 재고에서만 쓰는 할인 계산 기준입니다. 업체정보 값은 「기본으로 들어오는 값」일 뿐이고,
       //  여기 저장된 값이 있으면 이후 다시 계산할 때도 이것을 먼저 씁니다.
       discountBase: String((document.getElementById("item-base-select")||{}).value||"") || null,
@@ -14034,6 +14037,11 @@
               saleDiscountAmt:o.saleDiscountAmt||null, saleDiscount:o.saleDiscountPct||null,
               // 할인 계산 기준을 업체 기준으로 함께 넣습니다. (나중에 채우실 필요가 없게)
               discountBase: arrBuyBase, saleDiscountBase: arrSaleBase,
+              kind: (function(){ try{
+                const mm = (modelsCache||[]).find(function(x){
+                  return modelDupKey(String(x.systemModel||"")) === modelDupKey(String(o.systemModel||"")); });
+                return (mm && mm.kind) ? mm.kind : "";
+              }catch(e){ return ""; } })(),
               profit: (o.salePrice && o.purchasePrice) ? (Number(o.salePrice)-Number(o.purchasePrice)) : null,
               imei:"", status: sell ? "판매" : "보유중",
               orderDate:o.orderDate||"", inDate, expectedSaleDate:"", outDate: sell ? outDate : "",
@@ -14348,6 +14356,7 @@
         saleDiscountAmt:o.saleDiscountAmt||null, saleDiscount:o.saleDiscountPct||null,
         // 할인 계산 기준을 업체 기준으로 함께 넣습니다. (나중에 채우실 필요가 없게)
         discountBase: arrBuyBase2, saleDiscountBase: arrSaleBase2,
+        kind: (m && m.kind) ? m.kind : "",   // 모델의 구분을 그대로 씁니다
         profit: (o.salePrice && o.purchasePrice) ? (Number(o.salePrice)-Number(o.purchasePrice)) : null,
         imei:"", status: autoSell ? "판매" : "보유중", orderDate:o.orderDate||"", inDate, expectedSaleDate:"", outDate,
         note1: o.note1 || "", note2: o.note2 || "",
@@ -28157,6 +28166,7 @@
           listPrice: c.L, purchaseDiscount: c.pct, purchaseDiscountAmt: Math.round(c.pre),
           otherDiscountPct: null, otherDiscountAmt: null,
           purchasePrice: Math.round(c.buy), discountBase: c.base,
+          kind: it.kind || "",                // 1차 재고의 구분을 그대로 씁니다
           status: "보유중", orderId: orderIdOf[it.id] || null,
           // ── 되사오기 표시 ──
           isRebuy: true, rebuyFromItemId: it.id,
@@ -41375,6 +41385,7 @@
         petName:m.petName||"", manufacturerColor:colorObj.manufacturerColor||"", systemColor:colorObj.systemColor||"", sku:colorObj.sku||"",
         carrier, source, manufacturer:"", location:"", destination:dest||"",
         listPrice:m.priceIncVat||null, purchasePrice:m.priceExVat||null, salePrice:null,
+        kind: m.kind || "",                 // 모델의 구분을 그대로 씁니다
         // 할인 계산 기준을 업체 기준으로 함께 넣습니다.
         discountBase: (function(){ try{ return itemDiscountBase({ source }) || "unit"; }catch(e){ return "unit"; } })(),
         saleDiscountBase: (function(){
@@ -42562,6 +42573,11 @@
           purchaseDiscountAmt: purchaseDiscountAmtNum,
           salePrice:salePriceNum, saleDiscount: saleDiscountNum,
           saleDiscountAmt: saleDiscountAmtNum,
+          kind: (function(){ try{
+            const mm = (modelsCache||[]).find(function(x){
+              return modelDupKey(String(x.systemModel||"")) === modelDupKey(String(systemModel||"")); });
+            return (mm && mm.kind) ? mm.kind : "";
+          }catch(e){ return ""; } })(),
           // 할인 계산 기준을 업체 기준으로 함께 넣습니다.
           discountBase: (function(){ try{ return itemDiscountBase({ source }) || "unit"; }catch(e){ return "unit"; } })(),
           saleDiscountBase: (function(){
@@ -43127,7 +43143,7 @@
         //  이어서 보는 게 나은 열은 짝이 되는 열 바로 뒤에 끼워 넣습니다.
         const NEXT_TO = { discountBase: "purchasePrice", saleDiscountBase: "saleDiscount",
                           isRebuy: "source", saleReqState: "destination",
-                          kind: "manufacturer" };
+                          kind: "systemModel" };
         const alive = saved.filter(k=> INV_COLUMNS.some(c=>c.key===k));
         const fresh = added.filter(k=> !alive.includes(k));
         fresh.forEach(k=>{
