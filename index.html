@@ -400,7 +400,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-04 v941</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-04 v942</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -24489,6 +24489,24 @@
     }
   };
 
+  // 붙여넣기 — 「입고동일」 이면 판매가를 입고가와 똑같이 둡니다.
+  window.onResvPasteSameBuy = function(){
+    const on = !!(document.getElementById("resv-paste-samebuy")||{}).checked;
+    ["resv-paste-salebase","resv-paste-saleamt","resv-paste-salepct","resv-paste-saleprice"].forEach(function(id){
+      const el = document.getElementById(id);
+      if(!el) return;
+      el.disabled = on;
+      el.style.background = on ? "#eee" : "";
+      if(on && id !== "resv-paste-salebase") el.value = "";
+    });
+    const note = document.getElementById("resv-paste-sale-note");
+    if(note) note.textContent = on
+      ? "판매가를 입고가(출고가 − 선할인 − 타할인)와 똑같이 넣습니다."
+      : "";
+    // 미리보기에도 바로 반영합니다.
+    try{ analyzeResvPaste(); }catch(e){}
+  };
+
   // 판매 예약 — 판매할인·판매가를 넣으면 서로 채워줍니다.
   window.resvPasteSale = { base:"unit", amt:null, pct:null, price:null };
   window.onResvPasteSale = function(from){
@@ -24649,6 +24667,7 @@
     { const e = document.getElementById("resv-paste-base");     if(e) e.value = "unit"; }
     { const e = document.getElementById("resv-paste-dest");     if(e) e.value = ""; }
     { const e = document.getElementById("resv-paste-nocolor");  if(e) e.checked = false; }
+    { const e = document.getElementById("resv-paste-samebuy");  if(e) e.checked = false; }
     // 담아둔 값도 비웁니다. (안 그러면 창을 다시 열 때 되살아납니다)
     resvPasteKeepDisc = {};
     resvPasteFixedAmt = { pre:null, other:null };
@@ -24957,8 +24976,23 @@
           preDiscountPct: pre.pct, preDiscountAmt: pre.amt,
           otherDiscountPct: oth.pct, otherDiscountAmt: oth.amt };
       });
+      // 「입고동일」 이면 판매가를 입고가와 똑같이 둡니다.
+      if(!!(document.getElementById("resv-paste-samebuy")||{}).checked){
+        resvPendingRows = resvPendingRows.map(function(d){
+          const L = Number(d.listPrice)||0;
+          const pre = Number(d.preDiscountAmt)||0;
+          const oth = Number(d.otherDiscountAmt)||0;
+          const q = Number(d.orderedQty)||1;
+          // 선할인·타할인은 줄 합계로 담겨 있어 대당으로 나눕니다.
+          const buy = L - Math.round(pre / (q||1)) - Math.round(oth / (q||1));
+          if(!(buy > 0)) return d;
+          return { ...d, salePrice: buy, saleDiscountAmt: L - buy,
+                   saleDiscountPct: L ? Number((((L - buy)/L)*100).toFixed(2)) : null,
+                   salePriceFollowsBuy: true };
+        });
+      }
       // 판매 예약이면 아래에서 넣으신 판매가·판매할인을 담습니다.
-      if(resvKind !== "buy"){
+      else if(resvKind !== "buy"){
         const sBase  = String((document.getElementById("resv-paste-salebase")||{}).value || "unit");
         const sAmt   = num("resv-paste-saleamt");
         const sPct   = num("resv-paste-salepct");
