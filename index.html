@@ -400,7 +400,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-03 v911</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-03 v912</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -3702,6 +3702,21 @@
       </div>
     </div>
 
+    <!-- 모델 구분 일괄 변경 -->
+    <div id="mbk-overlay" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.55);z-index:1120;align-items:center;justify-content:center;">
+      <div style="background:#fff;border:2px solid var(--navy);max-width:520px;width:94%;padding:22px;position:relative;">
+        <button onclick="closeModelBulkKind()" style="position:absolute;top:12px;right:12px;background:none;border:1px solid var(--navy);width:26px;height:26px;cursor:pointer;font-size:13px;">✕</button>
+        <h3 style="margin-top:0;margin-bottom:4px;">구분 일괄 변경</h3>
+        <p class="desc" style="margin-top:0;" id="mbk-count"></p>
+        <div class="stack-form">
+          <div class="stack-row"><label>바꿀 구분</label><select id="mbk-kind"><option value="">선택</option></select></div>
+        </div>
+        <p class="desc" style="margin-top:10px;">고르신 모델과 <b>그 모델로 만든 재고</b>의 구분을 함께 바꿉니다.</p>
+        <div id="mbk-msg" style="font-size:12.5px;margin:8px 0;"></div>
+        <span class="btn-row"><button class="btn small" style="width:auto;" onclick="submitModelBulkKind()">바꾸기</button><button class="btn small secondary" style="width:auto;" onclick="closeModelBulkKind()">닫기</button></span>
+      </div>
+    </div>
+
     <!-- 거래 자료 초기화 -->
     <div id="wipe-overlay" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.65);z-index:1200;align-items:center;justify-content:center;">
       <div style="background:#fff;border:3px solid var(--danger);max-width:820px;width:96%;max-height:92vh;overflow-y:auto;padding:24px;position:relative;">
@@ -5933,32 +5948,39 @@
       alert("구분이 하나도 없습니다.\n\n재고 기초설정 → 구분 에서 먼저 등록해주세요.");
       return;
     }
-    const pick = prompt("체크한 " + ids.length + "개 모델의 구분을 바꿉니다.\n\n"
-      + "쓸 수 있는 구분\n  " + names.join(" · ")
-      + "\n\n바꿀 구분을 그대로 적어주세요.", names[0]);
-    if(pick === null) return;
-    const kind = String(pick).trim();
-    if(!kind){ alert("구분을 적어주세요."); return; }
-    if(names.indexOf(kind) < 0){
-      alert("「" + kind + "」 은 구분 목록에 없습니다.\n\n"
-        + "쓸 수 있는 구분\n  " + names.join(" · ")
-        + "\n\n재고 기초설정 → 구분 에서 먼저 등록해주세요.");
-      return;
-    }
+    const sel = document.getElementById("mbk-kind");
+    sel.innerHTML = '<option value="">선택</option>';
+    names.forEach(function(n){
+      const o = document.createElement("option"); o.value = n; o.textContent = n; sel.appendChild(o);
+    });
+    document.getElementById("mbk-count").textContent = "체크하신 모델 " + ids.length + "개의 구분을 바꿉니다.";
+    document.getElementById("mbk-msg").innerHTML = "";
+    document.getElementById("mbk-overlay").style.display = "flex";
+  };
+  window.closeModelBulkKind = function(){ document.getElementById("mbk-overlay").style.display = "none"; };
+
+  window.submitModelBulkKind = async function(){
+    const ids = [...document.querySelectorAll(".model-cb:checked")].map(function(e){ return e.dataset.mid; });
+    if(ids.length === 0){ alert("먼저 모델을 체크해주세요."); return; }
+    const kind = String((document.getElementById("mbk-kind")||{}).value||"").trim();
+    if(!kind){ alert("바꿀 구분을 골라주세요."); return; }
     if(!confirm("모델 " + ids.length + "개의 구분을 「" + kind + "」 로 바꿉니다.\n\n"
       + "그 모델로 만든 재고의 구분도 함께 맞춥니다.\n\n진행할까요?")) return;
+    const msg = document.getElementById("mbk-msg");
     let mDone = 0, iDone = 0;
     try{
-      // 모델
+      if(msg) msg.innerHTML = '<span style="color:var(--gray);">모델을 바꾸는 중...</span>';
       for(let i=0; i<ids.length; i+=300){
         const bt = writeBatch(db);
         ids.slice(i, i+300).forEach(function(id){ bt.update(doc(db,"inventoryModels", id), { kind }); });
         await withTimeout(bt.commit(), 15000, "모델 저장");
         mDone += Math.min(300, ids.length - i);
       }
-      // 그 모델로 만든 재고
       const models = (modelsCache||[]).filter(function(x){ return ids.indexOf(x.id) >= 0; });
+      let mi = 0;
       for(const m of models){
+        if(msg) msg.innerHTML = '<span style="color:var(--gray);">재고를 맞추는 중... ('
+          + (++mi) + '/' + models.length + ')</span>';
         const q = await getDocs(query(collection(db,"inventoryItems"),
           where("systemModel","==", String(m.systemModel||""))));
         const live = q.docs.filter(function(d){ return d.data().deleted !== true; });
@@ -5970,12 +5992,14 @@
         }
       }
     }catch(e){
-      alert("바꾸지 못했습니다.\n" + ((e&&e.message)?e.message:String(e)));
+      if(msg) msg.innerHTML = '<span style="color:var(--danger);">바꾸지 못했습니다. '
+        + comboEsc((e&&e.message)?e.message:String(e)) + '</span>';
       return;
     }
     logAction("모델 구분 일괄 변경", kind + " / 모델 " + mDone + "개 / 재고 " + iDone + "대");
     try{ clearCache("models"); await fetchModelsCache(); clearCache("inventory"); clearDashCache(); }catch(e){}
     alert("모델 " + mDone + "개, 재고 " + iDone + "대의 구분을 「" + kind + "」 로 바꿨습니다.");
+    closeModelBulkKind();
     loadModelAdminList();
   };
 
