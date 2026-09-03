@@ -160,6 +160,9 @@
   .menu-item:hover{ background:#eee; }
   /* 검색되는 드롭다운(콤보박스) */
   .combo-wrap{ flex:1; position:relative; min-width:0; display:flex; }
+  /* 표 칸 안에서는 flex 가 안 먹어 폭이 0이 됩니다. 칸에 맞춰 늘립니다. */
+  td > .combo-wrap{ flex:none; width:100%; min-width:120px; }
+  td > .combo-wrap .combo-input{ border:1px solid var(--line); font-size:11.5px; padding:4px; min-height:26px; }
   .combo-wrap input.combo-input{ flex:1; width:100%; border:none; padding:5px 8px; font-size:12.5px; min-height:28px; box-sizing:border-box; font-family:inherit; background:#fff; }
   .combo-wrap input.combo-input:focus{ outline:2px solid var(--accent); outline-offset:-2px; }
   .combo-list{ display:none; position:absolute; left:0; right:0; top:100%; max-height:240px; overflow-y:auto; background:#fff; border:1px solid var(--navy); z-index:1200; box-shadow:0 4px 12px rgba(0,0,0,0.18); }
@@ -387,7 +390,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-03 v897</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-03 v898</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -25122,8 +25125,7 @@
           cse.className = "be-color";
           cse.style.cssText = "font-size:11.5px;padding:4px;width:110px;border:1px solid var(--line);box-sizing:border-box;";
           const cur = String(l.systemColor || l.manufacturerColor || "");
-          let op = '<option value="">' + comboEsc(cur || (l.isNew ? "모델을 먼저 고르세요" : "(색상 없음)"))
-                 + (l.isNew && !cur ? '' : ' — 그대로') + '</option>';
+          let op = '<option value="">' + comboEsc(cur || "") + (cur ? ' — 그대로' : '') + '</option>';
           cols.forEach(c=>{
             const v = (c.manufacturerColor||"") + "|" + (c.systemColor||"") + "|" + (c.sku||"");
             op += '<option value="' + comboEsc(v) + '">' + comboEsc(c.systemColor || c.manufacturerColor || "-") + '</option>';
