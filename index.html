@@ -400,7 +400,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-03 v917</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-03 v918</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -24100,7 +24100,11 @@
                      .filter(function(v){ return v > 0; });
     const same = prices.length > 0 && prices.every(function(v){ return v === prices[0]; });
     const L = same ? prices[0] : 0;
-    const baseAmt = (base === "supply") ? Math.round(L / 1.1) : L;
+    //  대당 = 출고가 · 공급가 = 출고가÷1.1 · 합계 = 출고가 합계
+    const totalAll = (resvPendingRows||[]).reduce(function(n,r){
+      return n + (Number(r.listPrice)||0) * (Number(r.orderedQty)||0); }, 0);
+    const baseAmt = (base === "supply") ? Math.round(L / 1.1)
+                  : (base === "total")  ? totalAll : L;
 
     if(from === "price"){
       // 판매가를 직접 넣으면 할인은 비웁니다.
@@ -24131,11 +24135,13 @@
     const a2 = amtEl.value === "" ? null : Number(amtEl.value);
     window.resvPasteSale = { base, amt:a2,
       pct: pctEl.value === "" ? null : Number(pctEl.value), price:null };
-    if(note) note.textContent = (a2 != null)
-      ? "출고가 " + L.toLocaleString() + " − 할인 " + a2.toLocaleString()
-        + " = 판매가 " + (L - a2).toLocaleString()
-        + (base === "supply" ? "   (공급가 " + baseAmt.toLocaleString() + " 기준)" : "")
-      : "";
+    if(note) note.textContent = (a2 == null) ? ""
+      : (base === "total")
+        ? ("출고가 합계 " + totalAll.toLocaleString() + " 에 " + (pctEl.value||"-") + "% → 할인 "
+           + a2.toLocaleString() + " (줄마다 나눠 들어갑니다)")
+        : ("출고가 " + L.toLocaleString() + " − 할인 " + a2.toLocaleString()
+           + " = 판매가 " + (L - a2).toLocaleString()
+           + (base === "supply" ? "   (공급가 " + baseAmt.toLocaleString() + " 기준)" : ""));
   };
 
   window.onResvPasteDisc = function(which, from){
@@ -24368,9 +24374,10 @@
           : '<div style="border:1px solid var(--navy);background:#f4f7fb;padding:9px 11px;margin-bottom:10px;">'
             + '<b>판매가 넣기</b> <span style="color:var(--gray);font-size:11.5px;">모델을 알아봤으니 이제 넣으시면 됩니다. 줄에 판매가를 적으셨으면 그 값이 우선합니다.</span>'
             + '<div style="display:flex;gap:0;flex-wrap:wrap;align-items:center;margin-top:6px;">'
-            + '<select id="resv-paste-salebase" style="height:28px;border:1px solid var(--line);padding:0 6px;font-size:12.5px;box-sizing:border-box;">'
+            + '<select id="resv-paste-salebase" onchange="onResvPasteSale(\'pct\')" style="height:28px;border:1px solid var(--line);padding:0 6px;font-size:12.5px;box-sizing:border-box;">'
               + '<option value="unit">대당 (출고가에 걸기)</option>'
-              + '<option value="supply">공급가 기준</option>'
+              + '<option value="total">합계 (출고가 합계에 한 번)</option>'
+              + '<option value="supply">공급가 기준 (삼성전자 방식)</option>'
             + '</select>'
             + '<input type="number" id="resv-paste-saleamt" placeholder="판매할인 (대당)" oninput="onResvPasteSale(\'amt\')" style="width:130px;height:28px;border:1px solid var(--line);padding:0 6px;font-size:12.5px;margin-left:-1px;box-sizing:border-box;">'
             + '<input type="number" step="0.01" id="resv-paste-salepct" placeholder="판매할인%" oninput="onResvPasteSale(\'pct\')" style="width:105px;height:28px;border:1px solid var(--line);padding:0 6px;font-size:12.5px;margin-left:-1px;box-sizing:border-box;">'
@@ -24490,9 +24497,23 @@
         const sAmt   = num("resv-paste-saleamt");
         const sPct   = num("resv-paste-salepct");
         const sPrice = num("resv-paste-saleprice");
+        // 합계 기준이면 출고가 합계에 %를 걸고, 줄마다 대당 금액으로 나눕니다.
+        const totalAll2 = resvPendingRows.reduce(function(n,d){
+          return n + (Number(d.listPrice)||0) * (Number(d.orderedQty)||0); }, 0);
         if(sAmt != null || sPct != null || sPrice != null){
           resvPendingRows = resvPendingRows.map(function(d){
             const L = Number(d.listPrice)||0;
+            const q = Number(d.orderedQty)||0;
+            if(sBase === "total" && sPrice == null){
+              // 합계에 %를 건 뒤 줄마다 (출고가 비중)만큼 나눠 대당 금액으로 만듭니다.
+              const pctT = (sPct != null) ? sPct
+                         : (totalAll2 > 0 && sAmt != null ? Number((sAmt / totalAll2 * 100).toFixed(4)) : null);
+              if(pctT == null || L <= 0) return d;
+              const amtT = Math.round(L * pctT / 100);        // 대당 할인
+              if(d.salePrice != null && d.salePrice !== "") return d;
+              return { ...d, salePrice: L - amtT, saleDiscountAmt: amtT,
+                       saleDiscountPct: Number(pctT.toFixed(2)), saleDiscountBase: "total" };
+            }
             const baseAmt = (sBase === "supply") ? Math.round(L / 1.1) : L;
             let amt = null, pct = null, price = null;
             if(sPrice != null){
