@@ -400,7 +400,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-03 v928</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-03 v933</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -3270,6 +3270,10 @@
               <option value="supply">공급가 기준 (삼성전자 방식)</option>
             </select>
           </div>
+          <div class="stack-row"><label>판매가 연동 <span class="info-tip" title="켜면 판매가를 입고가와 똑같이 두고, 앞으로 입고가가 바뀔 때 판매가도 따라갑니다. 도착 등록 때 재고에도 그대로 넘어갑니다.">ⓘ</span></label>
+            <span><label style="display:inline-flex;align-items:center;gap:5px;cursor:pointer;">
+              <input type="checkbox" id="order-samebuy-input">
+              <b style="color:var(--navy);">입고동일 — 판매가를 입고가와 똑같이</b></label></span></div>
           <div class="stack-row"><label>입고처</label><select id="order-source-select" onchange="onOrderSourceChange()"><option value="">선택</option></select></div>
           <div id="order-source-note" style="display:none;font-size:12px;padding:7px 10px;margin:0 0 6px 0;border:1px solid var(--navy);background:#f4f7fb;line-height:1.7;"></div>
           <div class="stack-row"><label>통신사</label><select id="order-carrier-select"></select></div>
@@ -4210,6 +4214,17 @@
 
   // 판매할인이 실제로 어느 기준으로 계산돼 있는지 가립니다.
   function actualSaleBase(it){
+    // 저장해 둔 기준이 있으면 그것을 먼저 보여드립니다.
+    {
+      const saved = String((it && it.saleDiscountBase) || "");
+      if(saved === "supply" || saved === "total" || saved === "unit"){
+        const lab = (saved === "supply") ? "공급가" : (saved === "total" ? "합계" : "출고가");
+        // 「입고동일」 이면 그 표시를 먼저 보여드립니다.
+        if(it && it.salePriceFollowsBuy === true) return "입고동일";
+        return lab;
+      }
+    }
+    if(it && it.salePriceFollowsBuy === true) return "입고동일";
     // 목록에 보이는 값과 똑같은 값으로 가립니다.
     //  (%나 금액이 저장돼 있지 않아 화면에서 계산해 보여준 값도 그대로 씁니다)
     const L = Number(it && it.listPrice)||0;
@@ -4239,6 +4254,23 @@
   //   · mixed: 선할인과 타할인의 기준이 서로 다름
   //   · off  : 적어둔 %로 낸 값이 아님        { base, pct } ← 실제 비율을 함께 돌려줍니다
   function actualDiscountBase(it){
+    const L = Number((it && it.listPrice)) || 0;
+    // 저장해 둔 기준이 있으면 그것을 먼저 보여드립니다. (업체정보는 처음 들어오는 값일 뿐입니다)
+    const saved = String((it && it.discountBase) || "");
+    if(saved === "supply" || saved === "total" || saved === "unit"){
+      const lab = (saved === "supply") ? "공급가" : (saved === "total" ? "합계" : "출고가");
+      // 실제 금액이 그 기준과 맞는지 견줘보고, 다르면 함께 알려드립니다.
+      const chk = (L > 0) ? actualDiscountBaseCalc(it) : null;
+      if(chk && chk.kind === "one"){
+        const got = (chk.base === "supply") ? "공급가" : "출고가";
+        if(got !== lab && saved !== "total") return { kind:"off", label: lab + " (실제 " + got + ")" };
+      }
+      return { kind:"one", base: saved, savedLabel: lab };
+    }
+    return actualDiscountBaseCalc(it);
+  }
+  //  저장된 기준이 없을 때 — 금액에서 거꾸로 알아냅니다.
+  function actualDiscountBaseCalc(it){
     const L = Number((it && it.listPrice)) || 0;
     if(!L) return { kind:"none" };
     const S = L / 1.1;
@@ -4300,12 +4332,6 @@
     { key:"inDate", label:"입고일", get:it=>it.inDate||"-" },
     { key:"expectedSaleDate", label:"판매예정일", get:it=>it.expectedSaleDate||"-" },
     { key:"outDate", label:"판매일", get:it=>it.outDate||"-" },
-    { key:"activateDate", label:"개통일", get:it=>it.activateDate||"-" },
-    { key:"source", label:"입고처", get:it=>it.source||"-" },
-    { key:"manufacturer", label:"제조사", get:it=>it.manufacturer||"-" },
-    { key:"carrier", label:"통신사", get:it=>it.carrier||"-" },
-    { key:"location", label:"위치", get:it=>it.location||"-" },
-    { key:"petName", label:"펫네임", get:it=>it.petName||"-" },
     // 모델의 구분(단말기·TV·모니터·액세서리 등)입니다. 모델 등록에서 정합니다.
     { key:"kind", label:"구분",
       get:it=>{
@@ -4320,6 +4346,25 @@
           || (x.systemModel && it.systemModel && modelDupKey(x.systemModel) === modelDupKey(it.systemModel)));
         return (m && m.kind) ? m.kind : "";
       } },
+    { key:"activateDate", label:"개통일", get:it=>it.activateDate||"-" },
+    { key:"source", label:"입고처", get:it=>it.source||"-" },
+    // 재고에 제조사가 없으면 모델에서 가져와 보여줍니다. (예전에 등록된 재고 대비)
+    { key:"manufacturer", label:"제조사",
+      get:it=>{
+        if(it.manufacturer) return it.manufacturer;
+        const m = (modelsCache||[]).find(x=> x.id === it.modelId
+          || (x.systemModel && it.systemModel && modelDupKey(x.systemModel) === modelDupKey(it.systemModel)));
+        return (m && m.manufacturer) ? m.manufacturer : "-";
+      },
+      getRaw:it=>{
+        if(it.manufacturer) return it.manufacturer;
+        const m = (modelsCache||[]).find(x=> x.id === it.modelId
+          || (x.systemModel && it.systemModel && modelDupKey(x.systemModel) === modelDupKey(it.systemModel)));
+        return (m && m.manufacturer) ? m.manufacturer : "";
+      } },
+    { key:"carrier", label:"통신사", get:it=>it.carrier||"-" },
+    { key:"location", label:"위치", get:it=>it.location||"-" },
+    { key:"petName", label:"펫네임", get:it=>it.petName||"-" },
     { key:"systemModel", label:"전산모델명", get:it=>it.systemModel||"-" },
     { key:"baseModel", label:"모델명", get:it=>it.baseModel||"-" },
     { key:"capacity", label:"기가수", get:it=>it.capacity||"-" },
@@ -8602,6 +8647,7 @@
       note1: document.getElementById("item-note1-input").value.trim(),
       note2: document.getElementById("item-note2-input").value.trim(),
       kind: (m && m.kind) ? m.kind : "",      // 모델의 구분을 그대로 씁니다
+      manufacturer: (m && m.manufacturer) ? m.manufacturer : "",   // 모델의 제조사
       // 이 재고에서만 쓰는 할인 계산 기준입니다. 업체정보 값은 「기본으로 들어오는 값」일 뿐이고,
       //  여기 저장된 값이 있으면 이후 다시 계산할 때도 이것을 먼저 씁니다.
       discountBase: String((document.getElementById("item-base-select")||{}).value||"") || null,
@@ -9487,6 +9533,7 @@
     document.getElementById("order-paydue-input").value = "";
     document.getElementById("order-deposit-input").value = "";
     { const e = document.getElementById("order-list-total"); if(e) e.innerHTML = "-"; }
+    { const e = document.getElementById("order-samebuy-input"); if(e) e.checked = false; }
     document.getElementById("order-payment-method-select").value = "normal";
     document.getElementById("order-lines-body").innerHTML = "";
     orderLineSeq = 0;
@@ -9641,6 +9688,14 @@
         otherDiscountAmt: document.getElementById("os-otheramt").value ? osNum("os-otheramt") : null,
         otherDiscountPct: document.getElementById("os-otherpct").value ? Number(osNum("os-otherpct").toFixed(2)) : null,
         destination: dest, salePrice: sale || null,
+        // 할인 계산 기준 — 입고처·판매처 업체정보를 따릅니다. 도착 등록 때 재고로 옮겨집니다.
+        discountBase: (function(){ try{ return itemDiscountBase({ source }) || "unit"; }catch(e){ return "unit"; } })(),
+        saleDiscountBase: (function(){ try{
+          const cS = (companiesCache||[]).find(function(x){
+            return String(x.name||"").trim() === String(dest||"").trim(); });
+          const bs = String((cS && cS.discountBase) || "");
+          return (bs === "supply" || bs === "total") ? bs : "unit";
+        }catch(e){ return "unit"; } })(),
         saleDiscountAmt: document.getElementById("os-saleamt").value ? osNum("os-saleamt") : null,
         saleDiscountPct: document.getElementById("os-salepct").value ? Number(osNum("os-salepct").toFixed(2)) : null,
         note1: document.getElementById("os-note1").value.trim(),
@@ -10112,6 +10167,17 @@
       await updateDoc(doc(db,"orderBatches", batchRef.id), { creditUsed: creditUse });
     }
 
+    // 화면에서 고르신 할인 계산 기준 — 줄에 함께 남깁니다.
+    const orderBaseSel = String((document.getElementById("order-base-select")||{}).value||"") || "unit";
+    const orderSameBuy = !!(document.getElementById("order-samebuy-input")||{}).checked;
+    // 판매할인 기준은 판매처 업체정보를 따릅니다.
+    let orderSaleBaseSel = "unit";
+    try{
+      const cS = (companiesCache||[]).find(function(x){
+        return String(x.name||"").trim() === String(lines[0] && lines[0].destination || "").trim(); });
+      const bs = String((cS && cS.discountBase) || "");
+      orderSaleBaseSel = (bs === "supply" || bs === "total") ? bs : "unit";
+    }catch(e){}
     const orderRefs = [];
     for(const l of lines){
       const orderRef = await addDoc(collection(db,"orders"), {
@@ -10129,6 +10195,10 @@
         preDiscountAmt: l.preDiscountAmt, preDiscountPct: l.preDiscountPct,
         otherDiscountAmt: l.otherDiscountAmt, otherDiscountPct: l.otherDiscountPct,
         salePrice: l.salePrice, saleDiscountAmt: l.saleDiscountAmt, saleDiscountPct: l.saleDiscountPct,
+        // 할인 계산 기준을 줄에 함께 남깁니다. 도착 등록 때 재고로 그대로 옮겨집니다.
+        discountBase: (l.discountBase || orderBaseSel || "unit"),
+        saleDiscountBase: (l.saleDiscountBase || l.saleBase || orderSaleBaseSel || "unit"),
+        salePriceFollowsBuy: (l.salePriceFollowsBuy === true) || orderSameBuy,
         orderDate, status: "주문중",
         fromReservationId: l.fromReservationId || null,   // 구매 예약에서 넘어온 줄이면 예약과 이어둡니다
         createdAt: serverTimestamp()
@@ -14158,15 +14228,24 @@
               baseModel:o.baseModel||"", capacity:o.capacity||"", systemModel:o.systemModel||"",
               petName:o.petName||"", modelId:o.modelId||null,
               manufacturerColor:o.manufacturerColor||"", systemColor:o.systemColor||"", sku:o.sku||"",
-              carrier:o.carrier||"", source:o.source||"", manufacturer:"", location: location||"",
+              carrier:o.carrier||"", source:o.source||"",
+              manufacturer: (function(){ try{
+                const mm = (modelsCache||[]).find(function(x){
+                  return modelDupKey(String(x.systemModel||"")) === modelDupKey(String(o.systemModel||"")); });
+                return (mm && mm.manufacturer) ? mm.manufacturer : "";
+              }catch(e){ return ""; } })(),
+              location: location||"",
               destination: sell ? (o.destination||"") : (o.destination||""),
               listPrice:o.listPrice||null, purchasePrice:o.purchasePrice||null,
               salePrice: o.salePrice||null,
               purchaseDiscountAmt:o.preDiscountAmt||null, purchaseDiscount:o.preDiscountPct||null,
               otherDiscountAmt:o.otherDiscountAmt||null, otherDiscountPct:o.otherDiscountPct||null,
               saleDiscountAmt:o.saleDiscountAmt||null, saleDiscount:o.saleDiscountPct||null,
-              // 할인 계산 기준을 업체 기준으로 함께 넣습니다. (나중에 채우실 필요가 없게)
-              discountBase: arrBuyBase, saleDiscountBase: arrSaleBase,
+              // 할인 계산 기준 — 주문에 저장된 값을 먼저 쓰고, 없으면 업체 기준을 씁니다.
+              discountBase: (o.discountBase || arrBuyBase),
+              saleDiscountBase: (o.saleDiscountBase || arrSaleBase),
+              // 「입고동일」 표시도 주문 품목에서 그대로 가져옵니다.
+              salePriceFollowsBuy: (o.salePriceFollowsBuy === true),
               kind: (function(){ try{
                 const mm = (modelsCache||[]).find(function(x){
                   return modelDupKey(String(x.systemModel||"")) === modelDupKey(String(o.systemModel||"")); });
@@ -14485,8 +14564,13 @@
         otherDiscountAmt:o.otherDiscountAmt||null, otherDiscountPct:o.otherDiscountPct||null,
         saleDiscountAmt:o.saleDiscountAmt||null, saleDiscount:o.saleDiscountPct||null,
         // 할인 계산 기준을 업체 기준으로 함께 넣습니다. (나중에 채우실 필요가 없게)
-        discountBase: arrBuyBase2, saleDiscountBase: arrSaleBase2,
+        // 할인 계산 기준 — 주문에 저장된 값을 먼저 쓰고, 없으면 업체 기준을 씁니다.
+        discountBase: (o.discountBase || arrBuyBase2),
+        saleDiscountBase: (o.saleDiscountBase || arrSaleBase2),
+        // 「입고동일」 표시도 주문 품목에서 그대로 가져옵니다.
+        salePriceFollowsBuy: (o.salePriceFollowsBuy === true),
         kind: (m && m.kind) ? m.kind : "",   // 모델의 구분을 그대로 씁니다
+        manufacturer: (m && m.manufacturer) ? m.manufacturer : "",   // 모델의 제조사
         profit: (o.salePrice && o.purchasePrice) ? (Number(o.salePrice)-Number(o.purchasePrice)) : null,
         imei:"", status: autoSell ? "판매" : "보유중", orderDate:o.orderDate||"", inDate, expectedSaleDate:"", outDate,
         note1: o.note1 || "", note2: o.note2 || "",
@@ -26076,6 +26160,17 @@
         p.salePrice = num(".be-saleprice");
         p.saleDiscountAmt = num(".be-saleamt");
         p.saleDiscountPct = num(".be-salepct");
+        // 할인 계산 기준도 줄에 함께 남깁니다. (도착 등록 때 재고로 옮겨집니다)
+        { const bs = String(party||"").trim() || String(b.source||"").trim();
+          try{ p.discountBase = itemDiscountBase({ source: bs }) || "unit"; }catch(e){}
+          const dsv = (p.destination !== undefined) ? p.destination : (src.destination||"");
+          try{
+            const cS = (companiesCache||[]).find(function(x){
+              return String(x.name||"").trim() === String(dsv||"").trim(); });
+            const sb = String((cS && cS.discountBase) || "");
+            p.saleDiscountBase = (sb === "supply" || sb === "total") ? sb : "unit";
+          }catch(e){}
+        }
         // 「입고동일」 로 넣으셨으면 그 표시를 함께 저장합니다.
         //  앞으로 입고가가 바뀌면 판매가도 따라갑니다.
         { const cb = tr.querySelector(".be-samebuy");
@@ -26591,13 +26686,47 @@
 
   // 모델이 정해진 뒤, 색상·SKU를 찾아 결과 한 줄을 만듭니다.
   //  자동 매칭으로 찾았을 때와 사람이 고른 뒤 둘 다 이 함수를 씁니다.
+  //  색상 이름을 느슨하게 견줍니다. 괄호·공백·대소문자를 무시합니다.
+  //   예) "핑크(라벤더)" ↔ "핑크" ↔ "라벤더" 를 같은 것으로 봅니다.
+  function colorLooseKeys(v){
+    const t = String(v||"").trim().toLowerCase().replace(/\s+/g,"");
+    if(!t) return [];
+    const out = new Set([t]);
+    // 괄호 안과 밖을 따로 봅니다.
+    const m = t.match(/^([^(（]*)[(（]([^)）]*)[)）]$/);
+    if(m){
+      if(m[1]) out.add(m[1]);
+      if(m[2]) out.add(m[2]);
+    }
+    // 괄호를 아예 없앤 것도 봅니다.
+    out.add(t.replace(/[()（）]/g,""));
+    return [...out].filter(Boolean);
+  }
+  function sameColorLoose(a, b){
+    const A = colorLooseKeys(a), B = colorLooseKeys(b);
+    return A.some(x=> B.some(y=> x === y));
+  }
+  window.sameColorLoose = sameColorLoose;
+
   function buildPasteRow(label, modelCells, model, carrier, qty, colorObj, usedCell, usedCap){
     let colorText = "";
     if(!colorObj){
+      // ① 먼저 정확히 같은 이름을 찾습니다.
       for(const c of modelCells){
         if(c === usedCell || c === usedCap) continue;
         const hit = (model.colors||[]).find(x=> x.systemColor === c || x.manufacturerColor === c);
         if(hit){ colorObj = hit; colorText = c; break; }
+      }
+      // ② 못 찾으면 괄호·공백을 무시하고 다시 찾습니다.
+      if(!colorObj){
+        for(const c of modelCells){
+          if(c === usedCell || c === usedCap) continue;
+          const t = String(c||"").trim();
+          if(!t || /^[0-9,]+$/.test(t) || /^SM-/i.test(t)) continue;
+          const hit = (model.colors||[]).find(x=>
+            sameColorLoose(x.systemColor, t) || sameColorLoose(x.manufacturerColor, t));
+          if(hit){ colorObj = hit; colorText = t; break; }
+        }
       }
     }
     if(!colorObj){
@@ -36786,7 +36915,13 @@
       if(c.saleDiscountBase === "follow") return buyBase;
       return (c.saleDiscountBase === "supply") ? (L/1.1) : L;
     };
-    const saleBase = (it.salePriceFollowsBuy === true) ? buyBase : baseOfSale(it.destination);
+    // 재고에 저장해 둔 판매할인 기준이 있으면 그것을 먼저 씁니다.
+    //  (업체정보 기준은 처음 들어오는 값일 뿐입니다)
+    const savedSaleBase = String(it.saleDiscountBase || "");
+    const saleBase = (it.salePriceFollowsBuy === true) ? buyBase
+      : ((savedSaleBase === "supply") ? (L/1.1)
+        : (savedSaleBase === "unit" || savedSaleBase === "total") ? L
+        : baseOfSale(it.destination));
     const pct = (amt) => L ? Number(((amt/L)*100).toFixed(2)) : null;
     const amt = (r)   => L ? Math.round(L * num(r) / 100) : null;
     const bAmt = (r)  => buyBase  ? Math.round(buyBase  * num(r) / 100) : null;
@@ -42013,7 +42148,7 @@
         modelId: m.id || null,        // 모델 연결 — 이름을 바꿔도 안 끊깁니다
         baseModel:m.baseModel, capacity:m.capacity, systemModel:m.systemModel,
         petName:m.petName||"", manufacturerColor:colorObj.manufacturerColor||"", systemColor:colorObj.systemColor||"", sku:colorObj.sku||"",
-        carrier, source, manufacturer:"", location:"", destination:dest||"",
+        carrier, source, manufacturer: m.manufacturer || "", location:"", destination:dest||"",
         listPrice:m.priceIncVat||null, purchasePrice:m.priceExVat||null, salePrice:null,
         kind: m.kind || "",                 // 모델의 구분을 그대로 씁니다
         // 할인 계산 기준을 업체 기준으로 함께 넣습니다.
@@ -43208,6 +43343,11 @@
               return modelDupKey(String(x.systemModel||"")) === modelDupKey(String(systemModel||"")); });
             return (mm && mm.kind) ? mm.kind : "";
           }catch(e){ return ""; } })(),
+          manufacturer: (function(){ try{
+            const mm = (modelsCache||[]).find(function(x){
+              return modelDupKey(String(x.systemModel||"")) === modelDupKey(String(systemModel||"")); });
+            return (mm && mm.manufacturer) ? mm.manufacturer : "";
+          }catch(e){ return ""; } })(),
           // 할인 계산 기준을 업체 기준으로 함께 넣습니다.
           discountBase: (function(){ try{ return itemDiscountBase({ source }) || "unit"; }catch(e){ return "unit"; } })(),
           saleDiscountBase: (function(){
@@ -43773,7 +43913,7 @@
         //  이어서 보는 게 나은 열은 짝이 되는 열 바로 뒤에 끼워 넣습니다.
         const NEXT_TO = { discountBase: "purchasePrice", saleDiscountBase: "saleDiscount",
                           isRebuy: "source", saleReqState: "destination",
-                          kind: "systemModel" };
+                          kind: "outDate" };
         const alive = saved.filter(k=> INV_COLUMNS.some(c=>c.key===k));
         const fresh = added.filter(k=> !alive.includes(k));
         fresh.forEach(k=>{
