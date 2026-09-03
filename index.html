@@ -400,7 +400,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-04 v942</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-04 v943</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -3594,6 +3594,19 @@
             <label style="display:flex;align-items:center;gap:6px;font-size:12.5px;cursor:pointer;flex:1;padding:5px 8px;">
               <input type="checkbox" id="resv-paste-nocolor" onchange="analyzeResvPaste()">
               <span>색상 없이 넣기 <span style="color:var(--gray);font-size:11.5px;">— 붙여넣는 줄에 색상 칸이 없을 때 체크하세요. 모델만 잡고 색상은 나중에 고르시면 됩니다.</span></span>
+            </label></div>
+          <div class="stack-row"><label>선할인 · 타할인 <span class="info-tip" title="입고동일을 쓰실 때 판매가를 내는 데 씁니다. 구매 예약이면 매입 할인으로도 쓰입니다.">ⓘ</span></label>
+            <span style="display:flex;gap:0;flex:1;">
+              <input type="number" id="resv-paste-preamt2" placeholder="선할인 (대당)" oninput="onResvPasteTop('pre','amt')" style="width:120px;height:28px;border:1px solid var(--line);padding:0 6px;font-size:12.5px;box-sizing:border-box;">
+              <input type="number" step="0.01" id="resv-paste-prepct2" placeholder="선할인%" oninput="onResvPasteTop('pre','pct')" style="width:95px;height:28px;border:1px solid var(--line);padding:0 6px;font-size:12.5px;margin-left:-1px;box-sizing:border-box;">
+              <input type="number" id="resv-paste-otheramt2" placeholder="타할인 (대당)" oninput="onResvPasteTop('other','amt')" style="width:120px;height:28px;border:1px solid var(--line);padding:0 6px;font-size:12.5px;margin-left:-1px;box-sizing:border-box;">
+              <input type="number" step="0.01" id="resv-paste-otherpct2" placeholder="타할인%" oninput="onResvPasteTop('other','pct')" style="width:95px;height:28px;border:1px solid var(--line);padding:0 6px;font-size:12.5px;margin-left:-1px;box-sizing:border-box;">
+            </span></div>
+          <div class="stack-row"><label>판매가 연동</label>
+            <label style="display:flex;align-items:center;gap:6px;font-size:12.5px;cursor:pointer;flex:1;padding:5px 8px;">
+              <input type="checkbox" id="resv-paste-samebuy" onchange="onResvPasteSameBuy()">
+              <span><b style="color:var(--navy);">입고동일 — 판매가를 입고가와 똑같이</b>
+                <span style="color:var(--gray);font-size:11.5px;">(출고가 − 선할인 − 타할인)</span></span>
             </label></div>
           <div class="stack-row resv-paste-buy-only"><label>할인 계산 기준 <span class="info-tip" title="거래처에 저장해둔 기준이 자동으로 들어옵니다. 이 등록에서만 다르게 하려면 바꾸세요.">ⓘ</span></label>
             <select id="resv-paste-base" onchange="onResvPasteDisc('pre','pct')">
@@ -24489,6 +24502,36 @@
     }
   };
 
+  // 위쪽 선할인·타할인 칸 — 금액↔% 를 서로 채우고, 입고동일이면 판매가도 다시 냅니다.
+  window.onResvPasteTop = function(which, from){
+    const aEl = document.getElementById("resv-paste-" + which + "amt2");
+    const pEl = document.getElementById("resv-paste-" + which + "pct2");
+    if(!aEl || !pEl) return;
+    // 붙여넣은 줄들의 출고가가 모두 같을 때만 환산합니다.
+    const prices = (resvPendingRows||[]).map(function(r){ return Number(r.listPrice)||0; })
+                     .filter(function(v){ return v > 0; });
+    const same = prices.length > 0 && prices.every(function(v){ return v === prices[0]; });
+    const L = same ? prices[0] : 0;
+    const base = String((document.getElementById("resv-paste-base")||{}).value || "unit");
+    const amtBase = (base === "supply") ? Math.round(L / 1.1) : L;
+    if(amtBase > 0){
+      if(from === "amt"){
+        const a = aEl.value === "" ? null : Number(aEl.value);
+        pEl.value = (a != null) ? Number((a / amtBase * 100).toFixed(2)) : "";
+      }else{
+        const p = pEl.value === "" ? null : Number(pEl.value);
+        aEl.value = (p != null) ? Math.round(amtBase * p / 100) : "";
+      }
+    }
+    // 아래 칸에도 같은 값을 넣어 계산이 이어지게 합니다.
+    const a2 = document.getElementById("resv-paste-" + which + "amt");
+    const p2 = document.getElementById("resv-paste-" + which + "pct");
+    if(a2) a2.value = aEl.value;
+    if(p2) p2.value = pEl.value;
+    try{ resvPasteKeepDisc = resvPasteKeepDisc || {}; }catch(e){}
+    try{ analyzeResvPaste(); }catch(e){}
+  };
+
   // 붙여넣기 — 「입고동일」 이면 판매가를 입고가와 똑같이 둡니다.
   window.onResvPasteSameBuy = function(){
     const on = !!(document.getElementById("resv-paste-samebuy")||{}).checked;
@@ -24668,6 +24711,8 @@
     { const e = document.getElementById("resv-paste-dest");     if(e) e.value = ""; }
     { const e = document.getElementById("resv-paste-nocolor");  if(e) e.checked = false; }
     { const e = document.getElementById("resv-paste-samebuy");  if(e) e.checked = false; }
+    ["resv-paste-preamt2","resv-paste-prepct2","resv-paste-otheramt2","resv-paste-otherpct2"]
+      .forEach(function(id){ const e = document.getElementById(id); if(e) e.value = ""; });
     // 담아둔 값도 비웁니다. (안 그러면 창을 다시 열 때 되살아납니다)
     resvPasteKeepDisc = {};
     resvPasteFixedAmt = { pre:null, other:null };
@@ -24862,7 +24907,7 @@
             + '<input type="number" id="resv-paste-saleamt" placeholder="판매할인 (대당)" oninput="onResvPasteSale(\'amt\')" style="width:130px;height:28px;border:1px solid var(--line);padding:0 6px;font-size:12.5px;margin-left:-1px;box-sizing:border-box;">'
             + '<input type="number" step="0.01" id="resv-paste-salepct" placeholder="판매할인%" oninput="onResvPasteSale(\'pct\')" style="width:105px;height:28px;border:1px solid var(--line);padding:0 6px;font-size:12.5px;margin-left:-1px;box-sizing:border-box;">'
             + '<input type="number" id="resv-paste-saleprice" placeholder="판매가 (대당 · 직접)" oninput="onResvPasteSale(\'price\')" style="width:150px;height:28px;border:1px solid var(--line);padding:0 6px;font-size:12.5px;margin-left:-1px;box-sizing:border-box;">'
-            + '<button class="btn small secondary" style="width:auto;margin-left:6px;" onclick="analyzeResvPaste()">다시 계산</button>'
++ '<button class="btn small secondary" style="width:auto;margin-left:6px;" onclick="analyzeResvPaste()">다시 계산</button>'
             + '</div>'
             + '<div id="resv-paste-sale-note" style="font-size:11.5px;color:var(--navy);margin-top:5px;"></div>'
             + '</div>'
@@ -24978,17 +25023,25 @@
       });
       // 「입고동일」 이면 판매가를 입고가와 똑같이 둡니다.
       if(!!(document.getElementById("resv-paste-samebuy")||{}).checked){
+        const tPreP = num("resv-paste-prepct2"),  tPreA = num("resv-paste-preamt2");
+        const tOthP = num("resv-paste-otherpct2"), tOthA = num("resv-paste-otheramt2");
+        const tBase = String((document.getElementById("resv-paste-base")||{}).value || "unit");
         resvPendingRows = resvPendingRows.map(function(d){
           const L = Number(d.listPrice)||0;
-          const pre = Number(d.preDiscountAmt)||0;
-          const oth = Number(d.otherDiscountAmt)||0;
-          const q = Number(d.orderedQty)||1;
-          // 선할인·타할인은 줄 합계로 담겨 있어 대당으로 나눕니다.
-          const buy = L - Math.round(pre / (q||1)) - Math.round(oth / (q||1));
+          if(!(L > 0)) return d;
+          const amtBase = (tBase === "supply") ? Math.round(L / 1.1) : L;
+          const pre = (tPreP != null) ? Math.round(amtBase * tPreP / 100) : (tPreA || 0);
+          const oth = (tOthP != null) ? Math.round(amtBase * tOthP / 100) : (tOthA || 0);
+          const buy = L - pre - oth;
           if(!(buy > 0)) return d;
-          return { ...d, salePrice: buy, saleDiscountAmt: L - buy,
-                   saleDiscountPct: L ? Number((((L - buy)/L)*100).toFixed(2)) : null,
-                   salePriceFollowsBuy: true };
+          return { ...d,
+            preDiscountAmt: pre * (Number(d.orderedQty)||1),
+            preDiscountPct: (tPreP != null) ? tPreP : (amtBase ? Number((pre/amtBase*100).toFixed(2)) : null),
+            otherDiscountAmt: oth * (Number(d.orderedQty)||1),
+            otherDiscountPct: (tOthP != null) ? tOthP : (amtBase ? Number((oth/amtBase*100).toFixed(2)) : null),
+            salePrice: buy, saleDiscountAmt: L - buy,
+            saleDiscountPct: L ? Number((((L - buy)/L)*100).toFixed(2)) : null,
+            salePriceFollowsBuy: true, saleDiscountBase: tBase };
         });
       }
       // 판매 예약이면 아래에서 넣으신 판매가·판매할인을 담습니다.
