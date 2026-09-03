@@ -400,7 +400,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-03 v902</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-03 v906</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -12676,6 +12676,7 @@
       '<th class="ta-right">도착</th><th>상태</th>' +
       '<th>모델 (전산모델명)</th><th>색상</th><th>기가수</th><th>통신사</th>' +
       '<th class="ta-right">주문수량</th>' +
+      '<th>할인 기준</th>' +
       '<th class="ta-right">출고가</th>' +
       '<th class="ta-right">선할인</th><th class="ta-right">선할인%</th>' +
       '<th class="ta-right">타할인</th><th class="ta-right">타할인%</th>' +
@@ -12732,6 +12733,17 @@
           +'>'+comboEsc(o.carrier||"-")
           +((b.carrier && o.carrier && o.carrier !== b.carrier) ? ' ⚠' : '')+'</td>' +
         '<td class="ta-right">'+qty+'</td>' +
+        // 할인 계산 기준 — 이 줄에 저장된 값이 없으면 묶음(입고처) 기준을 씁니다.
+        '<td style="white-space:nowrap;">' + comboEsc((function(){
+            const bs = String(o.discountBase || b.discountBase || "");
+            if(bs === "supply") return "공급가";
+            if(bs === "total")  return "합계";
+            if(bs === "unit")   return "대당";
+            try{
+              const bb = itemDiscountBase({ source: b.source || "" });
+              return bb === "supply" ? "공급가" : (bb === "total" ? "합계" : "대당");
+            }catch(e){ return "대당"; }
+          })()) + '</td>' +
         '<td class="ta-right">'+discFmt(o.listPrice)+'</td>' +
         '<td class="ta-right">'+discFmt(o.preDiscountAmt)+'</td>' +
         '<td class="ta-right">'+discPctFmt(o.preDiscountPct != null ? o.preDiscountPct : pctFromAmt(o.preDiscountAmt, Number(o.listPrice)||0))+'</td>' +
@@ -12770,7 +12782,7 @@
       '<tr style="border-top:2px solid var(--navy);font-weight:700;background:#fff;">' +
       '<td colspan="6">합계 (품목 '+lines.length+'건)</td>' +      // 도착·상태·모델·색상·기가수·통신사
       '<td class="ta-right">'+sumQty+'</td>' +                    // 주문수량
-      '<td colspan="5"></td>' +                                   // 출고가·선할인·선할인%·타할인·타할인%
+      '<td colspan="6"></td>' +                                   // 할인기준·출고가·선할인·선할인%·타할인·타할인%
       '<td class="ta-right">'+sumPurchase.toLocaleString()+'</td>' + // 입고가
       '<td></td>' +                                               // 판매처
       '<td class="ta-right">'+sumSale.toLocaleString()+'</td>' +   // 판매가
@@ -25295,9 +25307,36 @@
       await deleteDoc(doc(db, col, lineId));
     }catch(e){ alert("지우지 못했습니다.\n" + ((e&&e.message)?e.message:String(e))); return; }
     logAction((kind === "order" ? "주문" : "판매요청") + " 품목 삭제", label + " " + qty + "대");
+    // 표를 다시 그리기 전에, 화면에서 고쳐두신 값을 담아둡니다.
+    //  (다시 그리면 입력하신 값이 지워지기 때문입니다)
+    const typed = {};
+    try{
+      document.querySelectorAll("#be-lines-body tr").forEach(function(tr){
+        const lid = tr.dataset.lineId;
+        if(!lid || lid === lineId) return;
+        const one = {};
+        tr.querySelectorAll("input, select").forEach(function(el){
+          const cls = (el.className||"").split(" ").find(function(c){ return c.indexOf("be-") === 0; });
+          if(cls) one[cls] = el.value;
+        });
+        typed[lid] = one;
+      });
+    }catch(e){}
     editingBatch.lines = alive;
     await renderBatchEditLines();
-    alert("지웠습니다. 금액을 확인하고 <수정 저장>을 눌러주세요.");
+    // 담아둔 값을 다시 넣어줍니다.
+    try{
+      document.querySelectorAll("#be-lines-body tr").forEach(function(tr){
+        const lid = tr.dataset.lineId;
+        const one = typed[lid];
+        if(!one) return;
+        tr.querySelectorAll("input, select").forEach(function(el){
+          const cls = (el.className||"").split(" ").find(function(c){ return c.indexOf("be-") === 0; });
+          if(cls && one[cls] !== undefined && !el.disabled) el.value = one[cls];
+        });
+      });
+    }catch(e){}
+    alert("지웠습니다. 고쳐두신 값은 그대로입니다.\n금액을 확인하고 <수정 저장>을 눌러주세요.");
   };
 
   // 모델을 바꿨을 때 — 출고가·색상 목록을 그 모델 기준으로 다시 채웁니다.
@@ -25531,7 +25570,8 @@
       const oldPm = (b.paymentMethod === "b2b_credit") ? "b2b_credit" : "normal";
       // 실제 차감할 금액 = 이번에 저장될 최종 주문금액
       // 여신은 선할인까지만 반영한 금액으로 차감합니다. (타할인은 후정산)
-      const amt = await creditAmountOfBatch(id);
+      msg("여신 차감을 맞추는 중...", false);
+      const amt = await withTimeout(creditAmountOfBatch(id), 15000, "여신 계산");
 
       if(newPm !== oldPm){
         if(b.paymentRequestId){
@@ -25540,18 +25580,18 @@
         }
         if(newPm === "b2b_credit"){
           let bal = null;
-          try{ bal = await getB2BBalance(); }catch(e){}
+          try{ bal = await withTimeout(getB2BBalance(), 12000, "여신 잔액"); }catch(e){}
           if(bal !== null && amt > bal && !confirm(
             "잔여 여신이 부족합니다.\n\n  필요 " + amt.toLocaleString() + "\n  잔여 " + bal.toLocaleString()
             + "\n  부족 " + (amt - bal).toLocaleString() + "\n\n그래도 여신 사용으로 바꾸시겠습니까?")) return;
           if(!confirm("여신 사용으로 바꿉니다.\n\n· 여신에서 " + amt.toLocaleString() + " 이 차감됩니다.\n· 출금요청 대상에서 빠지고 결제완료로 처리됩니다.\n\n진행하시겠습니까?")) return;
-          await replaceB2BOrderUse(id, amt, d1 || todayStr(), party);
+          await withTimeout(replaceB2BOrderUse(id, amt, d1 || todayStr(), party), 20000, "여신 차감");
           batchPatch.paymentMethod = "b2b_credit";
           batchPatch.depositPaid = true;
           batchPatch.depositPaidDate = d1 || todayStr();
         }else{
           if(!confirm("일반 결제로 되돌립니다.\n\n· 여신 차감 기록이 지워집니다.\n· 다시 출금요청 대상이 되고 미결제로 바뀝니다.\n\n진행하시겠습니까?")) return;
-          await replaceB2BOrderUse(id, 0, d1 || todayStr(), party);
+          await withTimeout(replaceB2BOrderUse(id, 0, d1 || todayStr(), party), 20000, "여신 되돌림");
           batchPatch.paymentMethod = "normal";
           batchPatch.depositPaid = false;
           batchPatch.depositPaidDate = "";
@@ -25559,7 +25599,7 @@
         logAction("주문 결제방식 변경", party + " / " + oldPm + " → " + newPm + " / " + amt.toLocaleString());
       }else if(newPm === "b2b_credit" && batchPatch.depositRequired != null){
         // 여신 주문의 금액이 바뀌면 차감 기록도 새 금액으로 맞춥니다.
-        await replaceB2BOrderUse(id, amt, b.depositPaidDate || d1 || todayStr(), party);
+        await withTimeout(replaceB2BOrderUse(id, amt, b.depositPaidDate || d1 || todayStr(), party), 20000, "여신 차감");
         logAction("여신 차감액 갱신", party + " / " + amt.toLocaleString());
       }
     }
@@ -25607,10 +25647,12 @@
 
     try{
       msg("저장 중...", false);
+      msg("묶음 정보를 저장하는 중...", false);
       await withTimeout(updateDoc(doc(db, col, id), batchPatch), 12000, "묶음 수정");
       // 새로 더한 줄은 문서를 만들고, 원래 있던 줄은 고칩니다.
       const oldLines = lines.filter(function(l){ return !l.isNew; });
       const newLines = lines.filter(function(l){ return l.isNew; });
+      if(oldLines.length) msg("품목 " + oldLines.length + "줄을 저장하는 중...", false);
       for(let i=0; i<oldLines.length; i+=300){
         const bt = writeBatch(db);
         oldLines.slice(i, i+300).forEach(l=>{
@@ -25665,7 +25707,7 @@
         const linkRowsBE = [];
     try{
           for(const t of itemTargets){
-            const sn = await getDoc(doc(db,"inventoryItems", t.iid));
+            const sn = await withTimeout(getDoc(doc(db,"inventoryItems", t.iid)), 10000, "재고 읽기");
             if(sn.exists()) invItemsForFix[t.iid] = sn.data();
           }
         }catch(e){}
@@ -25710,10 +25752,11 @@
                 after: { ...((invItemsForFix && invItemsForFix[t.iid]) || {}), ...patch } });
             }
           });
-          await bt.commit();
+          await withTimeout(bt.commit(), 15000, "재고 저장");
         }
         // 재고가 바뀌었으면 판매요청·묶음 합계도 함께 맞춥니다. (주문 품목은 이미 여기서 고쳤습니다)
-        try{ if(linkRowsBE.length) await syncItemLinks(linkRowsBE); }catch(e){}
+        if(linkRowsBE.length) msg("주문·판매요청·여신을 함께 맞추는 중...", false);
+        try{ if(linkRowsBE.length) await withTimeout(syncItemLinks(linkRowsBE), 25000, "연동"); }catch(e){}
         // 색상을 바꿨으면 그 재고와 이어진 다른 곳도 함께 맞춥니다.
         try{
           const byColor = {};
@@ -25728,22 +25771,27 @@
             const extra = (one && one.p && one.p.systemModel != null)
               ? { systemModel:one.p.systemModel, baseModel:one.p.baseModel||"",
                   petName:one.p.petName||"", modelId:one.p.modelId||null } : null;
-            await syncColorEverywhere(byColor[k], pr[0], pr[1], pr[2], extra);
+            await withTimeout(syncColorEverywhere(byColor[k], pr[0], pr[1], pr[2], extra), 20000, "색상 연동");
           }
         }catch(e){}
         clearCache("inventory"); clearDashCache();
       }
     }catch(e){
-      msg("<b>저장에 실패했습니다.</b><br>" + comboEsc((e && e.message) ? e.message : String(e)), true);
+      msg("<b>저장에 실패했습니다.</b><br>" + comboEsc((e && e.message) ? e.message : String(e))
+        + '<br><span style="color:var(--gray);font-size:11.5px;">저장된 부분은 목록에서 확인해주세요.</span>', true);
       return;
     }
+    msg("마무리하는 중...", false);
     logAction((kind==="order"?"주문":"판매요청")+" 묶음 수정",
       party + " / " + d1 + " / 품목 " + lines.length + "개"
       + (Object.keys(perLine).length ? " / 금액수정 " + Object.keys(perLine).length + "줄" : "")
       + (fixItems && itemTargets.length ? " / 재고 " + itemTargets.length + "대 금액 함께 수정" : ""));
     msg("저장되었습니다." + (addedLines ? "  품목 " + addedLines + "줄을 더했습니다." : ""), false);
-    if(kind === "order") loadOrderList(); else loadSaleRequestList();
-    setTimeout(closeBatchEdit, 700);
+    // 창을 먼저 닫고 목록은 뒤에서 새로 읽습니다. (목록 읽기가 오래 걸려도 창이 남지 않게)
+    setTimeout(function(){
+      try{ closeBatchEdit(); }catch(e){}
+      try{ if(kind === "order") loadOrderList(); else loadSaleRequestList(); }catch(e){}
+    }, 400);
   };
 
   // ================= 주문 텍스트 붙여넣기 (수량 단위) =================
