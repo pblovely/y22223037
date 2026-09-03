@@ -400,7 +400,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-03 v918</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-03 v923</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -988,7 +988,11 @@
               <input type="number" step="0.01" id="be-bulk-prepct" placeholder="선할인%" oninput="onBulkDisc('be-bulk','pre','pct')" style="width:90px;height:28px;border:1px solid var(--line);padding:0 6px;font-size:12.5px;margin-left:-1px;box-sizing:border-box;">
               <input type="number" id="be-bulk-otheramt" placeholder="타할인" style="width:100px;height:28px;border:1px solid var(--line);padding:0 6px;font-size:12.5px;margin-left:-1px;box-sizing:border-box;">
               <input type="number" step="0.01" id="be-bulk-otherpct" placeholder="타할인%" style="width:90px;height:28px;border:1px solid var(--line);padding:0 6px;font-size:12.5px;margin-left:-1px;box-sizing:border-box;">
-              <select id="be-bulk-dest" style="width:150px;height:28px;border:1px solid var(--line);padding:0 6px;font-size:12.5px;margin-left:-1px;box-sizing:border-box;"><option value="">판매처 (선택)</option></select>
+              <select id="be-bulk-dest" onchange="onBulkDestBase()" style="width:150px;height:28px;border:1px solid var(--line);padding:0 6px;font-size:12.5px;margin-left:-1px;box-sizing:border-box;"><option value="">판매처 (선택)</option></select>
+              <select id="be-bulk-salebase" title="판매할인%를 어디에 곱할지 고릅니다." style="width:150px;height:28px;border:1px solid var(--line);padding:0 6px;font-size:12.5px;margin-left:-1px;box-sizing:border-box;">
+                <option value="unit">판매할인 기준: 출고가</option>
+                <option value="supply">판매할인 기준: 공급가</option>
+              </select>
               <input type="number" step="0.01" id="be-bulk-salepct" placeholder="판매할인%" style="width:100px;height:28px;border:1px solid var(--line);padding:0 6px;font-size:12.5px;margin-left:-1px;box-sizing:border-box;">
               <button class="btn small" style="width:auto;margin-left:6px;" onclick="applyBulkToBatchLines()">모든 줄에 적용</button>
             </div>
@@ -3588,7 +3592,7 @@
               <option value="supply">공급가 기준 (삼성전자 방식)</option>
             </select>
           </div>
-          <div class="stack-row"><label>거래처 <span class="info-tip" title="붙여넣은 줄에 거래처를 안 적었으면 여기서 고른 곳으로 넣습니다. 줄 맨 앞에 거래처를 적으셨으면 그 값이 우선합니다.">ⓘ</span></label><select id="resv-paste-dest"><option value="">(줄에 적은 대로)</option></select></div>
+          <div class="stack-row"><label>거래처 <span class="info-tip" title="붙여넣은 줄에 거래처를 안 적었으면 여기서 고른 곳으로 넣습니다. 줄 맨 앞에 거래처를 적으셨으면 그 값이 우선합니다.">ⓘ</span></label><select id="resv-paste-dest" onchange="onResvPasteDest()"><option value="">(줄에 적은 대로)</option></select></div>
         </div>
         <textarea id="resv-paste-text" rows="8" style="width:100%;border:1px solid #c7c7c7;padding:8px;font-size:12.5px;font-family:inherit;box-sizing:border-box;" placeholder="색상 있을 때&#10;더퓨처랩&#9;SM-F976N512&#9;그레이&#9;5&#9;2500000&#10;&#10;색상 없을 때 (위 「색상 없이 넣기」 체크)&#10;더퓨처랩&#9;SM-F976N512&#9;5&#9;2500000"></textarea>
         <button class="btn small" style="width:auto;margin-top:10px;" onclick="analyzeResvPaste()">검증</button>
@@ -24084,6 +24088,25 @@
   // 붙여넣기 창 안에서 구분을 바꿉니다. 바꾸면 거래처 목록·할인칸·안내문이 함께 바뀝니다.
   // 붙여넣기 창의 선할인·타할인 — 금액을 넣으면 %가, %를 넣으면 금액이 채워집니다.
   //  붙여넣은 줄들의 출고가가 모두 같을 때만 환산합니다. (다르면 %만 쓰시는 게 맞습니다)
+  // 거래처를 고르면 그 업체의 할인 계산 기준을 넣어드립니다.
+  //  구매 예약이면 매입 기준, 판매 예약이면 판매 기준입니다.
+  window.onResvPasteDest = async function(){
+    const name = String((document.getElementById("resv-paste-dest")||{}).value||"").trim();
+    if(!name) return;
+    try{ if(!companiesCache || companiesCache.length === 0) await fetchCompanies(); }catch(e){}
+    const c = (companiesCache||[]).find(function(x){
+      return String(x.name||"").trim() === name; }) || null;
+    const b = String((c && c.discountBase) || "");
+    const base = (b === "supply" || b === "total") ? b : "unit";
+    const id = (resvKind === "buy") ? "resv-paste-base" : "resv-paste-salebase";
+    const sel = document.getElementById(id);
+    if(sel) sel.value = base;
+    // 판매 예약이면 넣어둔 값으로 다시 계산합니다.
+    if(resvKind !== "buy" && typeof onResvPasteSale === "function"){
+      try{ onResvPasteSale("pct"); }catch(e){}
+    }
+  };
+
   // 판매 예약 — 판매할인·판매가를 넣으면 서로 채워줍니다.
   window.resvPasteSale = { base:"unit", amt:null, pct:null, price:null };
   window.onResvPasteSale = function(from){
@@ -24236,9 +24259,18 @@
     document.getElementById("resv-paste-text").value = "";
     document.getElementById("resv-paste-result").innerHTML = "";
     document.getElementById("resv-paste-date-input").value = todayStr();
-    ["resv-paste-prepct","resv-paste-otherpct","resv-paste-preamt","resv-paste-otheramt"].forEach(id=>{
+    ["resv-paste-prepct","resv-paste-otherpct","resv-paste-preamt","resv-paste-otheramt",
+     "resv-paste-saleamt","resv-paste-salepct","resv-paste-saleprice"].forEach(id=>{
       const el = document.getElementById(id); if(el) el.value = "";
     });
+    { const e = document.getElementById("resv-paste-salebase"); if(e) e.value = "unit"; }
+    { const e = document.getElementById("resv-paste-base");     if(e) e.value = "unit"; }
+    { const e = document.getElementById("resv-paste-dest");     if(e) e.value = ""; }
+    { const e = document.getElementById("resv-paste-nocolor");  if(e) e.checked = false; }
+    // 담아둔 값도 비웁니다. (안 그러면 창을 다시 열 때 되살아납니다)
+    resvPasteKeepDisc = {};
+    resvPasteFixedAmt = { pre:null, other:null };
+    try{ window.resvPasteSale = { base:"unit", amt:null, pct:null, price:null }; }catch(e){}
     // 목록에서 「구매」·「판매」를 보고 계셨으면 그 구분으로 열어드립니다.
     if(resvListFilter === "buy" || resvListFilter === "sale") resvKind = resvListFilter;
     window.setResvPasteKind(resvKind);
@@ -24323,8 +24355,53 @@
       const put = (id, v)=>{ const el = document.getElementById(id); if(el && v !== "" && v != null) el.value = v; };
       put("resv-paste-preamt", K.preAmt); put("resv-paste-prepct", K.prePct);
       put("resv-paste-otheramt", K.otherAmt); put("resv-paste-otherpct", K.otherPct);
+      put("resv-paste-salebase", K.saleBase); put("resv-paste-saleamt", K.saleAmt);
+      put("resv-paste-salepct", K.salePct);   put("resv-paste-saleprice", K.salePrice);
+      // 담아둔 값이 없으면 거래처 업체정보의 기준을 넣어드립니다.
+      if(!K.saleBase){ try{ onResvPasteDest(); }catch(e){} }
       if(typeof window.onResvPasteDisc === "function") window.onResvPasteDisc("pre", K.prePct !== "" ? "pct" : "amt");
     }, 0);
+    // 판매 예약이면, 아래에서 넣으신 판매할인·판매가를 미리보기에도 반영합니다.
+    if(!isBuy){
+      const num = id=>{ const v = String((document.getElementById(id)||{}).value || "").trim();
+        return (v === "" || !isFinite(Number(v))) ? null : Number(v); };
+      const sBase  = String((document.getElementById("resv-paste-salebase")||{}).value || "unit");
+      const sAmt   = num("resv-paste-saleamt");
+      const sPct   = num("resv-paste-salepct");
+      const sPrice = num("resv-paste-saleprice");
+      if(sAmt != null || sPct != null || sPrice != null){
+        const totalAll3 = resvPendingRows.reduce(function(n,d){
+          return n + (Number(d.listPrice)||0) * (Number(d.orderedQty)||0); }, 0);
+        resvPendingRows = resvPendingRows.map(function(d){
+          if(d.salePrice != null && d.salePrice !== "" && d.__typedPrice) return d;
+          const L = Number(d.listPrice)||0;
+          if(L <= 0) return d;
+          if(sBase === "total" && sPrice == null){
+            const pctT = (sPct != null) ? sPct
+                       : (totalAll3 > 0 && sAmt != null ? Number((sAmt / totalAll3 * 100).toFixed(4)) : null);
+            if(pctT == null) return d;
+            const amtT = Math.round(L * pctT / 100);
+            return { ...d, salePrice: L - amtT, saleDiscountAmt: amtT,
+                     saleDiscountPct: Number(pctT.toFixed(2)), saleDiscountBase: "total" };
+          }
+          const baseAmt = (sBase === "supply") ? Math.round(L / 1.1) : L;
+          let amt = null, pct = null, price = null;
+          if(sPrice != null){
+            price = sPrice; amt = L - sPrice;
+            pct = baseAmt > 0 ? Number((amt / baseAmt * 100).toFixed(2)) : null;
+          }else if(sPct != null){
+            pct = sPct; amt = Math.round(baseAmt * sPct / 100); price = L - amt;
+          }else{
+            amt = sAmt; pct = baseAmt > 0 ? Number((sAmt / baseAmt * 100).toFixed(2)) : null;
+            price = L - sAmt;
+          }
+          return { ...d, salePrice: price, saleDiscountAmt: amt,
+                   saleDiscountPct: pct, saleDiscountBase: sBase };
+        });
+        // 표에도 같은 값을 씁니다.
+        ok.forEach(function(r, i){ if(resvPendingRows[i]) r.data = resvPendingRows[i]; });
+      }
+    }
     let html = '<div style="font-weight:700;margin-bottom:8px;">검증 결과 — 정상 '+ok.length+'건 / 오류 '+bad.length+'건</div>';
     if(bad.length){
       html += '<div style="border:1px solid var(--danger);background:#fdecea;padding:8px 10px;margin-bottom:10px;max-height:180px;overflow-y:auto;">'
@@ -24335,7 +24412,7 @@
         + '<table class="data-table" style="width:auto;"><thead><tr><th>거래처</th><th>모델</th><th>색상</th>'
         + '<th class="ta-right">수량</th><th class="ta-right">출고가</th>'
         + (isBuy ? '<th class="ta-right">선할인</th><th class="ta-right">타할인</th><th class="ta-right">입고가</th>'
-                 : '<th class="ta-right">판매가</th>')
+                 : '<th class="ta-right">판매할인</th><th class="ta-right">판매할인%</th><th class="ta-right">판매가</th>')
         + '</tr></thead><tbody>'
         + ok.map(r=>{
             const d = r.data;
@@ -24353,7 +24430,9 @@
                   ? '<td class="ta-right">'+money(pre)+(d.preDiscountPct!=null?' <span style="color:var(--gray);font-size:10.5px;">'+d.preDiscountPct+'%</span>':'')+'</td>'
                     + '<td class="ta-right">'+money(oth)+(d.otherDiscountPct!=null?' <span style="color:var(--gray);font-size:10.5px;">'+d.otherDiscountPct+'%</span>':'')+'</td>'
                     + '<td class="ta-right" style="font-weight:700;">'+money(L*q - pre)+'</td>'
-                  : '<td class="ta-right">'+(d.salePrice!=null ? d.salePrice.toLocaleString() : '<span style="color:var(--danger);">미입력</span>')+'</td>')
+                  : ('<td class="ta-right">'+(d.saleDiscountAmt!=null ? Math.round(d.saleDiscountAmt).toLocaleString() : '<span style="color:var(--gray);">-</span>')+'</td>'
+                     + '<td class="ta-right">'+(d.saleDiscountPct!=null ? d.saleDiscountPct+'%' : '<span style="color:var(--gray);">-</span>')+'</td>'
+                     + '<td class="ta-right" style="font-weight:700;">'+(d.salePrice!=null ? Number(d.salePrice).toLocaleString() : '<span style="color:var(--danger);">미입력</span>')+'</td>'))
               + '</tr>';
           }).join("")
         + '</tbody></table></div>'
@@ -24431,6 +24510,10 @@
     // 선할인·타할인은 모든 줄에 똑같이 넣습니다. (구매 예약에서만)
     // 검증 결과를 다시 그리면 칸이 새로 만들어지므로, 넣으신 값을 담아뒀다가 되살립니다.
     const keepDisc = {
+      saleBase:  String((document.getElementById("resv-paste-salebase")||{}).value || "").trim(),
+      saleAmt:   String((document.getElementById("resv-paste-saleamt")||{}).value || "").trim(),
+      salePct:   String((document.getElementById("resv-paste-salepct")||{}).value || "").trim(),
+      salePrice: String((document.getElementById("resv-paste-saleprice")||{}).value || "").trim(),
       preAmt:   String((document.getElementById("resv-paste-preamt")||{}).value || "").trim(),
       prePct:   String((document.getElementById("resv-paste-prepct")||{}).value || "").trim(),
       otherAmt: String((document.getElementById("resv-paste-otheramt")||{}).value || "").trim(),
@@ -24458,6 +24541,7 @@
       if(pickDest && c.length && destNames.indexOf(c[0]) < 0) c = [pickDest].concat(c);
       // 「색상 없이 넣기」를 고르시면 색상 칸이 없는 것으로 보고 자리를 당깁니다.
       const noColor = !!(document.getElementById("resv-paste-nocolor")||{}).checked;
+      
       return validateResvRow(noColor
         ? { requestDate: baseDate, destination: c[0], systemModel: c[1],
             color: "", qty: c[2], salePrice: c[3],
@@ -24567,6 +24651,14 @@
     logAction("예약 일괄등록", resvPendingRows.length+"건");
     alert(resvPendingRows.length+"건을 등록했습니다.");
     resvPendingRows = [];
+    // 담아둔 값을 비워 다음에 창을 열 때 깨끗하게 시작합니다.
+    resvPasteKeepDisc = {};
+    resvPasteFixedAmt = { pre:null, other:null };
+    try{ window.resvPasteSale = { base:"unit", amt:null, pct:null, price:null }; }catch(e){}
+    ["resv-paste-text","resv-paste-prepct","resv-paste-otherpct","resv-paste-preamt",
+     "resv-paste-otheramt","resv-paste-saleamt","resv-paste-salepct","resv-paste-saleprice"]
+      .forEach(function(id){ const e = document.getElementById(id); if(e) e.value = ""; });
+    { const e = document.getElementById("resv-paste-result"); if(e) e.innerHTML = ""; }
     closeResvExcelModal(); closeResvPasteModal();
     loadReservationTable();
   };
@@ -25773,6 +25865,18 @@
   }
 
   // 품목 표의 모든(잠기지 않은) 줄에 같은 값을 넣습니다.
+  // 판매처를 고르면 그 업체의 할인 계산 기준을 넣어드립니다.
+  window.onBulkDestBase = async function(){
+    const name = String((document.getElementById("be-bulk-dest")||{}).value||"").trim();
+    if(!name) return;
+    try{ if(!companiesCache || companiesCache.length === 0) await fetchCompanies(); }catch(e){}
+    const c = (companiesCache||[]).find(function(x){
+      return String(x.name||"").trim() === name; }) || null;
+    const b = String((c && c.discountBase) || "");
+    const sel = document.getElementById("be-bulk-salebase");
+    if(sel) sel.value = (b === "supply") ? "supply" : "unit";
+  };
+
   window.applyBulkToBatchLines = function(){
     const rows = Array.from(document.querySelectorAll("#be-lines-body tr"));
     const g = id => { const el = document.getElementById(id); return el ? el.value.trim() : ""; };
@@ -25797,7 +25901,13 @@
       if(dest !== ""){ const ds = tr.querySelector(".be-dest"); if(ds && !ds.disabled){
         if(!Array.from(ds.options).some(o=>o.value===dest)){ const o=document.createElement("option"); o.value=dest; o.textContent=dest; ds.appendChild(o); }
         ds.value = dest; } }
-      if(salePct !== "" && L){ const a = amtFromPct(salePct, L); set(".be-saleamt", a); set(".be-salepct", salePct); set(".be-saleprice", L - Number(a)); }
+      if(salePct !== "" && L){
+        // 판매할인 기준 — 출고가에 곱하거나, VAT 뺀 공급가에 곱합니다.
+        const sBase = g("be-bulk-salebase") || "unit";
+        const baseAmt = (sBase === "supply") ? Math.round(L / 1.1) : L;
+        const a = Math.round(baseAmt * Number(salePct) / 100);
+        set(".be-saleamt", a); set(".be-salepct", salePct); set(".be-saleprice", L - a);
+      }
       recalcBatchLine(tr);
       n++;
     });
@@ -35411,6 +35521,42 @@
     loadB2BTab();
   };
 
+  // 이어둔 통장 기록을 풉니다. 통장 내역 자체는 지우지 않습니다.
+  window.unlinkLedgerBank = async function(id){
+    if(!id) return;
+    let e = null;
+    try{
+      const d = await getDoc(doc(db,"b2bLedger", id));
+      if(d.exists()) e = d.data();
+    }catch(err){}
+    if(!e){ alert("여신 기록을 찾을 수 없습니다."); return; }
+    if(!e.fromBankDepositId){ alert("이어둔 통장 기록이 없습니다."); loadB2BTab(); return; }
+    let info = "";
+    try{
+      const bd = await getDoc(doc(db,"bankDeposits", e.fromBankDepositId));
+      if(bd.exists()){
+        const v = bd.data();
+        info = "\n\n  이어둔 통장 기록\n"
+          + "    " + (v.date||"-") + "  " + (Number(v.amount)||0).toLocaleString()
+          + "  " + (v.payer||v.company||"-") + (v.account ? "  (" + v.account + ")" : "");
+      }
+    }catch(err){}
+    if(!confirm("이어둔 통장 기록을 풉니다." + info + "\n\n"
+      + "통장 내역 자체는 그대로 남습니다. 연결만 끊깁니다.\n"
+      + "다시 이으시려면 [통장 잇기] 를 누르시면 됩니다.\n\n진행할까요?")) return;
+    try{
+      await updateDoc(doc(db,"b2bLedger", id), { fromBankDepositId: null });
+    }catch(err){
+      alert("풀지 못했습니다.\n" + ((err&&err.message)?err.message:String(err)));
+      return;
+    }
+    logAction("여신 기록 통장 잇기 풀기",
+      (e.partner||"-") + " / " + (e.date||"-") + " / " + (Number(e.amount)||0).toLocaleString());
+    try{ clearCache("b2b"); clearDashCache(); }catch(err){}
+    alert("연결을 풀었습니다.");
+    loadB2BTab();
+  };
+
   // ---------- 여신잔액 맞추기 ----------
   //  삼성에서 알려준 공식 잔액을 거래처별로 적어두고 우리 장부와 견줍니다.
   //  저장만으로는 잔액이 바뀌지 않습니다. 「조정으로 맞추기」로 사람이 확인해야 반영됩니다.
@@ -36067,7 +36213,8 @@
               ? '<span style="color:#2e7d32;font-weight:700;cursor:pointer;" title="눌러서 고칠 수 있습니다" onclick="setReturnCreditDate(\''+e.id+'\',\''+comboEsc(e.creditReturnDate)+'\')">' + comboEsc(e.creditReturnDate) + '</span>'
               : '<button class="btn small secondary" style="width:auto;color:#8a6d0b;" title="여신이 실제로 되돌아온 날을 넣습니다. 거래일자(반품일)는 그대로 둡니다." onclick="setReturnCreditDate(\''+e.id+'\',\'\')">복구일 넣기</button>')
           : (e.fromBankDepositId
-              ? '<button class="btn small secondary" style="width:auto;" title="이 여신 충전이 통장에서 어떻게 나갔는지 봅니다" onclick="showLedgerBankInfo(\''+e.fromBankDepositId+'\')">통장 보기</button>'
+              ? ('<button class="btn small secondary" style="width:auto;" title="이 여신 충전이 통장에서 어떻게 나갔는지 봅니다" onclick="showLedgerBankInfo(\''+e.fromBankDepositId+'\')">통장 보기</button>'
+                 + '<button class="btn small secondary" style="width:auto;margin-left:4px;color:var(--danger);" title="이어둔 통장 기록을 풉니다. 통장 내역 자체는 지우지 않습니다." onclick="unlinkLedgerBank(\''+e.id+'\')">잇기 풀기</button>')
           : ((!e.noBankLink && (e.category === "deposit" || e.category === "collateral_cash"))
                   ? '<button class="btn small secondary" style="width:auto;color:#8a6d0b;" title="통장에서 나간 기록을 이어둡니다" onclick="openLedgerBankLink(\''+e.id+'\')">통장 잇기</button>'
                   : '<span style="color:var(--gray);">-</span>'))) + '</td>' +
