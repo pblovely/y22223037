@@ -400,7 +400,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-03 v933</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-03 v934</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -11323,7 +11323,11 @@
     const actions = (r)=>
       '<button class="btn small secondary" style="width:auto;" data-detail="'+r.id+'">상세</button>' +
       (!r.cancelled ? '<button class="btn small secondary" style="width:auto;" data-edit-batch="'+r.id+'">수정</button>' : '') +
-      (!r.cancelled ? '<button class="btn small danger" style="width:auto;" data-cancel-batch="'+r.id+'">취소</button>' : '') +
+      (!r.cancelled
+        ? ((r.lines||[]).reduce(function(n,o){ return n + (Number(o.fulfilledCount)||0); }, 0) > 0
+            ? '<button class="btn small danger" style="width:auto;" title="도착을 되돌립니다. 재고와 판매요청이 지워지고 주문은 진행중으로 돌아갑니다." data-cancel-arrival="'+r.id+'">도착 취소</button>'
+            : '<button class="btn small danger" style="width:auto;" title="주문을 취소합니다." data-cancel-batch="'+r.id+'">주문 취소</button>')
+        : '') +
       (r.b.paymentRequestId && !r.cancelled
         ? '<button class="btn small secondary" style="width:auto;" title="이 주문이 묶인 출금요청을 취소합니다" data-cancel-pr-order="'+comboEsc(r.b.paymentRequestId)+'">출금취소</button>' : '') +
       (r.cancelled && hasPerm(currentUserPerms,"cancelDelete")
@@ -11348,18 +11352,46 @@
       const r = rows.find(x=>x.id === btn.dataset.delBatch);
       btn.onclick = ()=> deleteCancelledBatch("order", r.id, r.b, r.lines);
     });
+    // 도착 취소 — 재고·판매요청을 되돌리고 주문은 진행중으로 둡니다.
+    listEl.querySelectorAll('[data-cancel-arrival]').forEach(btn=>{
+      const r = rows.find(x=>x.id === btn.dataset.cancelArrival);
+      btn.onclick = async ()=>{
+        try{
+          await openOrderBatchDetailModal(r.id, r.b);
+          await cancelAllArrivals();
+        }catch(e){
+          alert("되돌리지 못했습니다.\n주문을 열어 [도착 전체 취소] 를 써주세요.");
+          return;
+        }
+        // 주문은 살아 있고 「주문중」 으로 돌아갑니다. (cancelAllArrivals 가 처리)
+        //  도착 수가 0이 되면 「완료」 판정이 풀려 「진행」 으로 옮겨집니다.
+        try{ closeOrderDetailModal(); }catch(e){}
+        try{ clearCache("orders"); clearCache("inventory");
+             clearCache("saleRequests"); clearDashCache(); }catch(e){}
+        loadOrderList();
+        try{ if(typeof loadSaleRequestList === "function") loadSaleRequestList(); }catch(e){}
+      };
+    });
+
     listEl.querySelectorAll('[data-cancel-batch]').forEach(btn=>{
       const r = rows.find(x=>x.id === btn.dataset.cancelBatch);
       btn.onclick = async ()=>{
         // 여신결제 주문이면 여신 차감도 함께 되돌립니다.
         const isCredit = (r.b.paymentMethod === "b2b_credit");
         const usedAmt = Number(r.b.creditUsed != null ? r.b.creditUsed : r.b.depositRequired)||0;
+        // 도착된 재고가 있으면 먼저 되돌리셔야 합니다.
+        const doneQty0 = r.lines.reduce(function(n,o){ return n + (Number(o.fulfilledCount)||0); }, 0);
+        if(doneQty0 > 0){
+          alert("이 주문에는 도착 등록된 재고가 " + doneQty0 + "대 있습니다.\n\n"
+            + "먼저 [도착 취소] 로 재고와 판매요청을 되돌린 뒤 주문을 취소해주세요.");
+          return;
+        }
         if(!confirm("이 주문 전체를 취소하시겠습니까?\n\n"
           + "  " + (r.b.source||"-") + " · " + (r.b.orderDate||"-") + " · 품목 " + r.lines.length + "개\n"
           + (isCredit && usedAmt
               ? "\n※ 여신결제 주문입니다. 여신 차감 " + usedAmt.toLocaleString() + " 이 함께 되돌아갑니다.\n"
               : "")
-          + "\n이미 도착 등록된 재고는 그대로 유지됩니다.")) return;
+          + "\n도착 등록된 재고는 없습니다.")) return;
         const reason = prompt("취소 사유를 입력해주세요. (필수)", "");
         if(reason === null) return;
         if(!String(reason).trim()){ alert("취소 사유를 입력해주세요."); return; }
@@ -11996,12 +12028,13 @@
       if(emptyIds.length){
         const lines = emptyIds.slice(0,10).map(x=> "  " + (x.sr.destination||"-") + " "
           + (x.sr.systemModel||"-") + " " + (Number(x.sr.quantity)||0) + "대").join("\n");
-        if(confirm("붙어 있던 재고가 모두 지워져 매칭이 0이 된 판매요청이 "
-          + emptyIds.length + "건 있습니다.\n\n" + lines
-          + (emptyIds.length > 10 ? "\n  ... 외 " + (emptyIds.length-10) + "건" : "")
-          + "\n\n이 판매요청도 함께 취소할까요?\n\n"
-          + "· 취소하면 판매 관리에서 <취소>로 표시됩니다\n"
-          + "· 입금요청이 걸려 있으면 그 요청은 따로 확인하셔야 합니다")){
+        // 도착을 되돌렸으니 매칭이 0이 된 판매요청은 함께 취소하는 것이 맞습니다.
+        //  다만 입금요청이 걸린 건은 사람이 확인해야 하므로 알려드리고 진행합니다.
+        {
+          alert("붙어 있던 재고가 모두 지워져 매칭이 0이 된 판매요청 "
+            + emptyIds.length + "건을 함께 취소합니다.\n\n" + lines
+            + (emptyIds.length > 10 ? "\n  ... 외 " + (emptyIds.length-10) + "건" : "")
+            + "\n\n입금요청이 걸려 있으면 그 요청은 따로 확인해주세요.");
           const touched = new Set();
           for(const x of emptyIds){
             await updateDoc(doc(db,"saleRequests", x.id), { status:"취소" });
