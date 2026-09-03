@@ -400,7 +400,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-03 v910</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-03 v911</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -1552,6 +1552,8 @@
         <div id="model-syscode-notice" style="display:none;font-size:12.5px;padding:9px 11px;margin-bottom:8px;border:1px solid var(--danger);background:#fdecea;line-height:1.7;"></div>
         <p class="desc">등록된 모델을 한눈에 볼 수 있습니다. SKU가 없는 색상은 빨간색으로 표시되니 클릭해서 채워주세요.</p>
         <div style="display:flex;gap:6px;align-items:center;margin-bottom:8px;flex-wrap:wrap;">
+          <button class="btn small secondary" style="width:auto;" onclick="openModelBulkKind()" title="체크한 모델의 구분을 한 번에 바꿉니다.">구분 일괄 변경</button>
+          <span id="model-check-count" style="font-size:11.5px;color:var(--gray);"></span>
           <input type="text" id="model-search" placeholder="펫네임·전산모델명·모델명·색상·SKU로 찾기"
             style="width:280px;height:28px;border:1px solid var(--line);padding:0 8px;font-size:12.5px;box-sizing:border-box;"
             oninput="onModelSearch()">
@@ -1563,6 +1565,7 @@
         <table class="data-table" style="min-width:900px;">
           <thead>
             <tr>
+              <th style="width:30px;"><input type="checkbox" id="model-check-all" onclick="toggleModelAll(this)"></th>
               <th>#</th>
               <th>순서</th>
               <th>검수</th>
@@ -5910,6 +5913,72 @@
     });
   }
 
+  // ---------- 모델 일괄 변경 ----------
+  window.toggleModelAll = function(cb){
+    document.querySelectorAll(".model-cb").forEach(function(e){ e.checked = cb.checked; });
+    updateModelCheckCount();
+  };
+  window.updateModelCheckCount = function(){
+    const n = document.querySelectorAll(".model-cb:checked").length;
+    const el = document.getElementById("model-check-count");
+    if(el) el.textContent = n ? (n + "개 골랐습니다") : "";
+  };
+  //  체크한 모델의 구분을 한 번에 바꿉니다. 그 모델로 만든 재고도 함께 맞춥니다.
+  window.openModelBulkKind = async function(){
+    const ids = [...document.querySelectorAll(".model-cb:checked")].map(function(e){ return e.dataset.mid; });
+    if(ids.length === 0){ alert("먼저 모델을 체크해주세요."); return; }
+    let names = [];
+    try{ names = await fetchNamesList("itemKinds"); }catch(e){}
+    if(names.length === 0){
+      alert("구분이 하나도 없습니다.\n\n재고 기초설정 → 구분 에서 먼저 등록해주세요.");
+      return;
+    }
+    const pick = prompt("체크한 " + ids.length + "개 모델의 구분을 바꿉니다.\n\n"
+      + "쓸 수 있는 구분\n  " + names.join(" · ")
+      + "\n\n바꿀 구분을 그대로 적어주세요.", names[0]);
+    if(pick === null) return;
+    const kind = String(pick).trim();
+    if(!kind){ alert("구분을 적어주세요."); return; }
+    if(names.indexOf(kind) < 0){
+      alert("「" + kind + "」 은 구분 목록에 없습니다.\n\n"
+        + "쓸 수 있는 구분\n  " + names.join(" · ")
+        + "\n\n재고 기초설정 → 구분 에서 먼저 등록해주세요.");
+      return;
+    }
+    if(!confirm("모델 " + ids.length + "개의 구분을 「" + kind + "」 로 바꿉니다.\n\n"
+      + "그 모델로 만든 재고의 구분도 함께 맞춥니다.\n\n진행할까요?")) return;
+    let mDone = 0, iDone = 0;
+    try{
+      // 모델
+      for(let i=0; i<ids.length; i+=300){
+        const bt = writeBatch(db);
+        ids.slice(i, i+300).forEach(function(id){ bt.update(doc(db,"inventoryModels", id), { kind }); });
+        await withTimeout(bt.commit(), 15000, "모델 저장");
+        mDone += Math.min(300, ids.length - i);
+      }
+      // 그 모델로 만든 재고
+      const models = (modelsCache||[]).filter(function(x){ return ids.indexOf(x.id) >= 0; });
+      for(const m of models){
+        const q = await getDocs(query(collection(db,"inventoryItems"),
+          where("systemModel","==", String(m.systemModel||""))));
+        const live = q.docs.filter(function(d){ return d.data().deleted !== true; });
+        for(let i=0; i<live.length; i+=300){
+          const bt = writeBatch(db);
+          live.slice(i, i+300).forEach(function(d){ bt.update(doc(db,"inventoryItems", d.id), { kind }); });
+          await withTimeout(bt.commit(), 15000, "재고 저장");
+          iDone += Math.min(300, live.length - i);
+        }
+      }
+    }catch(e){
+      alert("바꾸지 못했습니다.\n" + ((e&&e.message)?e.message:String(e)));
+      return;
+    }
+    logAction("모델 구분 일괄 변경", kind + " / 모델 " + mDone + "개 / 재고 " + iDone + "대");
+    try{ clearCache("models"); await fetchModelsCache(); clearCache("inventory"); clearDashCache(); }catch(e){}
+    alert("모델 " + mDone + "개, 재고 " + iDone + "대의 구분을 「" + kind + "」 로 바꿨습니다.");
+    loadModelAdminList();
+  };
+
   // ---------- 구분 (단말기 · TV · 모니터 · 액세서리 …) ----------
   //  이름을 바꾸면 등록된 모델의 구분도 함께 바뀝니다.
   window.loadKindList = function(){
@@ -6715,6 +6784,7 @@
 
       const tr = document.createElement("tr");
       tr.innerHTML =
+        '<td><input type="checkbox" class="model-cb" data-mid="'+m.id+'" onclick="updateModelCheckCount()"></td>' +
         '<td style="color:var(--gray);">'+rowNum+'</td>' +
         '<td class="ta-right">'+(m.sortOrder != null ? '<b>'+m.sortOrder+'</b>' : '<span style="color:var(--gray);">-</span>')+'</td>' +
         '<td>'+(m.needsReview ? '<input type="checkbox" data-review-model="'+m.id+'" style="accent-color:var(--danger);width:16px;height:16px;cursor:pointer;">' : '<span style="color:var(--gray);">✓</span>')+'</td>' +
