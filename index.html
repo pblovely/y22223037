@@ -400,7 +400,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-03 v934</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-03 v936</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -11331,7 +11331,8 @@
       (r.b.paymentRequestId && !r.cancelled
         ? '<button class="btn small secondary" style="width:auto;" title="이 주문이 묶인 출금요청을 취소합니다" data-cancel-pr-order="'+comboEsc(r.b.paymentRequestId)+'">출금취소</button>' : '') +
       (r.cancelled && hasPerm(currentUserPerms,"cancelDelete")
-        ? '<button class="btn small danger" style="width:auto;" title="취소된 주문을 완전히 지웁니다" data-del-batch="'+r.id+'">삭제</button>' : '');
+        ? '<button class="btn small secondary" style="width:auto;" title="취소를 되돌려 진행중으로 옮깁니다. 도착·재고는 그대로입니다." data-restore-batch="'+r.id+'">되돌리기</button>'
+          + '<button class="btn small danger" style="width:auto;margin-left:4px;" title="취소된 주문을 완전히 지웁니다" data-del-batch="'+r.id+'">삭제</button>' : '');
 
     listEl.innerHTML = renderListTable("order", rows, actions);
     foldActionColumn("order-list");
@@ -11348,6 +11349,44 @@
     listEl.querySelectorAll('[data-cancel-pr-order]').forEach(btn=>{
       btn.onclick = ()=> cancelPaymentRequest(btn.dataset.cancelPrOrder);
     });
+    // 취소 되돌리기 — 주문을 「진행중」 으로 옮깁니다. 도착·재고는 그대로 둡니다.
+    listEl.querySelectorAll('[data-restore-batch]').forEach(btn=>{
+      const r = rows.find(x=>x.id === btn.dataset.restoreBatch);
+      btn.onclick = async ()=>{
+        const doneQty = (r.lines||[]).reduce(function(n,o){ return n + (Number(o.fulfilledCount)||0); }, 0);
+        if(!confirm("이 주문의 취소를 되돌립니다.\n\n"
+          + "  " + (r.b.source||"-") + " · " + (r.b.orderDate||"-") + " · 품목 " + (r.lines||[]).length + "개\n"
+          + (doneQty ? "  도착 " + doneQty + "대 (그대로 둡니다)\n" : "")
+          + "\n주문이 진행중으로 돌아갑니다.\n"
+          + (r.b.paymentMethod === "b2b_credit" ? "여신 차감도 다시 잡힙니다.\n" : "")
+          + "\n진행할까요?")) return;
+        try{
+          await updateDoc(doc(db,"orderBatches", r.id), {
+            status: "진행", cancelReason: null, cancelledAt: null, cancelledBy: null });
+          for(const o of (r.lines||[])){
+            const q = Number(o.quantity)||0, f = Number(o.fulfilledCount)||0;
+            await updateDoc(doc(db,"orders", o.id), {
+              status: (f >= q && q > 0) ? "도착완료" : (f > 0 ? "부분도착" : "주문중") });
+          }
+          // 여신결제였으면 차감을 다시 잡습니다.
+          if(r.b.paymentMethod === "b2b_credit"){
+            try{
+              const amt = await creditAmountOfBatch(r.id);
+              await replaceB2BOrderUse(r.id, amt, r.b.depositPaidDate || r.b.orderDate || todayStr(), r.b.source || "");
+            }catch(e){}
+          }
+        }catch(e){
+          alert("되돌리지 못했습니다.\n" + ((e&&e.message)?e.message:String(e)));
+          return;
+        }
+        logAction("주문 취소 되돌리기", (r.b.source||"-") + " " + (r.b.orderDate||"-")
+          + " / 품목 " + (r.lines||[]).length + "개" + (doneQty ? " / 도착 " + doneQty + "대" : ""));
+        try{ clearCache("orders"); clearCache("inventory"); clearDashCache(); }catch(e){}
+        alert("되돌렸습니다. 주문이 진행중으로 옮겨졌습니다.");
+        loadOrderList();
+      };
+    });
+
     listEl.querySelectorAll('[data-del-batch]').forEach(btn=>{
       const r = rows.find(x=>x.id === btn.dataset.delBatch);
       btn.onclick = ()=> deleteCancelledBatch("order", r.id, r.b, r.lines);
@@ -11917,9 +11956,56 @@
     if(!currentPoBatch){ alert("주문을 먼저 열어주세요."); return; }
     if(!hasPerm(currentUserPerms, "cancelDelete")){ alert("권한이 없습니다."); return; }
     const { batchId, b } = currentPoBatch;
-    const lines = (orderBatchLinesCache[batchId] || []).filter(o=> o.status !== "취소");
+    // 취소된 주문이라도 도착 수가 남아 있으면 되돌릴 수 있어야 합니다.
+    //  (주문을 먼저 취소해 버린 경우, 재고·판매요청이 주인 없이 남습니다)
+    const lines = (orderBatchLinesCache[batchId] || []);
     const done = lines.filter(o=> (Number(o.fulfilledCount)||0) > 0);
-    if(done.length === 0){ alert("되돌릴 도착 건이 없습니다."); return; }
+    if(done.length === 0){
+      // 도착 수가 0인데 재고가 남아 있는 경우도 봅니다.
+      let stray = [];
+      try{
+        for(const o of lines){
+          const q = await getDocs(query(collection(db,"inventoryItems"), where("orderId","==", o.id)));
+          q.forEach(function(d){ const v = d.data(); if(v.deleted !== true) stray.push({ id:d.id, lineId:o.id, ...v }); });
+        }
+      }catch(e){}
+      if(stray.length === 0){ alert("되돌릴 도착 건이 없습니다."); return; }
+      if(!confirm("도착 수는 0인데 이 주문으로 들어온 재고가 " + stray.length + "대 남아 있습니다.\n\n"
+        + stray.slice(0,6).map(function(x){
+            return "  " + (x.serialNumber||"-") + "  " + (x.systemModel||"")
+                 + "  " + (x.destination||x.status||"-"); }).join("\n")
+        + (stray.length > 6 ? "\n  ... 외 " + (stray.length-6) + "대" : "")
+        + "\n\n이 재고를 지우고 판매요청 매칭도 풀까요?\n되돌릴 수 없습니다.")) return;
+      try{
+        const ids0 = stray.map(function(x){ return x.id; });
+        // 판매요청 매칭 풀기
+        const srIds0 = [...new Set(stray.map(function(x){ return x.saleRequestId; }).filter(Boolean))];
+        for(const sid of srIds0){
+          try{
+            const sd = await getDoc(doc(db,"saleRequests", sid));
+            if(!sd.exists()) continue;
+            const sr = sd.data();
+            const keep = (sr.matchedItemIds||[]).filter(function(x){ return ids0.indexOf(x) < 0; });
+            const nf = Math.max(0, (Number(sr.fulfilledCount)||0) - ((sr.matchedItemIds||[]).length - keep.length));
+            await updateDoc(doc(db,"saleRequests", sid), {
+              matchedItemIds: keep, fulfilledCount: nf,
+              status: (nf <= 0) ? "취소" : (nf >= (Number(sr.quantity)||0) ? "매칭완료" : "부분매칭") });
+          }catch(e){}
+        }
+        for(let i=0; i<ids0.length; i+=300){
+          const bt = writeBatch(db);
+          ids0.slice(i, i+300).forEach(function(id){ bt.delete(doc(db,"inventoryItems", id)); });
+          await bt.commit();
+        }
+      }catch(e){ alert("지우지 못했습니다.\n" + ((e&&e.message)?e.message:String(e))); return; }
+      logAction("남은 재고 정리", (b.source||"-") + " " + (b.orderDate||"-") + " / " + stray.length + "대");
+      try{ clearCache("inventory"); clearCache("orders"); clearCache("saleRequests"); clearDashCache(); }catch(e){}
+      alert("재고 " + stray.length + "대를 지우고 판매요청 매칭을 풀었습니다.");
+      try{ closeOrderDetailModal(); }catch(e){}
+      loadOrderList();
+      try{ if(typeof loadSaleRequestList === "function") loadSaleRequestList(); }catch(e){}
+      return;
+    }
 
     // 이 주문으로 들어온 재고를 모읍니다.
     let items = [];
