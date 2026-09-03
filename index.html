@@ -400,7 +400,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-03 v912</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-03 v914</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -474,8 +474,8 @@
       <div class="sidebar" id="inv-admin-submenu" style="display:none;">
         <div class="sidebar-section-label">재고 기초설정</div>
         <button class="tab-btn" data-tab="tab-inv-model" data-label-key="tab-inv-model" id="tabbtn-inv-model" onclick="switchTab('tab-inv-model')"><span class="tab-label-text">모델 등록</span></button>
-        <button class="tab-btn" data-tab="tab-inv-color" data-label-key="tab-inv-color" id="tabbtn-inv-color" onclick="switchTab('tab-inv-color')"><span class="tab-label-text">색상 등록</span></button>
         <button class="tab-btn" data-tab="tab-inv-kind" data-label-key="tab-inv-kind" id="tabbtn-inv-kind" onclick="switchTab('tab-inv-kind')"><span class="tab-label-text">구분</span></button>
+        <button class="tab-btn" data-tab="tab-inv-color" data-label-key="tab-inv-color" id="tabbtn-inv-color" onclick="switchTab('tab-inv-color')"><span class="tab-label-text">색상 등록</span></button>
           <button class="tab-btn" data-tab="tab-inv-manufacturer" data-label-key="tab-inv-manufacturer" id="tabbtn-inv-manufacturer" onclick="switchTab('tab-inv-manufacturer')"><span class="tab-label-text">제조사</span></button>
         <button class="tab-btn" data-tab="tab-inv-location" data-label-key="tab-inv-location" id="tabbtn-inv-location" onclick="switchTab('tab-inv-location')"><span class="tab-label-text">위치</span></button>
         <button class="tab-btn" data-tab="tab-inv-status" data-label-key="tab-inv-status" id="tabbtn-inv-status" onclick="switchTab('tab-inv-status')"><span class="tab-label-text">현재상태</span></button>
@@ -1553,6 +1553,7 @@
         <p class="desc">등록된 모델을 한눈에 볼 수 있습니다. SKU가 없는 색상은 빨간색으로 표시되니 클릭해서 채워주세요.</p>
         <div style="display:flex;gap:6px;align-items:center;margin-bottom:8px;flex-wrap:wrap;">
           <button class="btn small secondary" style="width:auto;" onclick="openModelBulkKind()" title="체크한 모델의 구분을 한 번에 바꿉니다.">구분 일괄 변경</button>
+          <span id="dl-modellist"></span>
           <span id="model-check-count" style="font-size:11.5px;color:var(--gray);"></span>
           <input type="text" id="model-search" placeholder="펫네임·전산모델명·모델명·색상·SKU로 찾기"
             style="width:280px;height:28px;border:1px solid var(--line);padding:0 8px;font-size:12.5px;box-sizing:border-box;"
@@ -1570,6 +1571,7 @@
               <th>순서</th>
               <th>검수</th>
               <th>구분</th>
+              <th>세트</th>
               <th>제조사</th>
               <th>펫네임</th>
               <th>전산모델명</th>
@@ -1596,6 +1598,7 @@
           <button class="btn small" style="width:auto;" onclick="openColorStandaloneAddModal()">+ 색상 등록</button>
         </div>
         <p class="desc">모든 모델의 색상을 한눈에 볼 수 있습니다. SKU가 없는 색상은 빨간색입니다. 수정은 해당 모델의 색상 관리 팝업에서 합니다.</p>
+        <div style="display:flex;gap:6px;align-items:center;margin-bottom:8px;flex-wrap:wrap;"><span id="dl-colorlist"></span></div>
         <div id="color-pagination"></div>
         <div id="color-list-wrap" style="overflow-x:auto;">
         <table class="data-table" style="min-width:700px;">
@@ -1792,6 +1795,8 @@
         <div class="stack-form">
           <div class="stack-row"><label>구분 <span class="info-tip" title="단말기·TV·모니터·액세서리 등으로 나눠두면 나중에 재고와 매출을 종류별로 볼 수 있습니다.">ⓘ</span></label>
             <select id="ms-kind-select"><option value="">선택</option></select></div>
+          <div class="stack-row"><label>세트 상품 <span class="info-tip" title="두 개를 묶어 파는 상품일 때 함께 나가는 모델을 적어두세요. 나중에 찾기 쉽습니다. 재고는 각각 잡히고, 세는 방식은 바뀌지 않습니다.">ⓘ</span></label>
+            <input type="text" id="ms-setwith-input" placeholder="함께 나가는 모델 (선택 · 예: 사운드바 HW-Q990D)"></div>
           <div class="stack-row"><label>제조사</label><select id="ms-manufacturer-select"></select></div>
           <div class="stack-row"><label>펫네임</label><input type="text" id="ms-pet-input" placeholder="예: 갤럭시Z 폴드7"></div>
           <div class="stack-row"><label>전산모델명 <span class="info-tip" title="LG 마스터재고 파일의 '모델코드'와 맞춰야 하는 값입니다. 입력하면 아래에 파일 속 펫네임을 찾아 보여줍니다.">ⓘ</span></label><input type="text" id="ms-system-input" list="model-system-datalist" placeholder="예: SM-F976N256 (타이핑하면 목록)" oninput="checkMasterPetName('ms')"></div>
@@ -1830,6 +1835,8 @@
           <div class="stack-row"><label>표시 순서 <span class="info-tip" title="작은 숫자가 드롭다운에서 먼저 나옵니다. 자주 쓰는 모델에 1, 2, 3 을 주세요. 비우면 맨 뒤로 갑니다.">ⓘ</span></label><input type="number" id="me-sortorder-input" placeholder="예: 1 (비우면 맨 뒤)"></div>
           <div class="stack-row"><label>구분 <span class="info-tip" title="단말기·TV·모니터·액세서리 등으로 나눠두면 나중에 재고와 매출을 종류별로 볼 수 있습니다.">ⓘ</span></label>
             <select id="me-kind-select"><option value="">선택</option></select></div>
+          <div class="stack-row"><label>세트 상품 <span class="info-tip" title="두 개를 묶어 파는 상품일 때 함께 나가는 모델을 적어두세요. 나중에 찾기 쉽습니다. 재고는 각각 잡히고, 세는 방식은 바뀌지 않습니다.">ⓘ</span></label>
+            <input type="text" id="me-setwith-input" placeholder="함께 나가는 모델 (선택 · 예: 사운드바 HW-Q990D)"></div>
           <div class="stack-row"><label>제조사</label><select id="me-manufacturer-select"></select></div>
           <div class="stack-row"><label>펫네임</label><input type="text" id="me-pet-input"></div>
           <div class="stack-row"><label>전산모델명 <span class="info-tip" title="LG 마스터재고 파일의 '모델코드'와 맞춰야 하는 값입니다. 입력하면 아래에 파일 속 펫네임을 찾아 보여줍니다.">ⓘ</span></label><input type="text" id="me-system-input" list="model-system-datalist" oninput="checkMasterPetName('me')"></div>
@@ -3567,6 +3574,11 @@
             </span>
           </div>
           <div class="stack-row"><label>요청일</label><input type="text" id="resv-paste-date-input" placeholder="예: 20260726" maxlength="8" inputmode="numeric"></div>
+          <div class="stack-row"><label>색상 칸</label>
+            <label style="display:flex;align-items:center;gap:6px;font-size:12.5px;cursor:pointer;flex:1;padding:5px 8px;">
+              <input type="checkbox" id="resv-paste-nocolor" onchange="analyzeResvPaste()">
+              <span>색상 없이 넣기 <span style="color:var(--gray);font-size:11.5px;">— 붙여넣는 줄에 색상 칸이 없을 때 체크하세요. 모델만 잡고 색상은 나중에 고르시면 됩니다.</span></span>
+            </label></div>
           <div class="stack-row resv-paste-buy-only"><label>할인 계산 기준 <span class="info-tip" title="거래처에 저장해둔 기준이 자동으로 들어옵니다. 이 등록에서만 다르게 하려면 바꾸세요.">ⓘ</span></label>
             <select id="resv-paste-base" onchange="onResvPasteDisc('pre','pct')">
               <option value="unit">대당 (출고가에 걸기)</option>
@@ -3576,7 +3588,7 @@
           </div>
           <div class="stack-row"><label>거래처 <span class="info-tip" title="붙여넣은 줄에 거래처를 안 적었으면 여기서 고른 곳으로 넣습니다. 줄 맨 앞에 거래처를 적으셨으면 그 값이 우선합니다.">ⓘ</span></label><select id="resv-paste-dest"><option value="">(줄에 적은 대로)</option></select></div>
         </div>
-        <textarea id="resv-paste-text" rows="8" style="width:100%;border:1px solid #c7c7c7;padding:8px;font-size:12.5px;font-family:inherit;box-sizing:border-box;" placeholder="더퓨처랩&#9;SM-F976N512&#9;그레이&#9;5&#9;2500000&#10;태화&#9;SM-F776N256&#9;&#9;3&#9;"></textarea>
+        <textarea id="resv-paste-text" rows="8" style="width:100%;border:1px solid #c7c7c7;padding:8px;font-size:12.5px;font-family:inherit;box-sizing:border-box;" placeholder="색상 있을 때&#10;더퓨처랩&#9;SM-F976N512&#9;그레이&#9;5&#9;2500000&#10;&#10;색상 없을 때 (위 「색상 없이 넣기」 체크)&#10;더퓨처랩&#9;SM-F976N512&#9;5&#9;2500000"></textarea>
         <button class="btn small" style="width:auto;margin-top:10px;" onclick="analyzeResvPaste()">검증</button>
         <div id="resv-paste-result" style="font-size:12.5px;margin-top:10px;"></div>
       </div>
@@ -5538,6 +5550,7 @@
       cascadeList:[{collection:"users", field:"team"}],
       afterChange: loadTeamsIntoSelect
     });
+  
   }
   window.addTeam = async function(){
     const input = document.getElementById("new-team-input");
@@ -6256,6 +6269,7 @@
       };
     });
     listEl.prepend(renderPaginationBar("notices", noticeDocs.length, loadNoticeList));
+  
   }
 
   async function checkUnreadNotices(){
@@ -6813,6 +6827,7 @@
         '<td class="ta-right">'+(m.sortOrder != null ? '<b>'+m.sortOrder+'</b>' : '<span style="color:var(--gray);">-</span>')+'</td>' +
         '<td>'+(m.needsReview ? '<input type="checkbox" data-review-model="'+m.id+'" style="accent-color:var(--danger);width:16px;height:16px;cursor:pointer;">' : '<span style="color:var(--gray);">✓</span>')+'</td>' +
         '<td>'+comboEsc(m.kind||"-")+'</td>' +
+        '<td>'+comboEsc(m.setWith||"-")+'</td>' +
         '<td>'+(m.manufacturer||'<span style="color:var(--danger);">미지정</span>')+'</td>' +
         '<td>'+(m.petName||"-")+'</td>' +
         '<td>'+(m.systemModel ? comboEsc(m.systemModel) : '<span style="color:var(--danger);font-weight:700;">미입력</span>')+'</td>' +
@@ -6872,6 +6887,12 @@
     // 페이지를 넘길 때는 다시 읽지 않고 화면만 그립니다. (읽기 0회)
     document.getElementById("model-pagination").replaceChildren(renderPaginationBar("models", viewList.length, renderModelAdminList));
     foldActionColumn("model-list-wrap");   // 줄을 누르면 수정·삭제가 아래로 펼쳐집니다
+    // 엑셀 받기와 보기 설정을 붙입니다.
+    try{
+      addDownloadBtn("dl-modellist", "model-list-wrap", "모델목록");
+      addViewCfgBtn("dl-modellist", "model-list-wrap");
+    }catch(e){}
+    try{ updateModelCheckCount(); }catch(e){}
   }
 
   // ---------- 모델 수정 팝업 ----------
@@ -6886,6 +6907,7 @@
     currentEditingModelId = modelId;
     document.getElementById("me-sortorder-input").value = (m.sortOrder != null ? m.sortOrder : "");
     { const e = document.getElementById("me-kind-select"); if(e) e.value = m.kind || ""; }
+    { const e = document.getElementById("me-setwith-input"); if(e) e.value = m.setWith || ""; }
     document.getElementById("me-pet-input").value = m.petName || "";
     document.getElementById("me-system-input").value = m.systemModel || "";
     document.getElementById("me-base-input").value = m.baseModel || "";
@@ -6916,6 +6938,7 @@
       nickname: document.getElementById("me-nick-input").value.trim(),
       manufacturer: document.getElementById("me-manufacturer-select").value,
       kind: String((document.getElementById("me-kind-select")||{}).value || ""),
+      setWith: String((document.getElementById("me-setwith-input")||{}).value || "").trim(),
       sortOrder: document.getElementById("me-sortorder-input").value !== "" ? Number(document.getElementById("me-sortorder-input").value) : null,
       updatedAt: serverTimestamp()
     };
@@ -7068,6 +7091,9 @@
     document.getElementById("color-pagination").innerHTML = "";
     document.getElementById("color-pagination").replaceChildren(renderPaginationBar("colors", rows.length, loadColorAdminList));
     foldActionColumn("color-list-wrap");   // 줄을 누르면 버튼이 아래로 펼쳐집니다
+  
+    // 엑셀 받기와 보기 설정을 붙입니다.
+    try{ addDownloadBtn("dl-colorlist", "color-list-wrap", "색상목록"); addViewCfgBtn("dl-colorlist", "color-list-wrap"); }catch(e){}
   }
 
   async function deleteColorStandalone(modelId, idx){
@@ -7424,6 +7450,7 @@
         priceExVat: fields.priceExVat||null, priceIncVat: fields.priceIncVat||null,
         petName: fields.petName||"", nickname: fields.nickname||"", manufacturer: fields.manufacturer||"", colors: [],
         kind: fields.kind || "",           // 구분 관리에서 고르신 값
+        setWith: fields.setWith || "",     // 두 개를 묶어 파는 상품일 때 함께 나가는 모델
         createdAt: serverTimestamp(), updatedAt: serverTimestamp()
       });
       markModelTouched(ref && ref.id);      // 방금 등록한 모델을 맨 위로 올려 바로 고칠 수 있게 합니다
@@ -7463,6 +7490,7 @@
     const nickname = document.getElementById("ms-nick-input").value.trim();
     const manufacturer = document.getElementById("ms-manufacturer-select").value;
     const kind = String((document.getElementById("ms-kind-select")||{}).value||"");
+    const setWith = String((document.getElementById("ms-setwith-input")||{}).value||"").trim();
 
     if(!petName && !systemModel && !baseModel){
       showModelMsg("ms-result-msg", "펫네임 · 전산모델명 · 모델명 중 최소 하나는 입력해주세요.", true);
@@ -7477,7 +7505,7 @@
       await withTimeout(fetchModelsCache(), 12000, "모델 목록 조회");
       showModelMsg("ms-result-msg", "② 저장 중...", false);
       result = await withTimeout(
-        upsertModel({ petName, systemModel, baseModel, capacity, priceIncVat, priceExVat, nickname, manufacturer, kind }),
+        upsertModel({ petName, systemModel, baseModel, capacity, priceIncVat, priceExVat, nickname, manufacturer, kind, setWith }),
         12000, "모델 저장");
     }catch(e){
       // 저장 자체가 거부된 경우 (권한·보안규칙·네트워크 등) — 예전에는 아무 표시 없이 멈췄습니다.
@@ -24348,11 +24376,16 @@
       // 줄 맨 앞이 등록된 거래처가 아니면, 위에서 고른 거래처를 앞에 붙입니다.
       const pickDest = String((document.getElementById("resv-paste-dest")||{}).value || "").trim();
       if(pickDest && c.length && destNames.indexOf(c[0]) < 0) c = [pickDest].concat(c);
-      return validateResvRow({
-        requestDate: baseDate, destination: c[0], systemModel: c[1],
-        color: c[2], qty: c[3], salePrice: c[4],
-        prePct: buyDisc.prePct, otherPct: buyDisc.otherPct
-      }, destNames, (i+1)+"번째 줄");
+      // 「색상 없이 넣기」를 고르시면 색상 칸이 없는 것으로 보고 자리를 당깁니다.
+      const noColor = !!(document.getElementById("resv-paste-nocolor")||{}).checked;
+      return validateResvRow(noColor
+        ? { requestDate: baseDate, destination: c[0], systemModel: c[1],
+            color: "", qty: c[2], salePrice: c[3],
+            prePct: buyDisc.prePct, otherPct: buyDisc.otherPct }
+        : { requestDate: baseDate, destination: c[0], systemModel: c[1],
+            color: c[2], qty: c[3], salePrice: c[4],
+            prePct: buyDisc.prePct, otherPct: buyDisc.otherPct
+          }, destNames, (i+1)+"번째 줄");
     });
     renderResvValidation(results, "resv-paste-result");
   };
