@@ -400,7 +400,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-04 v940</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-04 v941</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -3408,6 +3408,10 @@
           <div class="stack-row"><label>판매할인%</label><input type="number" step="0.01" id="resv-salediscountpct-input" oninput="onResvSaleDiscountPctInput()" placeholder="예: 4.00"></div>
           <div class="stack-row"><label>선입금 <span class="info-tip" title="배정 전에 미리 받은 금액입니다. 배정할 때 자동으로 입금완료로 반영됩니다. 전액을 받았으면 전체 금액을, 일부만 받았으면 그만큼 적어주세요.">ⓘ</span></label><input type="number" id="resv-prepaid-input" placeholder="미리 받은 금액 (선택)"></div>
           <div class="stack-row"><label>선입금일</label><input type="text" id="resv-prepaid-date-input" maxlength="8" inputmode="numeric" placeholder="예: 20260720"></div>
+          <div class="stack-row resv-buy-only"><label>판매가 연동 <span class="info-tip" title="켜면 판매가를 입고가와 똑같이 둡니다. 선할인·타할인을 바꾸면 판매가도 따라갑니다.">ⓘ</span></label>
+            <span><label style="display:inline-flex;align-items:center;gap:5px;cursor:pointer;">
+              <input type="checkbox" id="resv-samebuy-input" onchange="onResvSameBuy()">
+              <b style="color:var(--navy);">입고동일 — 판매가를 입고가와 똑같이</b></label></span></div>
           <div class="stack-row"><label id="resv-price-label">판매가 (선택) <span class="info-tip" title="비우면 목록에 '미입력'으로 표시되고, 배정할 때 입력하면 됩니다.">ⓘ</span></label><input type="number" id="resv-saleprice-input" oninput="onResvSalePriceInput()" placeholder="비우면 미입력으로 표시됩니다"></div>
         </div>
         <button class="btn small" id="resv-submit-btn" style="width:auto;" onclick="submitReservation()">예약 등록</button>
@@ -22889,6 +22893,8 @@
     document.getElementById("resv-date-input").value = todayStr();
     document.getElementById("resv-order-qty-input").value = "1";
     document.getElementById("resv-saleprice-input").value = "";
+    { const e = document.getElementById("resv-samebuy-input"); if(e) e.checked = false; }
+    try{ onResvSameBuy(); }catch(e){}
     document.getElementById("resv-listprice-input").value = "";
     document.getElementById("resv-prepaid-input").value = "";
     document.getElementById("resv-prepaid-date-input").value = "";
@@ -23059,6 +23065,8 @@
       const p = Number(pEl.value);
       aEl.value = (pEl.value === "" || !(p > 0)) ? "" : Math.round(base * p / 100);
     }
+    // 「입고동일」 이면 판매가도 함께 다시 냅니다.
+    try{ resvFillSaleFromBuy(); }catch(e){}
   };
   window.setResvCarrier = function(c){
     resvCarrier = c;
@@ -23081,6 +23089,9 @@
     document.getElementById("resv-date-input").value = r.requestDate || todayStr();
     document.getElementById("resv-order-qty-input").value = Number(r.orderedQty)||1;
     document.getElementById("resv-saleprice-input").value = r.salePrice || "";
+    { const e = document.getElementById("resv-samebuy-input");
+      if(e){ e.checked = (r.salePriceFollowsBuy === true); } }
+    try{ onResvSameBuy(); }catch(e){}
     document.getElementById("resv-listprice-input").value = r.listPrice || "";
     document.getElementById("resv-prepaid-input").value = r.prepaidAmount || "";
     document.getElementById("resv-prepaid-date-input").value = r.prepaidDate || "";
@@ -23138,6 +23149,36 @@
     document.getElementById("resv-salediscountamt-input").value = amt;
     if(amt !== "") document.getElementById("resv-saleprice-input").value = L - Number(amt);
   };
+  // 「입고동일」 — 판매가를 입고가와 똑같이 두고 판매할인 칸을 잠급니다.
+  window.onResvSameBuy = function(){
+    const on = !!(document.getElementById("resv-samebuy-input")||{}).checked;
+    ["resv-saleprice-input","resv-salediscountamt-input","resv-salediscountpct-input"].forEach(function(id){
+      const el = document.getElementById(id);
+      if(!el) return;
+      el.readOnly = on;
+      el.style.background = on ? "#eee" : "";
+    });
+    if(on) resvFillSaleFromBuy();
+  };
+  //  선할인·타할인으로 입고가를 내고 그것을 판매가로 씁니다.
+  window.resvFillSaleFromBuy = function(){
+    if(!(document.getElementById("resv-samebuy-input")||{}).checked) return;
+    const L = resvListPrice();
+    if(!L) return;
+    const num = id=>{ const v = String((document.getElementById(id)||{}).value||"").trim();
+      return (v === "" || !isFinite(Number(v))) ? 0 : Number(v); };
+    const pre = num("resv-prediscountamt-input");
+    const oth = num("resv-otherdiscountamt-input");
+    const buy = L - pre - oth;
+    if(!(buy > 0)) return;
+    const sp = document.getElementById("resv-saleprice-input");
+    const sa = document.getElementById("resv-salediscountamt-input");
+    const spc= document.getElementById("resv-salediscountpct-input");
+    if(sp) sp.value = buy;
+    if(sa) sa.value = L - buy;
+    if(spc) spc.value = pctFromAmt(L - buy, L);
+  };
+
   window.onResvSalePriceInput = function(){
     const L = resvListPrice();
     const priceRaw = document.getElementById("resv-saleprice-input").value;
@@ -23227,6 +23268,8 @@
       systemColor: colorObj ? (colorObj.systemColor||"") : "",
       sku: colorObj ? (colorObj.sku||"") : "",
       destination, orderedQty, requestDate, salePrice,
+      // 「입고동일」 — 판매가를 입고가와 똑같이 두는 예약입니다.
+      salePriceFollowsBuy: !!(document.getElementById("resv-samebuy-input")||{}).checked,
       prepaidAmount: document.getElementById("resv-prepaid-input").value ? Number(document.getElementById("resv-prepaid-input").value) : null,
       prepaidDate: (document.getElementById("resv-prepaid-date-input").value||"").replace(/\D/g,"")
     };
