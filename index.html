@@ -400,7 +400,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-03 v925</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-03 v928</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -25555,8 +25555,8 @@
     const isOrder = (kind === "order");
 
     const cols = isOrder
-      ? ["모델","색상","통신사","수량","출고가","입고가","선할인","선할인%","타할인","타할인%","판매처","판매가","판매할인","판매할인%","상태","관리"]
-      : ["모델","색상","통신사","수량","판매처","판매가","판매할인","판매할인%","상태","관리"];
+      ? ["모델","색상","통신사","수량","출고가","입고가","선할인","선할인%","타할인","타할인%","판매처","판매가","판매할인","판매할인%","입고동일","상태","관리"]
+      : ["모델","색상","통신사","수량","판매처","판매가","판매할인","판매할인%","입고동일","상태","관리"];
     head.innerHTML = cols.map(c=>'<th style="padding:6px;border:1px solid var(--line);">'+c+'</th>').join("");
 
     const destNames = await fetchNamesList("outboundDestinations");
@@ -25714,6 +25714,39 @@
       cell(inp("be-saleprice", l.salePrice, "85px"));
       cell(inp("be-saleamt", l.saleDiscountAmt, "80px"));
       cell(inp("be-salepct", l.saleDiscountPct, "65px"));
+      // 「입고동일」 — 체크하면 판매가를 입고가와 똑같이 씁니다.
+      {
+        const td = document.createElement("td");
+        td.style.padding = "4px"; td.style.border = "1px solid var(--line)";
+        td.style.textAlign = "center"; td.style.whiteSpace = "nowrap";
+        const cb = document.createElement("input");
+        cb.type = "checkbox"; cb.className = "be-samebuy";
+        cb.checked = (l.salePriceFollowsBuy === true);
+        cb.title = "판매가를 입고가와 똑같이 씁니다. 앞으로 입고가가 바뀌면 판매가도 따라갑니다.";
+        if(locked && !priceEmpty){ cb.disabled = true; }
+        cb.onchange = ()=>{
+          tr.dataset.sameBuy = cb.checked ? "1" : "";
+          if(cb.checked){
+            const bp = tr.querySelector(".be-purchase");
+            const buy = bp ? (Number(bp.value)||0) : (Number(tr.dataset.purchasePrice)||0);
+            const set = (cls,v)=>{ const el = tr.querySelector(cls); if(el && !el.disabled) el.value = v; };
+            if(buy > 0){ set(".be-saleprice", buy); set(".be-saleamt", ""); set(".be-salepct", ""); }
+          }
+          ["be-saleamt","be-salepct"].forEach(function(c){
+            const el = tr.querySelector("."+c);
+            if(el && !el.disabled){ el.style.background = cb.checked ? "#eee" : ""; el.readOnly = cb.checked; }
+          });
+        };
+        // 처음 그릴 때도 잠금 상태를 맞춰둡니다.
+        if(cb.checked){
+          ["be-saleamt","be-salepct"].forEach(function(c){
+            const el = tr.querySelector("."+c);
+            if(el){ el.style.background = "#eee"; el.readOnly = true; }
+          });
+        }
+        td.appendChild(cb);
+        tr.appendChild(td);
+      }
       cell(txt(locked
         ? ("도착 " + doneCnt + "/" + (l.quantity||0) + (priceEmpty ? " · 금액 입력 가능" : ""))
         : "수정 가능"));
@@ -25923,7 +25956,10 @@
         if(buy > 0){
           set(".be-saleprice", buy);
           set(".be-saleamt", ""); set(".be-salepct", "");
+          tr.dataset.sameBuey = "";      // (예전 표기 정리)
           tr.dataset.sameBuy = "1";
+          const cb = tr.querySelector(".be-samebuy");
+          if(cb && !cb.disabled){ cb.checked = true; cb.onchange && cb.onchange(); }
         }
       }else if(salePct !== "" && L){
         // 판매할인 기준 — 출고가에 곱하거나, VAT 뺀 공급가에 곱합니다.
@@ -26042,6 +26078,8 @@
         p.saleDiscountPct = num(".be-salepct");
         // 「입고동일」 로 넣으셨으면 그 표시를 함께 저장합니다.
         //  앞으로 입고가가 바뀌면 판매가도 따라갑니다.
+        { const cb = tr.querySelector(".be-samebuy");
+          if(cb && !cb.disabled) tr.dataset.sameBuy = cb.checked ? "1" : ""; }
         if(tr.dataset.sameBuy === "1"){
           p.salePriceFollowsBuy = true;
           p.saleDiscountAmt = null; p.saleDiscountPct = null;
@@ -26149,6 +26187,7 @@
     //  도착 등록할 때 주문의 출고가·입고가가 재고에 복사됩니다.
     //  나중에 주문만 고치면 재고는 옛 값(또는 0) 그대로 남습니다.
     let fixItems = false, itemTargets = [];
+    let addedLines = 0;      // 새로 더한 품목 줄 수 (아래 안내에서 씁니다)
     {
       // 금액·모델을 고친 줄만 대상입니다.
       const priceChanged = Object.keys(perLine).filter(lid=>{
@@ -26195,7 +26234,6 @@
         });
         await withTimeout(bt.commit(), 15000, "품목 저장");
       }
-      let addedLines = 0;
       for(const l of newLines){
         const p = perLine[l.id] || {};
         if(!p.systemModel && !l.systemModel) continue;      // 모델을 안 고른 줄은 건너뜁니다
@@ -26324,10 +26362,12 @@
       return;
     }
     msg("마무리하는 중...", false);
+    try{
     logAction((kind==="order"?"주문":"판매요청")+" 묶음 수정",
       party + " / " + d1 + " / 품목 " + lines.length + "개"
       + (Object.keys(perLine).length ? " / 금액수정 " + Object.keys(perLine).length + "줄" : "")
       + (fixItems && itemTargets.length ? " / 재고 " + itemTargets.length + "대 금액 함께 수정" : ""));
+    }catch(e){}
     msg("저장되었습니다." + (addedLines ? "  품목 " + addedLines + "줄을 더했습니다." : ""), false);
     // 창을 먼저 닫고 목록은 뒤에서 새로 읽습니다. (목록 읽기가 오래 걸려도 창이 남지 않게)
     setTimeout(function(){
@@ -37105,6 +37145,26 @@
         ids.slice(i, i+300).forEach(id=>{
           const it = lastRenderedItems.find(x=>x.id===id) || {};
           const p = { ...patch };
+          // 매입 금액을 고쳤으면 입고가를 다시 내고, 「입고동일」 이면 판매가도 따라가게 합니다.
+          {
+            const touchBuy = ["listPrice","purchaseDiscountAmt","purchaseDiscount",
+                              "otherDiscountAmt","otherDiscountPct"].some(function(k){ return p[k] !== undefined; });
+            if(touchBuy){
+              const L   = (p.listPrice !== undefined) ? (Number(p.listPrice)||0) : (Number(it.listPrice)||0);
+              const pre = (p.purchaseDiscountAmt !== undefined) ? (Number(p.purchaseDiscountAmt)||0) : (Number(it.purchaseDiscountAmt)||0);
+              const oth = (p.otherDiscountAmt !== undefined) ? (Number(p.otherDiscountAmt)||0) : (Number(it.otherDiscountAmt)||0);
+              // 입고가를 직접 넣으셨으면 그 값을 그대로 씁니다.
+              if(p.purchasePrice === undefined && L > 0) p.purchasePrice = L - pre - oth;
+              if(it.salePriceFollowsBuy === true && p.salePrice === undefined){
+                const sb = saleFromBuy({ ...it, ...p,
+                  listPrice:L, purchaseDiscountAmt:pre, otherDiscountAmt:oth,
+                  purchasePrice: (p.purchasePrice !== undefined) ? p.purchasePrice : it.purchasePrice });
+                p.saleDiscountAmt = sb.amt;
+                p.saleDiscount = sb.pct;
+                p.salePrice = L - sb.amt;
+              }
+            }
+          }
           // 수익은 항상 앞뒤가 맞게 다시 계산합니다.
           const sale = (p.salePrice !== undefined) ? p.salePrice : it.salePrice;
           const buy  = (p.purchasePrice !== undefined) ? p.purchasePrice : it.purchasePrice;
