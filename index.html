@@ -387,7 +387,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-03 v894</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-03 v895</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -984,6 +984,7 @@
               <tbody id="be-lines-body"></tbody>
             </table>
           </div>
+          <span class="btn-row" style="margin-top:8px;"><button class="btn small secondary" style="width:auto;" onclick="addBatchEditLine()" title="이 주문에 품목을 한 줄 더합니다. 저장을 눌러야 반영됩니다.">+ 품목 추가</button></span>
           <div id="be-lock-note" style="font-size:11.5px;color:var(--danger);margin-top:6px;"></div>
         </div>
 
@@ -25005,6 +25006,37 @@
     document.getElementById("batch-edit-modal-overlay").style.display = "flex";
   };
 
+  // 묶음 수정 창에 품목을 한 줄 더합니다.
+  //  새 줄은 저장할 때 주문 품목으로 만들어집니다.
+  window.addBatchEditLine = async function(){
+    if(!editingBatch){ alert("먼저 주문을 열어주세요."); return; }
+    const b = editingBatch.b || {};
+    editingBatch.lines.push({
+      id: "__new" + (Date.now() % 100000) + "_" + Math.floor(Math.random()*1000),
+      isNew: true,
+      batchId: editingBatch.id,
+      orderDate: b.orderDate || "",
+      source: b.source || "",
+      carrier: b.carrier || "",
+      systemModel: "", baseModel: "", petName: "", capacity: "",
+      manufacturerColor: "", systemColor: "", sku: "",
+      quantity: 1, fulfilledCount: 0, arrivedCount: 0,
+      listPrice: null, purchasePrice: null,
+      preDiscountAmt: null, preDiscountPct: null,
+      otherDiscountAmt: null, otherDiscountPct: null,
+      destination: "", salePrice: null, saleDiscountAmt: null, saleDiscountPct: null,
+      status: b.status || "진행",
+      paymentMethod: b.paymentMethod || "normal"
+    });
+    await renderBatchEditLines();
+    // 새로 넣은 줄로 화면을 내려줍니다.
+    try{
+      const body = document.getElementById("be-lines-body");
+      const last = body && body.lastElementChild;
+      if(last) last.scrollIntoView({ block:"nearest" });
+    }catch(e){}
+  };
+
   // 묶음 수정 창의 품목 표를 그립니다.
   // 이미 도착·매칭된 줄은 잠급니다. (재고와 금액이 어긋나지 않도록)
   async function renderBatchEditLines(){
@@ -25554,12 +25586,49 @@
     try{
       msg("저장 중...", false);
       await withTimeout(updateDoc(doc(db, col, id), batchPatch), 12000, "묶음 수정");
-      for(let i=0; i<lines.length; i+=300){
+      // 새로 더한 줄은 문서를 만들고, 원래 있던 줄은 고칩니다.
+      const oldLines = lines.filter(function(l){ return !l.isNew; });
+      const newLines = lines.filter(function(l){ return l.isNew; });
+      for(let i=0; i<oldLines.length; i+=300){
         const bt = writeBatch(db);
-        lines.slice(i, i+300).forEach(l=>{
+        oldLines.slice(i, i+300).forEach(l=>{
           bt.update(doc(db, lineCol, l.id), { ...linePatch, ...(perLine[l.id] || {}) });
         });
         await bt.commit();
+      }
+      let addedLines = 0;
+      for(const l of newLines){
+        const p = perLine[l.id] || {};
+        if(!p.systemModel && !l.systemModel) continue;      // 모델을 안 고른 줄은 건너뜁니다
+        const row = {
+          batchId: id,
+          orderDate: batchPatch.orderDate || b.orderDate || "",
+          source: batchPatch.source || b.source || "",
+          carrier: p.carrier || b.carrier || "",
+          systemModel: p.systemModel || "", baseModel: p.baseModel || "",
+          petName: p.petName || "", capacity: p.capacity || "",
+          modelId: p.modelId || null,
+          manufacturerColor: p.manufacturerColor || "", systemColor: p.systemColor || "", sku: p.sku || "",
+          quantity: (p.quantity != null ? p.quantity : 1),
+          fulfilledCount: 0, arrivedCount: 0,
+          listPrice: (p.listPrice != null ? p.listPrice : null),
+          purchasePrice: (p.purchasePrice != null ? p.purchasePrice : null),
+          preDiscountAmt: (p.preDiscountAmt != null ? p.preDiscountAmt : null),
+          preDiscountPct: (p.preDiscountPct != null ? p.preDiscountPct : null),
+          purchaseDiscountAmt: (p.preDiscountAmt != null ? p.preDiscountAmt : null),
+          purchaseDiscount: (p.preDiscountPct != null ? p.preDiscountPct : null),
+          otherDiscountAmt: (p.otherDiscountAmt != null ? p.otherDiscountAmt : null),
+          otherDiscountPct: (p.otherDiscountPct != null ? p.otherDiscountPct : null),
+          destination: p.destination || "",
+          salePrice: (p.salePrice != null ? p.salePrice : null),
+          saleDiscountAmt: (p.saleDiscountAmt != null ? p.saleDiscountAmt : null),
+          saleDiscountPct: (p.saleDiscountPct != null ? p.saleDiscountPct : null),
+          paymentMethod: b.paymentMethod || "normal",
+          status: b.status || "진행",
+          createdBy: currentUser.name, createdAt: serverTimestamp()
+        };
+        await addDoc(collection(db, lineCol), row);
+        addedLines++;
       }
       // 재고의 금액을 같이 맞춥니다. (고른 경우에만)
       //  수익을 다시 계산하려면 지금 재고 값이 필요해서 먼저 읽어옵니다.
@@ -25645,7 +25714,7 @@
       party + " / " + d1 + " / 품목 " + lines.length + "개"
       + (Object.keys(perLine).length ? " / 금액수정 " + Object.keys(perLine).length + "줄" : "")
       + (fixItems && itemTargets.length ? " / 재고 " + itemTargets.length + "대 금액 함께 수정" : ""));
-    msg("저장되었습니다.", false);
+    msg("저장되었습니다." + (addedLines ? "  품목 " + addedLines + "줄을 더했습니다." : ""), false);
     if(kind === "order") loadOrderList(); else loadSaleRequestList();
     setTimeout(closeBatchEdit, 700);
   };
