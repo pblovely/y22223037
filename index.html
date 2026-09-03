@@ -400,7 +400,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-03 v916</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-03 v917</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -24084,6 +24084,60 @@
   // 붙여넣기 창 안에서 구분을 바꿉니다. 바꾸면 거래처 목록·할인칸·안내문이 함께 바뀝니다.
   // 붙여넣기 창의 선할인·타할인 — 금액을 넣으면 %가, %를 넣으면 금액이 채워집니다.
   //  붙여넣은 줄들의 출고가가 모두 같을 때만 환산합니다. (다르면 %만 쓰시는 게 맞습니다)
+  // 판매 예약 — 판매할인·판매가를 넣으면 서로 채워줍니다.
+  window.resvPasteSale = { base:"unit", amt:null, pct:null, price:null };
+  window.onResvPasteSale = function(from){
+    const amtEl   = document.getElementById("resv-paste-saleamt");
+    const pctEl   = document.getElementById("resv-paste-salepct");
+    const priceEl = document.getElementById("resv-paste-saleprice");
+    const baseEl  = document.getElementById("resv-paste-salebase");
+    const note    = document.getElementById("resv-paste-sale-note");
+    if(!amtEl || !pctEl || !priceEl) return;
+    const base = String(baseEl ? baseEl.value : "unit") || "unit";
+
+    // 검증에서 알아본 줄들의 출고가
+    const prices = (resvPendingRows||[]).map(function(r){ return Number(r.listPrice)||0; })
+                     .filter(function(v){ return v > 0; });
+    const same = prices.length > 0 && prices.every(function(v){ return v === prices[0]; });
+    const L = same ? prices[0] : 0;
+    const baseAmt = (base === "supply") ? Math.round(L / 1.1) : L;
+
+    if(from === "price"){
+      // 판매가를 직접 넣으면 할인은 비웁니다.
+      amtEl.value = ""; pctEl.value = "";
+      window.resvPasteSale = { base, amt:null, pct:null,
+        price: priceEl.value === "" ? null : Number(priceEl.value) };
+      if(note) note.textContent = priceEl.value === "" ? "" :
+        "판매가 " + Number(priceEl.value).toLocaleString() + " 을 모든 줄에 넣습니다.";
+      return;
+    }
+    if(!same){
+      if(note) note.textContent = prices.length
+        ? "줄마다 출고가가 달라 금액↔% 환산을 못 합니다. %로 넣으시면 줄마다 알맞게 계산됩니다."
+        : "모델을 알아본 뒤 환산해 드립니다. 먼저 [분석하기] 를 눌러주세요.";
+      window.resvPasteSale = { base,
+        amt: amtEl.value === "" ? null : Number(amtEl.value),
+        pct: pctEl.value === "" ? null : Number(pctEl.value), price:null };
+      return;
+    }
+    if(from === "amt"){
+      const a = amtEl.value === "" ? null : Number(amtEl.value);
+      pctEl.value = (a != null && baseAmt > 0) ? Number((a / baseAmt * 100).toFixed(2)) : "";
+    }else{
+      const p = pctEl.value === "" ? null : Number(pctEl.value);
+      amtEl.value = (p != null && baseAmt > 0) ? Math.round(baseAmt * p / 100) : "";
+    }
+    priceEl.value = "";
+    const a2 = amtEl.value === "" ? null : Number(amtEl.value);
+    window.resvPasteSale = { base, amt:a2,
+      pct: pctEl.value === "" ? null : Number(pctEl.value), price:null };
+    if(note) note.textContent = (a2 != null)
+      ? "출고가 " + L.toLocaleString() + " − 할인 " + a2.toLocaleString()
+        + " = 판매가 " + (L - a2).toLocaleString()
+        + (base === "supply" ? "   (공급가 " + baseAmt.toLocaleString() + " 기준)" : "")
+      : "";
+  };
+
   window.onResvPasteDisc = function(which, from){
     const amtEl = document.getElementById("resv-paste-" + which + "amt");
     const pctEl = document.getElementById("resv-paste-" + which + "pct");
@@ -24310,7 +24364,24 @@
             + '</div>'
             + '<div style="color:var(--gray);font-size:11.5px;margin-bottom:8px;line-height:1.7;">'
             + '<b>선할인·타할인</b> — 줄마다 (출고가 × 수량 × %) 로 계산한 금액입니다. 건별 등록과 같은 값입니다.<br>'
-            + '<b>입고가</b> — 출고가 합계에서 선할인을 뺀 금액입니다. (타할인은 나중에 여신으로 반영)</div>' : '')
+            + '<b>입고가</b> — 출고가 합계에서 선할인을 뺀 금액입니다. (타할인은 나중에 여신으로 반영)</div>'
+          : '<div style="border:1px solid var(--navy);background:#f4f7fb;padding:9px 11px;margin-bottom:10px;">'
+            + '<b>판매가 넣기</b> <span style="color:var(--gray);font-size:11.5px;">모델을 알아봤으니 이제 넣으시면 됩니다. 줄에 판매가를 적으셨으면 그 값이 우선합니다.</span>'
+            + '<div style="display:flex;gap:0;flex-wrap:wrap;align-items:center;margin-top:6px;">'
+            + '<select id="resv-paste-salebase" style="height:28px;border:1px solid var(--line);padding:0 6px;font-size:12.5px;box-sizing:border-box;">'
+              + '<option value="unit">대당 (출고가에 걸기)</option>'
+              + '<option value="supply">공급가 기준</option>'
+            + '</select>'
+            + '<input type="number" id="resv-paste-saleamt" placeholder="판매할인 (대당)" oninput="onResvPasteSale(\'amt\')" style="width:130px;height:28px;border:1px solid var(--line);padding:0 6px;font-size:12.5px;margin-left:-1px;box-sizing:border-box;">'
+            + '<input type="number" step="0.01" id="resv-paste-salepct" placeholder="판매할인%" oninput="onResvPasteSale(\'pct\')" style="width:105px;height:28px;border:1px solid var(--line);padding:0 6px;font-size:12.5px;margin-left:-1px;box-sizing:border-box;">'
+            + '<input type="number" id="resv-paste-saleprice" placeholder="판매가 (대당 · 직접)" oninput="onResvPasteSale(\'price\')" style="width:150px;height:28px;border:1px solid var(--line);padding:0 6px;font-size:12.5px;margin-left:-1px;box-sizing:border-box;">'
+            + '<button class="btn small secondary" style="width:auto;margin-left:6px;" onclick="analyzeResvPaste()">다시 계산</button>'
+            + '</div>'
+            + '<div id="resv-paste-sale-note" style="font-size:11.5px;color:var(--navy);margin-top:5px;"></div>'
+            + '</div>'
+            + '<div style="color:var(--gray);font-size:11.5px;margin-bottom:8px;line-height:1.7;">'
+            + '<b>판매할인</b> 을 넣으면 판매가는 (출고가 − 할인) 으로 계산됩니다.<br>'
+            + '<b>판매가</b> 를 직접 넣으시면 그 값이 그대로 들어갑니다.</div>')
         + '<button class="btn small" style="width:auto;" onclick="submitResvBulk()">정상 '+ok.length+'건 일괄 등록</button>';
     }
     document.getElementById(targetElId).innerHTML = html;
@@ -24413,10 +24484,50 @@
           preDiscountPct: pre.pct, preDiscountAmt: pre.amt,
           otherDiscountPct: oth.pct, otherDiscountAmt: oth.amt };
       });
+      // 판매 예약이면 아래에서 넣으신 판매가·판매할인을 담습니다.
+      if(resvKind !== "buy"){
+        const sBase  = String((document.getElementById("resv-paste-salebase")||{}).value || "unit");
+        const sAmt   = num("resv-paste-saleamt");
+        const sPct   = num("resv-paste-salepct");
+        const sPrice = num("resv-paste-saleprice");
+        if(sAmt != null || sPct != null || sPrice != null){
+          resvPendingRows = resvPendingRows.map(function(d){
+            const L = Number(d.listPrice)||0;
+            const baseAmt = (sBase === "supply") ? Math.round(L / 1.1) : L;
+            let amt = null, pct = null, price = null;
+            if(sPrice != null){
+              price = sPrice;
+              amt = (L > 0) ? (L - sPrice) : null;
+              pct = (baseAmt > 0 && amt != null) ? Number((amt / baseAmt * 100).toFixed(2)) : null;
+            }else if(sPct != null){
+              pct = sPct;
+              amt = Math.round(baseAmt * sPct / 100);
+              price = (L > 0) ? (L - amt) : null;
+            }else{
+              amt = sAmt;
+              pct = (baseAmt > 0) ? Number((sAmt / baseAmt * 100).toFixed(2)) : null;
+              price = (L > 0) ? (L - sAmt) : null;
+            }
+            // 줄에 판매가를 적으셨으면 그 값이 우선입니다.
+            if(d.salePrice != null && d.salePrice !== "") return d;
+            return { ...d, salePrice: price, saleDiscountAmt: amt,
+                     saleDiscountPct: pct, saleDiscountBase: sBase };
+          });
+        }
+      }
     }
     const sumPre = resvPendingRows.reduce((n,d)=> n + (Number(d.preDiscountAmt)||0), 0);
+    const noSale = (resvKind !== "buy")
+      && resvPendingRows.filter(function(d){ return !(Number(d.salePrice) > 0); }).length;
+    if(noSale){
+      if(!confirm("판매가가 없는 줄이 " + noSale + "건 있습니다.\n\n"
+        + "아래 「판매가 넣기」 에서 판매할인이나 판매가를 넣어주세요.\n\n"
+        + "그래도 이대로 등록할까요?")) return;
+    }
     if(!confirm(resvPendingRows.length + "건을 예약으로 등록하시겠습니까?"
-      + (sumPre ? "\n\n선할인 합계 " + Math.round(sumPre).toLocaleString() : "\n\n선할인 없음"))) return;
+      + (resvKind === "buy"
+          ? (sumPre ? "\n\n선할인 합계 " + Math.round(sumPre).toLocaleString() : "\n\n선할인 없음")
+          : ""))) return;
     try{
       for(let i=0; i<resvPendingRows.length; i+=300){
         const batch = writeBatch(db);
