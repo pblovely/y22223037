@@ -400,7 +400,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-03 v937</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-03 v938</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -3123,7 +3123,7 @@
         <button class="no-print" onclick="closeOrderDetailModal()" style="position:absolute;top:12px;right:12px;background:none;border:1px solid var(--navy);width:26px;height:26px;cursor:pointer;font-size:13px;">✕</button>
         <div style="display:flex;justify-content:space-between;align-items:flex-start;">
           <h3 style="margin-top:0;margin-bottom:4px;" id="order-detail-heading">주문 요청서</h3>
-          <span class="no-print btn-row" style="margin-right:34px;"><button class="btn small secondary" style="width:auto;" id="order-po-btn" onclick="openPoFromDetail()">삼성전자 발주서</button><button class="btn small secondary" style="width:auto;" id="order-bulkarr-btn" onclick="toggleBulkArrival()">도착 일괄 등록</button><button class="btn small secondary" style="width:auto;" id="order-credit-btn" title="이 주문의 여신 차감액이 어떻게 나온 값인지 품목별로 보여주고, 원장과 다르면 맞출 수 있습니다." onclick="showOrderCreditCalc()">여신 계산 보기</button><button class="btn small secondary" style="width:auto;" id="order-allinv-btn" title="이 주문에 붙은 재고를 한 번에 모두 보여줍니다." onclick="showAllOrderItems()">붙은 재고 전체</button><button class="btn small danger" style="width:auto;" id="order-allcancel-btn" title="이 주문에 도착 등록된 재고를 전부 되돌립니다. 재고는 지워지고 도착 수는 0이 됩니다." onclick="cancelAllArrivals()">도착 전체 취소</button><button class="btn small secondary" style="width:auto;" onclick="printOrderDetail()">인쇄 / PDF 저장</button></span>
+          <span class="no-print btn-row" style="margin-right:34px;"><button class="btn small secondary" style="width:auto;" id="order-po-btn" onclick="openPoFromDetail()">삼성전자 발주서</button><button class="btn small secondary" style="width:auto;" id="order-bulkarr-btn" onclick="toggleBulkArrival()">도착 일괄 등록</button><button class="btn small secondary" style="width:auto;" id="order-credit-btn" title="이 주문의 여신 차감액이 어떻게 나온 값인지 품목별로 보여주고, 원장과 다르면 맞출 수 있습니다." onclick="showOrderCreditCalc()">여신 계산 보기</button><button class="btn small secondary" style="width:auto;" id="order-allinv-btn" title="이 주문에 붙은 재고를 한 번에 모두 보여줍니다." onclick="showAllOrderItems()">붙은 재고 전체</button><button class="btn small secondary" style="width:auto;" title="판매요청의 빈 색상을 주문 품목에서 가져와 채웁니다." onclick="fillSaleReqColorFromOrder()">색상 채우기</button><button class="btn small danger" style="width:auto;" id="order-allcancel-btn" title="이 주문에 도착 등록된 재고를 전부 되돌립니다. 재고는 지워지고 도착 수는 0이 됩니다." onclick="cancelAllArrivals()">도착 전체 취소</button><button class="btn small secondary" style="width:auto;" onclick="printOrderDetail()">인쇄 / PDF 저장</button></span>
         </div>
         <p class="desc" id="order-detail-title"></p>
         <div id="bulk-arrival-box" class="no-print" style="display:none;border:1px solid var(--navy);background:#f4f7fb;padding:12px 14px;margin-bottom:12px;">
@@ -11952,6 +11952,56 @@
   };
 
   // 이 주문의 도착을 전부 되돌립니다. 재고는 지워지고 도착 수는 0이 됩니다.
+  // 판매요청의 빈 색상을 주문 품목에서 가져와 채웁니다.
+  //  주문 수정으로 색상을 고쳤을 때 판매요청에 안 옮겨진 것을 바로잡습니다.
+  window.fillSaleReqColorFromOrder = async function(){
+    if(!currentPoBatch){ alert("주문을 먼저 열어주세요."); return; }
+    const { batchId, b } = currentPoBatch;
+    const lines = (orderBatchLinesCache[batchId] || []);
+    const byOrder = {};
+    lines.forEach(function(o){ byOrder[o.id] = o; });
+    let srs = [];
+    try{
+      const q = await getDocs(query(collection(db,"saleRequests"), where("fromOrderBatchId","==", batchId)));
+      q.forEach(function(d){ srs.push({ id:d.id, ...d.data() }); });
+    }catch(e){ alert("판매요청을 읽지 못했습니다."); return; }
+    const plan = [];
+    srs.forEach(function(sr){
+      if(sr.status === "취소") return;
+      const o = byOrder[sr.fromOrderId];
+      if(!o) return;
+      const has = String(sr.systemColor||sr.manufacturerColor||"").trim();
+      const src = String(o.systemColor||o.manufacturerColor||"").trim();
+      if(has || !src) return;
+      plan.push({ sr, o });
+    });
+    if(plan.length === 0){ alert("채울 색상이 없습니다.\n\n판매요청에 색상이 이미 있거나, 주문 품목에도 색상이 없습니다."); return; }
+    if(!confirm("판매요청 " + plan.length + "줄의 색상을 주문 품목에서 가져와 채웁니다.\n\n"
+      + plan.slice(0,8).map(function(x){
+          return "  " + (x.o.systemModel||"-") + "  →  "
+               + (x.o.systemColor||x.o.manufacturerColor||"-"); }).join("\n")
+      + (plan.length > 8 ? "\n  ... 외 " + (plan.length-8) + "줄" : "")
+      + "\n\n금액·수량·매칭은 건드리지 않습니다. 진행할까요?")) return;
+    try{
+      for(let i=0; i<plan.length; i+=300){
+        const bt = writeBatch(db);
+        plan.slice(i, i+300).forEach(function(x){
+          bt.update(doc(db,"saleRequests", x.sr.id), {
+            manufacturerColor: x.o.manufacturerColor || "",
+            systemColor: x.o.systemColor || "",
+            sku: x.o.sku || ""
+          });
+        });
+        await withTimeout(bt.commit(), 15000, "색상 채우기");
+      }
+    }catch(e){ alert("채우지 못했습니다.\n" + ((e&&e.message)?e.message:String(e))); return; }
+    logAction("판매요청 색상 채움", (b.source||"-") + " " + (b.orderDate||"-") + " / " + plan.length + "줄");
+    try{ clearCache("saleRequests"); clearDashCache(); }catch(e){}
+    alert("판매요청 " + plan.length + "줄의 색상을 채웠습니다.");
+    try{ await openOrderBatchDetailModal(batchId, b); }catch(e){}
+    try{ if(typeof loadSaleRequestList === "function") loadSaleRequestList(); }catch(e){}
+  };
+
   window.cancelAllArrivals = async function(){
     if(!currentPoBatch){ alert("주문을 먼저 열어주세요."); return; }
     if(!hasPerm(currentUserPerms, "cancelDelete")){ alert("권한이 없습니다."); return; }
@@ -14402,10 +14452,22 @@
           try{
             const srSnap = await getDocs(query(collection(db,"saleRequests"), where("fromOrderId","==",oid)));
             let pool = ids.map(x=>x.id);
-            for(const d of srSnap.docs){
+            // 모델·색상이 맞는 판매요청 줄에 먼저 붙입니다. (색상이 비어 있으면 순서대로)
+            const oCol = String(o.systemColor || o.manufacturerColor || "").trim();
+            const srList = srSnap.docs.slice().sort(function(a, bb){
+              const ca = String(a.data().systemColor || a.data().manufacturerColor || "").trim();
+              const cb = String(bb.data().systemColor || bb.data().manufacturerColor || "").trim();
+              const ma = (oCol && ca && sameColorLoose(ca, oCol)) ? 0 : (ca ? 2 : 1);
+              const mb = (oCol && cb && sameColorLoose(cb, oCol)) ? 0 : (cb ? 2 : 1);
+              return ma - mb;
+            });
+            for(const d of srList){
               if(pool.length === 0) break;
               const sr = d.data();
               if(sr.status === "취소") continue;
+              // 색상이 둘 다 있는데 서로 다르면 건너뜁니다. (엉뚱한 줄에 붙지 않게)
+              const sCol = String(sr.systemColor || sr.manufacturerColor || "").trim();
+              if(oCol && sCol && !sameColorLoose(sCol, oCol)) continue;
               const left = (Number(sr.quantity)||0) - (Number(sr.fulfilledCount)||0);
               if(left <= 0) continue;
               const take = pool.splice(0, Math.min(left, pool.length));
@@ -26287,6 +26349,7 @@
           p.manufacturerColor = pr[0]||"";
           p.systemColor = pr[1]||"";
           p.sku = pr[2]||"";
+          srColorFix.push({ lineId: lid, mc: pr[0]||"", sc: pr[1]||"", sku: pr[2]||"" });
         }
         // 모델을 바꿨으면 펫네임·모델명·전산모델명을 등록된 값으로 함께 맞춥니다.
         const me = tr.querySelector(".be-model");
@@ -26430,7 +26493,8 @@
     //  도착 등록할 때 주문의 출고가·입고가가 재고에 복사됩니다.
     //  나중에 주문만 고치면 재고는 옛 값(또는 0) 그대로 남습니다.
     let fixItems = false, itemTargets = [];
-    let addedLines = 0;      // 새로 더한 품목 줄 수 (아래 안내에서 씁니다)
+    let addedLines = 0;
+    const srColorFix = [];   // 색상을 바꾼 줄 — 판매요청에도 옮깁니다      // 새로 더한 품목 줄 수 (아래 안내에서 씁니다)
     {
       // 금액·모델을 고친 줄만 대상입니다.
       const priceChanged = Object.keys(perLine).filter(lid=>{
@@ -26603,6 +26667,19 @@
       msg("<b>저장에 실패했습니다.</b><br>" + comboEsc((e && e.message) ? e.message : String(e))
         + '<br><span style="color:var(--gray);font-size:11.5px;">저장된 부분은 목록에서 확인해주세요.</span>', true);
       return;
+    }
+    // 색상을 바꾼 줄은 그 주문 품목에서 만들어진 판매요청에도 옮깁니다.
+    if(kind === "order" && srColorFix.length){
+      try{
+        for(const f of srColorFix){
+          const q = await getDocs(query(collection(db,"saleRequests"), where("fromOrderId","==", f.lineId)));
+          for(const d of q.docs){
+            if(d.data().status === "취소") continue;
+            await updateDoc(doc(db,"saleRequests", d.id), {
+              manufacturerColor: f.mc, systemColor: f.sc, sku: f.sku });
+          }
+        }
+      }catch(e){}
     }
     msg("마무리하는 중...", false);
     try{
