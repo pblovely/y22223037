@@ -400,7 +400,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-04 v952</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-04 v954</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -3362,7 +3362,7 @@
           <div class="stack-row"><label>모델 (전산모델명)</label><input type="text" id="instant-sale-model-display" disabled style="background:#fff;"></div>
           <div class="stack-row"><label>출고가</label><input type="text" id="instant-sale-listprice-display" disabled style="background:#fff;"></div>
           <div class="stack-row"><label>입고가</label><input type="text" id="instant-sale-purchaseprice-display" disabled style="background:#fff;"></div>
-          <div class="stack-row"><label>판매처</label><select id="instant-sale-dest-select"><option value="">선택</option></select></div>
+          <div class="stack-row"><label>판매처</label><select id="instant-sale-dest-select" onchange="onInstantSaleDestBase()"><option value="">선택</option></select></div>
           <div class="stack-row"><label>판매가</label><input type="number" id="instant-sale-price-input" oninput="onInstantSalePriceInput()"></div>
           <div class="stack-row"><label>판매할인</label><input type="number" id="instant-sale-discountamt-input" oninput="onInstantSaleDiscountAmtInput()"></div>
           <div class="stack-row"><label>판매할인%</label><input type="number" step="0.01" id="instant-sale-discountpct-input" oninput="onInstantSaleDiscountPctInput()"></div>
@@ -3551,7 +3551,7 @@
           펫네임·모델군은 사람이 보기 위한 것이라 매칭에 쓰지 않습니다. 통신사는 U+ / LG / SK / KT 로 적으세요.</span></p>
         <textarea id="order-paste-text" rows="9" style="width:100%;border:1px solid #c7c7c7;padding:8px;font-size:12.5px;font-family:monospace;box-sizing:border-box;" placeholder="SM-F976NZKPKOD&#9;그라파이트&#9;U+&#9;6&#10;SM-F976NZYPKOD&#9;바이올렛쉐도우&#9;U+&#9;5"></textarea>
         <div class="stack-form" style="max-width:520px;margin-top:10px;">
-          <div class="stack-row"><label>입고처</label><select id="order-paste-source"><option value="">선택</option></select></div>
+          <div class="stack-row"><label>입고처</label><select id="order-paste-source" onchange="onOrderPasteSourceBase()"><option value="">선택</option></select></div>
           <div class="stack-row"><label>주문일</label><input type="text" id="order-paste-date" maxlength="8" inputmode="numeric" placeholder="예: 20260726"></div>
         </div>
         <button class="btn small" style="width:auto;margin-top:10px;" onclick="analyzeOrderPaste()">분석하기</button>
@@ -5955,7 +5955,7 @@
       opt.value = n; opt.textContent = n;
       sel.appendChild(opt);
     });
-    initSearchableSelect("item-source-select", "입고처를 입력하면 목록이 나옵니다");
+    // (일반 드롭다운으로 둡니다 — 검색형이면 값 바뀜이 안 전해질 때가 있습니다)
     syncSearchableSelect("item-source-select");
   }
 
@@ -5978,7 +5978,7 @@
       opt.value = n; opt.textContent = n;
       sel.appendChild(opt);
     });
-    initSearchableSelect("item-dest-select", "판매처를 입력하면 목록이 나옵니다");
+    // (일반 드롭다운으로 둡니다 — 검색형이면 값 바뀜이 안 전해질 때가 있습니다)
     syncSearchableSelect("item-dest-select");
   }
 
@@ -9515,6 +9515,22 @@
     el.style.background = "#eef7ee";
     setTimeout(function(){ el.style.background = ""; }, 1200);
   }
+  //  텍스트 판매처리 — 판매처를 고르면 판매 기준
+  window.onPasteSaleDestBase = async function(){
+    const b = await baseOfCompany((document.getElementById("paste-sale-dest-select")||{}).value);
+    putBase("paste-sale-base", b);
+  };
+  //  즉시 판매 — 판매처를 고르면 판매 기준
+  window.onInstantSaleDestBase = async function(){
+    const b = await baseOfCompany((document.getElementById("instant-sale-dest-select")||{}).value);
+    putBase("instant-sale-base", b);
+  };
+  //  주문 붙여넣기 — 입고처를 고르면 매입 기준
+  window.onOrderPasteSourceBase = async function(){
+    const b = await baseOfCompany((document.getElementById("order-paste-source")||{}).value);
+    putBase("order-paste-base", b);
+  };
+
   //  단건 주문 — 입고처를 고르면 매입 기준
   window.onOsSourceBase = async function(){
     const b = await baseOfCompany((document.getElementById("os-source")||{}).value);
@@ -9598,8 +9614,8 @@
     sel.innerHTML = '<option value="">선택</option>';
     const names = await fetchNamesList("inboundSources");
     names.forEach(n=>{ const opt=document.createElement("option"); opt.value=n; opt.textContent=n; sel.appendChild(opt); });
-    initSearchableSelect("order-source-select", "입고처를 입력하면 목록이 나옵니다");
-    syncSearchableSelect("order-source-select");
+    // 입고처는 일반 드롭다운으로 둡니다.
+    //  검색형으로 바꾸면 값이 바뀌어도 할인 계산 기준이 안 따라오는 일이 있었습니다.
     // 빈 항목을 맨 앞에 둡니다. 예전에는 이게 없어서 목록 첫 번째 통신사가
     //  저절로 골라진 채로 저장되는 일이 있었습니다. (KT가 먼저면 KT로 저장됨)
     const carrierSel = document.getElementById("order-carrier-select");
@@ -9636,8 +9652,7 @@
     // 업체정보를 미리 읽어둡니다. 입고처를 고르면 그 업체 기준이 바로 들어가게요.
     try{ if(!companiesCache || companiesCache.length === 0) await fetchCompanies(); }catch(e){}
     { const ss = document.getElementById("order-source-select"); if(ss) ss.value = ""; }
-    try{ syncSearchableSelect("order-source-select"); }catch(e){}
-    if(typeof onOrderSourceChange === "function") onOrderSourceChange();
+    if(typeof onOrderSourceChange === "function") await onOrderSourceChange();
     await addOrderLine(); // 기본 1줄 시작
     document.getElementById("order-modal-overlay").style.display = "flex";
   };
@@ -9668,8 +9683,8 @@
     await fill("os-source", "inboundSources", '<option value="">선택</option>');
     await fill("os-carrier", "carriers", '<option value="">선택</option>');
     await fill("os-dest", "outboundDestinations", '<option value="">해당없음</option>');
-    initSearchableSelect("os-source", "입고처를 입력하면 목록이 나옵니다"); syncSearchableSelect("os-source");
-    initSearchableSelect("os-dest", "판매처를 입력하면 목록이 나옵니다"); syncSearchableSelect("os-dest");
+    // (일반 드롭다운으로 둡니다 — 검색형이면 값 바뀜이 안 전해질 때가 있습니다)
+    // (일반 드롭다운으로 둡니다 — 검색형이면 값 바뀜이 안 전해질 때가 있습니다)
 
     const ms = document.getElementById("os-model");
     ms.innerHTML = '<option value="">모델을 선택하세요</option>';
@@ -23086,7 +23101,7 @@
     destSel.innerHTML = '<option value="">선택</option>';
     const destNames = await fetchNamesList("outboundDestinations");
     destNames.forEach(n=>{ const opt=document.createElement("option"); opt.value=n; opt.textContent=n; destSel.appendChild(opt); });
-    initSearchableSelect("resv-dest-select", "거래처를 입력하면 목록이 나옵니다");
+    // (일반 드롭다운으로 둡니다 — 검색형이면 값 바뀜이 안 전해질 때가 있습니다)
     syncSearchableSelect("resv-dest-select");
 
     document.getElementById("reservation-modal-overlay").style.display = "flex";
@@ -24809,7 +24824,7 @@
     { const c = (companiesCache||[]).find(x=> String(x.name||"").trim() === String(sel.value||"").trim());
       const bs = document.getElementById("resv-paste-base");
       if(bs) bs.value = (c && (c.discountBase === "total" || c.discountBase === "supply")) ? c.discountBase : "unit"; }
-    initSearchableSelect("resv-paste-dest", "거래처를 입력하면 목록이 나옵니다");
+    // (일반 드롭다운으로 둡니다 — 검색형이면 값 바뀜이 안 전해질 때가 있습니다)
     syncSearchableSelect("resv-paste-dest");
   }
 
@@ -39221,7 +39236,21 @@
 
   window.initSearchableSelect = function(selectId, placeholder){
     const sel = document.getElementById(selectId);
-    if(!sel || sel.dataset.combo === "1") return;   // 이미 만들었으면 재생성하지 않음
+    if(!sel) return;
+    // 이미 만들었으면 다시 만들지 않되, 값 바뀜을 알리는 장치는 다시 걸어둡니다.
+    if(sel.dataset.combo === "1"){
+      if(!sel.__fireChange){
+        sel.__fireChange = function(){
+          try{ sel.dispatchEvent(new Event("change")); }catch(e){}
+          try{
+            const attr = sel.getAttribute("onchange");
+            if(attr) (new Function(attr)).call(sel);
+            if(typeof sel.onchange === "function") sel.onchange();
+          }catch(e){}
+        };
+      }
+      return;
+    }
     sel.dataset.combo = "1";
 
     const wrap = document.createElement("div");
@@ -39234,6 +39263,17 @@
     input.type = "text"; input.className = "combo-input";
     input.id = selectId + "-combo"; input.autocomplete = "off";
     input.placeholder = placeholder || "입력하면 목록이 나옵니다";
+    // 값이 바뀌면 원래 칸에 적어둔 함수를 반드시 부릅니다.
+    //  (숨겨진 칸이라 이벤트가 안 갈 때가 있습니다)
+    const fireChange = ()=>{
+      try{ sel.dispatchEvent(new Event("change")); }catch(e){}
+      try{
+        const attr = sel.getAttribute("onchange");
+        if(attr) (new Function(attr)).call(sel);
+        if(typeof sel.onchange === "function") sel.onchange();
+      }catch(e){}
+    };
+    sel.__fireChange = fireChange;
     const list = document.createElement("div");
     list.className = "combo-list";
     wrap.appendChild(input); wrap.appendChild(list);
@@ -39261,13 +39301,7 @@
       input.value = text;
       list.style.display = "none";
       activeIdx = -1;
-      sel.dispatchEvent(new Event("change"));   // onchange="onItemModelChange()" 등이 정상 실행됨
-      // 숨겨진 칸이라 이벤트가 안 갈 때가 있어, 적어둔 함수도 직접 부릅니다.
-      try{
-        const attr = sel.getAttribute("onchange");
-        if(attr){ (new Function(attr)).call(sel); }
-        if(typeof sel.onchange === "function") sel.onchange();
-      }catch(e){}
+      fireChange();
     }
 
     input.addEventListener("focus", ()=>{ activeIdx = -1; draw(); });
@@ -43237,7 +43271,7 @@
     html += '<div class="stack-row"><label>통신사</label><select id="paste-sale-carrier-select" onchange="onPasteSaleCarrier(this.value)">'
       + ["LG","SK","KT"].map(c=> '<option value="'+c+'"'+(c===car?' selected':'')+'>'+c+'</option>').join("")
       + '</select> <span style="color:var(--gray);font-size:11.5px;margin-left:6px;">고른 통신사의 재고만 판매처리합니다.</span></div>';
-    html += '<div class="stack-row"><label>판매처</label><select id="paste-sale-dest-select"></select></div>';
+    html += '<div class="stack-row"><label>판매처</label><select id="paste-sale-dest-select" onchange="onPasteSaleDestBase()"></select></div>';
     setTimeout(()=>{ try{
       initSearchableSelect("paste-sale-dest-select", "판매처를 입력하면 목록이 나옵니다");
       syncSearchableSelect("paste-sale-dest-select");
