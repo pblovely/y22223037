@@ -400,7 +400,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-04 v944</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-04 v949</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -3272,7 +3272,7 @@
           </div>
           <div class="stack-row"><label>판매가 연동 <span class="info-tip" title="켜면 판매가를 입고가와 똑같이 두고, 앞으로 입고가가 바뀔 때 판매가도 따라갑니다. 도착 등록 때 재고에도 그대로 넘어갑니다.">ⓘ</span></label>
             <span><label style="display:inline-flex;align-items:center;gap:5px;cursor:pointer;">
-              <input type="checkbox" id="order-samebuy-input">
+              <input type="checkbox" id="order-samebuy-input" onchange="onOrderSameBuyAll()">
               <b style="color:var(--navy);">입고동일 — 판매가를 입고가와 똑같이</b></label></span></div>
           <div class="stack-row"><label>입고처</label><select id="order-source-select" onchange="onOrderSourceChange()"><option value="">선택</option></select></div>
           <div id="order-source-note" style="display:none;font-size:12px;padding:7px 10px;margin:0 0 6px 0;border:1px solid var(--navy);background:#f4f7fb;line-height:1.7;"></div>
@@ -3323,6 +3323,7 @@
                 <th style="padding:6px;text-align:right;border:1px solid var(--line);">판매가</th>
                 <th style="padding:6px;text-align:right;border:1px solid var(--line);">판매할인</th>
                 <th style="padding:6px;text-align:right;border:1px solid var(--line);">판매할인%</th>
+                <th style="padding:6px;text-align:center;border:1px solid var(--line);">입고동일</th>
                 <th style="padding:6px;text-align:right;border:1px solid var(--line);">소계(입고)</th>
                 <th style="padding:6px;border:1px solid var(--line);"></th>
               </tr>
@@ -9495,13 +9496,36 @@
     if(name && (!companiesCache || companiesCache.length === 0)){
       try{ await fetchCompanies(); }catch(e){}
     }
-    const c = (companiesCache||[]).find(x=> String(x.name||"").trim() === name) || null;
+    let c = (companiesCache||[]).find(x=> String(x.name||"").trim() === name) || null;
+    // 캐시에 그 업체가 없으면 한 번 더 읽어봅니다. (새로 넣은 업체 대비)
+    if(name && !c){
+      try{ await fetchCompanies(); }catch(e){}
+      c = (companiesCache||[]).find(x=> String(x.name||"").trim() === name) || null;
+    }
     const rate = c && c.cashRate !== "" && c.cashRate != null ? Number(c.cashRate) : null;
     const base = (c && (c.discountBase === "total" || c.discountBase === "supply")) ? c.discountBase : "unit";
     currentOrderSourceInfo = c ? { name, rate, base } : null;
     // 업체정보에 저장해둔 기준을 칸에 넣어둡니다. 이 주문에서만 바꾸실 수 있습니다.
     //  입고처를 안 고르셨으면 기본값(대당)으로 되돌립니다.
-    { const bs = document.getElementById("order-base-select"); if(bs) bs.value = c ? base : "unit"; }
+    { const bs = document.getElementById("order-base-select");
+      if(bs){
+        bs.value = c ? base : "unit";
+        // 업체정보에서 가져온 값임을 잠깐 알려드립니다. (바꾸셔도 됩니다)
+        if(c){
+          bs.style.background = "#eef7ee";
+          setTimeout(function(){ bs.style.background = ""; }, 1200);
+        }
+      } }
+    // 업체정보를 못 읽었으면 알려드립니다.
+    if(name && !c){
+      const el0 = document.getElementById("order-source-note");
+      if(el0){
+        el0.style.display = "block";
+        el0.innerHTML = '<b style="color:var(--danger);">' + comboEsc(name)
+          + '</b> 업체정보를 못 찾았습니다. 할인 계산 기준을 직접 골라주세요.';
+      }
+      return;
+    }
 
     const el = document.getElementById("order-source-note");
     if(el){
@@ -9756,6 +9780,16 @@
 
   // 주문 품목 여러 줄에 같은 값을 한 번에 넣습니다.
   // %는 각 줄의 출고가 기준으로 계산되므로 줄마다 금액이 다르게 들어갑니다.
+  // 위쪽 「입고동일」 을 켜고 끄면 모든 줄에 바로 반영합니다.
+  window.onOrderSameBuyAll = function(){
+    const on = !!(document.getElementById("order-samebuy-input")||{}).checked;
+    document.querySelectorAll("#order-lines-body tr").forEach(function(tr){
+      const cb = tr.querySelector(".ol-samebuy");
+      if(!cb) return;
+      if(cb.checked !== on){ cb.checked = on; if(cb.onchange) cb.onchange(); }
+    });
+  };
+
   window.applyBulkToOrderLines = function(){
     const rows = Array.from(document.querySelectorAll("#order-lines-body tr"));
     if(rows.length === 0){ alert("품목 줄이 없습니다."); return; }
@@ -9810,8 +9844,13 @@
           ds.value = dest;
         }
       }
-      // 판매할인% → 판매할인 금액·판매가
-      if(salePct !== "" && L){
+      // 「입고동일」 이 켜져 있으면 판매가를 입고가로 두고 판매할인은 넣지 않습니다.
+      const sameOn = !!(document.getElementById("order-samebuy-input")||{}).checked;
+      if(sameOn){
+        const cb = tr.querySelector(".ol-samebuy");
+        if(cb && !cb.checked){ cb.checked = true; if(cb.onchange) cb.onchange(); }
+      }else if(salePct !== "" && L){
+        // 판매할인% → 판매할인 금액·판매가
         const a = amtFromPct(salePct, L);
         set(".ol-salediscountamt", a);
         set(".ol-salediscountpct", salePct);
@@ -9950,6 +9989,29 @@
     saleDiscPctInput.oninput = ()=> onOrderLineSaleDiscountPctInput(tr);
     td(saleDiscPctInput);
 
+    // 「입고동일」 — 켜면 판매가를 입고가와 똑같이 두고 판매할인 칸을 잠급니다.
+    const sameCb = document.createElement("input");
+    sameCb.type = "checkbox"; sameCb.className = "ol-samebuy";
+    sameCb.title = "판매가를 입고가와 똑같이 씁니다. 앞으로 입고가가 바뀌면 판매가도 따라갑니다.";
+    sameCb.onchange = ()=>{
+      const on = sameCb.checked;
+      [saleDiscAmtInput, saleDiscPctInput].forEach(function(el){
+        el.readOnly = on; el.style.background = on ? "#eee" : "";
+        if(on) el.value = "";
+      });
+      saleInput.readOnly = on; saleInput.style.background = on ? "#eee" : "";
+      if(on){
+        // 입고가가 아직 안 나왔으면 먼저 계산합니다.
+        try{ if(typeof recalcOrderLinePurchasePrice === "function") recalcOrderLinePurchasePrice(tr); }catch(e){}
+        const buy = Number(purchaseInput.value)||0;
+        if(buy > 0) saleInput.value = buy;
+      }
+      recalcOrderDeposit();
+    };
+    { const c = document.createElement("td");
+      c.style.cssText = "padding:4px;border:1px solid var(--line);text-align:center;";
+      c.appendChild(sameCb); tr.appendChild(c); }
+
     const subtotalSpan = document.createElement("span");
     subtotalSpan.className = "ol-subtotal"; subtotalSpan.textContent = "-";
     td(subtotalSpan);
@@ -9970,6 +10032,15 @@
     const preAmt = Number(tr.querySelector(".ol-prediscountamt").value) || 0;
     const otherAmt = Number(tr.querySelector(".ol-otherdiscountamt").value) || 0;
     tr.querySelector(".ol-purchaseprice").value = listPrice - preAmt - otherAmt;
+    // 「입고동일」 줄이면 판매가도 함께 맞춥니다.
+    {
+      const cb = tr.querySelector(".ol-samebuy");
+      if(cb && cb.checked){
+        const buy = listPrice - preAmt - otherAmt;
+        const sp = tr.querySelector(".ol-saleprice");
+        if(sp && buy > 0) sp.value = buy;
+      }
+    }
   }
   function onOrderLineModelChange(tr){
     const modelId = tr.querySelector(".ol-model").value;
@@ -10117,6 +10188,8 @@
         modelId, m,
         lineNo: lines.length + 1,   // 입력한 순서를 그대로 남깁니다
         colorObj: cObj,
+        // 「입고동일」 — 줄마다 켜고 끌 수 있습니다.
+        salePriceFollowsBuy: !!(tr.querySelector(".ol-samebuy") && tr.querySelector(".ol-samebuy").checked),
         lineCarrier: tr.querySelector(".ol-carrier") ? tr.querySelector(".ol-carrier").value : "",
         quantity: Number(tr.querySelector(".ol-qty").value) || 1,
         listPrice: Number(tr.querySelector(".ol-listprice").value) || null,
@@ -10126,7 +10199,16 @@
         otherDiscountAmt: tr.querySelector(".ol-otherdiscountamt").value ? Number(tr.querySelector(".ol-otherdiscountamt").value) : null,
         otherDiscountPct: tr.querySelector(".ol-otherdiscountpct").value ? Number(tr.querySelector(".ol-otherdiscountpct").value) : null,
         destination: tr.querySelector(".ol-dest").value,
-        salePrice: tr.querySelector(".ol-saleprice").value ? Number(tr.querySelector(".ol-saleprice").value) : null,
+        // 「입고동일」 이면 판매가를 입고가로 씁니다. (칸이 비어 있어도 채워 넣습니다)
+        salePrice: (function(){
+          const sameOn = !!(tr.querySelector(".ol-samebuy") && tr.querySelector(".ol-samebuy").checked);
+          const sv = tr.querySelector(".ol-saleprice").value;
+          if(sameOn){
+            const buy = Number(tr.querySelector(".ol-purchaseprice").value) || 0;
+            if(buy > 0) return buy;
+          }
+          return sv ? Number(sv) : null;
+        })(),
         saleDiscountAmt: tr.querySelector(".ol-salediscountamt").value ? Number(tr.querySelector(".ol-salediscountamt").value) : null,
         saleDiscountPct: tr.querySelector(".ol-salediscountpct").value ? Number(tr.querySelector(".ol-salediscountpct").value) : null,
         fromReservationId: tr.dataset.resvId || null   // 구매 예약에서 넘어온 줄이면 예약과 이어둡니다
@@ -10184,7 +10266,8 @@
       await updateDoc(doc(db,"orderBatches", batchRef.id), { creditUsed: creditUse });
     }
 
-    // 화면에서 고르신 할인 계산 기준 — 줄에 함께 남깁니다.
+    // 화면에서 고르신 할인 계산 기준 그대로 저장합니다.
+    //  (업체정보는 화면에 처음 넣어주는 값일 뿐, 바꾸셨으면 바꾼 값이 우선입니다)
     const orderBaseSel = String((document.getElementById("order-base-select")||{}).value||"") || "unit";
     const orderSameBuy = !!(document.getElementById("order-samebuy-input")||{}).checked;
     // 판매할인 기준은 판매처 업체정보를 따릅니다.
@@ -10215,7 +10298,7 @@
         // 할인 계산 기준을 줄에 함께 남깁니다. 도착 등록 때 재고로 그대로 옮겨집니다.
         discountBase: (l.discountBase || orderBaseSel || "unit"),
         saleDiscountBase: (l.saleDiscountBase || l.saleBase || orderSaleBaseSel || "unit"),
-        salePriceFollowsBuy: (l.salePriceFollowsBuy === true) || orderSameBuy,
+        salePriceFollowsBuy: (l.salePriceFollowsBuy === true),
         orderDate, status: "주문중",
         fromReservationId: l.fromReservationId || null,   // 구매 예약에서 넘어온 줄이면 예약과 이어둡니다
         createdAt: serverTimestamp()
@@ -13109,6 +13192,7 @@
       '<th class="ta-right">입고가</th>' +
       '<th>판매처</th><th class="ta-right">판매가</th>' +
       '<th class="ta-right">판매할인</th><th class="ta-right">판매할인%</th>' +
+      '<th style="text-align:center;">입고동일</th>' +
       '<th class="ta-right no-print">관리</th>' +
       '</tr></thead><tbody id="order-detail-tbody"></tbody><tfoot id="order-detail-tfoot"></tfoot></table></div>';
     // 이 주문의 미입고 현황 — 모델을 누르면 색상별로 펼쳐집니다.
@@ -13178,8 +13262,23 @@
         '<td class="ta-right">'+numFmt(o.purchasePrice)+'</td>' +
         '<td>'+(o.destination ? comboEsc(o.destination) : '<span style="color:var(--gray);">미지정</span>')+'</td>' +
         '<td class="ta-right">'+numFmt(o.salePrice)+'</td>' +
-        '<td class="ta-right">'+discFmt(o.saleDiscountAmt)+'</td>' +
-        '<td class="ta-right">'+discPctFmt(o.saleDiscountPct != null ? o.saleDiscountPct : pctFromAmt(o.saleDiscountAmt, Number(o.listPrice)||0))+'</td>' +
+        // 판매할인 — 저장된 값이 없으면 출고가와 판매가로 냅니다.
+        '<td class="ta-right">'+(function(){
+            if(o.saleDiscountAmt != null && o.saleDiscountAmt !== "") return discFmt(o.saleDiscountAmt);
+            const L = Number(o.listPrice)||0, sp = Number(o.salePrice)||0;
+            return (L > 0 && sp > 0) ? discFmt(L - sp) : discFmt(null);
+          })()+'</td>' +
+        '<td class="ta-right">'+(function(){
+            if(o.saleDiscountPct != null && o.saleDiscountPct !== "") return discPctFmt(o.saleDiscountPct);
+            const L = Number(o.listPrice)||0, sp = Number(o.salePrice)||0;
+            const amt = (o.saleDiscountAmt != null && o.saleDiscountAmt !== "")
+                      ? Number(o.saleDiscountAmt) : ((L > 0 && sp > 0) ? (L - sp) : null);
+            return discPctFmt(pctFromAmt(amt, L));
+          })()+'</td>' +
+        // 「입고동일」 — 판매가를 입고가와 똑같이 두는 줄입니다.
+        '<td style="text-align:center;">' + (o.salePriceFollowsBuy === true
+            ? '<b style="color:var(--navy);">입고동일</b>'
+            : '<span style="color:var(--gray);">-</span>') + '</td>' +
 
         '<td class="ta-right no-print">' +
           '<button class="btn small secondary" style="width:auto;" data-edit-line="'+o.id+'">수정</button>' +
@@ -13212,7 +13311,7 @@
       '<td class="ta-right">'+sumPurchase.toLocaleString()+'</td>' + // 입고가
       '<td></td>' +                                               // 판매처
       '<td class="ta-right">'+sumSale.toLocaleString()+'</td>' +   // 판매가
-      '<td colspan="2"></td>' +                                   // 판매할인·판매할인%
+      '<td colspan="3"></td>' +                                   // 판매할인·판매할인%·입고동일
       '<td class="no-print"></td>' +                              // 관리
       '</tr>';
 
