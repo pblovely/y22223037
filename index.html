@@ -400,7 +400,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-04 v949</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-04 v952</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -3220,7 +3220,7 @@
           <div class="stack-row"><label>주문일</label><input type="text" id="os-date" maxlength="8" inputmode="numeric" placeholder="예: 20260726"></div>
           <div class="stack-row"><label>도착예정일 (선택)</label><input type="text" id="os-expected" maxlength="8" inputmode="numeric" placeholder="예: 20260731"></div>
           <div class="stack-row"><label>입금예정일 <span class="info-tip" title="이 주문 대금을 언제까지 보내기로 했는지 적어주세요.">ⓘ</span></label><input type="text" id="os-paydue" maxlength="8" inputmode="numeric" placeholder="예: 20260731"></div>
-          <div class="stack-row"><label>입고처</label><select id="os-source"><option value="">선택</option></select></div>
+          <div class="stack-row"><label>입고처</label><select id="os-source" onchange="onOsSourceBase()"><option value="">선택</option></select></div>
           <div class="stack-row"><label>통신사</label><select id="os-carrier"></select></div>
           <div class="stack-row"><label>결제방식</label>
             <select id="os-payment">
@@ -3231,6 +3231,12 @@
           <div class="stack-row"><label>모델 (전산모델명)</label><select id="os-model" onchange="onOrderSingleModelChange()"><option value="">모델을 선택하세요</option></select></div>
           <div class="stack-row"><label>색상</label><select id="os-color"><option value="">모델을 먼저 선택하세요</option></select></div>
           <div class="stack-row"><label>수량</label><input type="number" id="os-qty" value="1" min="1" oninput="osRecalc()"></div>
+          <div class="stack-row"><label>할인 계산 기준 <span class="info-tip" title="업체정보에 저장해둔 기준이 자동으로 들어옵니다. 이 주문에서만 다르게 하려면 바꾸세요.">ⓘ</span></label>
+            <select id="os-base" onchange="osRecalc()">
+              <option value="unit">대당 (출고가에 걸기)</option>
+              <option value="total">합계 (출고가 합계에 한 번)</option>
+              <option value="supply">공급가 기준 (삼성전자 방식)</option>
+            </select></div>
           <div class="stack-row"><label>출고가</label><input type="number" id="os-listprice" oninput="osRecalc('list')"></div>
           <div class="stack-row"><label>선할인</label><input type="number" id="os-preamt" oninput="osRecalc('preamt')" placeholder="예: 20000"></div>
           <div class="stack-row"><label>선할인%</label><input type="number" step="0.01" id="os-prepct" oninput="osRecalc('prepct')" placeholder="예: 0.20"></div>
@@ -3970,7 +3976,7 @@
           <div class="stack-row"><label>판매예정일</label><input type="text" id="item-expectedsaledate-input" placeholder="예: 20260724" maxlength="8" inputmode="numeric"></div>
           <div class="stack-row"><label>판매일</label><input type="text" id="item-outdate-input" placeholder="예: 20260724" maxlength="8" inputmode="numeric"></div>
           <div class="stack-row"><label>개통일 <span class="info-tip" title="포피플에서 직접 개통한 날입니다. 상태를 개통으로 바꿀 때 함께 적어주세요.">ⓘ</span></label><input type="text" id="item-activatedate-input" placeholder="예: 20260724" maxlength="8" inputmode="numeric"></div>
-          <div class="stack-row"><label>입고처</label><select id="item-source-select"><option value="">선택</option></select></div>
+          <div class="stack-row"><label>입고처</label><select id="item-source-select" onchange="onItemSourceBase()"><option value="">선택</option></select></div>
           <div class="stack-row"><label>제조사</label><select id="item-manufacturer-select"><option value="">선택</option></select></div>
           <div class="stack-row"><label>통신사</label><select id="item-carrier-select"></select></div>
           <div class="stack-row"><label>위치</label><select id="item-location-select"><option value="">선택</option></select></div>
@@ -4007,7 +4013,7 @@
             <span><label style="display:inline-flex;align-items:center;gap:5px;cursor:pointer;">
               <input type="checkbox" id="item-samebuy-input" onchange="onItemSameBuyChange()">
               <b style="color:var(--navy);">입고동일 — 판매가를 입고가와 똑같이</b></label></span></div>
-          <div class="stack-row"><label>판매처</label><select id="item-dest-select"><option value="">해당없음</option></select></div>
+          <div class="stack-row"><label>판매처</label><select id="item-dest-select" onchange="onItemDestBase()"><option value="">해당없음</option></select></div>
           <div class="stack-row"><label>판매가</label><input type="number" id="item-saleprice-input" oninput="onSalePriceInput()"></div>
           <div class="stack-row"><label>판매할인</label><input type="number" id="item-salediscountamt-input" placeholder="예: 10000" oninput="onSaleDiscountAmtInput()"></div>
           <div class="stack-row"><label>판매할인%</label><input type="number" step="0.01" id="item-salediscount-input" placeholder="예: 0.20" oninput="onSaleDiscountInput()"></div>
@@ -9490,6 +9496,41 @@
     if(typeof recalcOrderTotal === "function") recalcOrderTotal();
   };
 
+  //  거래처를 고르면 그 업체의 할인 계산 기준을 칸에 넣어드립니다.
+  //   (업체정보는 처음 넣어주는 값이고, 화면에서 바꾸시면 바꾼 값이 저장됩니다)
+  async function baseOfCompany(name){
+    const nm = String(name||"").trim();
+    if(!nm) return "";
+    try{ if(!companiesCache || companiesCache.length === 0) await fetchCompanies(); }catch(e){}
+    let c = (companiesCache||[]).find(function(x){ return String(x.name||"").trim() === nm; });
+    if(!c){ try{ await fetchCompanies(); }catch(e){}
+      c = (companiesCache||[]).find(function(x){ return String(x.name||"").trim() === nm; }); }
+    const b = String((c && c.discountBase) || "");
+    return (b === "supply" || b === "total") ? b : "unit";
+  }
+  function putBase(selId, base){
+    const el = document.getElementById(selId);
+    if(!el || !base) return;
+    el.value = base;
+    el.style.background = "#eef7ee";
+    setTimeout(function(){ el.style.background = ""; }, 1200);
+  }
+  //  단건 주문 — 입고처를 고르면 매입 기준
+  window.onOsSourceBase = async function(){
+    const b = await baseOfCompany((document.getElementById("os-source")||{}).value);
+    putBase("os-base", b);
+  };
+  //  재고 등록 — 입고처를 고르면 매입 기준
+  window.onItemSourceBase = async function(){
+    const b = await baseOfCompany((document.getElementById("item-source-select")||{}).value);
+    putBase("item-base-select", b);
+  };
+  //  재고 등록 — 판매처를 고르면 판매 기준
+  window.onItemDestBase = async function(){
+    const b = await baseOfCompany((document.getElementById("item-dest-select")||{}).value);
+    putBase("item-salebase-select", b);
+  };
+
   window.onOrderSourceChange = async function(){
     const name = String((document.getElementById("order-source-select")||{}).value||"").trim();
     // 업체정보를 아직 안 읽었으면 여기서 읽습니다. (기준이 「대당」으로 잘못 들어가는 것을 막습니다)
@@ -9730,7 +9771,7 @@
         otherDiscountPct: document.getElementById("os-otherpct").value ? Number(osNum("os-otherpct").toFixed(2)) : null,
         destination: dest, salePrice: sale || null,
         // 할인 계산 기준 — 입고처·판매처 업체정보를 따릅니다. 도착 등록 때 재고로 옮겨집니다.
-        discountBase: (function(){ try{ return itemDiscountBase({ source }) || "unit"; }catch(e){ return "unit"; } })(),
+        discountBase: String((document.getElementById("os-base")||{}).value||"") || "unit",
         saleDiscountBase: (function(){ try{
           const cS = (companiesCache||[]).find(function(x){
             return String(x.name||"").trim() === String(dest||"").trim(); });
@@ -39221,6 +39262,12 @@
       list.style.display = "none";
       activeIdx = -1;
       sel.dispatchEvent(new Event("change"));   // onchange="onItemModelChange()" 등이 정상 실행됨
+      // 숨겨진 칸이라 이벤트가 안 갈 때가 있어, 적어둔 함수도 직접 부릅니다.
+      try{
+        const attr = sel.getAttribute("onchange");
+        if(attr){ (new Function(attr)).call(sel); }
+        if(typeof sel.onchange === "function") sel.onchange();
+      }catch(e){}
     }
 
     input.addEventListener("focus", ()=>{ activeIdx = -1; draw(); });
