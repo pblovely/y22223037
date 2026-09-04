@@ -400,7 +400,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-04 v954</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-04 v957</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -3276,10 +3276,6 @@
               <option value="supply">공급가 기준 (삼성전자 방식)</option>
             </select>
           </div>
-          <div class="stack-row"><label>판매가 연동 <span class="info-tip" title="켜면 판매가를 입고가와 똑같이 두고, 앞으로 입고가가 바뀔 때 판매가도 따라갑니다. 도착 등록 때 재고에도 그대로 넘어갑니다.">ⓘ</span></label>
-            <span><label style="display:inline-flex;align-items:center;gap:5px;cursor:pointer;">
-              <input type="checkbox" id="order-samebuy-input" onchange="onOrderSameBuyAll()">
-              <b style="color:var(--navy);">입고동일 — 판매가를 입고가와 똑같이</b></label></span></div>
           <div class="stack-row"><label>입고처</label><select id="order-source-select" onchange="onOrderSourceChange()"><option value="">선택</option></select></div>
           <div id="order-source-note" style="display:none;font-size:12px;padding:7px 10px;margin:0 0 6px 0;border:1px solid var(--navy);background:#f4f7fb;line-height:1.7;"></div>
           <div class="stack-row"><label>통신사</label><select id="order-carrier-select"></select></div>
@@ -3303,6 +3299,8 @@
             <input type="number" step="0.01" id="bulk-line-otherpct" placeholder="타할인%" oninput="onBulkDisc('bulk-line','other','pct')" style="width:90px;height:28px;border:1px solid var(--line);padding:0 6px;font-size:12.5px;margin-left:-1px;box-sizing:border-box;">
             <select id="bulk-line-dest" style="width:150px;height:28px;border:1px solid var(--line);padding:0 6px;font-size:12.5px;margin-left:-1px;box-sizing:border-box;"><option value="">판매처 (선택)</option></select>
             <input type="number" step="0.01" id="bulk-line-salepct" placeholder="판매할인%" style="width:100px;height:28px;border:1px solid var(--line);padding:0 6px;font-size:12.5px;margin-left:-1px;box-sizing:border-box;">
+            <label style="display:inline-flex;align-items:center;gap:4px;font-size:12px;cursor:pointer;height:28px;border:1px solid var(--line);padding:0 8px;margin-left:-1px;box-sizing:border-box;background:#fff;white-space:nowrap;" title="판매가를 입고가와 똑같이 둡니다. 켜면 판매할인은 넣지 않습니다.">
+              <input type="checkbox" id="order-samebuy-input" onchange="onOrderSameBuyAll()"><b style="color:var(--navy);">입고동일</b></label>
             <button class="btn small" style="width:auto;margin-left:6px;" onclick="applyBulkToOrderLines()">모든 줄에 적용</button>
           </div>
           <div style="color:var(--gray);font-size:11.5px;margin-top:5px;line-height:1.6;">
@@ -9573,14 +9571,21 @@
           setTimeout(function(){ bs.style.background = ""; }, 1200);
         }
       } }
-    // 업체정보를 못 읽었으면 알려드립니다.
-    if(name && !c){
+    // 무엇을 읽었는지 화면에 보여드립니다. (기준이 안 따라올 때 원인을 바로 알 수 있게)
+    {
       const el0 = document.getElementById("order-source-note");
-      if(el0){
+      if(el0 && name){
         el0.style.display = "block";
-        el0.innerHTML = '<b style="color:var(--danger);">' + comboEsc(name)
-          + '</b> 업체정보를 못 찾았습니다. 할인 계산 기준을 직접 골라주세요.';
+        el0.innerHTML = c
+          ? ('<b>' + comboEsc(name) + '</b> 업체정보를 읽었습니다 · 할인 계산 기준 <b style="color:#2e7d32;">'
+             + (base === "supply" ? "공급가" : (base === "total" ? "합계" : "대당"))
+             + '</b>' + (rate ? ' · 현금할인 ' + rate + '%' : ''))
+          : ('<b style="color:var(--danger);">' + comboEsc(name)
+             + '</b> 업체정보를 못 찾았습니다. (읽은 업체 ' + (companiesCache||[]).length
+             + '개) 할인 계산 기준을 직접 골라주세요.');
       }
+    }
+    if(name && !c){
       return;
     }
 
@@ -9839,6 +9844,9 @@
   // 위쪽 「입고동일」 을 켜고 끄면 모든 줄에 바로 반영합니다.
   window.onOrderSameBuyAll = function(){
     const on = !!(document.getElementById("order-samebuy-input")||{}).checked;
+    // 켜면 판매할인% 칸은 쓰지 않습니다.
+    { const el = document.getElementById("bulk-line-salepct");
+      if(el){ el.disabled = on; el.style.background = on ? "#eee" : ""; if(on) el.value = ""; } }
     document.querySelectorAll("#order-lines-body tr").forEach(function(tr){
       const cb = tr.querySelector(".ol-samebuy");
       if(!cb) return;
@@ -25618,7 +25626,7 @@
     await fetchModelsCache();
     await openOrderModal();
     const ss = document.getElementById("order-source-select");
-    if(ss && sources[0]){ ss.value = sources[0]; syncSearchableSelect("order-source-select"); }
+    if(ss && sources[0]){ ss.value = sources[0]; try{ await onOrderSourceChange(); }catch(e){} }
     const cs0 = document.getElementById("order-carrier-select");
     if(cs0 && carriers[0]) cs0.value = carriers[0];
     const dEl = document.getElementById("order-date-input");
@@ -27539,7 +27547,11 @@
     // 머리부 채우기
     if(source){
       const ss = document.getElementById("order-source-select");
-      if(ss){ ss.value = source; syncSearchableSelect("order-source-select"); }
+      if(ss){
+        ss.value = source;
+        // 입고처가 정해졌으니 그 업체의 할인 계산 기준도 함께 넣습니다.
+        try{ await onOrderSourceChange(); }catch(e){}
+      }
     }
     document.getElementById("order-date-input").value = orderDate;
 
@@ -34558,7 +34570,7 @@
     await openOrderModal();
     // 머리부 — 입고처·주문일
     const ss = document.getElementById("order-source-select");
-    if(ss && r.destination){ ss.value = r.destination; syncSearchableSelect("order-source-select"); }
+    if(ss && r.destination){ ss.value = r.destination; try{ await onOrderSourceChange(); }catch(e){} }
     const dEl = document.getElementById("order-date-input");
     if(dEl) dEl.value = todayStr();
 
