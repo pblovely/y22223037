@@ -400,7 +400,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-04 v957</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-04 v963</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -12512,7 +12512,9 @@
     let h = '<div style="border:1px solid '+(allDone ? '#2e7d32' : 'var(--line)')+';background:'+(allDone ? '#f4f9f4' : '#fafafa')+';padding:8px 11px;font-size:12.5px;line-height:1.8;">' +
       (allDone ? '<span style="background:#2e7d32;color:#fff;font-size:10.5px;padding:1px 6px;margin-right:6px;">판매 완료</span>' : '') +
       '<b>연결된 판매요청 ' + found.length + '건</b> · 매칭 ' + totF + '/' + totQ +
-      ' <span style="color:var(--gray);">(단말기를 도착 등록하면 자동으로 채워집니다)</span>';
+      ' <span style="color:var(--gray);">(단말기를 도착 등록하면 자동으로 채워집니다)</span>' +
+      ' <button class="btn small secondary no-print" style="width:auto;padding:1px 8px;font-size:11px;" onclick="toggleOrderSaleLines()">자세히</button>' +
+      '<div id="order-sale-lines" style="display:none;">';
     found.forEach(sr=>{
       const done = (Number(sr.fulfilledCount)||0) >= (Number(sr.quantity)||0);
       const srColor = sr.systemColor || sr.manufacturerColor || "";
@@ -12522,10 +12524,18 @@
         + ' · <b style="color:'+(done ? '#2e7d32' : 'var(--danger)')+';">' + comboEsc(sr.status||"-")
         + ' ' + (Number(sr.fulfilledCount)||0) + '/' + (Number(sr.quantity)||0) + '</b>';
     });
+    h += '</div>';   // 접히는 목록 끝
     h += '<br><button class="btn small secondary no-print" style="width:auto;margin-top:6px;" onclick="goToSaleTab()">판매 관리에서 보기</button>';
     h += '</div>';
     holder.innerHTML = h;
   }
+
+  // 연결된 판매요청 목록을 펼치거나 접습니다.
+  window.toggleOrderSaleLines = function(){
+    const el = document.getElementById("order-sale-lines");
+    if(!el) return;
+    el.style.display = (el.style.display === "none") ? "block" : "none";
+  };
 
   // 판매요청의 출처를 보여줍니다.
   async function renderSaleReqOrigin(b, lines){
@@ -13417,12 +13427,11 @@
     document.getElementById("arrival-bulk-indate-input").value = (o.expectedArrivalDate||"") || todayStr();
     const locSel = document.getElementById("arrival-bulk-location");
     if(locSel){
-      const cur = locSel.value;
       locSel.innerHTML = '<option value="">선택</option>';
       (await fetchNamesList("locations")).forEach(n=>{
         const op = document.createElement("option"); op.value = n; op.textContent = n; locSel.appendChild(op);
       });
-      if(cur) locSel.value = cur;   // 연속 입력을 위해 앞서 고른 위치를 유지합니다
+      locSel.value = "";   // 창을 열 때마다 비웁니다. 앞 위치가 남아 잘못 들어가는 일이 없게요.
     }
 
     // 주문에 판매처가 정해져 있으면 "도착 즉시 판매처리" 선택지를 보여줍니다.
@@ -27272,18 +27281,32 @@
   function buildPasteRow(label, modelCells, model, carrier, qty, colorObj, usedCell, usedCap){
     let colorText = "";
     if(!colorObj){
+      // 색상은 보통 모델 칸 바로 오른쪽에 있습니다. 그 순서로 먼저 봅니다.
+      //  (왼쪽부터 훑으면 엉뚱한 칸이 색상으로 잡히는 일이 있었습니다)
+      const mi = modelCells.indexOf(usedCell);
+      const order = [];
+      if(mi >= 0){
+        for(let i = mi + 1; i < modelCells.length; i++) order.push(modelCells[i]);
+        for(let i = mi - 1; i >= 0; i--) order.push(modelCells[i]);
+      }else{
+        modelCells.forEach(function(c){ order.push(c); });
+      }
+      const skip = c =>{
+        const t = String(c||"").trim();
+        return (!t || c === usedCell || c === usedCap
+          || /^[0-9,]+$/.test(t) || /^SM-[A-Z0-9]{8,}$/i.test(t) || /^SM-/i.test(t));
+      };
       // ① 먼저 정확히 같은 이름을 찾습니다.
-      for(const c of modelCells){
-        if(c === usedCell || c === usedCap) continue;
+      for(const c of order){
+        if(skip(c)) continue;
         const hit = (model.colors||[]).find(x=> x.systemColor === c || x.manufacturerColor === c);
         if(hit){ colorObj = hit; colorText = c; break; }
       }
       // ② 못 찾으면 괄호·공백을 무시하고 다시 찾습니다.
       if(!colorObj){
-        for(const c of modelCells){
-          if(c === usedCell || c === usedCap) continue;
+        for(const c of order){
+          if(skip(c)) continue;
           const t = String(c||"").trim();
-          if(!t || /^[0-9,]+$/.test(t) || /^SM-/i.test(t)) continue;
           const hit = (model.colors||[]).find(x=>
             sameColorLoose(x.systemColor, t) || sameColorLoose(x.manufacturerColor, t));
           if(hit){ colorObj = hit; colorText = t; break; }
@@ -27485,9 +27508,32 @@
       h += '</tbody></table></div></div>';
     }
     if(ok.length){
+      // 같은 모델·색상이 여러 줄이면 색상을 잘못 읽었을 수 있어 알려드립니다.
+      {
+        const cnt = {};
+        ok.forEach(function(r){
+          const k = String((r.model && r.model.systemModel) || "") + "|"
+                  + String(r.colorObj ? (r.colorObj.systemColor||"") : (r.colorText||""));
+          cnt[k] = (cnt[k]||0) + 1;
+        });
+        const dups = Object.keys(cnt).filter(function(k){ return cnt[k] >= 2; });
+        if(dups.length){
+          h += '<div style="border:1px solid #b8860b;background:#fffbe6;padding:9px 11px;margin-bottom:10px;font-size:12.5px;line-height:1.8;">'
+            + '<b style="color:#8a6d0b;">같은 모델·색상이 여러 줄에 있습니다 — ' + dups.length + '가지</b><br>'
+            + dups.slice(0,6).map(function(k){
+                const p = k.split("|");
+                return '&nbsp;&nbsp;· ' + comboEsc(p[0]) + ' · '
+                     + comboEsc(p[1] || "(색상 없음)") + '  <b>' + cnt[k] + '줄</b>';
+              }).join('<br>')
+            + (dups.length > 6 ? '<br>&nbsp;&nbsp;... 외 ' + (dups.length-6) + '가지' : '')
+            + '<br><span style="color:var(--gray);">일부러 나눠 적으신 것이면 그대로 두셔도 됩니다. '
+            + '색상을 잘못 읽었다면 아래 <b>「붙여넣은 색상」</b> 을 보고 <b>「색상」</b> 칸에서 고쳐주세요.</span></div>';
+        }
+      }
       h += '<div style="border:1px solid var(--line);max-height:260px;overflow:auto;margin-bottom:10px;">'
-        + '<table class="data-table" style="width:auto;"><thead><tr><th>전산모델명</th><th>붙여넣은 색상</th><th>색상 (고칠 수 있음)</th><th>통신사</th><th class="ta-right">수량</th><th class="ta-right">출고가</th><th>삼성모델명(SKU)</th></tr></thead><tbody>'
-        + ok.map((r,i)=>'<tr><td style="white-space:nowrap;">'+comboEsc(modelOptionLabel(r.model))+'</td>'
+        + '<table class="data-table" style="width:auto;"><thead><tr><th>줄</th><th>전산모델명</th><th>붙여넣은 색상</th><th>색상 (고칠 수 있음)</th><th>통신사</th><th class="ta-right">수량</th><th class="ta-right">출고가</th><th>삼성모델명(SKU)</th></tr></thead><tbody>'
+        + ok.map((r,i)=>'<tr><td style="color:var(--gray);white-space:nowrap;">'+comboEsc(r.label||"")+'</td>'
+            + '<td style="white-space:nowrap;">'+comboEsc(modelOptionLabel(r.model))+'</td>'
             + '<td style="color:var(--gray);white-space:nowrap;">'+comboEsc(r.rawColor||"-")+'</td>'
             + '<td><input type="text" class="op-color" data-i="'+i+'" list="op-color-list-'+i+'"'
               + ' value="'+comboEsc(r.colorObj ? (r.colorObj.systemColor||"") : (r.colorText||""))+'"'
@@ -41781,15 +41827,17 @@
       if(!byDest[d]) byDest[d] = { cnt:0, amt:0, unpaid:0, unpaidAmt:0 };
       const v = Number(r.it.salePrice)||0;
       byDest[d].cnt++; byDest[d].amt += v;
+      byDest[d].listAmt = (byDest[d].listAmt||0) + (Number(r.it.listPrice)||0);
       if(r.state === "unpaid" || r.state === "wait" || r.state === "none"){ byDest[d].unpaid++; byDest[d].unpaidAmt += v; }
     });
     const dkeys = Object.keys(byDest).sort();
     sumEl.innerHTML = dkeys.length
       ? '<div style="overflow-x:auto;"><table class="data-table resv-dest-fit" style="width:auto;"><thead><tr>'
-        + '<th>거래처</th><th class="ta-right">나간 대수</th><th class="ta-right">판매금액</th>'
+        + '<th>거래처</th><th class="ta-right">나간 대수</th><th class="ta-right">출고가 금액</th><th class="ta-right">판매금액</th>'
         + '<th class="ta-right">미입금 대수</th><th class="ta-right">미입금 금액</th></tr></thead><tbody>'
         + dkeys.map(d=>'<tr><td><b>'+comboEsc(d)+'</b></td>'
             + '<td class="ta-right">'+byDest[d].cnt+'</td>'
+            + '<td class="ta-right">'+(byDest[d].listAmt||0).toLocaleString()+'</td>'
             + '<td class="ta-right">'+byDest[d].amt.toLocaleString()+'</td>'
             + '<td class="ta-right"'+(byDest[d].unpaid?' style="color:var(--danger);font-weight:700;"':'')+'>'+byDest[d].unpaid+'</td>'
             + '<td class="ta-right"'+(byDest[d].unpaidAmt?' style="color:var(--danger);font-weight:700;"':'')+'>'+byDest[d].unpaidAmt.toLocaleString()+'</td></tr>').join("")
@@ -41817,20 +41865,21 @@
       return;
     }
     let h = '<div style="overflow-x:auto;"><table class="data-table resv-dest-fit" style="width:auto;"><thead><tr>'
-      + '<th>일련번호</th><th>전산모델명</th><th>색상</th><th>통신사</th><th>판매처</th>'
-      + '<th>판매일</th><th class="ta-right">판매가</th><th>상태</th><th>입금</th><th>입금일</th><th>세금계산서</th>'
+      + '<th>통신사</th><th>전산모델명</th><th>색상</th><th>일련번호</th><th>판매처</th>'
+      + '<th>판매일</th><th class="ta-right">출고가</th><th class="ta-right">판매가</th><th>상태</th><th>입금</th><th>입금일</th><th>세금계산서</th>'
       + '</tr></thead><tbody>';
     rows.forEach(r=>{
       const it = r.it, p = r.p;
       const label = p ? p.label : "판매요청 없음";
       const color = p ? p.color : "var(--gray)";
       h += '<tr>'
-        + '<td><b>'+comboEsc(it.serialNumber||"-")+'</b></td>'
+        + '<td>'+comboEsc(it.carrier||"-")+'</td>'
         + '<td>'+comboEsc(it.systemModel||"-")+'</td>'
         + '<td>'+comboEsc(it.systemColor||it.manufacturerColor||"-")+'</td>'
-        + '<td>'+comboEsc(it.carrier||"-")+'</td>'
+        + '<td><b>'+comboEsc(it.serialNumber||"-")+'</b></td>'
         + '<td>'+comboEsc(it.destination||"-")+'</td>'
         + '<td>'+comboEsc(it.outDate||"-")+'</td>'
+        + '<td class="ta-right">'+((Number(it.listPrice)||0) ? Number(it.listPrice).toLocaleString() : '<span style="color:var(--gray);">-</span>')+'</td>'
         + '<td class="ta-right">'+(Number(it.salePrice)||0).toLocaleString()+'</td>'
         + '<td>'+comboEsc(it.status||"-")+'</td>'
         + '<td><span style="color:'+color+';font-weight:700;">'+comboEsc(label)+'</span>'
@@ -41842,8 +41891,10 @@
     });
     const totQty = rows.length;
     const totAmt = rows.reduce((n,r)=> n + (Number(r.it.salePrice)||0), 0);
+    const totList = rows.reduce((n,r)=> n + (Number(r.it.listPrice)||0), 0);
     h += '<tr style="background:#fff;font-weight:700;border-top:2px solid var(--navy);">'
       + '<td colspan="6">합계 '+totQty+'대</td>'
+      + '<td class="ta-right">'+totList.toLocaleString()+'</td>'
       + '<td class="ta-right">'+totAmt.toLocaleString()+'</td><td colspan="4"></td></tr>';
     h += '</tbody></table></div>';
     listEl.innerHTML = h;
