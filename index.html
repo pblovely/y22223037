@@ -400,7 +400,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-04 v963</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-04 v967</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -9527,6 +9527,61 @@
   window.onOrderPasteSourceBase = async function(){
     const b = await baseOfCompany((document.getElementById("order-paste-source")||{}).value);
     putBase("order-paste-base", b);
+  };
+
+  //  할인 계산 기준을 바꾸면 모든 줄의 선할인·타할인 금액을 다시 냅니다.
+  //   %는 그대로 두고 금액만 기준에 맞춰 바꿉니다. 입고가·판매가도 함께 맞춥니다.
+  window.onBeBaseChange = function(){
+    const base = String((document.getElementById("be-base")||{}).value || "unit");
+    let n = 0;
+    document.querySelectorAll("#be-lines-body tr").forEach(function(tr){
+      const lp = tr.querySelector(".be-listprice");
+      const L = lp ? (Number(lp.value)||0) : (Number(tr.dataset.listPrice)||0);
+      if(!(L > 0)) return;
+      const bs = (base === "supply") ? Math.round(L / 1.1) : L;
+      const set = (cls, v)=>{ const el = tr.querySelector(cls); if(el && !el.disabled) el.value = v; };
+      const num = (cls)=>{ const el = tr.querySelector(cls);
+        return (el && el.value !== "") ? Number(el.value) : null; };
+      const pPct = num(".be-prepct"), oPct = num(".be-otherpct");
+      if(pPct != null){ set(".be-preamt", Math.round(bs * pPct / 100)); n++; }
+      if(oPct != null){ set(".be-otheramt", Math.round(bs * oPct / 100)); }
+      // 입고가·판매가를 다시 냅니다.
+      try{ recalcBatchLine(tr); }catch(e){}
+      const cb = tr.querySelector(".be-samebuy");
+      if(cb && cb.checked){
+        const bp = tr.querySelector(".be-purchase");
+        const buy = bp ? (Number(bp.value)||0) : 0;
+        if(buy > 0) set(".be-saleprice", buy);
+      }
+    });
+    const el = document.getElementById("be-msg");
+    if(el){
+      el.style.display = "block";
+      el.innerHTML = '<span style="color:var(--navy);">할인 계산 기준을 <b>'
+        + (base === "supply" ? "공급가" : (base === "total" ? "합계" : "출고가"))
+        + '</b> 로 바꿔 ' + n + '줄을 다시 계산했습니다. <b>수정 저장</b> 을 눌러야 반영됩니다.</span>';
+    }
+  };
+
+  //  주문 수정 — 잔여 여신을 보여줍니다. (새 주문 창과 같게)
+  window.showBeB2BHint = async function(){
+    const row = document.getElementById("be-b2b-hint-row");
+    const el  = document.getElementById("be-b2b-hint");
+    const pm  = document.getElementById("be-paymethod");
+    if(!row || !el || !pm) return;
+    if(pm.value !== "b2b_credit"){ row.style.display = "none"; return; }
+    row.style.display = "";
+    el.textContent = "확인 중...";
+    try{
+      const bal = await getB2BBalance();
+      el.innerHTML = '<b>' + bal.toLocaleString() + '</b>';
+    }catch(e){ el.textContent = "확인할 수 없습니다."; }
+  };
+
+  //  주문 수정 — 입고처를 고르면 매입 기준
+  window.onBeSourceBase = async function(){
+    const b = await baseOfCompany((document.getElementById("be-party")||{}).value);
+    putBase("be-base", b);
   };
 
   //  단건 주문 — 입고처를 고르면 매입 기준
@@ -26123,10 +26178,23 @@
     const beEditCarrierNames = await fetchNamesList("carriers");
     let h = "";
     if(kind === "order"){
-      h += '<div class="stack-row"><label>입고처</label><select id="be-party">'+opts(b.source)+'</select></div>';
+      // 새 주문 창과 같은 순서로 둡니다. (수정 창이 달라 보이면 고치기 어렵습니다)
       h += '<div class="stack-row"><label>주문일</label><input type="text" id="be-date1" maxlength="8" inputmode="numeric" value="'+comboEsc(b.orderDate||"")+'"></div>';
-      h += '<div class="stack-row"><label>도착예정일</label><input type="text" id="be-date2" maxlength="8" inputmode="numeric" value="'+comboEsc(b.expectedArrivalDate||"")+'"></div>';
-      h += '<div class="stack-row"><label>입금예정일</label><input type="text" id="be-date3" maxlength="8" inputmode="numeric" value="'+comboEsc(b.payDueDate||"")+'"></div>';
+      h += '<div class="stack-row"><label>도착예정일 (선택)</label><input type="text" id="be-date2" maxlength="8" inputmode="numeric" value="'+comboEsc(b.expectedArrivalDate||"")+'"></div>';
+      h += '<div class="stack-row"><label>입금예정일 <span class="info-tip" title="이 날짜까지 입금해야 합니다. 비워두셔도 됩니다.">ⓘ</span></label><input type="text" id="be-date3" maxlength="8" inputmode="numeric" value="'+comboEsc(b.payDueDate||"")+'"></div>';
+      // 할인 계산 기준 — 이 주문의 선할인·타할인을 어디에 걸지 정합니다.
+      {
+        const curBase = String(b.discountBase || "")
+          || (function(){ try{ return itemDiscountBase({ source: b.source||"" }) || "unit"; }catch(e){ return "unit"; } })();
+        h += '<div class="stack-row"><label>할인 계산 기준 <span class="info-tip" title="선할인·타할인%를 어디에 곱할지 정합니다. 바꾸신 뒤 [모든 줄에 적용] 을 눌러주세요.">ⓘ</span></label>'
+          + '<select id="be-base">'
+          + '<option value="unit"'   + (curBase==="unit"?' selected':'')   + '>대당 (출고가에 걸기)</option>'
+          + '<option value="total"'  + (curBase==="total"?' selected':'')  + '>합계 (출고가 합계에 한 번)</option>'
+          + '<option value="supply"' + (curBase==="supply"?' selected':'') + '>공급가 기준 (삼성전자 방식)</option>'
+          + '</select></div>';
+      }
+      // 입고처 — 할인 계산 기준 다음에 둡니다. (새 주문 창과 같은 자리)
+      h += '<div class="stack-row"><label>입고처</label><select id="be-party" onchange="onBeSourceBase()">'+opts(b.source)+'</select></div>';
       // 통신사 — 주문 목록에 보이는 값입니다. 바꾸면 품목 줄에도 함께 반영할지 물어봅니다.
       {
         const curCar = b.carrier || [...new Set((lines||[]).map(l=>l.carrier).filter(Boolean))].join(",") || "";
@@ -26137,17 +26205,23 @@
           + '</select></div>';
       }
       h += '<div class="stack-row"><label>결제방식 <span class="info-tip" title="여신으로 바꾸면 잔여 여신에서 바로 차감되고 출금요청 대상에서 빠집니다. 일반으로 되돌리면 차감 기록도 함께 지워집니다.">ⓘ</span></label>'
-        + '<select id="be-paymethod">'
+        + '<select id="be-paymethod" onchange="showBeB2BHint()">'
         + '<option value="normal"'+(b.paymentMethod!=="b2b_credit"?' selected':'')+'>일반 (계좌이체 — 출금요청 필요)</option>'
         + '<option value="b2b_credit"'+(b.paymentMethod==="b2b_credit"?' selected':'')+'>삼성여신 사용 (여신에서 자동 차감)</option>'
         + '</select></div>';
+      // 잔여 여신 — 새 주문 창과 같게 보여드립니다.
+      h += '<div class="stack-row" id="be-b2b-hint-row" style="display:none;"><label>잔여 여신</label>'
+        + '<span id="be-b2b-hint" style="flex:1;padding:5px 8px;font-size:12.5px;"></span></div>';
     }else{
       h += '<div class="stack-row"><label>판매처</label><select id="be-party">'+opts(b.destination)+'</select></div>';
       h += '<div class="stack-row"><label>요청일</label><input type="text" id="be-date1" maxlength="8" inputmode="numeric" value="'+comboEsc(b.requestDate||"")+'"></div>';
     }
     document.getElementById("be-form").innerHTML = h;
-    initSearchableSelect("be-party", (kind==="order" ? "입고처" : "판매처") + "를 입력하면 목록이 나옵니다");
-    syncSearchableSelect("be-party");
+    // 입고처·판매처는 일반 드롭다운으로 둡니다.
+    //  (검색형이면 값 바뀜이 안 전해져 할인 계산 기준이 안 따라옵니다)
+    try{ if(kind === "order") await onBeSourceBase(); }catch(e){}
+    // 여신 잔액도 보여드립니다.
+    try{ await showBeB2BHint(); }catch(e){}
     document.getElementById("be-msg").style.display = "none";
     await renderBatchEditLines();
     document.getElementById("batch-edit-modal-overlay").style.display = "flex";
@@ -26570,6 +26644,12 @@
     const othAmt = g("be-bulk-otheramt"), othPct = g("be-bulk-otherpct");
     const dest = g("be-bulk-dest"), salePct = g("be-bulk-salepct");
     const sameBuy = !!(document.getElementById("be-bulk-samebuy")||{}).checked;
+    // 할인 계산 기준 — 위에서 고르신 값에 맞춰 곱합니다.
+    const buyBase = String((document.getElementById("be-base")||{}).value || "unit");
+    const amtOnBase = (pct, L)=>{
+      const bs = (buyBase === "supply") ? Math.round(L / 1.1) : L;
+      return Math.round(bs * Number(pct) / 100);
+    };
     if(!preAmt && !prePct && !othAmt && !othPct && !dest && !salePct && !sameBuy){ alert("넣을 값을 하나 이상 입력해주세요."); return; }
 
     let n = 0;
@@ -26582,9 +26662,9 @@
       const L = (lp ? (Number(lp.value)||0) : 0) || (Number(tr.dataset.listPrice)||0);
       const set = (cls, val)=>{ const el = tr.querySelector(cls); if(el && !el.disabled) el.value = val; };
       if(preAmt !== ""){ set(".be-preamt", preAmt); set(".be-prepct", pctFromAmt(preAmt, L)); }
-      else if(prePct !== "" && L){ const a = amtFromPct(prePct, L); set(".be-preamt", a); set(".be-prepct", prePct); }
+      else if(prePct !== "" && L){ const a = amtOnBase(prePct, L); set(".be-preamt", a); set(".be-prepct", prePct); }
       if(othAmt !== ""){ set(".be-otheramt", othAmt); set(".be-otherpct", pctFromAmt(othAmt, L)); }
-      else if(othPct !== "" && L){ const a = amtFromPct(othPct, L); set(".be-otheramt", a); set(".be-otherpct", othPct); }
+      else if(othPct !== "" && L){ const a = amtOnBase(othPct, L); set(".be-otheramt", a); set(".be-otherpct", othPct); }
       if(dest !== ""){ const ds = tr.querySelector(".be-dest"); if(ds && !ds.disabled){
         if(!Array.from(ds.options).some(o=>o.value===dest)){ const o=document.createElement("option"); o.value=dest; o.textContent=dest; ds.appendChild(o); }
         ds.value = dest; } }
@@ -26717,8 +26797,13 @@
         p.saleDiscountAmt = num(".be-saleamt");
         p.saleDiscountPct = num(".be-salepct");
         // 할인 계산 기준도 줄에 함께 남깁니다. (도착 등록 때 재고로 옮겨집니다)
-        { const bs = String(party||"").trim() || String(b.source||"").trim();
-          try{ p.discountBase = itemDiscountBase({ source: bs }) || "unit"; }catch(e){}
+        { // 화면에서 고르신 기준을 그대로 씁니다.
+          const chosen = String((document.getElementById("be-base")||{}).value || "");
+          if(chosen) p.discountBase = chosen;
+          else{
+            const bs = String(party||"").trim() || String(b.source||"").trim();
+            try{ p.discountBase = itemDiscountBase({ source: bs }) || "unit"; }catch(e){}
+          }
           const dsv = (p.destination !== undefined) ? p.destination : (src.destination||"");
           try{
             const cS = (companiesCache||[]).find(function(x){
@@ -26957,6 +27042,9 @@
             if(t.p.salePrice != null) patch.salePrice = t.p.salePrice;
             if(t.p.saleDiscountAmt != null) patch.saleDiscountAmt = t.p.saleDiscountAmt;
             if(t.p.saleDiscountPct != null) patch.saleDiscount = t.p.saleDiscountPct;
+            // 할인 계산 기준도 재고로 옮깁니다. 재고 목록·판매 계산이 같은 기준으로 돕니다.
+            if(t.p.discountBase) patch.discountBase = t.p.discountBase;
+            if(t.p.saleDiscountBase) patch.saleDiscountBase = t.p.saleDiscountBase;
             // 「입고동일」 표시도 함께 옮깁니다. 그래야 앞으로 입고가가 바뀔 때 판매가도 따라갑니다.
             if(t.p.salePriceFollowsBuy != null){
               patch.salePriceFollowsBuy = t.p.salePriceFollowsBuy;
@@ -28456,10 +28544,20 @@
         if(String(it.status||"").indexOf("판매") < 0
            && String(it.status||"").indexOf("개통") < 0) bad.notSold.push(it.serialNumber || iid);
         // ③ 다른 판매요청도 이 재고를 가리키는지
+        //   재고에 적힌 판매요청(saleRequestId)이 「자기 자신」 입니다.
+        //   부르는 쪽에서 srId 를 안 넘겨도 이것으로 자기 자신을 뺍니다.
+        //   (전에는 자기 자신까지 세어 늘 겹친다고 나왔습니다)
+        const selfId = srId || it.saleRequestId || null;
         try{
           const q = await getDocs(query(collection(db,"saleRequests"), where("matchedItemIds","array-contains", iid)));
           const live = q.docs.filter(function(x){
-            return x.id !== srId && x.data().status !== "취소" && x.data().deleted !== true; });
+            const v = x.data();
+            if(x.id === selfId) return false;
+            if(v.status === "취소" || v.deleted === true) return false;
+            // 같은 묶음에 속한 줄은 「다른 판매요청」이 아닙니다.
+            if(selfId && (v.batchId === selfId || v.parentId === selfId)) return false;
+            return true;
+          });
           if(live.length) bad.dupReq.push((it.serialNumber||iid) + " → "
             + live.map(function(x){ return (x.data().destination||"-") + " " + (x.data().requestDate||""); }).join(", "));
         }catch(e){}
