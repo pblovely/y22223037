@@ -400,7 +400,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-06 v1016</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-06 v1017</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -13563,11 +13563,27 @@
         '<td class="ta-right">'+numFmt(o.salePrice)+'</td>' +
         // 판매할인 — 저장된 값이 없으면 출고가와 판매가로 냅니다.
         '<td class="ta-right">'+(function(){
+            // 판매가가 있으면 그것으로 냅니다. (저장된 옛 값보다 우선)
+            {
+              const L0 = Number(o.listPrice)||0, sp0 = Number(o.salePrice)||0;
+              if(L0 > 0 && sp0 > 0) return discFmt(L0 - sp0);
+            }
             if(o.saleDiscountAmt != null && o.saleDiscountAmt !== "") return discFmt(o.saleDiscountAmt);
             const L = Number(o.listPrice)||0, sp = Number(o.salePrice)||0;
             return (L > 0 && sp > 0) ? discFmt(L - sp) : discFmt(null);
           })()+'</td>' +
         '<td class="ta-right">'+(function(){
+            // 저장된 %가 금액과 안 맞으면 금액으로 다시 냅니다. (옛 값이 보이지 않게)
+            {
+              const L0 = Number(o.listPrice)||0;
+              const sp0 = Number(o.salePrice)||0;
+              if(L0 > 0 && sp0 > 0){
+                const amt0 = L0 - sp0;
+                const sb0 = String(o.saleDiscountBase || o.discountBase || "unit");
+                const div0 = (sb0 === "supply") ? Math.round(L0 / 1.1) : L0;
+                if(div0) return discPctFmt(Number(((amt0 / div0) * 100).toFixed(2)));
+              }
+            }
             if(o.saleDiscountPct != null && o.saleDiscountPct !== "") return discPctFmt(o.saleDiscountPct);
             const L = Number(o.listPrice)||0, sp = Number(o.salePrice)||0;
             const amt = (o.saleDiscountAmt != null && o.saleDiscountAmt !== "")
@@ -27343,7 +27359,15 @@
               : (L2 - (Number(p.preDiscountAmt)||0) - (Number(p.otherDiscountAmt)||0));
             if(buyP > 0){ sp2 = buyP; p.salePrice = buyP; }
           }
+          //  판매가가 여전히 없으면 입고가로 냅니다. (판매처가 있는 줄은 판매가가 있어야 합니다)
+          if((sp2 == null || !(sp2 > 0)) && L2 > 0){
+            const buy0 = L2 - (Number(p.preDiscountAmt)||0) - (Number(p.otherDiscountAmt)||0);
+            const prev = Number(src.salePrice)||0;
+            if(prev > 0) sp2 = prev;
+            else if(sameP && buy0 > 0) sp2 = buy0;
+          }
           if(L2 > 0 && sp2 != null && sp2 > 0){
+            p.salePrice = sp2;
             p.saleDiscountAmt = L2 - sp2;
             const bbP = String((document.getElementById("be-base")||{}).value || "unit");
             const sbP = sameP ? bbP
