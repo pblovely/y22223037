@@ -400,7 +400,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-06 v1028</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-06 v1029</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -4199,10 +4199,18 @@
   }
   function saleDiscountPctOf(it){
     if(it.saleDiscount != null) return Number(it.saleDiscount);
+    // 「입고동일」 이면 판매할인% = 선할인% + 타할인% 입니다.
+    if(it && it.salePriceFollowsBuy === true){
+      const pp = Number(it.purchaseDiscount)||0, op = Number(it.otherDiscountPct)||0;
+      if(pp + op > 0) return Number((pp + op).toFixed(2));
+    }
     const list = Number(it.listPrice) || 0;
     const amt = saleDiscountAmtOf(it);
     if(!list || amt === null) return null;
-    return Number(((amt/list)*100).toFixed(2));
+    // 판매할인 기준으로 냅니다. (출고가로 나누면 공급가 기준에서 어긋납니다)
+    const base = String(it.saleDiscountBase || it.discountBase || "") || "unit";
+    const v = pctOnBase(amt, list, base);
+    return (v === "" || v == null) ? null : Number(v);
   }
   function totalInDiscountOf(it){
     const pre = preDiscountAmtOf(it);
@@ -4378,12 +4386,12 @@
     if(op > 0) pcts.push(op + "%");
     const head = lab + " · " + pcts.join(" + ");
     if(okPre && okOth){
-      return head + ' <span style="color:#2e7d32;">→ ' + (wantPre + wantOth).toLocaleString() + ' ✓</span>';
+      return head + " → " + (wantPre + wantOth).toLocaleString() + " ✓";
     }
     const gaps = [];
     if(!okPre) gaps.push("선 " + wantPre.toLocaleString() + " (저장 " + pa.toLocaleString() + ")");
     if(!okOth) gaps.push("타 " + wantOth.toLocaleString() + " (저장 " + oa.toLocaleString() + ")");
-    return head + ' <span style="color:var(--danger);font-weight:700;">→ ' + gaps.join(" · ") + '</span>';
+    return head + " ✗ " + gaps.join(" · ");
   }
   window.discountBaseLabel = discountBaseLabel;
 
@@ -4450,7 +4458,7 @@
     //  적어둔 %와 저장된 금액을 맞춰봐서, 출고가에 곱한 값인지 공급가에 곱한 값인지 가려냅니다.
     { key:"discountBase", label:"할인 반영 기준",
       get:it=> discountBaseLabel(it),
-      getRaw:it=> String(discountBaseLabel(it)).replace(/<[^>]*>/g, "") },
+      getRaw:it=> discountBaseLabel(it) },
     { key:"purchaseDiscountAmt", label:"선할인", get:it=> discFmt(preDiscountAmtOf(it)), getRaw:it=> discRaw(preDiscountAmtOf(it)) },
     { key:"purchaseDiscount", label:"선할인%", get:it=> discPctFmt(preDiscountPctOf(it)), getRaw:it=> discRaw(preDiscountPctOf(it)) },
     { key:"otherDiscountAmt", label:"타할인", get:it=> discFmt(it.otherDiscountAmt), getRaw:it=> discRaw(it.otherDiscountAmt) },
