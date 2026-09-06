@@ -400,7 +400,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-06 v1013</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-06 v1014</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -4549,8 +4549,15 @@
     //  (이것을 안 비워 고친 금액이 화면에 안 나오는 일이 있었습니다)
     try{ if(typeof clearAllDataCache === "function") clearAllDataCache(); }catch(e){}
     try{ if(typeof clearDashCache === "function") clearDashCache(); }catch(e){}
+    // 담아둔 목록을 전부 비웁니다. 자료를 고치는 곳은 모두 이 함수를 지나갑니다.
+    //  한 곳이라도 남으면 화면에 옛 금액이 그대로 보입니다.
     try{ if(typeof orderBatchLinesCache === "object" && orderBatchLinesCache){
       for(const k in orderBatchLinesCache) delete orderBatchLinesCache[k]; } }catch(e){}
+    try{ if(typeof orderBatchCache === "object" && orderBatchCache){
+      for(const k in orderBatchCache) delete orderBatchCache[k]; } }catch(e){}
+    try{ if(typeof lastRenderedItems !== "undefined") lastRenderedItems = []; }catch(e){}
+    try{ if(typeof sdrDateMap === "object" && sdrDateMap){
+      for(const k in sdrDateMap) delete sdrDateMap[k]; } }catch(e){}
     // 화면 묶음으로 담아둔 것(B2B 대출·계좌카드)도 같이 비웁니다.
     //  여신 장부를 고쳤는데 담보 계산서가 옛 값을 보여주던 문제를 막습니다.
     try{ if(typeof clearScreenBoxes === "function") clearScreenBoxes(); }catch(e){}
