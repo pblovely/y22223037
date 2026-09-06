@@ -400,7 +400,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-06 v1002</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-06 v1003</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -10059,23 +10059,23 @@
       const L = Number((tr.querySelector(".ol-listprice")||{}).value) || 0;
       const set = (cls, v)=>{ const el = tr.querySelector(cls); if(el){ el.value = v; } };
 
-      // 선할인 — 금액이 우선, 없으면 %로 계산
-      if(preAmt !== ""){
-        set(".ol-prediscountamt", preAmt);
-        set(".ol-prediscountpct", pctFromAmt(preAmt, L));
-      }else if(prePct !== "" && L){
+      //  %를 넣으셨으면 % 가 우선입니다. 금액 칸에 옛 값이 남아 있어도 다시 계산합니다.
+      if(prePct !== "" && L){
         const a = amtFromPct(prePct, L);
         set(".ol-prediscountamt", a);
         set(".ol-prediscountpct", prePct);
+      }else if(preAmt !== ""){
+        set(".ol-prediscountamt", preAmt);
+        set(".ol-prediscountpct", pctFromAmt(preAmt, L));
       }
       // 타할인
-      if(othAmt !== ""){
-        set(".ol-otherdiscountamt", othAmt);
-        set(".ol-otherdiscountpct", pctFromAmt(othAmt, L));
-      }else if(othPct !== "" && L){
+      if(othPct !== "" && L){
         const a = amtFromPct(othPct, L);
         set(".ol-otherdiscountamt", a);
         set(".ol-otherdiscountpct", othPct);
+      }else if(othAmt !== ""){
+        set(".ol-otherdiscountamt", othAmt);
+        set(".ol-otherdiscountpct", pctFromAmt(othAmt, L));
       }
       // 판매처
       if(dest !== ""){
@@ -27044,10 +27044,12 @@
       const L = (lp ? (Number(lp.value)||0) : 0) || (Number(tr.dataset.listPrice)||0);
       //  잠긴 줄도 값은 바꿉니다. (칸은 회색 그대로 둡니다)
       const set = (cls, val)=>{ const el = tr.querySelector(cls); if(el) el.value = val; };
-      if(preAmt !== ""){ set(".be-preamt", preAmt); set(".be-prepct", pctFromAmt(preAmt, L)); }
-      else if(prePct !== "" && L){ const a = amtOnBase(prePct, L); set(".be-preamt", a); set(".be-prepct", prePct); }
-      if(othAmt !== ""){ set(".be-otheramt", othAmt); set(".be-otherpct", pctFromAmt(othAmt, L)); }
-      else if(othPct !== "" && L){ const a = amtOnBase(othPct, L); set(".be-otheramt", a); set(".be-otherpct", othPct); }
+      //  %를 넣으셨으면 % 를 기준으로 금액을 냅니다. (금액 칸에 옛 값이 남아 있어도 %가 우선)
+      //  % 없이 금액만 넣으셨으면 그 금액을 그대로 씁니다.
+      if(prePct !== "" && L){ const a = amtOnBase(prePct, L); set(".be-preamt", a); set(".be-prepct", prePct); }
+      else if(preAmt !== ""){ set(".be-preamt", preAmt); set(".be-prepct", pctFromAmt(preAmt, L)); }
+      if(othPct !== "" && L){ const a = amtOnBase(othPct, L); set(".be-otheramt", a); set(".be-otherpct", othPct); }
+      else if(othAmt !== ""){ set(".be-otheramt", othAmt); set(".be-otherpct", pctFromAmt(othAmt, L)); }
       if(dest !== ""){ const ds = tr.querySelector(".be-dest"); if(ds){
         if(!Array.from(ds.options).some(o=>o.value===dest)){ const o=document.createElement("option"); o.value=dest; o.textContent=dest; ds.appendChild(o); }
         ds.value = dest; } }
