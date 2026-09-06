@@ -400,7 +400,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-06 v983</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-06 v985</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -2523,7 +2523,7 @@
           <h3 style="margin:0;">여신 거래 내역 <span class="info-tip" title="여신 충전·주문사용·클럽장려금이 시간순으로 쌓입니다. 오른쪽 「+ 거래 등록」으로 직접 넣을 수 있습니다.">ⓘ</span></h3>
           <span class="btn-row">
             <span id="dl-b2b"></span>
-            <button class="btn small secondary" style="width:auto;" onclick="openB2BBalanceCheck()">여신잔액 맞추기</button>
+            <button class="btn small secondary" style="width:auto;" onclick="cleanOrphanCreditUse()" title="어느 주문에도 이어지지 않은 여신 차감 기록을 찾아 정리합니다.">주인 없는 차감 정리</button><button class="btn small secondary" style="width:auto;" onclick="openB2BBalanceCheck()">여신잔액 맞추기</button>
             <button class="btn small secondary" style="width:auto;" onclick="openB2BPostSettle()">후정산 대조</button>
             <button class="btn small" style="width:auto;" onclick="openB2BLedgerAdd()">+ 거래 등록</button>
           </span>
@@ -15577,6 +15577,42 @@
   }
 
   // 이 주문의 여신 차감 기록을 지우고 새 금액으로 다시 넣습니다. (중복 방지)
+  // 어느 주문에도 이어지지 않은 「주문사용」 기록을 찾아 정리합니다.
+  //  옛 방식으로 만들어졌거나 수기로 넣은 것이라 두면 여신이 두 번 빠집니다.
+  window.cleanOrphanCreditUse = async function(){
+    let rows = [];
+    try{
+      const q = await getDocs(collection(db,"b2bLedger"));
+      q.forEach(function(d){
+        const v = d.data();
+        if(v.category !== "order_use") return;
+        if(v.fromOrderBatchId) return;
+        rows.push({ id:d.id, ...v });
+      });
+    }catch(e){ alert("읽지 못했습니다."); return; }
+    if(rows.length === 0){ alert("주인 없는 여신 차감 기록이 없습니다."); return; }
+    const sum = rows.reduce(function(n,x){ return n + (Number(x.amount)||0); }, 0);
+    if(!confirm("어느 주문에도 이어지지 않은 여신 차감 기록이 " + rows.length + "건 있습니다.\n\n"
+      + rows.slice(0,10).map(function(x){
+          return "  " + (x.date||"-") + "  " + String(x.partner||x.source||"-")
+               + "  " + (Number(x.amount)||0).toLocaleString(); }).join("\n")
+      + (rows.length > 10 ? "\n  ... 외 " + (rows.length-10) + "건" : "")
+      + "\n\n합계 " + sum.toLocaleString()
+      + "\n\n지우면 그만큼 여신이 늘어납니다.\n"
+      + "그 주문을 열어 <수정 저장> 하시면 올바른 금액으로 다시 만들어집니다.\n\n지울까요?")) return;
+    try{
+      for(let i=0; i<rows.length; i+=300){
+        const bt = writeBatch(db);
+        rows.slice(i, i+300).forEach(function(r){ bt.delete(doc(db,"b2bLedger", r.id)); });
+        await withTimeout(bt.commit(), 15000, "여신 기록 정리");
+      }
+    }catch(e){ alert("지우지 못했습니다.\n" + ((e&&e.message)?e.message:String(e))); return; }
+    logAction("주인 없는 여신 차감 정리", rows.length + "건 / " + sum.toLocaleString());
+    alert(rows.length + "건을 지웠습니다. (" + sum.toLocaleString() + ")\n\n"
+      + "해당 주문을 열어 <수정 저장> 하시면 올바른 금액으로 다시 만들어집니다.");
+    loadB2BTab();
+  };
+
   async function replaceB2BOrderUse(orderBatchId, amount, date, sourceName){
     // ① 이 주문에서 만들어진 기록을 지웁니다.
     try{
@@ -15587,21 +15623,21 @@
     //   같은 날·같은 입고처의 「주문사용」인데 어느 주문에서 왔는지 없는 기록입니다.
     //   (옛 방식으로 만들어졌거나 수기로 넣은 것이라, 두면 두 번 차감됩니다)
     try{
-      const d0 = String(date || "").trim();
       const nm = String(sourceName || "").trim();
-      if(d0 && nm){
-        const q2 = await getDocs(query(collection(db,"b2bLedger"), where("date","==", d0)));
+      if(nm){
+        //  날짜는 안 따집니다. 옛 기록은 날짜가 다르게 들어간 경우도 있습니다.
+        const q2 = await getDocs(collection(db,"b2bLedger"));
         const orphan = [];
         q2.forEach(function(dd){
           const v = dd.data();
           if(v.category !== "order_use") return;
-          if(v.fromOrderBatchId) return;                       // 다른 주문 것은 둡니다
+          if(v.fromOrderBatchId) return;                       // 주문과 이어진 것은 둡니다
           if(String(v.partner||v.source||"").trim() !== nm) return;
           orphan.push({ id: dd.id, ...v });
         });
         if(orphan.length){
           const sum = orphan.reduce(function(n,x){ return n + (Number(x.amount)||0); }, 0);
-          if(confirm("같은 날짜·입고처에 <주문과 이어지지 않은> 여신 차감 기록이 "
+          if(confirm("이 입고처에 <주문과 이어지지 않은> 여신 차감 기록이 "
             + orphan.length + "건 있습니다.\n\n"
             + orphan.slice(0,5).map(function(x){
                 return "  " + (x.date||"-") + "  " + (Number(x.amount)||0).toLocaleString()
@@ -26224,6 +26260,13 @@
     }catch(e){
       alert("삭제에 실패했습니다.\n" + ((e && e.message) ? e.message : String(e)));
       return;
+    }
+    // 주문을 지우면 그 주문에서 나온 여신 차감 기록도 함께 지웁니다.
+    if(kind === "order"){
+      try{
+        const led = await getDocs(query(collection(db,"b2bLedger"), where("fromOrderBatchId","==", id)));
+        for(const dd of led.docs) await deleteDoc(doc(db,"b2bLedger", dd.id));
+      }catch(e){}
     }
     logAction(label + " 삭제(취소건)", party + " / 품목 " + (lines||[]).length + "개 / 사유: " + (b.cancelReason||"-"));
     alert("삭제했습니다." + (deleteSR ? "\n연결된 판매요청도 함께 정리했습니다." : ""));
