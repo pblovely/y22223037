@@ -400,7 +400,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-06 v988</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-06 v989</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -860,7 +860,7 @@
           <select id="ih-type" style="height:28px;border:1px solid var(--line);padding:0 6px;font-size:12.5px;margin-left:-1px;box-sizing:border-box;"><option value="">전체 종류</option></select>
           <select id="ih-user" style="height:28px;border:1px solid var(--line);padding:0 6px;font-size:12.5px;margin-left:-1px;box-sizing:border-box;"><option value="">전체 처리자</option></select>
           <button class="btn small" style="width:auto;margin-left:-1px;" onclick="loadItemHistory()">조회</button>
-          <button class="btn small secondary" style="width:auto;" onclick="clearItemHistory()">비우기</button>
+          <button class="btn small secondary" style="width:auto;" onclick="clearItemHistory()">비우기</button><button class="btn small secondary" style="width:auto;margin-left:6px;" onclick="fillPastCancelHistory()" title="예전에 배정·판매를 취소한 기록을 찾아 단말 이력에 채웁니다. 한 번만 하시면 됩니다.">지난 취소 이력 채우기</button>
           <span id="dl-itemhistory" style="margin-left:auto;"></span>
         </div>
         <div id="ih-summary" style="display:none;border:1px solid var(--navy);background:#f4f7fb;padding:10px 12px;margin-bottom:10px;font-size:12.5px;line-height:1.8;"></div>
@@ -24632,6 +24632,68 @@
     loadReservationTable();
     if(typeof loadSaleRequestList === "function") loadSaleRequestList();
     loadInventoryList();
+  };
+
+  // 예전에 취소한 배정·판매요청을 찾아 단말 이력에 채웁니다.
+  //  그때는 이력을 안 남기던 시절이라, 취소된 판매요청에 적힌 재고로 되살립니다.
+  window.fillPastCancelHistory = async function(){
+    let plan = [];
+    try{
+      // 취소된 판매요청을 모읍니다.
+      const srSnap = await getDocs(collection(db,"saleRequests"));
+      const cancelled = [];
+      srSnap.forEach(function(d){
+        const v = d.data();
+        if(v.status !== "취소") return;
+        const ids = v.matchedItemIds || v.cancelledItemIds || [];
+        if(!ids.length) return;
+        cancelled.push({ id:d.id, ...v, ids });
+      });
+      if(cancelled.length === 0){ alert("취소된 판매요청이 없습니다."); return; }
+      // 이미 이력이 있는지 봅니다. (두 번 넣지 않게)
+      const hs = await getDocs(collection(db,"itemHistory"));
+      const seen = {};
+      hs.forEach(function(d){
+        const v = d.data();
+        if(String(v.detail||"").indexOf("취소") < 0) return;
+        seen[(v.itemId||"") + "|" + String(v.detail||"").slice(0,30)] = 1;
+      });
+      for(const sr of cancelled){
+        for(const iid of sr.ids){
+          const detail = (sr.destination||"-") + " · 예약 배정 취소"
+            + (sr.cancelReason ? " · 사유: " + sr.cancelReason : "");
+          if(seen[iid + "|" + detail.slice(0,30)]) continue;
+          plan.push({ iid, sr, detail });
+        }
+      }
+    }catch(e){ alert("읽지 못했습니다.\n" + ((e&&e.message)?e.message:String(e))); return; }
+    if(plan.length === 0){ alert("채울 이력이 없습니다. (이미 다 들어 있습니다)"); return; }
+    if(!confirm("예전에 취소한 기록으로 단말 이력 " + plan.length + "건을 채웁니다.\n\n"
+      + plan.slice(0,8).map(function(p){ return "  " + p.detail; }).join("\n")
+      + (plan.length > 8 ? "\n  ... 외 " + (plan.length-8) + "건" : "")
+      + "\n\n같은 내용이 이미 있으면 건너뜁니다. 진행할까요?")) return;
+    let done = 0;
+    try{
+      for(const p of plan){
+        let sn = "", sm = "";
+        try{
+          const d0 = await getDoc(doc(db,"inventoryItems", p.iid));
+          if(d0.exists()){ sn = d0.data().serialNumber || ""; sm = d0.data().systemModel || ""; }
+        }catch(e){}
+        await addDoc(collection(db,"itemHistory"), {
+          itemId: p.iid, serialNumber: String(sn), systemModel: sm,
+          type: "sale", detail: p.detail,
+          date: String(p.sr.cancelledAt && p.sr.cancelledAt.seconds
+            ? new Date(p.sr.cancelledAt.seconds*1000).toISOString().slice(0,10).replace(/-/g,"")
+            : (p.sr.requestDate || todayStr())),
+          by: currentUser.name, byUsername: currentUser.username, at: serverTimestamp()
+        });
+        done++;
+      }
+    }catch(e){ alert("채우다 멈췄습니다.\n" + ((e&&e.message)?e.message:String(e))); }
+    logAction("지난 취소 이력 채우기", done + "건");
+    alert("단말 이력 " + done + "건을 채웠습니다.");
+    try{ if(typeof loadItemHistory === "function") loadItemHistory(); }catch(e){}
   };
 
   window.cancelResvAllocation = async function(saleRequestId){
