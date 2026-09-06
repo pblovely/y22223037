@@ -400,7 +400,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-06 v1017</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-06 v1021</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -8137,6 +8137,22 @@
   };
 
   //  할인 기준이 「공급가」면 VAT를 뺀 금액에 %를 겁니다. (삼성전자 방식)
+  //  입고가 = 출고가 − 할인(VAT 포함)
+  //   공급가 기준으로 넣은 할인은 VAT 제외 금액이라 1.1 을 곱해 빼야 합니다.
+  //   (전에는 그냥 빼서 삼성 매입가보다 크게 나왔습니다)
+  //   base 를 안 넘기면 지금 열려 있는 창의 기준을 씁니다.
+  window.buyFromDiscounts = function(listPrice, preAmt, otherAmt, base){
+    const L = Number(listPrice)||0;
+    if(!L) return 0;
+    let b = String(base||"");
+    if(b !== "supply" && b !== "unit" && b !== "total"){
+      b = (discBase(1000) < 1000) ? "supply" : "unit";   // 지금 창의 기준을 되짚습니다
+    }
+    const mul = (b === "supply") ? 1.1 : 1;
+    const cut = Math.round(((Number(preAmt)||0) + (Number(otherAmt)||0)) * mul);
+    return L - cut;
+  };
+
   function discBase(listPrice){
     //  지금 열려 있는 창의 「할인 계산 기준」을 씁니다.
     //   ① 주문 수정 창  ② 새 주문 창  ③ 단건 주문 창  ④ 재고 창  ⑤ 예약 창
@@ -9637,7 +9653,7 @@
       if(oPct != null) set(".be-otheramt", Math.round(bs * oPct / 100));
       // 입고가·판매가를 다시 냅니다.
       const pre = num(".be-preamt")||0, oth = num(".be-otheramt")||0;
-      set(".be-purchase", L - pre - oth);
+      set(".be-purchase", buyFromDiscounts(L, pre, oth, buyBase));
       const cb = tr.querySelector(".be-samebuy");
       if(cb && cb.checked) set(".be-saleprice", L - pre - oth);
       if(isLocked) tr.dataset.forceSave = "1";   // 저장 때 이 줄도 넣습니다
@@ -10278,7 +10294,7 @@
     const listPrice = Number(tr.querySelector(".ol-listprice").value) || 0;
     const preAmt = Number(tr.querySelector(".ol-prediscountamt").value) || 0;
     const otherAmt = Number(tr.querySelector(".ol-otherdiscountamt").value) || 0;
-    const buyNow2 = listPrice - preAmt - otherAmt;
+    const buyNow2 = buyFromDiscounts(listPrice, preAmt, otherAmt, String((document.getElementById("order-base-select")||{}).value||""));
     tr.querySelector(".ol-purchaseprice").value = buyNow2;
     // 「입고동일」 줄이면 판매가·판매할인도 함께 맞춥니다.
     {
@@ -12554,7 +12570,25 @@
         });
         srReleased += removed;
       }
-      // ② 재고 지우기
+      // ② 재고를 지우기 전에 단말 이력을 남깁니다.
+      //   재고가 사라져도 일련번호+모델로 이어져 이력 조회에서 보입니다.
+      try{
+        for(const id of ids){
+          let sn = "", sm = "", src2 = "";
+          try{
+            const d0 = await getDoc(doc(db,"inventoryItems", id));
+            if(d0.exists()){
+              const it0 = d0.data();
+              sn = it0.serialNumber || ""; sm = it0.systemModel || "";
+              src2 = it0.source || "";
+            }
+          }catch(e){}
+          await logItem(id, sn, "arrival_cancel",
+            "도착 취소" + (src2 ? " · " + src2 : "") + (b.orderDate ? " · " + b.orderDate : ""),
+            { systemModel: sm, date: b.orderDate || todayStr() });
+        }
+      }catch(e){}
+      // 재고 지우기
       for(let i=0; i<ids.length; i+=300){
         const bt = writeBatch(db);
         ids.slice(i, i+300).forEach(id=> bt.delete(doc(db,"inventoryItems", id)));
@@ -13149,7 +13183,25 @@
         srReleased += removed;
       }
 
-      // ② 재고를 지웁니다.
+      // ② 재고를 지우기 전에 단말 이력을 남깁니다.
+      //   재고가 사라져도 일련번호+모델로 이어져 이력 조회에서 보입니다.
+      try{
+        for(const id of picked){
+          let sn = "", sm = "", src2 = "";
+          try{
+            const d0 = await getDoc(doc(db,"inventoryItems", id));
+            if(d0.exists()){
+              const it0 = d0.data();
+              sn = it0.serialNumber || ""; sm = it0.systemModel || "";
+              src2 = it0.source || "";
+            }
+          }catch(e){}
+          await logItem(id, sn, "arrival_cancel",
+            "도착 취소" + (src2 ? " · " + src2 : "") + (o.orderDate ? " · " + o.orderDate : ""),
+            { systemModel: sm, date: o.orderDate || todayStr() });
+        }
+      }catch(e){}
+      // 재고를 지웁니다.
       for(let i=0; i<picked.length; i+=300){
         const bt = writeBatch(db);
         picked.slice(i, i+300).forEach(id=> bt.delete(doc(db,"inventoryItems", id)));
@@ -23734,7 +23786,7 @@
       return (v === "" || !isFinite(Number(v))) ? 0 : Number(v); };
     const pre = num("resv-prediscountamt-input");
     const oth = num("resv-otherdiscountamt-input");
-    const buy = L - pre - oth;
+    const buy = buyFromDiscounts(L, pre, oth, String((document.getElementById("resv-base-select")||{}).value||""));
     if(!(buy > 0)) return;
     const sp = document.getElementById("resv-saleprice-input");
     const sa = document.getElementById("resv-salediscountamt-input");
@@ -27067,7 +27119,7 @@
     }
 
     // 입고가 = 출고가 − 선할인 − 타할인
-    const buyNow = L - v(".be-preamt") - v(".be-otheramt");
+    const buyNow = buyFromDiscounts(L, v(".be-preamt"), v(".be-otheramt"), buyBase);
     set(".be-purchase", buyNow);
 
     // 「입고동일」 이면 판매가를 입고가와 똑같이 둡니다.
@@ -28969,6 +29021,7 @@
   // 단말기 한 대가 지나온 모든 기록을 남깁니다. 일련번호로 언제든 조회할 수 있습니다.
   const IH_TYPES = {
     inbound:   { label:"입고",     color:"#1565c0" },
+    arrival_cancel: { label:"도착취소", color:"var(--danger)" },
     location:  { label:"위치이동",  color:"#6b6b6b" },
     status:    { label:"상태변경",  color:"#6b6b6b" },
     salereq:   { label:"판매요청",  color:"#1565c0" },
@@ -30530,7 +30583,7 @@
       if(na !== nb) return na - nb;
       // 그래도 같으면 실제 일어나는 순서로 세웁니다.
       const RANK = { inbound:1, replaced:1, restored:1, salereq:2, matched:2,
-                     outbound:3, activate:4, location:5, price:5, edited:5,
+                     outbound:3, arrival_cancel:3.5, activate:4, location:5, price:5, edited:5,
                      status:6, deactivate:6, returned:7, deleted:8 };
       return (RANK[a.type] || 5) - (RANK[b.type] || 5);
     });
@@ -30851,7 +30904,7 @@
       if(na !== nb) return na - nb;
       // 그래도 같으면 실제 일어나는 순서로 세웁니다.
       const RANK = { inbound:1, replaced:1, restored:1, salereq:2, matched:2,
-                     outbound:3, activate:4, location:5, price:5, edited:5,
+                     outbound:3, arrival_cancel:3.5, activate:4, location:5, price:5, edited:5,
                      status:6, deactivate:6, returned:7, deleted:8 };
       return (RANK[a.type] || 5) - (RANK[b.type] || 5);
     });
@@ -31805,7 +31858,7 @@
           else if(pre) p.preDiscountPct = Number(((pre/L)*100).toFixed(2));
           if(othPct != null && othPct > 0){ oth = Math.round(L * othPct / 100); p.otherDiscountAmt = oth; }
           else if(oth) p.otherDiscountPct = Number(((oth/L)*100).toFixed(2));
-          p.purchasePrice = L - pre - oth;
+          p.purchasePrice = buyFromDiscounts(L, pre, oth, String(r.o.discountBase||""));
           bt.update(doc(db,"orders", r.oid), p);
         });
         await bt.commit();
@@ -33710,6 +33763,98 @@
     runDataCheck();
   };
 
+  let buyFixCache = { orders: [], items: [] };
+  // 입고가가 할인과 안 맞는 건을 찾습니다.
+  //  공급가 기준인데 할인을 VAT 포함으로 환산하지 않고 뺀 건입니다.
+  window.findBuyPriceMismatch = async function(){
+    const orders = [], items = [];
+    try{
+      const obAll = {};
+      (await getDocs(collection(db,"orderBatches"))).forEach(function(d){ obAll[d.id] = d.data(); });
+      (await getDocs(collection(db,"orders"))).forEach(function(d){
+        const o = d.data();
+        if(o.status === "취소") return;
+        const bt = obAll[o.batchId];
+        if(bt && bt.status === "취소") return;
+        const L = Number(o.listPrice)||0;
+        const cur = Number(o.purchasePrice)||0;
+        if(!L || !cur) return;
+        const base = String(o.discountBase || (bt && bt.discountBase) || "");
+        if(base !== "supply") return;                       // 공급가 기준만 해당
+        const want = L - Math.round(((Number(o.preDiscountAmt)||0) + (Number(o.otherDiscountAmt)||0)) * 1.1);
+        if(Math.abs(want - cur) <= 1) return;
+        orders.push({ id:d.id, batchId:o.batchId, date:o.orderDate||"-",
+          src:(bt && bt.source)||"-", model:o.systemModel||"-",
+          color:o.systemColor||o.manufacturerColor||"-", L, cur, want });
+      });
+      (await getDocs(collection(db,"inventoryItems"))).forEach(function(d){
+        const it = d.data();
+        if(it.deleted === true) return;
+        const L = Number(it.listPrice)||0;
+        const cur = Number(it.purchasePrice)||0;
+        if(!L || !cur) return;
+        if(String(it.discountBase||"") !== "supply") return;
+        const want = L - Math.round(((Number(it.purchaseDiscountAmt)||0) + (Number(it.otherDiscountAmt)||0)) * 1.1);
+        if(Math.abs(want - cur) <= 1) return;
+        items.push({ id:d.id, sn:it.serialNumber||"-", model:it.systemModel||"-",
+          color:it.systemColor||it.manufacturerColor||"-", L, cur, want,
+          sameBuy: it.salePriceFollowsBuy === true, salePrice: Number(it.salePrice)||0 });
+      });
+    }catch(e){ alert("읽지 못했습니다.\n" + ((e&&e.message)?e.message:String(e))); return null; }
+    buyFixCache = { orders, items };
+    return buyFixCache;
+  };
+
+  // 찾은 건들의 입고가를 한 번에 맞춥니다.
+  window.fixBuyPriceAll = async function(){
+    const r = await findBuyPriceMismatch();
+    if(!r) return;
+    const { orders, items } = r;
+    if(orders.length === 0 && items.length === 0){ alert("입고가가 어긋난 건이 없습니다."); return; }
+    const won = v => (Number(v)||0).toLocaleString();
+    if(!confirm("입고가가 할인과 안 맞는 건을 맞춥니다.\n\n"
+      + "  주문 품목  " + orders.length + "줄\n"
+      + "  재고       " + items.length + "대\n\n"
+      + (orders.length ? orders.slice(0,5).map(function(o){
+          return "  " + o.date + " " + o.model + " " + o.color
+               + "  " + won(o.cur) + " → " + won(o.want); }).join("\n") + "\n" : "")
+      + (orders.length > 5 ? "  ... 외 " + (orders.length-5) + "줄\n" : "")
+      + "\n공급가 기준으로 넣은 할인은 부가세를 뺀 금액입니다.\n"
+      + "출고가(부가세 포함)에서 빼려면 1.1 을 곱해야 합니다.\n\n"
+      + "「입고동일」 재고는 판매가도 함께 맞춥니다.\n\n진행할까요?")) return;
+    let n1 = 0, n2 = 0;
+    try{
+      for(let i=0; i<orders.length; i+=300){
+        const bt = writeBatch(db);
+        orders.slice(i, i+300).forEach(function(o){
+          bt.update(doc(db,"orders", o.id), { purchasePrice: o.want });
+          n1++;
+        });
+        await withTimeout(bt.commit(), 15000, "주문 저장");
+      }
+      for(let i=0; i<items.length; i+=300){
+        const bt = writeBatch(db);
+        items.slice(i, i+300).forEach(function(it){
+          const patch = { purchasePrice: it.want };
+          // 「입고동일」 이면 판매가·판매할인도 함께 맞춥니다.
+          if(it.sameBuy){
+            patch.salePrice = it.want;
+            patch.saleDiscountAmt = it.L - it.want;
+            const div = Math.round(it.L / 1.1);
+            patch.saleDiscount = div ? Number((((it.L - it.want) / div) * 100).toFixed(2)) : null;
+          }
+          bt.update(doc(db,"inventoryItems", it.id), patch);
+          n2++;
+        });
+        await withTimeout(bt.commit(), 15000, "재고 저장");
+      }
+    }catch(e){ alert("맞추다 멈췄습니다.\n" + ((e&&e.message)?e.message:String(e))); return; }
+    logAction("입고가 일괄 정정", "주문 " + n1 + "줄 / 재고 " + n2 + "대");
+    alert("맞췄습니다.\n\n  주문 품목 " + n1 + "줄\n  재고 " + n2 + "대");
+    try{ loadOrderList(); }catch(e){}
+    try{ if(typeof loadInventoryList === "function") loadInventoryList(); }catch(e){}
+  };
+
   let orderBaseDiffCache = [];
   // 주문의 할인 금액이 기준과 다른 건을 보여줍니다.
   window.showOrderBaseDiffList = function(){
@@ -34084,6 +34229,27 @@
               unit:"", why:"주문에 적힌 할인 계산 기준으로 %를 다시 곱하면 금액이 달라지는 건입니다. "
                 + "그 주문을 열어 [모든 줄에 적용] 하신 뒤 저장하시면 맞춰집니다.",
               fix:"showOrderBaseDiffList()", fixLabel:"확인하기" });
+          }
+        }
+        // 입고가가 할인과 안 맞는 건 (공급가 기준에서 부가세 환산을 안 한 건)
+        {
+          let bad2 = 0;
+          try{
+            Object.keys(items).forEach(function(id){
+              const it = items[id];
+              if(it.deleted === true) return;
+              const L = Number(it.listPrice)||0, cur = Number(it.purchasePrice)||0;
+              if(!L || !cur) return;
+              if(String(it.discountBase||"") !== "supply") return;
+              const want = L - Math.round(((Number(it.purchaseDiscountAmt)||0) + (Number(it.otherDiscountAmt)||0)) * 1.1);
+              if(Math.abs(want - cur) > 1) bad2++;
+            });
+          }catch(e){}
+          if(bad2){
+            issues.push({ n:"입고가가 할인과 안 맞음", cnt: bad2, unit:"",
+              why:"공급가 기준으로 넣은 할인은 부가세를 뺀 금액입니다. "
+                + "출고가(부가세 포함)에서 빼려면 1.1 을 곱해야 하는데 그냥 뺀 건입니다.",
+              fix:"fixBuyPriceAll()", fixLabel:"한 번에 맞추기" });
           }
         }
         issues.push({ n:"할인 금액이 기준과 다름", cnt: rows.length,
@@ -38523,7 +38689,7 @@
 
     if(["purchaseDiscount","purchaseDiscountAmt","otherDiscountPct","otherDiscountAmt"].includes(key)){
       if(L){
-        buy = L - pre - other; p.purchasePrice = buy;
+        buy = buyFromDiscounts(L, pre, other, String((it && it.discountBase)||"")); p.purchasePrice = buy;
         // 「판매가 = 입고가」로 맞춰둔 재고는 판매가도 함께 따라갑니다.
         if(it.salePriceFollowsBuy === true){
           sale = buy;
@@ -38668,10 +38834,10 @@
         set("saleDiscountAmt", a);
         if(a !== "") set("salePrice", L - Number(a));
       }
-      set("purchasePrice", L - (g("purchaseDiscountAmt")||0) - (g("otherDiscountAmt")||0));
+      set("purchasePrice", buyFromDiscounts(L, g("purchaseDiscountAmt")||0, g("otherDiscountAmt")||0, String(g("discountBase")||itemBaseOverride||"")));
     }
     if(["preamt","prepct","otheramt","otherpct","list"].includes(src) && L){
-      set("purchasePrice", L - (g("purchaseDiscountAmt")||0) - (g("otherDiscountAmt")||0));
+      set("purchasePrice", buyFromDiscounts(L, g("purchaseDiscountAmt")||0, g("otherDiscountAmt")||0, String(g("discountBase")||itemBaseOverride||"")));
     }
     if(src==="buy" && L){
       const pre = L - (g("purchasePrice")||0) - (g("otherDiscountAmt")||0);
@@ -38868,7 +39034,7 @@
               const pre = (p.purchaseDiscountAmt !== undefined) ? (Number(p.purchaseDiscountAmt)||0) : (Number(it.purchaseDiscountAmt)||0);
               const oth = (p.otherDiscountAmt !== undefined) ? (Number(p.otherDiscountAmt)||0) : (Number(it.otherDiscountAmt)||0);
               // 입고가를 직접 넣으셨으면 그 값을 그대로 씁니다.
-              if(p.purchasePrice === undefined && L > 0) p.purchasePrice = L - pre - oth;
+              if(p.purchasePrice === undefined && L > 0) p.purchasePrice = buyFromDiscounts(L, pre, oth, String((p.discountBase !== undefined ? p.discountBase : it.discountBase)||""));
               if(it.salePriceFollowsBuy === true && p.salePrice === undefined){
                 const sb = saleFromBuy({ ...it, ...p,
                   listPrice:L, purchaseDiscountAmt:pre, otherDiscountAmt:oth,
@@ -39704,7 +39870,7 @@
           // 입고가도 함께 맞춥니다. (출고가 − 선할인 − 타할인)
           const pre2 = (p2.preDiscountAmt != null) ? p2.preDiscountAmt : (Number(it.purchaseDiscountAmt)||0);
           const oth2 = (p2.otherDiscountAmt != null) ? p2.otherDiscountAmt : (Number(it.otherDiscountAmt)||0);
-          if(L) p2.purchasePrice = L - pre2 - oth2;
+          if(L) p2.purchasePrice = buyFromDiscounts(L, pre2, oth2, String((p2.discountBase != null ? p2.discountBase : it.discountBase)||""));
           await updateDoc(doc(db,"orders", it.orderId), p2);
           ordFixed++;
         }
