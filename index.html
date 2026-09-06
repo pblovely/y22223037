@@ -400,7 +400,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-06 v1021</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-06 v1022</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -8098,8 +8098,14 @@
   function pctFromAmt(amtRaw, listPrice){
     if(amtRaw === "" || amtRaw == null) return "";
     if(!listPrice) return "";
-    const B = discBase(listPrice);
-    return B ? ((Number(amtRaw)/B)*100).toFixed(2) : "";
+    // 화면의 할인 금액은 부가세 포함입니다. % 는 공급가 기준으로 되돌려 냅니다.
+    const L = Number(listPrice)||0;
+    const B0 = discBase(L);
+    if(B0 < L){
+      const su = Math.round(L / 1.1);
+      return su ? ((Number(amtRaw)/1.1/su)*100).toFixed(2) : "";
+    }
+    return L ? ((Number(amtRaw)/L)*100).toFixed(2) : "";
   }
   //  업체정보에 저장한 기준으로 계산 밑금액을 냅니다. (공급가면 VAT 제외)
   //  재고 창에서 기준을 바꾸면 그 자리에서 금액을 다시 냅니다.
@@ -8142,15 +8148,10 @@
   //   (전에는 그냥 빼서 삼성 매입가보다 크게 나왔습니다)
   //   base 를 안 넘기면 지금 열려 있는 창의 기준을 씁니다.
   window.buyFromDiscounts = function(listPrice, preAmt, otherAmt, base){
+    // 할인 금액은 화면·저장 모두 「부가세 포함」 입니다. 그대로 빼면 됩니다.
     const L = Number(listPrice)||0;
     if(!L) return 0;
-    let b = String(base||"");
-    if(b !== "supply" && b !== "unit" && b !== "total"){
-      b = (discBase(1000) < 1000) ? "supply" : "unit";   // 지금 창의 기준을 되짚습니다
-    }
-    const mul = (b === "supply") ? 1.1 : 1;
-    const cut = Math.round(((Number(preAmt)||0) + (Number(otherAmt)||0)) * mul);
-    return L - cut;
+    return L - (Number(preAmt)||0) - (Number(otherAmt)||0);
   };
 
   function discBase(listPrice){
@@ -8175,7 +8176,19 @@
   function amtFromPct(pctRaw, listPrice){
     if(pctRaw === "" || pctRaw == null) return "";
     if(!listPrice) return "";
-    return Math.round(discBase(listPrice) * Number(pctRaw)/100);
+    // 화면에 보이는 할인 금액은 출고가와 같은 「부가세 포함」 으로 냅니다.
+    //  공급가 기준이면 공급가에 %를 곱한 뒤 1.1 을 곱해 부가세를 붙입니다.
+    //  (그래야 출고가 − 할인 = 입고가 가 단위가 맞습니다)
+    const L = Number(listPrice)||0;
+    const B0 = discBase(L);
+    const sup = (B0 < L);                    // discBase 가 작아졌으면 공급가 기준입니다
+    if(sup){
+      //  삼성 방식과 똑같이 — 공급단가를 반올림한 뒤 %를 곱하고, 부가세를 붙입니다.
+      const su = Math.round(L / 1.1);
+      const en = Math.round(su * Number(pctRaw) / 100);
+      return Math.round(en * 1.1);
+    }
+    return Math.round(L * Number(pctRaw)/100);
   }
   //  판매할인%를 곱할 금액입니다. 매입과 따로 정합니다.
   function saleDiscBase(listPrice){
@@ -33781,9 +33794,14 @@
         if(!L || !cur) return;
         const base = String(o.discountBase || (bt && bt.discountBase) || "");
         if(base !== "supply") return;                       // 공급가 기준만 해당
-        const want = L - Math.round(((Number(o.preDiscountAmt)||0) + (Number(o.otherDiscountAmt)||0)) * 1.1);
+        // 화면·저장 모두 부가세 포함 금액이어야 합니다. %로 다시 내어 견줍니다.
+        const su = Math.round(L / 1.1);
+        const pp = Number(o.preDiscountPct)||0, op = Number(o.otherDiscountPct)||0;
+        const wPre = pp > 0 ? Math.round(Math.round(su * pp / 100) * 1.1) : (Number(o.preDiscountAmt)||0);
+        const wOth = op > 0 ? Math.round(Math.round(su * op / 100) * 1.1) : (Number(o.otherDiscountAmt)||0);
+        const want = L - wPre - wOth;
         if(Math.abs(want - cur) <= 1) return;
-        orders.push({ id:d.id, batchId:o.batchId, date:o.orderDate||"-",
+        orders.push({ id:d.id, batchId:o.batchId, wPre, wOth, date:o.orderDate||"-",
           src:(bt && bt.source)||"-", model:o.systemModel||"-",
           color:o.systemColor||o.manufacturerColor||"-", L, cur, want });
       });
@@ -33794,9 +33812,13 @@
         const cur = Number(it.purchasePrice)||0;
         if(!L || !cur) return;
         if(String(it.discountBase||"") !== "supply") return;
-        const want = L - Math.round(((Number(it.purchaseDiscountAmt)||0) + (Number(it.otherDiscountAmt)||0)) * 1.1);
+        const su2 = Math.round(L / 1.1);
+        const pp2 = Number(it.purchaseDiscount)||0, op2 = Number(it.otherDiscountPct)||0;
+        const wPre2 = pp2 > 0 ? Math.round(Math.round(su2 * pp2 / 100) * 1.1) : (Number(it.purchaseDiscountAmt)||0);
+        const wOth2 = op2 > 0 ? Math.round(Math.round(su2 * op2 / 100) * 1.1) : (Number(it.otherDiscountAmt)||0);
+        const want = L - wPre2 - wOth2;
         if(Math.abs(want - cur) <= 1) return;
-        items.push({ id:d.id, sn:it.serialNumber||"-", model:it.systemModel||"-",
+        items.push({ wPre: wPre2, wOth: wOth2, id:d.id, sn:it.serialNumber||"-", model:it.systemModel||"-",
           color:it.systemColor||it.manufacturerColor||"-", L, cur, want,
           sameBuy: it.salePriceFollowsBuy === true, salePrice: Number(it.salePrice)||0 });
       });
@@ -33827,7 +33849,10 @@
       for(let i=0; i<orders.length; i+=300){
         const bt = writeBatch(db);
         orders.slice(i, i+300).forEach(function(o){
-          bt.update(doc(db,"orders", o.id), { purchasePrice: o.want });
+          const p = { purchasePrice: o.want };
+          if(o.wPre != null) { p.preDiscountAmt = o.wPre; p.purchaseDiscountAmt = o.wPre; }
+          if(o.wOth != null) p.otherDiscountAmt = o.wOth;
+          bt.update(doc(db,"orders", o.id), p);
           n1++;
         });
         await withTimeout(bt.commit(), 15000, "주문 저장");
@@ -33836,6 +33861,8 @@
         const bt = writeBatch(db);
         items.slice(i, i+300).forEach(function(it){
           const patch = { purchasePrice: it.want };
+          if(it.wPre != null){ patch.purchaseDiscountAmt = it.wPre; }
+          if(it.wOth != null){ patch.otherDiscountAmt = it.wOth; }
           // 「입고동일」 이면 판매가·판매할인도 함께 맞춥니다.
           if(it.sameBuy){
             patch.salePrice = it.want;
