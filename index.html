@@ -400,7 +400,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-06 v1029</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-06 v1030</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -4468,26 +4468,32 @@
     { key:"creditReturnDate", label:"여신복구일", get:it=> it.creditReturnDate || "-", getRaw:it=> it.creditReturnDate || "-" },
     // 판매 쪽도 삼성 기준(공급가)으로 환산해 보여줍니다. 매입 할인율과 바로 견줄 수 있게요.
     { key:"samsungSalePct", label:"삼성기준 판매할인%",
+      // 할인 금액은 부가세 포함입니다. 부가세를 벗기고 공급단가로 나눕니다.
       get:it=>{
         const L = Number(it.listPrice)||0, sp = Number(it.salePrice)||0;
         if(!L || !sp) return "-";
-        return (((L - sp) / (L/1.1)) * 100).toFixed(2) + "%";
+        const v = pctOnBase(L - sp, L, "supply");
+        return (v === "" || v == null) ? "-" : (Number(v).toFixed(2) + "%");
       },
       getRaw:it=>{
         const L = Number(it.listPrice)||0, sp = Number(it.salePrice)||0;
         if(!L || !sp) return "-";
-        return Number((((L - sp) / (L/1.1)) * 100).toFixed(2));
+        const v = pctOnBase(L - sp, L, "supply");
+        return (v === "" || v == null) ? "-" : Number(v);
       } },
     { key:"samsungPct", label:"삼성기준 매입할인%",
+      // 할인 금액은 부가세 포함입니다. 부가세를 벗기고 공급단가로 나눕니다.
       get:it=>{
         const L = Number(it.listPrice)||0, buy = Number(it.purchasePrice)||0;
         if(!L || !buy) return "-";
-        return (((L - buy) / (L/1.1)) * 100).toFixed(2) + "%";
+        const v = pctOnBase(L - buy, L, "supply");
+        return (v === "" || v == null) ? "-" : (Number(v).toFixed(2) + "%");
       },
       getRaw:it=>{
         const L = Number(it.listPrice)||0, buy = Number(it.purchasePrice)||0;
         if(!L || !buy) return "";
-        return Number((((L - buy) / (L/1.1)) * 100).toFixed(2));
+        const v = pctOnBase(L - buy, L, "supply");
+        return (v === "" || v == null) ? "" : Number(v);
       } },
     { key:"salePriceFollowsBuy", label:"판매가 연동",
       get:it=> it.salePriceFollowsBuy === true ? "입고동일" : "-",
@@ -39975,7 +39981,8 @@
             if(L) p2.otherDiscountAmt = Math.round((L/1.1) * parsedVal / 100);
           }else if(key === "otherDiscountAmt"){
             p2.otherDiscountAmt = parsedVal;
-            if(L) p2.otherDiscountPct = Number((((parsedVal)/(L/1.1))*100).toFixed(2));
+            if(L){ const v9 = pctOnBase(parsedVal, L, "supply");
+            p2.otherDiscountPct = (v9 === "" || v9 == null) ? null : Number(v9); }
           }
           // 입고가도 함께 맞춥니다. (출고가 − 선할인 − 타할인)
           const pre2 = (p2.preDiscountAmt != null) ? p2.preDiscountAmt : (Number(it.purchaseDiscountAmt)||0);
