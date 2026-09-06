@@ -400,7 +400,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-06 v1032</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-06 v1035</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -17696,7 +17696,9 @@
             purchasePrice:Number(o.purchasePrice)||0, otherDiscountAmt:Number(o.otherDiscountAmt)||0 })),
           models: [...new Set(lines.map(o=> String(o.systemModel||o.baseModel||"-")))].slice(0,4).join("·") });
         months[k].qty    += qty;
-        months[k].cost   += Number(b.depositRequired)||0;
+        //  세금계산서 예상 금액 = 여신차감액 (실제 매입 금액)
+        //   타할인은 나중에 클럽장려금으로 들어오므로 여기서 빼지 않습니다.
+        months[k].cost   += Number(b.creditUsed != null ? b.creditUsed : b.depositRequired)||0;
         months[k].credit += Number(b.creditUsed != null ? b.creditUsed : b.depositRequired)||0;
       });
     }catch(e){}
@@ -17716,7 +17718,9 @@
     Object.keys(colByKey).forEach(k=> colByKey[k].sort((a,b)=> String(a.issueDate||"").localeCompare(String(b.issueDate||""))));
     // 기한이 끝난 계산서는 더 못 빌리므로 담보 금액에서 뺍니다. (표에는 기록으로 남깁니다)
     const sumCols = arr=> (arr||[]).reduce((n,c)=> n + (c.expired ? 0 : (Number(c.amount)||0)), 0);
-    const sumUsed = arr=> (arr||[]).reduce((n,c)=> n + (usedBy[c.id]||0), 0);
+    //  기한이 끝난 계산서는 담보에서 빠집니다. 거기서 빌린 금액도 함께 빼야
+    //  「남은 금액」이 실제로 더 빌릴 수 있는 금액이 됩니다.
+    const sumUsed = arr=> (arr||[]).reduce((n,c)=> n + (c.expired ? 0 : (usedBy[c.id]||0)), 0);
 
     // 반품으로 여신을 되돌려 받은 금액은 그 달 매입에서 빼야 계산서와 맞습니다.
     const retByKey = {};
@@ -17774,7 +17778,7 @@
     }
     const canDo = hasPerm(currentUserPerms, "paymentProcess");
     let h = '<div style="overflow-x:auto;"><table class="data-table resv-dest-fit" style="width:auto;"><thead><tr>'
-      + '<th>귀속월</th><th>입고처</th><th class="ta-right">주문완료</th><th class="ta-right">입고가 합계</th><th class="ta-right">여신차감</th>'
+      + '<th>귀속월</th><th>입고처</th><th class="ta-right">주문완료</th><th class="ta-right">세금계산서 예상</th><th class="ta-right">여신차감</th>'
       + '<th>계산서</th><th>발행일</th><th class="ta-right">계산서 금액</th><th class="ta-right">계산서 합계</th>'
       + '<th class="ta-right">차이</th>'
       + '<th class="ta-right">쓴 금액</th><th class="ta-right">남은 금액</th>' 
@@ -22859,13 +22863,43 @@
     const destinations = [...new Set(checked.map(cb=> (cb.dataset.dest||"").trim()).filter(Boolean))];
     let total = otherAmount;
     checked.forEach(cb=> total += Number(cb.dataset.amount)||0);
+    // 고른 건에 묶인 재고들의 판매일 중 가장 빠른 날을 알려드립니다.
+    //  이 날짜를 보고 입금요청일을 정하시면 됩니다.
+    let firstSale = "";
+    try{
+      const ids = [];
+      for(const b of batchRefs){
+        const col = b.isLegacy ? "saleRequests" : "saleRequestBatches";
+        if(b.isLegacy){
+          const d = await getDoc(doc(db,"saleRequests", b.id));
+          if(d.exists()) (d.data().matchedItemIds||[]).forEach(function(i){ ids.push(i); });
+        }else{
+          const q = await getDocs(query(collection(db,"saleRequests"), where("batchId","==", b.id)));
+          q.forEach(function(d){ (d.data().matchedItemIds||[]).forEach(function(i){ ids.push(i); }); });
+        }
+      }
+      const dates = [];
+      for(let i=0; i<ids.length; i+=25){
+        const part = ids.slice(i, i+25);
+        if(part.length === 0) continue;
+        const q2 = await getDocs(query(collection(db,"inventoryItems"), where("__name__","in", part)));
+        q2.forEach(function(d){
+          const od = String(d.data().outDate||"").replace(/\D/g,"");
+          if(od.length === 8) dates.push(od);
+        });
+      }
+      if(dates.length) firstSale = dates.sort()[0];
+    }catch(e){}
+
     const confirmMsg = (destinations.length ? destinations.join(", ")+" / " : "")
-      + batchRefs.length+"건"+(otherAmount>0?" + 기타 "+otherAmount.toLocaleString():"")+" / 총 "+total.toLocaleString()+" — 입금요청을 만드시겠습니까?";
+      + batchRefs.length+"건"+(otherAmount>0?" + 기타 "+otherAmount.toLocaleString():"")+" / 총 "+total.toLocaleString()
+      + (firstSale ? "\n\n가장 빠른 판매일  " + firstSale : "")
+      + "\n\n입금요청을 만드시겠습니까?";
     if(!confirm(confirmMsg)) return;
 
     const reqRef = await addDoc(collection(db,"saleDepositRequests"), {
       saleBatchRefs: batchRefs, destinations, otherAmount, totalAmount: total,
-      requestDate: todayStr(), depositCompleted:false, depositCompleteDate:"",
+      requestDate: todayStr(), firstSaleDate: firstSale || "", depositCompleted:false, depositCompleteDate:"",
       receivedAmount: 0, receipts: [],                 // 부분입금 누적
       taxInvoiceIssued:false, taxInvoiceDate:"",
       status:"요청중", createdBy: currentUser.name, createdByUsername: currentUser.username, createdAt: serverTimestamp()
@@ -23265,6 +23299,11 @@
       row.style.alignItems = "flex-start"; row.style.flexWrap = "wrap";
       row.innerHTML =
         '<span style="font-size:12.5px;">' +
+        // 가장 빠른 판매일 — 이 요청에 묶인 재고들의 판매일 중 제일 빠른 날입니다.
+        (p.firstSaleDate
+          ? '<span style="color:var(--navy);font-weight:700;" title="이 요청에 묶인 재고의 판매일 중 제일 빠른 날">판매 '
+            + comboEsc(p.firstSaleDate) + '</span> · '
+          : '<span class="sdr-first" data-sdr="' + d.id + '" style="color:var(--gray);">판매 -</span> · ') +
         '<b>'+destLabelOf(p)+'</b> · <b>'+(p.totalAmount||0).toLocaleString()+'</b> · 판매요청 '+p.saleBatchRefs.length+'건'+(p.otherAmount?' + 기타 '+p.otherAmount.toLocaleString():'')+' · 요청일 '+p.requestDate+' · 상태 <b>'+p.status+'</b><br>' +
         // 입금 내역 (부분입금 포함)
         ((p.receipts && p.receipts.length)
@@ -23339,6 +23378,47 @@
       }
     });
     el.prepend(renderPaginationBar("saleDepositRequests", sdrDocs.length, loadSaleDepositRequestList));
+    // 예전 요청은 판매일이 저장돼 있지 않습니다. 여기서 찾아 채워드립니다.
+    (async ()=>{
+      const need = Array.from(document.querySelectorAll(".sdr-first[data-sdr]"));
+      if(need.length === 0) return;
+      try{
+        const [srSnap, invSnap] = await Promise.all([
+          getDocs(collection(db,"saleRequests")),
+          getDocs(collection(db,"inventoryItems"))
+        ]);
+        const outBy = {};
+        invSnap.forEach(function(d){
+          const od = String(d.data().outDate||"").replace(/\D/g,"");
+          if(od.length === 8) outBy[d.id] = od;
+        });
+        const idsByBatch = {}, idsBySr = {};
+        srSnap.forEach(function(d){
+          const v = d.data();
+          const ids = v.matchedItemIds || [];
+          idsBySr[d.id] = ids;
+          if(v.batchId){ (idsByBatch[v.batchId] = idsByBatch[v.batchId] || []).push(...ids); }
+        });
+        for(const sp of need){
+          const id = sp.dataset.sdr;
+          const doc0 = sdrPage.find(function(x){ return x.id === id; });
+          if(!doc0) continue;
+          const refs = doc0.data().saleBatchRefs || [];
+          const dates = [];
+          refs.forEach(function(b){
+            const ids = b.isLegacy ? (idsBySr[b.id]||[]) : (idsByBatch[b.id]||[]);
+            ids.forEach(function(i){ if(outBy[i]) dates.push(outBy[i]); });
+          });
+          if(dates.length === 0) continue;
+          const first = dates.sort()[0];
+          sp.style.color = "var(--navy)"; sp.style.fontWeight = "700";
+          sp.textContent = "판매 " + first;
+          sp.title = "이 요청에 묶인 재고의 판매일 중 제일 빠른 날";
+          // 다음부터는 바로 보이도록 저장해 둡니다.
+          try{ await updateDoc(doc(db,"saleDepositRequests", id), { firstSaleDate: first }); }catch(e){}
+        }
+      }catch(e){}
+    })();
   }
 
   // ---------- 판매 요청 ----------
