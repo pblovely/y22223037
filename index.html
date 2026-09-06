@@ -400,7 +400,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-04 v969</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-04 v973</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -4523,6 +4523,12 @@
     // 자료가 바뀔 때마다 이 함수를 지나갑니다.
     //  담아둔 자료를 비워, 다음에 화면을 열 때 새 값을 읽게 합니다. (옛 값이 남지 않게)
     try{ if(typeof clearDocCache === "function") clearDocCache(); }catch(e){}
+    // 목록용으로 담아둔 것도 함께 비웁니다.
+    //  (이것을 안 비워 고친 금액이 화면에 안 나오는 일이 있었습니다)
+    try{ if(typeof clearAllDataCache === "function") clearAllDataCache(); }catch(e){}
+    try{ if(typeof clearDashCache === "function") clearDashCache(); }catch(e){}
+    try{ if(typeof orderBatchLinesCache === "object" && orderBatchLinesCache){
+      for(const k in orderBatchLinesCache) delete orderBatchLinesCache[k]; } }catch(e){}
     // 화면 묶음으로 담아둔 것(B2B 대출·계좌카드)도 같이 비웁니다.
     //  여신 장부를 고쳤는데 담보 계산서가 옛 값을 보여주던 문제를 막습니다.
     try{ if(typeof clearScreenBoxes === "function") clearScreenBoxes(); }catch(e){}
@@ -22605,6 +22611,9 @@
         ...(x.company ? {} : { company: destination||"" })
       });
     }catch(e){ console.error("입금 차감 실패", e); }
+      // 담아둔 목록을 비웁니다. (고친 값이 바로 보이게)
+    try{ if(typeof clearAllDataCache === "function") clearAllDataCache(); }catch(e){}
+    try{ if(typeof clearDocCache === "function") clearDocCache(); }catch(e){}
   };
 
   // 입금·이체 기록 한 줄을 승인 상태와 함께 보여줍니다.
@@ -26161,6 +26170,8 @@
   };
 
   window.openBatchEdit = async function(kind, id){
+    // 담아둔 줄 자료를 비우고 새로 읽습니다. (고친 금액이 바로 보이게)
+    try{ if(typeof orderBatchLinesCache === "object") delete orderBatchLinesCache[id]; }catch(e){}
     const col = (kind === "order") ? "orderBatches" : "saleRequestBatches";
     const snap = await getDoc(doc(db, col, id));
     if(!snap.exists()){ alert("이미 삭제된 건입니다."); return; }
@@ -26729,6 +26740,9 @@
     const linePatch = {};
     if(kind === "order"){
       batchPatch.source = party; batchPatch.orderDate = d1; batchPatch.expectedArrivalDate = d2;
+      // 할인 계산 기준 — 화면에서 고르신 값을 묶음에 저장합니다.
+      { const bsv = String((document.getElementById("be-base")||{}).value || "");
+        if(bsv) batchPatch.discountBase = bsv; }
       const d3El = document.getElementById("be-date3");
       if(d3El) batchPatch.payDueDate = (d3El.value||"").replace(/\D/g,"");
       // 통신사 — 바뀌었으면 품목 줄에도 함께 바꿀지 물어봅니다.
@@ -27134,6 +27148,13 @@
       party + " / " + d1 + " / 품목 " + lines.length + "개"
       + (Object.keys(perLine).length ? " / 금액수정 " + Object.keys(perLine).length + "줄" : "")
       + (fixItems && itemTargets.length ? " / 재고 " + itemTargets.length + "대 금액 함께 수정" : ""));
+    }catch(e){}
+    // 담아둔 자료를 전부 비웁니다. 안 그러면 목록·상세에 옛 금액이 그대로 보입니다.
+    try{
+      clearCache("orders"); clearCache("inventory"); clearCache("saleRequests");
+      clearCache("b2b"); clearCache("loan"); clearDashCache();
+      if(typeof orderBatchLinesCache === "object") { for(const k in orderBatchLinesCache) delete orderBatchLinesCache[k]; }
+      if(typeof clearScreenCache === "function"){ clearScreenCache("orders"); clearScreenCache("loan"); }
     }catch(e){}
     msg("저장되었습니다." + (addedLines ? "  품목 " + addedLines + "줄을 더했습니다." : ""), false);
     // 창을 먼저 닫고 목록은 뒤에서 새로 읽습니다. (목록 읽기가 오래 걸려도 창이 남지 않게)
@@ -33406,7 +33427,13 @@
         baseDiffCache = rows;
         baseDiffPaidSkip = paidSkip;
         const gap = rows.reduce((n,r)=> n + Math.abs(r.wantBuy - r.curBuy), 0);
-        // (뺐습니다) 「할인 금액이 업체 기준과 다른 재고」 — 등록·연동으로 자동 맞춰집니다.
+        // 저장된 기준과 실제 할인 금액이 어긋난 재고를 알려드립니다.
+        //  기준을 바꾸고 저장하면 저절로 사라집니다. 남아 있으면 어딘가 안 맞은 것입니다.
+        issues.push({ n:"할인 금액이 기준과 다름", cnt: rows.length,
+          unit: gap ? "입고가 차이 " + gap.toLocaleString() : "",
+          why:"이 재고에 저장된 할인 계산 기준(또는 업체 기준)으로 %를 다시 곱하면 금액이 달라지는 건입니다. "
+            + "기준을 바꾼 뒤 반영이 안 됐거나, 금액을 직접 고치신 경우입니다.",
+          fix: rows.length ? "showBaseDiffList()" : null, fixLabel:"확인하기" });
       }
 
       // ⓪-3 「입고동일」인데 판매 금액이 매입과 다른 재고
@@ -40077,6 +40104,10 @@
   window.clearCache = function(key){
     delete dataCache[key];
     delete dataCache["_m_" + key];
+  };
+  //  담아둔 목록을 통째로 비웁니다. 자료를 고칠 때마다 logAction 에서 부릅니다.
+  window.clearAllDataCache = function(){
+    try{ Object.keys(dataCache).forEach(function(k){ delete dataCache[k]; }); }catch(e){}
   };
 
   // 저장소 하나를 화면키로 담아둡니다. 「읽기 절약」이 켜져 있으면 다시 읽지 않습니다.
