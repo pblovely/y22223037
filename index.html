@@ -400,7 +400,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-06 v977</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-06 v981</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -9500,6 +9500,33 @@
     if(typeof recalcOrderTotal === "function") recalcOrderTotal();
   };
 
+  //  이 업체가 「여신 대상 (삼성전자 계열)」인지 봅니다.
+  async function isCreditCompany(name){
+    const nm = String(name||"").trim();
+    if(!nm) return false;
+    try{ if(!companiesCache || companiesCache.length === 0) await fetchCompanies(); }catch(e){}
+    const c = (companiesCache||[]).find(function(x){ return String(x.name||"").trim() === nm; });
+    return !!(c && c.isCreditTarget === true);
+  }
+  //  여신 대상 업체면 할인 계산 기준을 「공급가」로 고정합니다.
+  //   삼성전자 여신은 DPS 방식이 정해져 있어 다른 값으로 넣으면 금액이 어긋납니다.
+  window.lockBaseIfCredit = async function(selId, sourceName){
+    const el = document.getElementById(selId);
+    if(!el) return false;
+    const isC = await isCreditCompany(sourceName);
+    if(isC){
+      el.value = "supply";
+      el.disabled = true;
+      el.style.background = "#eef7ee";
+      el.title = "여신 대상 업체입니다. 삼성전자 여신(DPS) 방식으로 고정됩니다.";
+    }else{
+      el.disabled = false;
+      el.style.background = "";
+      el.title = "";
+    }
+    return isC;
+  };
+
   //  거래처를 고르면 그 업체의 할인 계산 기준을 칸에 넣어드립니다.
   //   (업체정보는 처음 넣어주는 값이고, 화면에서 바꾸시면 바꾼 값이 저장됩니다)
   async function baseOfCompany(name){
@@ -9599,9 +9626,11 @@
 
   //  주문 수정 — 입고처를 고르면 매입 기준
   window.onBeSourceBase = async function(){
-    // 입고처를 바꾸셨을 때만 그 업체 기준을 넣어드립니다.
     const name = String((document.getElementById("be-party")||{}).value||"").trim();
     if(!name) return;
+    // 여신 대상 업체면 「공급가」로 고정합니다.
+    try{ if(await lockBaseIfCredit("be-base", name)){ onBeBaseChange(); return; } }catch(e){}
+    // 입고처를 바꾸셨을 때만 그 업체 기준을 넣어드립니다.
     if(editingBatch && String(editingBatch.b && editingBatch.b.source || "").trim() === name) return;
     const b = await baseOfCompany(name);
     putBase("be-base", b);
@@ -9611,12 +9640,16 @@
 
   //  단건 주문 — 입고처를 고르면 매입 기준
   window.onOsSourceBase = async function(){
-    const b = await baseOfCompany((document.getElementById("os-source")||{}).value);
+    const nm = String((document.getElementById("os-source")||{}).value||"");
+    if(await lockBaseIfCredit("os-base", nm)) return;
+    const b = await baseOfCompany(nm);
     putBase("os-base", b);
   };
   //  재고 등록 — 입고처를 고르면 매입 기준
   window.onItemSourceBase = async function(){
-    const b = await baseOfCompany((document.getElementById("item-source-select")||{}).value);
+    const nm = String((document.getElementById("item-source-select")||{}).value||"");
+    if(await lockBaseIfCredit("item-base-select", nm)) return;
+    const b = await baseOfCompany(nm);
     putBase("item-base-select", b);
   };
   //  재고 등록 — 판매처를 고르면 판매 기준
@@ -9645,6 +9678,7 @@
     { const bs = document.getElementById("order-base-select");
       if(bs){
         bs.value = c ? base : "unit";
+        try{ await lockBaseIfCredit("order-base-select", name); }catch(e){}
         // 업체정보에서 가져온 값임을 잠깐 알려드립니다. (바꾸셔도 됩니다)
         if(c){
           bs.style.background = "#eef7ee";
@@ -9911,6 +9945,30 @@
     }catch(e){
       msg("<b>저장에 실패했습니다.</b><br>" + comboEsc((e && e.message) ? e.message : String(e)), true);
       return;
+    }
+    // 여신 결제면 차감 기록을 만듭니다. (묶음 주문과 같은 방식)
+    if(useB2B){
+      try{
+        const oneBase = String((document.getElementById("os-base")||{}).value||"") || "unit";
+        const creditUse1 = creditFromLines(source, [{
+          discountBase: oneBase,
+          listPrice: L || 0, quantity: qty,
+          preDiscountAmt: (document.getElementById("os-preamt").value ? osNum("os-preamt") : 0),
+          preDiscountPct: (document.getElementById("os-prepct").value ? Number(osNum("os-prepct").toFixed(2)) : null),
+          purchasePrice: buy || 0,
+          otherDiscountAmt: (document.getElementById("os-otheramt").value ? osNum("os-otheramt") : 0)
+        }], oneBase);
+        if(creditUse1 > 0){
+          await addDoc(collection(db,"b2bLedger"), {
+            date: orderDate, category:"order_use", amount: creditUse1,
+            partner: source, source,
+            memo: "주문 여신결제: " + source + " (1개 품목, 선할인 기준)",
+            fromOrderBatchId: batchRef.id,
+            createdBy: currentUser.name, createdByUsername: currentUser.username, createdAt: serverTimestamp()
+          });
+          await updateDoc(doc(db,"orderBatches", batchRef.id), { creditUsed: creditUse1 });
+        }
+      }catch(e){}
     }
     logAction("건별 주문 등록", source + " / " + docModelLabel(m) + " / " + qty + "대");
     msg("등록되었습니다." + (dest && sale ? " 판매요청도 함께 만들었습니다." : ""), false);
@@ -10396,7 +10454,11 @@
           "\n\n그래도 등록하시겠습니까?")) return;
       }catch(e){}
     }
-    // 여신 차감액 — 입고처의 「할인 계산 기준」을 따릅니다.
+    // 화면에서 고르신 할인 계산 기준 그대로 저장합니다.
+    //  (업체정보는 화면에 처음 넣어주는 값일 뿐, 바꾸셨으면 바꾼 값이 우선입니다)
+    const orderBaseSel = String((document.getElementById("order-base-select")||{}).value||"") || "unit";
+    const orderSameBuy = !!(document.getElementById("order-samebuy-input")||{}).checked;
+    // 여신 차감액 — 이 주문의 「할인 계산 기준」을 따릅니다.
     const creditUse = creditFromLines(source, lines, orderBaseSel);
     if(useB2BCredit && creditUse>0){
       await addDoc(collection(db,"b2bLedger"), {
@@ -10410,10 +10472,7 @@
       await updateDoc(doc(db,"orderBatches", batchRef.id), { creditUsed: creditUse });
     }
 
-    // 화면에서 고르신 할인 계산 기준 그대로 저장합니다.
-    //  (업체정보는 화면에 처음 넣어주는 값일 뿐, 바꾸셨으면 바꾼 값이 우선입니다)
-    const orderBaseSel = String((document.getElementById("order-base-select")||{}).value||"") || "unit";
-    const orderSameBuy = !!(document.getElementById("order-samebuy-input")||{}).checked;
+
     // 판매할인 기준은 판매처 업체정보를 따릅니다.
     let orderSaleBaseSel = "unit";
     try{
@@ -15399,6 +15458,9 @@
         .filter(function(v){ return v === "unit" || v === "total" || v === "supply"; }))];
       base = (bs.length === 1) ? bs[0] : String((c && c.discountBase) || "");
     }
+    // 업체정보에서 「여신 대상 (삼성전자 계열)」로 체크한 곳은
+    //  언제나 공급가(DPS) 방식으로 계산합니다. 화면 기준과 무관하게 고정입니다.
+    if(c && c.isCreditTarget === true) base = "supply";
     if(base !== "total" && base !== "supply") return unitSum;
     const listSum = (lines||[]).reduce((n,l)=> n + (Number(l.listPrice)||0) * (Number(l.quantity)||0), 0);
     if(!(listSum > 0)) return unitSum;
