@@ -400,7 +400,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-06 v989</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-06 v991</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -1074,6 +1074,7 @@
           <b>일부만 고르면</b> 그 대수만 빠지고 배정은 남습니다. <b>전부 고르면</b> 배정 자체가 취소됩니다.</p>
         <div id="acp-info" style="border:1px solid var(--line);background:#fff;padding:8px 11px;font-size:12.5px;margin-bottom:8px;"></div>
         <div id="acp-list" style="max-height:260px;overflow-y:auto;border:1px solid var(--line);margin-bottom:8px;"></div>
+        <div class="stack-row"><label>취소일</label><input type="text" id="acp-date" maxlength="8" inputmode="numeric" placeholder="비우면 오늘"></div>
         <div class="stack-row"><label>취소 사유</label><input type="text" id="acp-reason" placeholder="필수"></div>
         <div id="acp-msg" style="font-size:12.5px;margin:6px 0;"></div>
         <span class="btn-row" style="margin-top:6px;">
@@ -14619,15 +14620,22 @@
         }
       }
       const o = cands[0];
-      // ★ 이미 재고에 들어온 일련번호는 모델이 달라도 막습니다. ★
-      //  다른 주문에 넣은 일련번호를 이 주문에 또 넣으면 재고가 두 배로 잡힙니다.
+      // 이미 재고에 있는 일련번호는 「모델이 같을 때만」 막습니다.
+      //  삼성 일련번호는 뒷자리만 쓰는 경우가 있어 모델이 다르면 다른 단말기입니다.
+      //  (모델까지 같으면 같은 단말기를 두 번 넣는 것이라 막습니다)
       if(usedSerial[serial] && usedSerial[serial].length){
-        const u = usedSerial[serial][0];
-        bad.push({ label,
-          reason: "이미 재고에 있는 일련번호입니다 — " + u.model + " · " + u.carrier
-                + " · 입고 " + u.inDate + "  (이 주문 품목은 " + (o.systemModel||"-") + " · " + (o.carrier||"-") + ")",
-          raw:line, hi:serial });
-        return;
+        const mineKey = modelDupKey(o.systemModel||"");
+        const same = usedSerial[serial].filter(function(u){
+          return modelDupKey(String(u.model||"")) === mineKey; });
+        if(same.length){
+          const u = same[0];
+          bad.push({ label,
+            reason: "이미 재고에 있는 일련번호입니다 — " + u.model + " · " + u.carrier
+                  + " · 입고 " + u.inDate,
+            raw:line, hi:serial });
+          return;
+        }
+        // 모델이 다르면 그대로 넣습니다. (다른 단말기입니다)
       }
       const mKey = modelDupKey(o.systemModel||"");
       const seenKey = mKey + "|" + serial;
@@ -14713,9 +14721,14 @@
         el.innerHTML = '<div style="color:var(--danger);">확인 중 문제가 생겨 등록하지 않았습니다. 다시 시도해주세요.</div>';
         return;
       }
-      // 일련번호가 이미 재고에 있으면 모델이 달라도 막습니다.
-      //  한 대의 단말기에 일련번호는 하나뿐이라, 모델이 다르면 잘못 배정된 것입니다.
-      const dupNow = bulkArrRows.filter(r=> have[r.serial] && have[r.serial].length);
+      // 일련번호가 이미 재고에 있으면 「모델이 같을 때만」 막습니다.
+      //  삼성 일련번호는 뒷자리만 쓰는 경우가 있어 모델이 다르면 다른 단말기입니다.
+      const dupNow = bulkArrRows.filter(function(r){
+        const list = have[r.serial];
+        if(!list || !list.length) return false;
+        const mineKey = modelDupKey(String((r.order && r.order.systemModel) || ""));
+        return list.some(function(h){ return modelDupKey(String(h.model||"")) === mineKey; });
+      });
       if(dupNow.length){
         el.innerHTML = '<div style="border:1px solid var(--danger);background:#fdecea;padding:9px 11px;font-size:12.5px;line-height:1.7;">'
           + '<b>이미 재고에 있는 일련번호 ' + dupNow.length + '건이 있어 등록하지 않았습니다.</b><br>'
@@ -24549,6 +24562,7 @@
       '<b>' + comboEsc(sr.destination||"-") + '</b> · 배정 ' + (Number(sr.quantity)||0) + '개 · 판매가 '
       + (Number(sr.salePrice)||0).toLocaleString();
     document.getElementById("acp-reason").value = "";
+    { const e = document.getElementById("acp-date"); if(e) e.value = todayStr(); }
     document.getElementById("acp-msg").innerHTML = "";
     document.getElementById("acp-overlay").style.display = "flex";
     const all = document.getElementById("acp-all");
@@ -24566,6 +24580,13 @@
     const picked = Array.from(document.querySelectorAll(".acp-ck:checked")).map(c=> items[Number(c.value)]);
     if(picked.length === 0){ msg.innerHTML = '<span style="color:var(--danger);">되돌릴 일련번호를 골라주세요.</span>'; return; }
     const reason = document.getElementById("acp-reason").value.trim();
+    // 취소일 — 비우면 오늘로 둡니다.
+    const cDate = String((document.getElementById("acp-date")||{}).value||"").replace(/\D/g,"") || todayStr();
+    if(cDate.length !== 8){
+      const m0 = document.getElementById("acp-msg");
+      if(m0) m0.innerHTML = '<span style="color:var(--danger);">취소일은 8자리로 넣어주세요. 예: 20260906</span>';
+      return;
+    }
     if(!reason){ msg.innerHTML = '<span style="color:var(--danger);">취소 사유를 넣어주세요.</span>'; return; }
 
     const isAll = picked.length === items.length;
@@ -24595,13 +24616,15 @@
         await batch.commit();
       }
       for(const x of picked){
-        await logItem(x.id, x.serial, "status", "배정 취소로 <보유중> 되돌림 · 사유: " + reason, {});
+        await logItem(x.id, x.serial, "status",
+        "배정 취소로 <보유중> 되돌림 · 취소일 " + cDate + " · 사유: " + reason, { date: cDate });
       }
       // 2) 판매요청 — 전부면 취소, 일부면 수량·매칭만 줄입니다
       const restIds = items.filter(x=> !picked.includes(x)).map(x=> x.id);
       if(isAll){
         await updateDoc(doc(db,"saleRequests", saleRequestId), { status:"취소",
-          cancelReason: reason, cancelledAt: serverTimestamp(), cancelledBy: currentUser.name });
+          cancelReason: reason, cancelDate: cDate,
+        cancelledAt: serverTimestamp(), cancelledBy: currentUser.name });
         if(sr.batchId){ try{ await updateDoc(doc(db,"saleRequestBatches", sr.batchId), { status:"취소" }); }catch(e){} }
       }else{
         await updateDoc(doc(db,"saleRequests", saleRequestId), {
@@ -24633,6 +24656,17 @@
     if(typeof loadSaleRequestList === "function") loadSaleRequestList();
     loadInventoryList();
   };
+
+  // 취소일을 받습니다. 비우거나 그냥 확인하면 오늘 날짜로 둡니다.
+  //  나중에 「언제 취소했는지」로 찾아보실 수 있게 남겨둡니다.
+  function askCancelDate(label){
+    const v = prompt((label || "취소") + "일을 입력해주세요. (YYYYMMDD · 비우면 오늘)", todayStr());
+    if(v === null) return null;                       // 취소 버튼 누름
+    const d = String(v||"").replace(/\D/g,"");
+    if(!d) return todayStr();
+    if(d.length !== 8){ alert("날짜는 8자리로 넣어주세요. 예: 20260906"); return askCancelDate(label); }
+    return d;
+  }
 
   // 예전에 취소한 배정·판매요청을 찾아 단말 이력에 채웁니다.
   //  그때는 이력을 안 남기던 시절이라, 취소된 판매요청에 적힌 재고로 되살립니다.
@@ -24718,6 +24752,9 @@
     const reason = prompt("취소 사유를 입력해주세요. (필수)", "");
     if(reason === null) return;
     if(!String(reason).trim()){ alert("취소 사유를 입력해주세요."); return; }
+    // 취소일 — 나중에 「언제 취소했는지」로 찾아보실 수 있게 남깁니다.
+    const cDate = askCancelDate("취소");
+    if(cDate === null) return;
 
     try{
       // 1) 매칭된 재고를 보유중으로 되돌립니다.
@@ -24743,14 +24780,14 @@
               if(d0.exists()){ sn = d0.data().serialNumber || ""; sm = d0.data().systemModel || ""; }
             }catch(e){}
             await logItem(id, sn, "sale",
-              (sr.destination||"-") + " · 예약 배정 취소 · 사유: " + String(reason).trim(),
-              { systemModel: sm });
+              (sr.destination||"-") + " · 예약 배정 취소 · 취소일 " + cDate + " · 사유: " + String(reason).trim(),
+              { systemModel: sm, date: cDate });
           }
         }catch(e){}
       }
       // 2) 판매요청과 묶음을 취소 처리
       await updateDoc(doc(db,"saleRequests", saleRequestId), { status:"취소",
-        cancelReason:String(reason).trim(), cancelledAt: serverTimestamp(), cancelledBy: currentUser.name });
+        cancelReason:String(reason).trim(), cancelDate: cDate, cancelledAt: serverTimestamp(), cancelledBy: currentUser.name });
       if(sr.batchId){
         try{ await updateDoc(doc(db,"saleRequestBatches", sr.batchId), { status:"취소" }); }catch(e){}
       }
