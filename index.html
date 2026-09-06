@@ -400,7 +400,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-06 v1031</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-06 v1032</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -36504,7 +36504,7 @@
     document.getElementById("order-detail-title").textContent = (b.destination||"-") + " · 요청일 " + (b.requestDate||"-");
     let html = '<div id="order-sale-link" style="margin-bottom:10px;"></div>' +
       '<div style="overflow-x:auto;"><table class="data-table" style="min-width:850px;"><thead><tr>' +
-      '<th>모델 (전산모델명/펫네임)</th><th>색상</th><th>기가수</th><th>통신사</th><th class="ta-right">요청수량</th><th class="ta-right">판매가</th><th class="ta-right">판매할인</th><th class="ta-right">매칭</th><th>상태</th><th class="ta-right">관리</th>' +
+      '<th>모델 (전산모델명/펫네임)</th><th>색상</th><th>기가수</th><th>통신사</th><th>일련번호</th><th class="ta-right">요청수량</th><th class="ta-right">판매가</th><th class="ta-right">판매할인</th><th class="ta-right">매칭</th><th>상태</th><th class="ta-right">관리</th>' +
       '</tr></thead><tbody id="order-detail-tbody"></tbody></table></div>';
     { const pe = document.getElementById("order-detail-pending"); if(pe) pe.innerHTML = ""; }
     document.getElementById("order-detail-body").innerHTML = html;
@@ -36519,6 +36519,9 @@
           : '<span style="color:var(--danger);">미입력</span>')+'</td>' +
         '<td>'+(s.capacity||"-")+'</td>' +
         '<td>'+(s.carrier||"-")+'</td>' +
+        // 매칭된 재고의 일련번호를 바로 보여줍니다.
+        '<td style="white-space:nowrap;font-size:11.5px;" data-srsn="'+s.id+'">'
+          + '<span style="color:var(--gray);">-</span></td>' +
         '<td class="ta-right">'+(s.quantity||0)+'</td>' +
         '<td class="ta-right">'+(s.salePrice?Number(s.salePrice).toLocaleString():'-')+'</td>' +
         '<td class="ta-right">'+(s.saleDiscountAmt?Number(s.saleDiscountAmt).toLocaleString():'-')+'</td>' +
@@ -36535,6 +36538,30 @@
     });
     foldActionColumn("order-detail-body");   // 줄을 누르면 버튼이 아래로 펼쳐집니다
     document.getElementById("order-detail-modal-overlay").style.display = "flex";
+    // 매칭된 재고의 일련번호를 채웁니다. (한 번에 읽어 칸마다 넣습니다)
+    (async ()=>{
+      try{
+        const ids = [];
+        lines.forEach(function(x){ (x.matchedItemIds||[]).forEach(function(i){ ids.push(i); }); });
+        if(ids.length === 0) return;
+        const snMap = {};
+        for(let i=0; i<ids.length; i+=25){
+          const part = ids.slice(i, i+25);
+          const q = await getDocs(query(collection(db,"inventoryItems"), where("__name__","in", part)));
+          q.forEach(function(d){ snMap[d.id] = d.data().serialNumber || ""; });
+        }
+        lines.forEach(function(x){
+          const td = document.querySelector('[data-srsn="' + x.id + '"]');
+          if(!td) return;
+          const sns = (x.matchedItemIds||[]).map(function(i){ return snMap[i] || ""; }).filter(Boolean);
+          if(sns.length === 0) return;
+          td.innerHTML = sns.length <= 3
+            ? comboEsc(sns.join(", "))
+            : comboEsc(sns.slice(0,3).join(", ")) + ' <span style="color:var(--gray);">외 ' + (sns.length-3) + '</span>';
+          td.title = sns.join(", ");
+        });
+      }catch(e){}
+    })();
   }
 
   window.backfillSaleRequestsFromOrders = async function(silent){
