@@ -400,7 +400,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-06 v992</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-06 v996</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -2527,13 +2527,31 @@
           <span class="btn-row">
             <span id="dl-b2b"></span>
             <button class="btn small secondary" style="width:auto;" onclick="openB2BBalanceCheck()">여신잔액 맞추기</button>
-            <button class="btn small secondary" style="width:auto;" onclick="openB2BPostSettle()">후정산 대조</button>
+            <button class="btn small secondary" style="width:auto;" onclick="openMonthClose()" title="월별로 모델·색상을 묶어 삼성 계산서와 같은 방식으로 미리 계산합니다.">월 마감 시뮬</button><button class="btn small secondary" style="width:auto;" onclick="openB2BPostSettle()">후정산 대조</button>
             <button class="btn small" style="width:auto;" onclick="openB2BLedgerAdd()">+ 거래 등록</button>
           </span>
         </div>
         <div id="b2b-balance-check" style="font-size:12.5px;margin-bottom:8px;"></div>
         <div id="b2b-post-settlement-check" style="font-size:12.5px;margin-bottom:8px;"></div>
         <div id="b2b-ledger-list"></div>
+      </div>
+    </div>
+
+    <!-- 월 마감 시뮬 -->
+    <div id="mclose-overlay" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.55);z-index:1100;align-items:center;justify-content:center;">
+      <div style="background:#fff;border:2px solid var(--navy);max-width:1000px;width:97%;max-height:92vh;overflow-y:auto;padding:22px;position:relative;">
+        <button onclick="closeMonthClose()" style="position:absolute;top:12px;right:12px;background:none;border:1px solid var(--navy);width:26px;height:26px;cursor:pointer;font-size:13px;">✕</button>
+        <h3 style="margin-top:0;margin-bottom:4px;">월 마감 시뮬</h3>
+        <p class="desc" style="margin-top:0;">그 달 주문을 <b>모델·색상별로 묶어</b> 삼성 계산서와 같은 방식으로 계산합니다.<br>
+          실제 계산서와 대조해 보세요. 거래처는 따로 봅니다.</p>
+        <div style="display:flex;gap:0;flex-wrap:wrap;align-items:center;margin-bottom:10px;">
+          <input type="text" id="mclose-month" maxlength="6" inputmode="numeric" placeholder="귀속월 202607" style="width:140px;height:28px;border:1px solid var(--line);padding:0 8px;font-size:12.5px;box-sizing:border-box;">
+          <select id="mclose-company" style="width:180px;height:28px;border:1px solid var(--line);padding:0 6px;font-size:12.5px;margin-left:-1px;box-sizing:border-box;"><option value="">거래처 (선택)</option></select>
+          <button class="btn small" style="width:auto;margin-left:6px;" onclick="runMonthClose()">계산</button>
+          <span id="dl-mclose" style="margin-left:auto;"></span>
+        </div>
+        <div id="mclose-sum" style="font-size:12.5px;margin-bottom:8px;"></div>
+        <div id="mclose-body"></div>
       </div>
     </div>
 
@@ -15523,14 +15541,25 @@
     //   ⑥ 합계       = ④ + ⑤
     //  전에는 대당 부가세를 반올림한 뒤 수량을 곱해 줄마다 1~4원씩 어긋났습니다.
     if(base === "supply"){
-      return (lines||[]).reduce((n,l)=>{
+      //  같은 모델·색상은 한 줄로 묶어 계산합니다.
+      //   삼성은 월말에 모델·색상별로 수량을 합쳐 계산서를 냅니다.
+      //   나눠서 계산하면 부가세 반올림이 여러 번 일어나 1~2원씩 어긋납니다.
+      const grp = {};
+      (lines||[]).forEach(function(l){
         const L = Number(l.listPrice)||0;
         const q = Number(l.quantity)||0;
-        if(!L || !q) return n;
-        const supplyUnit = Math.round(L / 1.1);
+        if(!L || !q) return;
+        const key = String(l.systemModel||"") + "|"
+                  + String(l.systemColor || l.manufacturerColor || "") + "|" + L;
+        if(!grp[key]) grp[key] = { L, q: 0 };
+        grp[key].q += q;
+      });
+      return Object.keys(grp).reduce(function(n, k){
+        const g = grp[k];
+        const supplyUnit = Math.round(g.L / 1.1);
         const enuri = Math.round(supplyUnit * rate / 100);
         const unitPrice = supplyUnit - enuri;      // 매입단가 (대당)
-        const supply = unitPrice * q;              // 공급가
+        const supply = unitPrice * g.q;            // 공급가 (묶은 수량)
         const vat = Math.round(supply * 0.1);      // 부가세 — 한 번만 반올림
         return n + supply + vat;
       }, 0);
@@ -36490,6 +36519,137 @@
       + (e.fromBankDepositId
           ? '<br><span style="color:var(--gray);">이 기록은 <b>통장 출금</b>과 이어져 있습니다. '
             + '구분을 바꾸는 것은 괜찮지만, <b>금액·날짜를 바꾸면 통장 기록과 달라집니다.</b></span>' : '');
+  };
+
+  // 월 마감 시뮬 — 그 달 주문을 모델·색상으로 묶어 삼성 방식으로 계산합니다.
+  window.closeMonthClose = function(){ document.getElementById("mclose-overlay").style.display = "none"; };
+  window.openMonthClose = async function(){
+    const sel = document.getElementById("mclose-company");
+    if(sel){
+      let names = [];
+      try{ if(!companiesCache || companiesCache.length === 0) await fetchCompanies(); }catch(e){}
+      names = (companiesCache||[]).filter(function(c){ return c.isCreditTarget === true; })
+        .map(function(c){ return String(c.name||"").trim(); }).filter(Boolean);
+      sel.innerHTML = '<option value="">거래처 (선택)</option>'
+        + names.map(function(n){ return '<option value="'+comboEsc(n)+'">'+comboEsc(n)+'</option>'; }).join("");
+    }
+    { const e = document.getElementById("mclose-month");
+      if(e && !e.value) e.value = todayStr().slice(0,6); }
+    document.getElementById("mclose-sum").innerHTML = "";
+    document.getElementById("mclose-body").innerHTML = "";
+    document.getElementById("mclose-overlay").style.display = "flex";
+  };
+
+  window.runMonthClose = async function(){
+    const month = String((document.getElementById("mclose-month")||{}).value||"").replace(/\D/g,"");
+    const co    = String((document.getElementById("mclose-company")||{}).value||"").trim();
+    const sumEl = document.getElementById("mclose-sum");
+    const bodyEl= document.getElementById("mclose-body");
+    if(month.length !== 6){ sumEl.innerHTML = '<span style="color:var(--danger);">귀속월을 202607 형태로 넣어주세요.</span>'; return; }
+    if(!co){ sumEl.innerHTML = '<span style="color:var(--danger);">거래처를 골라주세요.</span>'; return; }
+    sumEl.innerHTML = '<span style="color:var(--gray);">계산 중...</span>';
+    bodyEl.innerHTML = "";
+    let lines = [], batches = {};
+    try{
+      const ob = await getDocs(collection(db,"orderBatches"));
+      ob.forEach(function(d){
+        const v = d.data();
+        if(String(v.source||"").trim() !== co) return;
+        if(v.status === "취소") return;
+        const od = String(v.orderDate||"");
+        if(od.slice(0,6) !== month) return;
+        batches[d.id] = v;
+      });
+      if(Object.keys(batches).length === 0){
+        sumEl.innerHTML = '<span style="color:var(--gray);">그 달에 이 거래처 주문이 없습니다.</span>';
+        return;
+      }
+      const os = await getDocs(collection(db,"orders"));
+      os.forEach(function(d){
+        const v = d.data();
+        if(!batches[v.batchId]) return;
+        if(v.status === "취소") return;
+        lines.push(v);
+      });
+    }catch(e){ sumEl.innerHTML = '<span style="color:var(--danger);">읽지 못했습니다.</span>'; return; }
+
+    // 모델·색상·출고가로 묶습니다. (삼성 계산서와 같은 방식)
+    const rate = (function(){
+      const ps = [...new Set(lines.map(function(l){ return Number(l.preDiscountPct)||0; })
+        .filter(function(v){ return v > 0; }))];
+      return ps.length === 1 ? ps[0] : null;
+    })();
+    const grp = {};
+    lines.forEach(function(l){
+      const L = Number(l.listPrice)||0, q = Number(l.quantity)||0;
+      if(!L || !q) return;
+      const color = String(l.systemColor || l.manufacturerColor || "-");
+      const key = String(l.systemModel||"-") + "|" + color + "|" + L;
+      if(!grp[key]) grp[key] = { model: String(l.systemModel||"-"), color, L, q: 0, rows: 0 };
+      grp[key].q += q; grp[key].rows++;
+    });
+    const keys = Object.keys(grp).sort();
+    let supTot = 0, vatTot = 0, splitTot = 0;
+    const rows = keys.map(function(k){
+      const g = grp[k];
+      const r = (rate != null) ? rate : 0;
+      const su = Math.round(g.L / 1.1);
+      const en = Math.round(su * r / 100);
+      const unit = su - en;
+      const sup = unit * g.q;
+      const vat = Math.round(sup * 0.1);
+      supTot += sup; vatTot += vat;
+      return { ...g, unit, sup, vat, tot: sup + vat };
+    });
+    // 나눠서 계산했을 때와 얼마나 다른지도 보여드립니다.
+    lines.forEach(function(l){
+      const L = Number(l.listPrice)||0, q = Number(l.quantity)||0;
+      if(!L || !q) return;
+      const r = (rate != null) ? rate : 0;
+      const su = Math.round(L / 1.1), en = Math.round(su * r / 100), unit = su - en;
+      const sup = unit * q;
+      splitTot += sup + Math.round(sup * 0.1);
+    });
+    const total = supTot + vatTot;
+    sumEl.innerHTML =
+      '<div style="border:1px solid var(--navy);background:#f4f7fb;padding:10px 12px;line-height:1.9;">'
+      + '<b>' + comboEsc(co) + ' · ' + month.slice(0,4) + '년 ' + month.slice(4) + '월</b>'
+      + ' · 주문 ' + Object.keys(batches).length + '건 · 품목 ' + lines.length + '줄'
+      + ' · 선할인 ' + (rate != null ? rate + '%' : '<span style="color:var(--danger);">여러 가지</span>')
+      + '<br>모델·색상으로 묶으면 <b>' + keys.length + '줄</b>'
+      + ' · 수량 <b>' + rows.reduce(function(n,r){ return n + r.q; }, 0) + '대</b>'
+      + '<br>공급가 <b>' + supTot.toLocaleString() + '</b> · 부가세 <b>' + vatTot.toLocaleString() + '</b>'
+      + ' · 합계 <b style="font-size:14px;">' + total.toLocaleString() + '</b>'
+      + (splitTot !== total
+          ? '<br><span style="color:#b8860b;">줄마다 따로 계산하면 ' + splitTot.toLocaleString()
+            + ' 로 <b>' + (splitTot - total > 0 ? '+' : '') + (splitTot - total) + '원</b> 달라집니다. '
+            + '삼성은 묶어서 내므로 위 금액이 맞습니다.</span>' : '')
+      + '</div>';
+    bodyEl.innerHTML =
+      '<div style="overflow-x:auto;"><table class="data-table" style="width:auto;"><thead><tr>'
+      + '<th>전산모델명</th><th>색상</th><th class="ta-right">출고가</th><th class="ta-right">수량</th>'
+      + '<th class="ta-right">주문 줄</th><th class="ta-right">매입단가</th>'
+      + '<th class="ta-right">공급가</th><th class="ta-right">부가세</th><th class="ta-right">합계</th>'
+      + '</tr></thead><tbody>'
+      + rows.map(function(r){
+          return '<tr><td>'+comboEsc(r.model)+'</td><td>'+comboEsc(r.color)+'</td>'
+            + '<td class="ta-right">'+r.L.toLocaleString()+'</td>'
+            + '<td class="ta-right"><b>'+r.q+'</b></td>'
+            + '<td class="ta-right" style="color:var(--gray);">'+r.rows+'</td>'
+            + '<td class="ta-right">'+r.unit.toLocaleString()+'</td>'
+            + '<td class="ta-right">'+r.sup.toLocaleString()+'</td>'
+            + '<td class="ta-right">'+r.vat.toLocaleString()+'</td>'
+            + '<td class="ta-right" style="font-weight:700;">'+r.tot.toLocaleString()+'</td></tr>';
+        }).join("")
+      + '</tbody><tfoot><tr style="border-top:2px solid var(--navy);font-weight:700;">'
+      + '<td colspan="3">합계</td>'
+      + '<td class="ta-right">'+rows.reduce(function(n,r){ return n+r.q; },0)+'</td>'
+      + '<td colspan="2"></td>'
+      + '<td class="ta-right">'+supTot.toLocaleString()+'</td>'
+      + '<td class="ta-right">'+vatTot.toLocaleString()+'</td>'
+      + '<td class="ta-right">'+total.toLocaleString()+'</td>'
+      + '</tr></tfoot></table></div>';
+    try{ addDownloadBtn("dl-mclose", "mclose-body", "월마감시뮬_"+month+"_"+co); }catch(e){}
   };
 
   window.openB2BPostSettle = async function(){
