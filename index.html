@@ -400,7 +400,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-06 v1022</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-06 v1028</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -4232,8 +4232,8 @@
     const oPct = Number(it && it.otherDiscountPct)||0;
     const buy  = Number(it && it.purchasePrice)||0;
     const amt  = (pre + oth) || (L ? (L - buy) : 0);
-    const pct  = (pPct + oPct) ? Number((pPct + oPct).toFixed(2))
-               : (L ? Number(((amt / L) * 100).toFixed(2)) : null);
+    // 입고동일이면 판매할인% = 선할인% + 타할인% 를 그대로 씁니다. 역산하지 않습니다.
+    const pct = (pPct + oPct) ? Number((pPct + oPct).toFixed(2)) : null;
     return { amt, pct };
   }
   window.saleFromBuy = saleFromBuy;
@@ -4243,15 +4243,17 @@
   function baseOfPctAmt(L, pct, amt){
     const p = Number(pct)||0, a = Number(amt)||0;
     if(!L || !(p > 0)) return null;
-    const S = L / 1.1;
-    const byList = Math.round(L * p / 100), bySupply = Math.round(S * p / 100);
+    //  할인 금액은 부가세 포함입니다.
+    //   출고가 기준: 출고가 × %      공급가 기준: 공급단가 × % × 1.1
+    const su = Math.round(L / 1.1);
+    const byList = Math.round(L * p / 100);
+    const bySupply = Math.round(Math.round(su * p / 100) * 1.1);
     if(byList === bySupply) return null;              // 두 값이 같으면 구분이 안 됩니다
-    if(a === byList)   return { k:"unit" };
-    if(a === bySupply) return { k:"supply" };
-    const pList = (a / L) * 100, pSupply = (a / S) * 100;
+    if(Math.abs(a - byList) <= 1)   return { k:"unit" };
+    if(Math.abs(a - bySupply) <= 1) return { k:"supply" };
+    const pList = (a / L) * 100, pSupply = (a / 1.1 / su) * 100;
     const useList = Math.abs(pList - p) <= Math.abs(pSupply - p);
     const realPct = Number((useList ? pList : pSupply).toFixed(2));
-    // 반올림 1원 차이로 딱 안 맞아도, 실제 비율이 적어둔 %와 같으면 기준은 맞는 것입니다.
     if(realPct === Number(p.toFixed(2))) return { k: useList ? "unit" : "supply" };
     return { k:"off", base: useList ? "unit" : "supply", pct: realPct };
   }
@@ -4303,12 +4305,8 @@
     const saved = String((it && it.discountBase) || "");
     if(saved === "supply" || saved === "total" || saved === "unit"){
       const lab = (saved === "supply") ? "공급가" : (saved === "total" ? "합계" : "출고가");
-      // 실제 금액이 그 기준과 맞는지 견줘보고, 다르면 함께 알려드립니다.
-      const chk = (L > 0) ? actualDiscountBaseCalc(it) : null;
-      if(chk && chk.kind === "one"){
-        const got = (chk.base === "supply") ? "공급가" : "출고가";
-        if(got !== lab && saved !== "total") return { kind:"off", label: lab + " (실제 " + got + ")" };
-      }
+      // 금액이 부가세 포함으로 통일되어 두 기준의 차이가 1원뿐입니다.
+      //  금액으로 기준을 되짚을 수 없으므로 저장된 기준을 그대로 보여드립니다.
       return { kind:"one", base: saved, savedLabel: lab };
     }
     return actualDiscountBaseCalc(it);
@@ -4317,22 +4315,23 @@
   function actualDiscountBaseCalc(it){
     const L = Number((it && it.listPrice)) || 0;
     if(!L) return { kind:"none" };
-    const S = L / 1.1;
+    //  할인 금액은 부가세 포함입니다.
+    //   출고가 기준: 출고가 × %
+    //   공급가 기준: 공급단가 × % × 1.1  (삼성 방식)
+    const su = Math.round(L / 1.1);
     const one = (pct, amt)=>{
       const p = Number(pct)||0, a = Number(amt)||0;
       if(!(p > 0)) return null;                       // %가 없으면 가릴 수 없습니다
       const byList   = Math.round(L * p / 100);
-      const bySupply = Math.round(S * p / 100);
+      const bySupply = Math.round(Math.round(su * p / 100) * 1.1);
       if(byList === bySupply) return null;            // 두 값이 같으면 구분이 안 됩니다
-      if(a === byList)   return { k:"unit" };
-      if(a === bySupply) return { k:"supply" };
+      if(Math.abs(a - byList) <= 1)   return { k:"unit" };
+      if(Math.abs(a - bySupply) <= 1) return { k:"supply" };
       // 딱 안 맞으면 그 금액이 실제로 몇 %인지 냅니다.
-      //  적어둔 %에 더 가까운 쪽을 기준으로 삼아 보여드립니다.
       const pList   = (a / L) * 100;
-      const pSupply = (a / S) * 100;
+      const pSupply = (a / 1.1 / su) * 100;
       const useList = Math.abs(pList - p) <= Math.abs(pSupply - p);
       const realPct = Number((useList ? pList : pSupply).toFixed(2));
-      // 반올림 1원 차이로 딱 안 맞아도, 실제 비율이 적어둔 %와 같으면 기준은 맞는 것입니다.
       if(realPct === Number(p.toFixed(2))) return { k: useList ? "unit" : "supply" };
       return { k:"off", base: useList ? "unit" : "supply", pct: realPct };
     };
@@ -4363,11 +4362,28 @@
     // 할인 자체가 없는 재고는 가릴 것이 없으므로 빈칸으로 둡니다.
     if(!(pp > 0) && !(op > 0) && !(pa > 0) && !(oa > 0)) return "-";
     if(!(pp > 0) && !(op > 0)) return "할인% 없음";
-    const r = actualDiscountBase(it);
-    if(r.kind === "none")  return "구분 안 됨";
-    if(r.kind === "off")   return r.label;
-    if(r.kind === "mixed") return "선 " + r.preLab + " / 타 " + r.otherLab;
-    return (r.base === "supply") ? "공급가" : "출고가";
+    // 저장된 기준으로 % 를 다시 곱해 금액을 내고, 저장된 금액과 견줍니다.
+    //  계산이 기준대로 됐는지 목록에서 바로 확인하실 수 있습니다.
+    const saved = String((it && it.discountBase) || "");
+    const base = (saved === "supply" || saved === "unit" || saved === "total")
+      ? saved
+      : ((typeof itemDiscountBase === "function") ? itemDiscountBase(it) : "unit");
+    const lab = (base === "supply") ? "공급가" : (base === "total" ? "합계" : "출고가");
+    const wantPre = pp > 0 ? (Number(amtOnBaseVat(pp, L, base))||0) : 0;
+    const wantOth = op > 0 ? (Number(amtOnBaseVat(op, L, base))||0) : 0;
+    const okPre = !(pp > 0) || Math.abs(wantPre - pa) <= 1;
+    const okOth = !(op > 0) || Math.abs(wantOth - oa) <= 1;
+    const pcts = [];
+    if(pp > 0) pcts.push(pp + "%");
+    if(op > 0) pcts.push(op + "%");
+    const head = lab + " · " + pcts.join(" + ");
+    if(okPre && okOth){
+      return head + ' <span style="color:#2e7d32;">→ ' + (wantPre + wantOth).toLocaleString() + ' ✓</span>';
+    }
+    const gaps = [];
+    if(!okPre) gaps.push("선 " + wantPre.toLocaleString() + " (저장 " + pa.toLocaleString() + ")");
+    if(!okOth) gaps.push("타 " + wantOth.toLocaleString() + " (저장 " + oa.toLocaleString() + ")");
+    return head + ' <span style="color:var(--danger);font-weight:700;">→ ' + gaps.join(" · ") + '</span>';
   }
   window.discountBaseLabel = discountBaseLabel;
 
@@ -4434,7 +4450,7 @@
     //  적어둔 %와 저장된 금액을 맞춰봐서, 출고가에 곱한 값인지 공급가에 곱한 값인지 가려냅니다.
     { key:"discountBase", label:"할인 반영 기준",
       get:it=> discountBaseLabel(it),
-      getRaw:it=> discountBaseLabel(it) },
+      getRaw:it=> String(discountBaseLabel(it)).replace(/<[^>]*>/g, "") },
     { key:"purchaseDiscountAmt", label:"선할인", get:it=> discFmt(preDiscountAmtOf(it)), getRaw:it=> discRaw(preDiscountAmtOf(it)) },
     { key:"purchaseDiscount", label:"선할인%", get:it=> discPctFmt(preDiscountPctOf(it)), getRaw:it=> discRaw(preDiscountPctOf(it)) },
     { key:"otherDiscountAmt", label:"타할인", get:it=> discFmt(it.otherDiscountAmt), getRaw:it=> discRaw(it.otherDiscountAmt) },
@@ -8095,6 +8111,35 @@
       + " — [모든 줄에 적용] 을 누르면 줄마다 계산됩니다.";
   };
 
+  //  부가세 포함 할인 금액에서 % 를 냅니다. 기준을 직접 넘길 때 씁니다.
+  //   공급가 기준이면 부가세를 벗기고 공급단가로 나눕니다.
+  //  % → 부가세 포함 할인 금액.  공급가 기준이면 삼성 방식으로 냅니다.
+  //  부가세 포함 금액 → % (숫자 또는 null)
+  function itemPctVal(amt, listPrice, base){
+    const v = pctOnBase(amt, listPrice, base);
+    return (v === "" || v == null) ? null : Number(v);
+  }
+  window.amtOnBaseVat = function(pct, listPrice, base){
+    const L = Number(listPrice)||0;
+    if(!L || pct === "" || pct == null) return "";
+    if(String(base) === "supply"){
+      const su = Math.round(L / 1.1);
+      return Math.round(Math.round(su * Number(pct) / 100) * 1.1);
+    }
+    return Math.round(L * Number(pct) / 100);
+  };
+
+  window.pctOnBase = function(amt, listPrice, base){
+    const L = Number(listPrice)||0;
+    const a = Number(amt)||0;
+    if(!L) return "";
+    if(String(base) === "supply"){
+      const su = Math.round(L / 1.1);
+      return su ? Number(((a / 1.1 / su) * 100).toFixed(2)) : "";
+    }
+    return Number(((a / L) * 100).toFixed(2));
+  };
+
   function pctFromAmt(amtRaw, listPrice){
     if(amtRaw === "" || amtRaw == null) return "";
     if(!listPrice) return "";
@@ -8198,13 +8243,18 @@
   function saleAmtFromPct(pctRaw, listPrice){
     if(pctRaw === "" || pctRaw == null) return "";
     if(!listPrice) return "";
-    return Math.round(saleDiscBase(listPrice) * Number(pctRaw)/100);
+    // 판매할인도 부가세 포함 금액으로 냅니다.
+    const L0 = Number(listPrice)||0;
+    const sup0 = (saleDiscBase(L0) < L0);
+    return Number(amtOnBaseVat(pctRaw, L0, sup0 ? "supply" : "unit")) || "";
   }
   function salePctFromAmt(amtRaw, listPrice){
     if(amtRaw === "" || amtRaw == null) return "";
     if(!listPrice) return "";
-    const B = saleDiscBase(listPrice);
-    return B ? ((Number(amtRaw)/B)*100).toFixed(2) : "";
+    const L0 = Number(listPrice)||0;
+    const sup0 = (saleDiscBase(L0) < L0);
+    const v0 = pctOnBase(amtRaw, L0, sup0 ? "supply" : "unit");
+    return (v0 === "" || v0 == null) ? "" : String(v0);
   }
 
   function updateTotalDiscountDisplay(){
@@ -9662,8 +9712,8 @@
         return (el && el.value !== "") ? Number(el.value) : null; };
       const pPct = num(".be-prepct"), oPct = num(".be-otherpct");
       if(pPct == null && oPct == null) return;
-      if(pPct != null) set(".be-preamt", Math.round(bs * pPct / 100));
-      if(oPct != null) set(".be-otheramt", Math.round(bs * oPct / 100));
+      if(pPct != null) set(".be-preamt", amtOnBaseVat(pPct, L, base));
+      if(oPct != null) set(".be-otheramt", amtOnBaseVat(oPct, L, base));
       // 입고가·판매가를 다시 냅니다.
       const pre = num(".be-preamt")||0, oth = num(".be-otheramt")||0;
       set(".be-purchase", buyFromDiscounts(L, pre, oth, buyBase));
@@ -10316,13 +10366,14 @@
         const sp = tr.querySelector(".ol-saleprice");
         if(sp) sp.value = buyNow2;
         //  판매할인 = 선할인 + 타할인, % 는 매입 기준으로 냅니다.
-        const bs = String((document.getElementById("order-base-select")||{}).value || "unit");
-        const div = (bs === "supply") ? Math.round(listPrice / 1.1) : listPrice;
         const amt = listPrice - buyNow2;
         const sa = tr.querySelector(".ol-salediscountamt");
         const sp2 = tr.querySelector(".ol-salediscountpct");
         if(sa) sa.value = amt;
-        if(sp2) sp2.value = div ? Number(((amt / div) * 100).toFixed(2)) : "";
+        // 판매할인% = 선할인% + 타할인% 를 그대로 씁니다.
+        const pp = Number((tr.querySelector(".ol-prediscountpct")||{}).value)||0;
+        const op = Number((tr.querySelector(".ol-otherdiscountpct")||{}).value)||0;
+        if(sp2) sp2.value = (pp + op) ? Number((pp + op).toFixed(2)) : "";
       }
     }
   }
@@ -15617,6 +15668,17 @@
   function itemDiscountAmountBase(it, listPrice){
     const L = Number(listPrice != null ? listPrice : (it && it.listPrice)) || 0;
     return (itemDiscountBase(it) === "supply") ? (L/1.1) : L;
+  }
+  //  이 재고의 기준으로 % → 부가세 포함 할인 금액을 냅니다.
+  function itemAmtFromPct(it, listPrice, pct){
+    const L = Number(listPrice != null ? listPrice : (it && it.listPrice)) || 0;
+    return Number(amtOnBaseVat(pct, L, itemDiscountBase(it))) || 0;
+  }
+  //  이 재고의 기준으로 부가세 포함 금액 → % 를 냅니다.
+  function itemPctFromAmt(it, listPrice, amt){
+    const L = Number(listPrice != null ? listPrice : (it && it.listPrice)) || 0;
+    const v = pctOnBase(amt, L, itemDiscountBase(it));
+    return (v === "" || v == null) ? null : Number(v);
   }
   window.itemDiscountAmountBase = itemDiscountAmountBase;
 
@@ -23808,9 +23870,11 @@
     if(sa) sa.value = L - buy;
     //  판매할인% 는 매입 기준으로 냅니다. (입고동일이니 매입 조건 그대로)
     {
+      // 판매할인% = 선할인% + 타할인% 를 그대로 씁니다.
+      const pp = Number((document.getElementById("resv-prediscountpct-input")||{}).value)||0;
+      const op = Number((document.getElementById("resv-otherdiscountpct-input")||{}).value)||0;
+      if(spc) spc.value = (pp + op) ? Number((pp + op).toFixed(2)) : "";
       const bs = String((document.getElementById("resv-base-select")||{}).value || "unit");
-      const div = (bs === "supply") ? Math.round(L / 1.1) : L;
-      if(spc) spc.value = div ? Number((((L - buy) / div) * 100).toFixed(2)) : "";
       // 판매할인 기준 칸이 있으면 매입 기준으로 맞춰둡니다.
       const sbEl = document.getElementById("resv-salebase-select");
       if(sbEl) sbEl.value = bs;
@@ -27147,7 +27211,10 @@
         set(".be-saleprice", buyNow);
         const a = L - buyNow;
         set(".be-saleamt", a);
-        set(".be-salepct", div ? Number(((a / div) * 100).toFixed(2)) : "");
+        // 판매할인% = 선할인% + 타할인% 를 그대로 씁니다. 역산하지 않습니다.
+        const pp = has(".be-prepct")   ? Number(tr.querySelector(".be-prepct").value)   : 0;
+        const op = has(".be-otherpct") ? Number(tr.querySelector(".be-otherpct").value) : 0;
+        set(".be-salepct", (pp + op) ? Number((pp + op).toFixed(2)) : "");
       }
       return;
     }
@@ -27158,18 +27225,18 @@
       set(".be-saleprice", a === "" ? "" : (L - a));
     }else if(src.indexOf("be-saleamt") >= 0){
       const a = v(".be-saleamt");
-      set(".be-salepct", (has(".be-saleamt") && div) ? Number(((a / div) * 100).toFixed(2)) : "");
+      set(".be-salepct", has(".be-saleamt") ? pctOnBase(a, L, sb) : "");
       set(".be-saleprice", has(".be-saleamt") ? (L - a) : "");
     }else if(src.indexOf("be-saleprice") >= 0){
       const a = has(".be-saleprice") ? (L - v(".be-saleprice")) : "";
       set(".be-saleamt", a);
-      set(".be-salepct", (a !== "" && div) ? Number(((a / div) * 100).toFixed(2)) : "");
+      set(".be-salepct", (a !== "") ? pctOnBase(a, L, sb) : "");
     }else{
       // 출고가·선할인·타할인만 바뀐 경우 — 판매가가 있으면 판매할인만 맞춥니다.
       if(has(".be-saleprice")){
         const a = L - v(".be-saleprice");
         set(".be-saleamt", a);
-        set(".be-salepct", div ? Number(((a / div) * 100).toFixed(2)) : "");
+        set(".be-salepct", pctOnBase(a, L, sb));
       }
     }
   }
@@ -27208,10 +27275,7 @@
     const sameBuy = !!(document.getElementById("be-bulk-samebuy")||{}).checked;
     // 할인 계산 기준 — 위에서 고르신 값에 맞춰 곱합니다.
     const buyBase = String((document.getElementById("be-base")||{}).value || "unit");
-    const amtOnBase = (pct, L)=>{
-      const bs = (buyBase === "supply") ? Math.round(L / 1.1) : L;
-      return Math.round(bs * Number(pct) / 100);
-    };
+    const amtOnBase = (pct, L)=> amtOnBaseVat(pct, L, buyBase);
     if(!preAmt && !prePct && !othAmt && !othPct && !dest && !salePct && !sameBuy){ alert("넣을 값을 하나 이상 입력해주세요."); return; }
 
     let n = 0;
@@ -27254,8 +27318,7 @@
       }else if(salePct !== "" && L){
         // 판매할인 기준 — 출고가에 곱하거나, VAT 뺀 공급가에 곱합니다.
         const sBase = g("be-bulk-salebase") || "unit";
-        const baseAmt = (sBase === "supply") ? Math.round(L / 1.1) : L;
-        const a = Math.round(baseAmt * Number(salePct) / 100);
+        const a = amtOnBaseVat(salePct, L, sBase);
         set(".be-saleamt", a); set(".be-salepct", salePct); set(".be-saleprice", L - a);
         tr.dataset.sameBuy = "";
       }
@@ -27437,8 +27500,14 @@
             const bbP = String((document.getElementById("be-base")||{}).value || "unit");
             const sbP = sameP ? bbP
               : String((document.getElementById("be-bulk-salebase")||{}).value || "unit");
-            const divP = (sbP === "supply") ? Math.round(L2 / 1.1) : L2;
-            p.saleDiscountPct = divP ? Number(((p.saleDiscountAmt / divP) * 100).toFixed(2)) : null;
+            if(sameP){
+              // 입고동일 — 판매할인% = 선할인% + 타할인%
+              const pp2 = Number(p.preDiscountPct != null ? p.preDiscountPct : src.preDiscountPct)||0;
+              const op2 = Number(p.otherDiscountPct != null ? p.otherDiscountPct : src.otherDiscountPct)||0;
+              p.saleDiscountPct = (pp2 + op2) ? Number((pp2 + op2).toFixed(2)) : null;
+            }else{
+              p.saleDiscountPct = pctOnBase(p.saleDiscountAmt, L2, sbP);
+            }
           }
         }
         // 할인 계산 기준도 줄에 함께 남깁니다. (도착 등록 때 재고로 옮겨집니다)
@@ -29866,19 +29935,19 @@
     const L = Number(it.listPrice)||0;
     const base = (typeof actualSaleBase === "function" && String(actualSaleBase(it)).indexOf("공급가") === 0)
       ? "supply" : (String(it.saleDiscountBase||"") || "unit");
-    const B = (base === "supply") ? (L/1.1) : L;
+    // 금액은 부가세 포함, %는 기준(공급가/출고가)으로 냅니다. 공통 함수를 씁니다.
     const soldPrice = Number(it.salePrice)||0;
     const soldAmt   = (Number(it.saleDiscountAmt)||0) || (L ? L - soldPrice : 0);
     const soldPct   = (it.saleDiscount != null && it.saleDiscount !== "")
-      ? Number(it.saleDiscount) : (B ? Number(((soldAmt/B)*100).toFixed(2)) : null);
+      ? Number(it.saleDiscount) : (L ? pctOnBase(soldAmt, L, base) : null);
     let buy, pre, pct;
     if(mode === "add"){
       buy = soldPrice + (Number(addAmt)||0);
       pre = L ? L - buy : 0;
-      pct = B ? Number(((pre/B)*100).toFixed(2)) : null;
+      pct = L ? pctOnBase(pre, L, base) : null;
     }else if(mode === "pct"){
       pct = Number(newPct)||0;
-      pre = L ? Math.round(B * pct / 100) : 0;
+      pre = L ? (Number(amtOnBaseVat(pct, L, base))||0) : 0;
       buy = L - pre;
     }else{                                  // same / each
       buy = soldPrice; pre = soldAmt; pct = soldPct;
@@ -30218,8 +30287,7 @@
       if(mode === "each" && eachBuy[i] != null){
         c.buy = eachBuy[i];
         c.pre = c.L ? c.L - c.buy : 0;
-        const B = (c.base === "supply") ? (c.L/1.1) : c.L;
-        c.pct = B ? Number(((c.pre/B)*100).toFixed(2)) : null;
+        c.pct = c.L ? itemPctVal(c.pre, c.L, c.base) : null;
       }
       return { it, c };
     });
@@ -30401,9 +30469,8 @@
             const buy2 = Number(val(b,a,"salePrice")) || 0;
             if(!L2 || !buy2) continue;
             const base2 = String(v.discountBase||"") || "unit";
-            const B2 = (base2 === "supply") ? (L2/1.1) : L2;
             const pre2 = L2 - buy2;
-            const pct2 = B2 ? Number(((pre2/B2)*100).toFixed(2)) : null;
+            const pct2 = itemPctVal(pre2, L2, base2);
             await updateDoc(doc(db,"inventoryItems", dd.id), {
               listPrice: L2, purchaseDiscountAmt: Math.round(pre2),
               purchaseDiscount: pct2, purchasePrice: buy2 });
@@ -32569,7 +32636,8 @@
     const lab = (want === "supply") ? "공급가 기준" : "출고가 기준";
     const calcPct = (L, amt)=>{
       const B = (want === "supply") ? (L/1.1) : L;
-      return B ? Number(((amt / B) * 100).toFixed(2)) : null;
+      const v0 = pctOnBase(amt, L, want);
+      return (v0 === "" || v0 == null) ? null : Number(v0);
     };
     const prev = rows.slice(0,4).map(r=>{
       const L = Number(r.it.listPrice)||0;
@@ -33868,7 +33936,7 @@
             patch.salePrice = it.want;
             patch.saleDiscountAmt = it.L - it.want;
             const div = Math.round(it.L / 1.1);
-            patch.saleDiscount = div ? Number((((it.L - it.want) / div) * 100).toFixed(2)) : null;
+            patch.saleDiscount = pctOnBase(it.L - it.want, it.L, "supply");
           }
           bt.update(doc(db,"inventoryItems", it.id), patch);
           n2++;
@@ -34201,8 +34269,8 @@
           const B = itemDiscountAmountBase(it, L);
           const pp = Number(it.purchaseDiscount)||0, op = Number(it.otherDiscountPct)||0;
           if(!(pp > 0) && !(op > 0)) return;              // %가 없으면 견줄 것이 없습니다
-          const wantPre   = Math.round(B * pp / 100);
-          const wantOther = Math.round(B * op / 100);
+          const wantPre   = itemAmtFromPct(it, L, pp);
+          const wantOther = itemAmtFromPct(it, L, op);
           const curPre    = Number(it.purchaseDiscountAmt)||0;
           const curOther  = Number(it.otherDiscountAmt)||0;
           if(curPre === wantPre && curOther === wantOther) return;
@@ -34241,8 +34309,8 @@
               const B = (base === "supply") ? Math.round(L / 1.1) : L;
               const pp = Number(o.preDiscountPct)||0, op = Number(o.otherDiscountPct)||0;
               if(!(pp > 0) && !(op > 0)) return;
-              const wantPre = pp > 0 ? Math.round(B * pp / 100) : 0;
-              const wantOth = op > 0 ? Math.round(B * op / 100) : 0;
+              const wantPre = pp > 0 ? itemAmtFromPct(it, L, pp) : 0;
+              const wantOth = op > 0 ? itemAmtFromPct(it, L, op) : 0;
               const curPre = Number(o.preDiscountAmt)||0, curOth = Number(o.otherDiscountAmt)||0;
               if(Math.abs(wantPre - curPre) <= 1 && Math.abs(wantOth - curOth) <= 1) return;
               oRows.push({ date: o.orderDate||"-", src: (bt && bt.source) || o.source || "-",
@@ -38694,11 +38762,18 @@
       : ((savedSaleBase === "supply") ? (L/1.1)
         : (savedSaleBase === "unit" || savedSaleBase === "total") ? L
         : baseOfSale(it.destination));
-    const pct = (amt) => L ? Number(((amt/L)*100).toFixed(2)) : null;
-    const amt = (r)   => L ? Math.round(L * num(r) / 100) : null;
-    const bAmt = (r)  => buyBase  ? Math.round(buyBase  * num(r) / 100) : null;
-    const bPct = (a)  => buyBase  ? Number(((a/buyBase) *100).toFixed(2)) : null;
-    const sAmt = (r)  => saleBase ? Math.round(saleBase * num(r) / 100) : null;
+    //  금액은 부가세 포함, % 는 기준(공급가/출고가)으로 냅니다.
+    const buyB  = String((it && it.discountBase) || "") || "unit";
+    const saleB = (it.salePriceFollowsBuy === true) ? buyB
+      : ((savedSaleBase === "supply" || savedSaleBase === "unit" || savedSaleBase === "total")
+          ? savedSaleBase : buyB);
+    const pct = (amt) => L ? (function(){ const v = pctOnBase(amt, L, saleB);
+      return (v === "" || v == null) ? null : Number(v); })() : null;
+    const amt = (r)   => L ? (Number(amtOnBaseVat(num(r), L, saleB))||0) : null;
+    const bAmt = (r)  => L ? (Number(amtOnBaseVat(num(r), L, buyB))||0) : null;
+    const bPct = (a)  => L ? (function(){ const v = pctOnBase(a, L, buyB);
+      return (v === "" || v == null) ? null : Number(v); })() : null;
+    const sAmt = (r)  => L ? (Number(amtOnBaseVat(num(r), L, saleB))||0) : null;
     const sPct = (a)  => saleBase ? Number(((a/saleBase)*100).toFixed(2)) : null;
 
     let pre   = num(it.purchaseDiscountAmt);
@@ -39342,8 +39417,8 @@
         const L = Number(it.listPrice)||0;
         const B = (want === "supply") ? (L/1.1) : L;
         const pp = Number(it.purchaseDiscount)||0, op = Number(it.otherDiscountPct)||0;
-        const pre = L ? Math.round(B * pp / 100) : (Number(it.purchaseDiscountAmt)||0);
-        const other = L ? Math.round(B * op / 100) : (Number(it.otherDiscountAmt)||0);
+        const pre = L ? (Number(amtOnBaseVat(pp, L, want))||0) : (Number(it.purchaseDiscountAmt)||0);
+        const other = L ? (Number(amtOnBaseVat(op, L, want))||0) : (Number(it.otherDiscountAmt)||0);
         return { L, B, pre, other, buy: L - pre - other };
       };
       const prev = targets.slice(0,4).map(x=>{
@@ -39430,7 +39505,7 @@
       const preview = list.slice(0,4).map(it=>{
         const L = Number(it.listPrice)||0, B = baseFor(it, L);
         const pp = Number(it.purchaseDiscount)||0, op = Number(it.otherDiscountPct)||0;
-        const np = Math.round(B*pp/100), no = Math.round(B*op/100);
+        const np = itemAmtFromPct(it, L, pp), no = itemAmtFromPct(it, L, op);
         return "  " + (it.serialNumber||"-") + " : 입고가 "
           + (Number(it.purchasePrice)||0).toLocaleString() + " → " + (L-np-no).toLocaleString();
       }).join("\n");
@@ -39463,7 +39538,7 @@
           if(!L) continue;
           const B = baseFor(it, L);
           const pp = Number(it.purchaseDiscount)||0, op = Number(it.otherDiscountPct)||0;
-          const np = Math.round(B*pp/100), no = Math.round(B*op/100);
+          const np = itemAmtFromPct(it, L, pp), no = itemAmtFromPct(it, L, op);
           const buy = L - np - no;
           const patch = { purchaseDiscountAmt: np, otherDiscountAmt: no, purchasePrice: buy };
           if(!paidR.has(it.id) && it.salePriceFollowsBuy === true){
@@ -39503,8 +39578,8 @@
         const L2 = Number(it.listPrice)||0;
         if(!L2) return null;
         const B2 = baseFor(it, L2);
-        const np2 = Math.round(B2*(Number(it.purchaseDiscount)||0)/100);
-        const no2 = Math.round(B2*(Number(it.otherDiscountPct)||0)/100);
+        const np2 = itemAmtFromPct(it, L2, Number(it.purchaseDiscount)||0);
+        const no2 = itemAmtFromPct(it, L2, Number(it.otherDiscountPct)||0);
         return { id: it.id, before: it,
                  after: { ...it, purchaseDiscountAmt: np2, otherDiscountAmt: no2,
                           purchasePrice: L2 - np2 - no2 } };
@@ -39649,7 +39724,7 @@
         const pp = Number(it.purchaseDiscount)||0, op = Number(it.otherDiscountPct)||0;
         if(!(pp > 0) && !(op > 0)) return;
         const B = itemDiscountAmountBase(it, L);
-        const pre = Math.round(B * pp / 100), other = Math.round(B * op / 100);
+        const pre = itemAmtFromPct(it, L, pp), other = itemAmtFromPct(it, L, op);
         const buy = L - pre - other;
         if(pre === (Number(it.purchaseDiscountAmt)||0)
           && other === (Number(it.otherDiscountAmt)||0)
