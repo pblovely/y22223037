@@ -400,7 +400,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-04 v973</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-06 v974</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -9599,8 +9599,14 @@
 
   //  주문 수정 — 입고처를 고르면 매입 기준
   window.onBeSourceBase = async function(){
-    const b = await baseOfCompany((document.getElementById("be-party")||{}).value);
+    // 입고처를 바꾸셨을 때만 그 업체 기준을 넣어드립니다.
+    const name = String((document.getElementById("be-party")||{}).value||"").trim();
+    if(!name) return;
+    if(editingBatch && String(editingBatch.b && editingBatch.b.source || "").trim() === name) return;
+    const b = await baseOfCompany(name);
     putBase("be-base", b);
+    // 기준이 바뀌었으니 줄 금액도 다시 냅니다.
+    try{ onBeBaseChange(); }catch(e){}
   };
 
   //  단건 주문 — 입고처를 고르면 매입 기준
@@ -26243,7 +26249,9 @@
     document.getElementById("be-form").innerHTML = h;
     // 입고처·판매처는 일반 드롭다운으로 둡니다.
     //  (검색형이면 값 바뀜이 안 전해져 할인 계산 기준이 안 따라옵니다)
-    try{ if(kind === "order") await onBeSourceBase(); }catch(e){}
+    // 창을 열 때는 저장된 기준을 그대로 둡니다.
+    //  (여기서 업체 기준을 넣으면 고쳐서 저장한 값이 매번 덮어써집니다)
+    //  입고처를 바꾸실 때만 onBeSourceBase 가 돕니다.
     // 여신 잔액도 보여드립니다.
     try{ await showBeB2BHint(); }catch(e){}
     document.getElementById("be-msg").style.display = "none";
@@ -26932,8 +26940,9 @@
           batchPatch.depositPaidDate = "";
         }
         logAction("주문 결제방식 변경", party + " / " + oldPm + " → " + newPm + " / " + amt.toLocaleString());
-      }else if(newPm === "b2b_credit" && batchPatch.depositRequired != null){
-        // 여신 주문의 금액이 바뀌면 차감 기록도 새 금액으로 맞춥니다.
+      }else if(newPm === "b2b_credit"){
+        // 여신 주문이면 저장할 때마다 차감 기록을 새 금액으로 맞춥니다.
+        //  (금액이 안 바뀐 것처럼 보여도 할인 기준이 바뀌면 차감액이 달라집니다)
         await withTimeout(replaceB2BOrderUse(id, amt, b.depositPaidDate || d1 || todayStr(), party), 20000, "여신 차감");
         logAction("여신 차감액 갱신", party + " / " + amt.toLocaleString());
       }
@@ -27149,6 +27158,18 @@
       + (Object.keys(perLine).length ? " / 금액수정 " + Object.keys(perLine).length + "줄" : "")
       + (fixItems && itemTargets.length ? " / 재고 " + itemTargets.length + "대 금액 함께 수정" : ""));
     }catch(e){}
+    // 품목을 저장한 뒤 여신 차감을 새 금액으로 다시 맞춥니다.
+    //  (앞의 여신 처리는 저장 전에 돌아 옛 금액으로 계산됩니다)
+    try{
+      const pm2 = document.getElementById("be-paymethod");
+      if(kind === "order" && pm2 && pm2.value === "b2b_credit"){
+        msg("여신 차감을 새 금액으로 맞추는 중...", false);
+        const amt2 = await withTimeout(creditAmountOfBatch(id), 15000, "여신 계산");
+        await withTimeout(replaceB2BOrderUse(id, amt2,
+          b.depositPaidDate || d1 || todayStr(), party), 20000, "여신 차감");
+      }
+    }catch(e){}
+
     // 담아둔 자료를 전부 비웁니다. 안 그러면 목록·상세에 옛 금액이 그대로 보입니다.
     try{
       clearCache("orders"); clearCache("inventory"); clearCache("saleRequests");
