@@ -400,7 +400,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-06 v985</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-06 v986</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -15580,17 +15580,44 @@
   // 어느 주문에도 이어지지 않은 「주문사용」 기록을 찾아 정리합니다.
   //  옛 방식으로 만들어졌거나 수기로 넣은 것이라 두면 여신이 두 번 빠집니다.
   window.cleanOrphanCreditUse = async function(){
-    let rows = [];
+    let rows = [], linked = [];
     try{
+      // 살아 있는 주문 묶음을 먼저 모읍니다.
+      const obs = {};
+      const ob = await getDocs(collection(db,"orderBatches"));
+      ob.forEach(function(d){ obs[d.id] = d.data(); });
       const q = await getDocs(collection(db,"b2bLedger"));
       q.forEach(function(d){
         const v = d.data();
         if(v.category !== "order_use") return;
-        if(v.fromOrderBatchId) return;
-        rows.push({ id:d.id, ...v });
+        if(!v.fromOrderBatchId){ rows.push({ id:d.id, why:"주문 표시 없음", ...v }); return; }
+        // 주문 id 는 있는데 그 주문이 사라졌으면 그것도 주인 없는 기록입니다.
+        if(!obs[v.fromOrderBatchId]){ rows.push({ id:d.id, why:"그 주문이 없음", ...v }); return; }
+        linked.push({ id:d.id, batch: obs[v.fromOrderBatchId], ...v });
       });
     }catch(e){ alert("읽지 못했습니다."); return; }
-    if(rows.length === 0){ alert("주인 없는 여신 차감 기록이 없습니다."); return; }
+    if(rows.length === 0){
+      // 주인 없는 기록이 없으면, 주문과 이어진 기록들이 지금 금액과 맞는지 보여드립니다.
+      let msg2 = "주인 없는 여신 차감 기록이 없습니다.\n\n";
+      if(linked.length){
+        msg2 += "주문과 이어진 차감 기록 " + linked.length + "건:\n";
+        for(const x of linked.slice(0,12)){
+          let want = null;
+          try{ want = await creditAmountOfBatch(x.fromOrderBatchId); }catch(e){}
+          const cur = Number(x.amount)||0;
+          const gap = (want != null) ? (want - cur) : null;
+          msg2 += "  " + (x.date||"-") + "  " + String(x.partner||x.source||"-")
+               + "  " + cur.toLocaleString()
+               + (gap === null ? "" : (gap === 0 ? "  (맞음)" : "  → 실제 " + want.toLocaleString()
+                   + " · 차이 " + gap.toLocaleString()))
+               + "\n";
+        }
+        if(linked.length > 12) msg2 += "  ... 외 " + (linked.length-12) + "건\n";
+        msg2 += "\n차이가 있는 건은 그 주문을 열어 <수정 저장> 하시면 맞춰집니다.";
+      }
+      alert(msg2);
+      return;
+    }
     const sum = rows.reduce(function(n,x){ return n + (Number(x.amount)||0); }, 0);
     if(!confirm("어느 주문에도 이어지지 않은 여신 차감 기록이 " + rows.length + "건 있습니다.\n\n"
       + rows.slice(0,10).map(function(x){
