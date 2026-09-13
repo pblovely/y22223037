@@ -400,7 +400,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-06 v1116</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-06 v1119</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -19222,12 +19222,35 @@
       // 기록에 통장 번호가 없으면 uses 에서 찾아봅니다.
       if(Object.keys(back).length === 0){
         const q = await getDocs(collection(db,"bankDeposits"));
-        q.forEach(function(d){
-          const v = d.data();
+        const all = [];
+        q.forEach(function(d){ all.push({ id:d.id, ...d.data() }); });
+        // ① 요청 번호로 찾기
+        all.forEach(function(v){
           (v.uses||[]).forEach(function(u){
-            if(String(u.reqId||"") === String(reqId)) back[d.id] = (back[d.id]||0) + (Number(u.amount)||0);
+            if(String(u.reqId||"") === String(reqId)) back[v.id] = (back[v.id]||0) + (Number(u.amount)||0);
           });
         });
+        // ② 옛 기록에는 요청 번호가 없습니다. 날짜·금액·상대로 찾습니다.
+        if(Object.keys(back).length === 0 && list.length){
+          list.forEach(function(r){
+            const amt = Number(r.amount)||0;
+            const dt  = String(r.date||"").replace(/\D/g,"");
+            const who = String(r.payer || r.destination || "").trim();
+            if(!amt) return;
+            for(const v of all){
+              if(v.deleted === true) continue;
+              if((Number(v.usedAmount)||0) <= 0) continue;
+              const hit = (v.uses||[]).some(function(u){
+                if(String(u.reqId||"")) return false;          // 번호가 있는 건 위에서 처리됩니다
+                if((Number(u.amount)||0) !== amt) return false;
+                if(dt && String(u.date||"").replace(/\D/g,"") && String(u.date||"").replace(/\D/g,"") !== dt) return false;
+                if(who && String(u.destination||"").trim() && String(u.destination||"").trim() !== who) return false;
+                return true;
+              });
+              if(hit){ back[v.id] = (back[v.id]||0) + amt; break; }
+            }
+          });
+        }
       }
       for(const bid of Object.keys(back)){
         try{
@@ -19235,9 +19258,19 @@
           if(!d.exists()) continue;
           const v = d.data();
           const cut = Math.min(Number(v.usedAmount)||0, back[bid]);
+          //  되돌린 만큼 uses 에서도 뺍니다. 번호가 없는 옛 기록은 금액으로 맞춥니다.
+          let rest = cut;
+          const keep = [];
+          (v.uses||[]).forEach(function(u){
+            if(String(u.reqId||"") === String(reqId)) return;          // 번호가 맞으면 뺍니다
+            if(rest > 0 && !String(u.reqId||"") && (Number(u.amount)||0) <= rest){
+              rest -= (Number(u.amount)||0); return;                    // 옛 기록도 금액만큼 뺍니다
+            }
+            keep.push(u);
+          });
           await updateDoc(doc(db,"bankDeposits", bid), {
             usedAmount: Math.max(0, (Number(v.usedAmount)||0) - cut),
-            uses: (v.uses||[]).filter(function(u){ return String(u.reqId||"") !== String(reqId); })
+            uses: keep
           });
           n++;
         }catch(e){}
@@ -19349,7 +19382,9 @@
       "이 요청에는 이미 이체 기록이 있습니다.\n\n"
       + "  누적 이체 " + paid.toLocaleString() + "\n\n"
       + "이체 기록은 그대로 남깁니다. 실제로 나간 돈이기 때문입니다.\n"
-      + "포함된 주문과의 연결만 풀어 다시 고를 수 있게 합니다.\n\n계속하시겠습니까?")) return;
+      + "포함된 주문과의 연결만 풀어 다시 고를 수 있게 합니다.\n\n"
+      + "통장에 붙였던 돈도 <안 붙임> 으로 돌아갑니다.\n"
+      + "입출금리스트에서 다시 매칭하실 수 있습니다.\n\n계속하시겠습니까?")) return;
     if(paid === 0 && !confirm("이 출금요청을 취소하시겠습니까?\n포함된 주문들은 다시 개별 선택할 수 있게 됩니다.")) return;
 
     const reason = prompt("취소 사유를 입력해주세요. (필수)", "");
@@ -19374,10 +19409,15 @@
       return;
     }
     logAction("출금요청 취소", (p.totalAmount||0).toLocaleString() + " / 사유: " + String(reason).trim());
-    alert("취소했습니다.");
+    alert("취소했습니다.\n\n통장에 붙였던 돈이 <안 붙임> 으로 돌아갔습니다.\n입출금리스트에서 확인해주세요.");
+    //  통장 화면도 함께 새로 읽습니다. (회색 → 검정 으로 바로 보이게)
+    try{ clearCache("bank"); clearDashCache(); }catch(e){}
     if(typeof loadPaymentRequestList === "function") loadPaymentRequestList();
     loadOrderList();
     if(typeof loadSettlementTab === "function") loadSettlementTab();
+    try{ if(typeof loadReqBoard === "function") loadReqBoard(); }catch(e){}
+    try{ if(typeof loadDepositEntryList === "function") loadDepositEntryList(); }catch(e){}
+    try{ if(typeof loadCashbook === "function") loadCashbook(); }catch(e){}
   };
 
   // 이체 내역을 한 건 추가합니다. (부분이체 지원)
@@ -19924,9 +19964,15 @@
         // 버튼은 줄을 눌렀을 때 아래로 펼쳐지는 칸에 모아 둡니다. (가로로 밀리지 않게)
         //  아직 요청에 안 붙인 통장 내역은 바로 지울 수 있게 합니다.
         const canDelCb = r.cb && !r.cbUsed && hasPerm(currentUserPerms, "cancelDelete");
+        //  이미 붙어 있는 통장 내역은 배분을 풀 수 있게 합니다. (붙은 요청이 없어졌을 때)
+        const canRelCb = r.cb && r.cbUsed > 0 && hasPerm(currentUserPerms, "paymentProcess");
         const btns =
             (canDelCb
               ? '<button class="btn small danger" style="width:auto;margin-right:4px;" data-rbd-delcb="' + r.id + '">삭제</button>'
+              : '')
+            + (canRelCb
+              ? '<button class="btn small secondary" style="width:auto;margin-right:4px;" title="붙은 요청이 없어졌을 때 씁니다. 쓴 금액을 0 으로 되돌립니다." data-rbd-relcb="' + r.id + '">배분 풀기</button>'
+                + '<button class="btn small danger" style="width:auto;margin-right:4px;" title="배분을 풀고 내역까지 지웁니다." data-rbd-fdelcb="' + r.id + '">삭제</button>'
               : '')
             + ((r.canProcess && !r.canceled && !r.finished && canDo)
               ? '<button class="btn small" style="width:auto;" data-rbd-do="' + r.kind + '|' + r.id + '">처리</button>'
@@ -20042,6 +20088,12 @@
     });
     document.querySelectorAll("#tab-reqboard [data-rbd-delcb]").forEach(b=>{
       b.onclick = ()=> deleteBankDup(b.dataset.rbdDelcb);
+    });
+    document.querySelectorAll("#tab-reqboard [data-rbd-relcb]").forEach(b=>{
+      b.onclick = ()=> releaseDepositEntry(b.dataset.rbdRelcb);
+    });
+    document.querySelectorAll("#tab-reqboard [data-rbd-fdelcb]").forEach(b=>{
+      b.onclick = ()=> forceDeleteDeposit(b.dataset.rbdFdelcb);
     });
     document.querySelectorAll("#tab-reqboard [data-rbd-edit]").forEach(b=>{
       const [kind, id] = b.dataset.rbdEdit.split("|");
@@ -23576,8 +23628,10 @@
         + '<td class="ta-left" style="font-size:11px;color:var(--gray);">'+comboEsc(x.memo||"")+'</td>'
         + '<td class="ta-right" style="white-space:nowrap;">'
         + ((x.uses||[]).length ? '<button class="btn small secondary" style="width:auto;" data-dep-use="'+x.id+'">사용 내역</button>' : '')
-        + (used === 0 ? '<button class="btn small danger" style="width:auto;" data-dep-del="'+x.id+'">삭제</button>'
-            : '<button class="btn small secondary" style="width:auto;" title="붙은 요청이 없어졌을 때 씁니다. 쓴 금액을 0 으로 되돌립니다." data-dep-release="'+x.id+'">배분 풀기</button>')
+        + (used === 0
+            ? '<button class="btn small danger" style="width:auto;" data-dep-del="'+x.id+'">삭제</button>'
+            : '<button class="btn small secondary" style="width:auto;margin-right:4px;" title="붙은 요청이 없어졌을 때 씁니다. 쓴 금액을 0 으로 되돌립니다." data-dep-release="'+x.id+'">배분 풀기</button>'
+              + '<button class="btn small danger" style="width:auto;" title="배분을 풀고 내역까지 지웁니다." data-dep-forcedel="'+x.id+'">삭제</button>')
         + '</td></tr>';
     });
     h += '<tr style="background:#fff;font-weight:700;border-top:2px solid var(--navy);">'
@@ -23591,6 +23645,7 @@
     el.querySelectorAll("[data-dep-del]").forEach(b=> b.onclick = ()=> deleteDepositEntry(b.dataset.depDel));
     el.querySelectorAll("[data-dep-use]").forEach(b=> b.onclick = ()=> showDepositUses(b.dataset.depUse));
     el.querySelectorAll("[data-dep-release]").forEach(b=> b.onclick = ()=> releaseDepositEntry(b.dataset.depRelease));
+    el.querySelectorAll("[data-dep-forcedel]").forEach(b=> b.onclick = ()=> forceDeleteDeposit(b.dataset.depForcedel));
   
     foldActionColumn("deposit-entry-list");
     addDownloadBtn("dl-deposit", "deposit-entry-list", "통장입금");
@@ -23632,8 +23687,43 @@
       + " / " + (v.payer || v.company || "-") + " / 풀린 금액 " + used.toLocaleString());
     alert("배분을 풀었습니다.\n\n이제 <삭제> 하시거나 다시 매칭하실 수 있습니다.");
     try{ clearCache("bank"); }catch(e){}
-    loadDepositEntryList();
+    try{ if(typeof loadDepositEntryList === "function") loadDepositEntryList(); }catch(e){}
     try{ if(typeof loadReqBoard === "function") loadReqBoard(); }catch(e){}
+    try{ if(typeof loadCashbook === "function") loadCashbook(); }catch(e){}
+  };
+
+  //  배분이 남아 있어도 확인 후 지웁니다. (붙은 요청이 없어졌을 때)
+  window.forceDeleteDeposit = async function(id){
+    if(!hasPerm(currentUserPerms, "cancelDelete")){ alert("권한이 없습니다."); return; }
+    let v = null;
+    try{
+      const d = await getDoc(doc(db,"bankDeposits", id));
+      if(!d.exists()){ alert("이미 지워진 내역입니다."); return; }
+      v = d.data();
+    }catch(e){ alert("읽지 못했습니다."); return; }
+    const used = Number(v.usedAmount)||0;
+    const uses = (v.uses||[]);
+    if(!confirm("이 입출금 내역을 지웁니다.\n\n"
+      + "  " + (v.date||"-") + " · " + (Number(v.amount)||0).toLocaleString()
+      + " · " + (v.payer || v.company || "-") + "\n"
+      + (used ? "  쓴 금액 " + used.toLocaleString() + "\n" : "")
+      + (uses.length ? "\n[붙어 있던 기록]\n"
+          + uses.slice(0,6).map(function(u){
+              return "  " + (u.date||"-") + " · " + (Number(u.amount)||0).toLocaleString()
+                   + (u.destination ? " · " + u.destination : "");
+            }).join("\n") + "\n" : "")
+      + "\n요청 쪽 기록은 건드리지 않습니다.\n"
+      + "되돌릴 수 없습니다. 진행할까요?")) return;
+    try{ await deleteDoc(doc(db,"bankDeposits", id)); }
+    catch(e){ alert("지우지 못했습니다.\n" + ((e&&e.message)?e.message:String(e))); return; }
+    logAction("입출금 내역 삭제 (배분 있음)",
+      (v.date||"-") + " / " + (Number(v.amount)||0).toLocaleString()
+      + " / " + (v.payer || v.company || "-") + (used ? " / 쓴 금액 " + used.toLocaleString() : ""));
+    alert("지웠습니다.");
+    try{ clearCache("bank"); }catch(e){}
+    try{ if(typeof loadDepositEntryList === "function") loadDepositEntryList(); }catch(e){}
+    try{ if(typeof loadReqBoard === "function") loadReqBoard(); }catch(e){}
+    try{ if(typeof loadCashbook === "function") loadCashbook(); }catch(e){}
   };
 
   window.showDepositUses = async function(id){
