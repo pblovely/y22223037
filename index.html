@@ -400,7 +400,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-06 v1137</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-06 v1138</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -18378,6 +18378,11 @@ const firebaseConfig = {
     //  기한이 끝난 계산서는 담보에서 빠집니다. 거기서 빌린 금액도 함께 빼야
     //  「남은 금액」이 실제로 더 빌릴 수 있는 금액이 됩니다.
     const sumUsed = arr=> (arr||[]).reduce((n,c)=> n + (c.expired ? 0 : (usedBy[c.id]||0)), 0);
+    //  발행한 계산서와 거기서 빌린 금액은 기한이 끝나도 사실 그대로 보여줍니다.
+    //  기한종료는 「남은 금액(더 빌릴 수 있는 금액)」에서만 빠집니다.
+    //  → 아래 「세금계산서 발행 목록」과 같은 값이 나오게 맞춥니다.
+    const sumColsAll = arr=> (arr||[]).reduce((n,c)=> n + (Number(c.amount)||0), 0);
+    const sumUsedAll = arr=> (arr||[]).reduce((n,c)=> n + (usedBy[c.id]||0), 0);
 
     // 반품으로 여신을 되돌려 받은 금액은 그 달 매입에서 빼야 계산서와 맞습니다.
     const retByKey = {};
@@ -18398,22 +18403,28 @@ const firebaseConfig = {
       const arr = colByKey[k] || [];
       rows.push({ key:k, ...m, cols:arr, col:(arr[0] || null),
         ret: retByKey[k] || 0,
-        colAmt: sumCols(arr), used: sumUsed(arr) });
+        colAmt: sumCols(arr), used: sumUsed(arr),
+        colAmtAll: sumColsAll(arr), usedAll: sumUsedAll(arr) });
     });
     // 주문은 없는데 계산서만 등록한 것도 함께 보여줍니다. (예전 건 입력분)
     Object.keys(colByKey).forEach(k=>{
       if(months[k]) return;
       const arr = colByKey[k]; const c0 = arr[0];
       rows.push({ key:k, month:c0.month||"", company:c0.company||"", qty:0, cost:0, credit:0,
-        cols:arr, col:c0, colAmt: sumCols(arr), used: sumUsed(arr) });
+        cols:arr, col:c0, colAmt: sumCols(arr), used: sumUsed(arr),
+        colAmtAll: sumColsAll(arr), usedAll: sumUsedAll(arr) });
     });
     rows.forEach(r=>{ r.left = r.colAmt - r.used; });
     rows.sort((a,b)=> String(b.month||"").localeCompare(String(a.month||""))
                    || String(a.company||"").localeCompare(String(b.company||"")));
 
     if(cardEl){
-      const tot  = rows.reduce((n,r)=> n + r.colAmt, 0);
-      const used = rows.reduce((n,r)=> n + r.used, 0);
+      const tot  = rows.reduce((n,r)=> n + (r.colAmtAll||0), 0);   // 발행 등록한 계산서 합계 (기한종료 포함)
+      const used = rows.reduce((n,r)=> n + (r.usedAll||0), 0);     // 실제로 대출에 쓴 금액
+      const leftTot = rows.reduce((n,r)=> n + (r.left||0), 0);     // 더 빌릴 수 있는 금액 (기한종료 제외)
+      //  기한이 끝나 못 쓰게 된 금액 — 아래 세금계산서 발행 목록과 같은 방식으로 셉니다.
+      const deadLeft = (cols||[]).reduce((n,c)=>
+        n + (c.expired ? Math.max(0, (Number(c.amount)||0) - (usedBy[c.id]||0)) : 0), 0);
       const noIssue = rows.filter(r=> !r.col && r.qty > 0).length;
       const card = (label, val, color, note)=>
         '<div style="flex:1;min-width:150px;border:1px solid var(--line);background:#fff;padding:10px 14px;">'
@@ -18423,7 +18434,8 @@ const firebaseConfig = {
       cardEl.innerHTML =
         card("담보 총액", tot.toLocaleString(), "var(--navy)", "발행 등록한 계산서 합계") +
         card("대출에 쓴 금액", used.toLocaleString(), "var(--danger)") +
-        card("남은 한도", (tot - used).toLocaleString(), (tot-used) > 0 ? "#2e7d32" : "var(--gray)", "더 빌릴 수 있는 금액") +
+        card("남은 한도", leftTot.toLocaleString(), leftTot > 0 ? "#2e7d32" : "var(--gray)",
+             "더 빌릴 수 있는 금액" + (deadLeft ? "<br>기한종료로 못 쓰게 된 금액 " + deadLeft.toLocaleString() : "")) +
         card("계산서 미등록", noIssue + "건", noIssue ? "var(--danger)" : "var(--gray)", "주문완료분 중 발행 안 적은 달");
     }
 
@@ -18444,15 +18456,15 @@ const firebaseConfig = {
     colSheetCache = {};
     rows.forEach(r=>{ colSheetCache[(r.month||"")+"|"+(r.company||"")] = r.cols || []; });
     rows.forEach(r=>{ colRowBatches[(r.month||"")+"|"+(r.company||"")] = r.batches || []; });
-    let tC=0, tU=0;
+    let tC=0, tU=0, tL=0;
     rows.forEach(r=>{
-      tC += r.colAmt; tU += r.used;
+      tC += (r.colAmtAll||0); tU += (r.usedAll||0); tL += (r.left||0);
       const done = !!r.col && r.left <= 0;
       // 반품분은 여신에서 되돌려 받았으니 그 달 매입에서 뺍니다.
       // 반품분은 계산서에 함께 실려 나옵니다. 여신차감에 더해 계산서와 견줍니다.
       // 삼성은 반품을 뺀 금액으로 계산서를 냅니다. 여신차감에서 반품을 빼고 견줍니다.
       const netCredit = (r.credit||0) - (r.ret||0);
-      const diff = r.col && r.qty > 0 ? (r.colAmt - netCredit) : 0;
+      const diff = r.col && r.qty > 0 ? ((r.colAmtAll||0) - netCredit) : 0;
       const colAdj = (r.cols||[]).reduce((n,c)=> n + (adjByCol[c.id]||0), 0);
       const freeAdj = adjFreeByCo[String(r.company||"").trim()] || 0;
       // 아직 안 맞춘 차이 = 계산서와 여신차감의 차이 + 이미 넣은 조정
@@ -18483,8 +18495,8 @@ const firebaseConfig = {
         + '<td class="ta-right" style="white-space:nowrap;">'
           + (((r.cols||[]).length > 1)
               ? r.cols.map(c=> c.expired ? ('<span style="color:var(--gray);text-decoration:line-through;">' + (Number(c.amount)||0).toLocaleString() + '</span>') : (Number(c.amount)||0).toLocaleString()).join("<br>")
-              : (((r.cols||[]).length && r.cols[0].expired) ? '<span style="color:var(--gray);text-decoration:line-through;">' + (Number(r.cols[0].amount)||0).toLocaleString() + '</span>' : ((r.colAmt ? r.colAmt.toLocaleString() : "-")))) + '</td>'
-        + '<td class="ta-right" style="white-space:nowrap;"><b>' + (r.colAmt ? r.colAmt.toLocaleString() : "-") + '</b></td>'
+              : (((r.cols||[]).length && r.cols[0].expired) ? '<span style="color:var(--gray);text-decoration:line-through;">' + (Number(r.cols[0].amount)||0).toLocaleString() + '</span>' : ((r.colAmtAll ? r.colAmtAll.toLocaleString() : "-")))) + '</td>'
+        + '<td class="ta-right" style="white-space:nowrap;"><b>' + (r.colAmtAll ? r.colAmtAll.toLocaleString() : "-") + '</b></td>'
         + '<td class="ta-right" style="white-space:nowrap;">'
           + (diff
               ? '<span style="color:var(--danger);font-weight:700;">' + (diff>0?"+":"") + diff.toLocaleString() + '</span>'
@@ -18495,7 +18507,7 @@ const firebaseConfig = {
                           + (needAdj>0?"+":"") + needAdj.toLocaleString() + '</span>' : '')
                     : '')
               : '<span style="color:var(--gray);">-</span>') + '</td>' 
-        + '<td class="ta-right">'+(r.used ? r.used.toLocaleString() : "-")+'</td>'
+        + '<td class="ta-right">'+(r.usedAll ? r.usedAll.toLocaleString() : "-")+'</td>'
         + '<td class="ta-right" style="color:'+(r.left > 0 ? "#2e7d32" : "var(--gray)")+';font-weight:700;">'
           + (r.col ? r.left.toLocaleString() : "-") + '</td>'
         + (canDo ? '<td class="ta-right" style="white-space:nowrap;">'
@@ -18509,7 +18521,7 @@ const firebaseConfig = {
                       + ' data-col-adj="'+comboEsc(r.company)+'|'+needAdj+'|'+r.col.id+'">'
                       + ((colAdj || freeAdj) ? '조정 더하기' : '여신 조정') + '</button>' : '')
                   + '<button class="btn small secondary" style="width:auto;margin-left:4px;" title="이 달의 계산서와 주문을 한 화면에서 이어 붙입니다." data-col-map="'+comboEsc(r.month)+'|'+comboEsc(r.company)+'">주문 매칭</button>'
-                  + '<button class="btn small" style="width:auto;margin-left:4px;" title="이 달에 계산서를 한 장 더 넣습니다" data-col-new="'+comboEsc(r.month)+'|'+comboEsc(r.company)+'|'+Math.max(0, r.credit - r.colAmt)+'">계산서 추가</button>'
+                  + '<button class="btn small" style="width:auto;margin-left:4px;" title="이 달에 계산서를 한 장 더 넣습니다" data-col-new="'+comboEsc(r.month)+'|'+comboEsc(r.company)+'|'+Math.max(0, r.credit - (r.colAmtAll||0))+'">계산서 추가</button>'
                 : '<button class="btn small" style="width:auto;" data-col-new="'+comboEsc(r.month)+'|'+comboEsc(r.company)+'|'+r.credit+'">계산서 등록</button>')
             + '</td>' : '')
         + '</tr>';
@@ -18520,7 +18532,7 @@ const firebaseConfig = {
       + '<td class="ta-right">'+tC.toLocaleString()+'</td>'
       + '<td></td>'
       + '<td class="ta-right">'+tU.toLocaleString()+'</td>'
-      + '<td class="ta-right">'+(tC-tU).toLocaleString()+'</td>'
+      + '<td class="ta-right">'+tL.toLocaleString()+'</td>'
       + (canDo ? '<td></td>' : '') + '</tr>';
     h += '</tbody></table></div>';
     listEl.innerHTML = h;
