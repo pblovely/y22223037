@@ -400,7 +400,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-06 v1066</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-06 v1067</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -662,26 +662,23 @@
         <div id="act-col-picker" style="display:none;border:1px solid var(--navy);background:#f4f7fb;padding:10px 12px;margin-bottom:8px;"></div>
         <div id="act-cards" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px;"></div>
         <div class="tbar-row" style="display:flex;gap:0;flex-wrap:wrap;align-items:center;margin-bottom:8px;">
-          <input type="text" id="act-q" placeholder="일련번호·모델·통신사로 찾기" onchange="loadActivationList()" style="width:230px;height:28px;border:1px solid var(--line);padding:0 8px;font-size:12.5px;box-sizing:border-box;">
-          <input type="text" id="act-from" placeholder="개통 시작일 20260701" onchange="loadActivationList()" style="width:150px;height:28px;border:1px solid var(--line);padding:0 8px;font-size:12.5px;margin-left:-1px;box-sizing:border-box;">
-          <input type="text" id="act-to" placeholder="개통 종료일 20260731" onchange="loadActivationList()" style="width:150px;height:28px;border:1px solid var(--line);padding:0 8px;font-size:12.5px;margin-left:-1px;box-sizing:border-box;">
-          <input type="text" id="act-month" maxlength="6" inputmode="numeric" placeholder="지원금 귀속월 202608" onchange="loadActivationList()" style="width:160px;height:28px;border:1px solid var(--line);padding:0 8px;font-size:12.5px;margin-left:-1px;box-sizing:border-box;">
-          <input type="text" id="act-reg-from" maxlength="8" inputmode="numeric" placeholder="등록일 시작 20260906" onchange="loadActivationList()" style="width:160px;height:28px;border:1px solid var(--line);padding:0 8px;font-size:12.5px;margin-left:-1px;box-sizing:border-box;">
-          <input type="text" id="act-reg-to" maxlength="8" inputmode="numeric" placeholder="등록일 종료 20260906" onchange="loadActivationList()" style="width:160px;height:28px;border:1px solid var(--line);padding:0 8px;font-size:12.5px;margin-left:-1px;box-sizing:border-box;">
-          <select id="act-kind-f" onchange="loadActivationList()" style="width:120px;height:28px;border:1px solid var(--line);padding:0 6px;font-size:12.5px;margin-left:-1px;box-sizing:border-box;">
-            <option value="">구분 전체</option>
-            <option value="pay">지급</option>
-            <option value="claw">환수</option>
-            <option value="none">지원금 없음</option>
+          <select id="act-date-type" onchange="loadActivationList()" title="기간 조회의 기준이 되는 날짜" style="width:110px;height:28px;border:1px solid var(--line);padding:0 6px;font-size:12.5px;box-sizing:border-box;">
+            <option value="activateDate">개통일</option>
+            <option value="regDate">등록일</option>
           </select>
-          <select id="act-code-f" onchange="loadActivationList()" style="width:130px;height:28px;border:1px solid var(--line);padding:0 6px;font-size:12.5px;margin-left:-1px;box-sizing:border-box;"><option value="">개통코드 전체</option></select>
-          <select id="act-sup-f" onchange="loadActivationList()" style="width:140px;height:28px;border:1px solid var(--line);padding:0 6px;font-size:12.5px;margin-left:-1px;box-sizing:border-box;">
-            <option value="">지원금 전체</option>
-            <option value="none">지원금 없음</option>
-            <option value="pay">지급만</option>
-            <option value="claw">환수 있음</option>
-            <option value="over">환수 초과</option>
+          <input type="text" id="act-from" maxlength="8" inputmode="numeric" placeholder="시작 20260701" onchange="loadActivationList()" style="width:130px;height:28px;border:1px solid var(--line);padding:0 8px;font-size:12.5px;margin-left:-1px;box-sizing:border-box;">
+          <input type="text" id="act-to" maxlength="8" inputmode="numeric" placeholder="종료 20260731" onchange="loadActivationList()" style="width:130px;height:28px;border:1px solid var(--line);padding:0 8px;font-size:12.5px;margin-left:-1px;box-sizing:border-box;">
+          <span class="tbar-sep" style="margin:0 4px;">|</span>
+          <select id="act-cond-field" onchange="loadActivationList()" style="width:130px;height:28px;border:1px solid var(--line);padding:0 6px;font-size:12.5px;box-sizing:border-box;"></select>
+          <select id="act-cond-match" onchange="loadActivationList()" style="width:95px;height:28px;border:1px solid var(--line);padding:0 6px;font-size:12.5px;margin-left:-1px;box-sizing:border-box;">
+            <option value="포함">포함</option>
+            <option value="일치">일치</option>
+            <option value="빈칸">빈칸</option>
+            <option value="빈칸아님">빈칸 아님</option>
           </select>
+          <input type="text" id="act-cond-value" placeholder="검색어" onchange="loadActivationList()" style="width:130px;height:28px;border:1px solid var(--line);padding:0 8px;font-size:12.5px;margin-left:-1px;box-sizing:border-box;">
+          <span class="tbar-sep" style="margin:0 4px;">|</span>
+          <input type="text" id="act-q" placeholder="전체에서 찾기 (모든 칸)" onchange="loadActivationList()" style="width:180px;height:28px;border:1px solid var(--line);padding:0 8px;font-size:12.5px;box-sizing:border-box;">
           <button class="btn small secondary" style="width:auto;margin-left:-1px;" onclick="clearActCond()">비우기</button>
           <button class="btn small secondary" style="width:auto;margin-left:-1px;" onclick="toggleActPicker()">보기 설정</button>
           <span id="dl-activation" style="margin-left:6px;"></span>
@@ -6363,16 +6360,6 @@
   window.loadActCodesIntoSelects = async function(){
     let names = [];
     try{ names = await fetchNamesOrdered("activationCodes"); }catch(e){}
-    // 개통 목록의 거르기 칸도 함께 채웁니다.
-    {
-      const f = document.getElementById("act-code-f");
-      if(f){
-        const cur = f.value;
-        f.innerHTML = '<option value="">개통코드 전체</option>'
-          + names.map(function(n){ return '<option value="'+comboEsc(n)+'">'+comboEsc(n)+'</option>'; }).join("");
-        if(cur) f.value = cur;
-      }
-    }
     ["paste-act-code","actinfo-code"].forEach(function(id){
       const sel = document.getElementById(id);
       if(!sel) return;
@@ -45006,8 +44993,10 @@
   // ---------- 개통 관리 ----------
   //  포피플에서 직접 개통한 단말기입니다. 거래처에 넘긴 것이 아니라 받을 돈이 없습니다.
   window.clearActCond = function(){
-    ["act-q","act-from","act-to","act-month","act-reg-from","act-reg-to"].forEach(id=>{ const e=document.getElementById(id); if(e) e.value=""; });
-    ["act-code-f","act-sup-f","act-kind-f"].forEach(id=>{ const e=document.getElementById(id); if(e) e.value=""; });
+    ["act-q","act-from","act-to","act-cond-value"].forEach(id=>{ const e=document.getElementById(id); if(e) e.value=""; });
+    { const e=document.getElementById("act-date-type"); if(e) e.value="activateDate"; }
+    { const e=document.getElementById("act-cond-field"); if(e) e.value=""; }
+    { const e=document.getElementById("act-cond-match"); if(e) e.value="포함"; }
     loadActivationList();
   };
 
@@ -45029,38 +45018,22 @@
       }
     }catch(e){}
 
-    const q    = String((document.getElementById("act-q")||{}).value || "").trim().toLowerCase();
-    const from = String((document.getElementById("act-from")||{}).value || "").replace(/\D/g,"");
-    const to   = String((document.getElementById("act-to")||{}).value || "").replace(/\D/g,"");
-    const mon  = String((document.getElementById("act-month")||{}).value || "").replace(/\D/g,"");
-    const codeF= String((document.getElementById("act-code-f")||{}).value || "").trim();
-    const supF = String((document.getElementById("act-sup-f")||{}).value || "");
+    const q     = String((document.getElementById("act-q")||{}).value || "").trim().toLowerCase();
+    const from  = String((document.getElementById("act-from")||{}).value || "").replace(/\D/g,"");
+    const to    = String((document.getElementById("act-to")||{}).value || "").replace(/\D/g,"");
+    const dType = String((document.getElementById("act-date-type")||{}).value || "activateDate");
+    const cField= String((document.getElementById("act-cond-field")||{}).value || "");
+    const cMatch= String((document.getElementById("act-cond-match")||{}).value || "포함");
+    const cVal  = String((document.getElementById("act-cond-value")||{}).value || "").trim().toLowerCase();
 
     let rows = items.filter(it=>{
       if(it.deleted === true) return false;
       if(it.status !== "개통") return false;
-      const d = String(it.activateDate||"").replace(/\D/g,"");
-      if(from && (!d || d < from)) return false;
-      if(to && (!d || d > to)) return false;
-      // 지원금 귀속월 — 여러 달이 쉼표로 들어 있을 수 있습니다.
-      if(mon){
-        const ms = String(it.supportMonth||"").split(",").map(function(x){ return x.trim(); });
-        if(ms.indexOf(mon) < 0) return false;
-      }
-      if(codeF && String(it.activationCode||"") !== codeF) return false;
-      if(supF){
-        const dv = Number(it.distSupport)||0, cv = Number(it.clawback)||0;
-        if(supF === "none" && (dv || cv)) return false;
-        if(supF === "pay"  && !(dv > 0 && cv === 0)) return false;
-        if(supF === "claw" && !(cv > 0)) return false;
-        if(supF === "over" && !(cv > dv)) return false;
-      }
-      if(q){
-        const hay = [it.serialNumber, it.systemModel, it.petName, it.carrier,
-                     it.systemColor, it.manufacturerColor,
-                     it.subNumber, it.activationCode, it.supportMonth]
-          .map(v=> String(v||"").toLowerCase()).join(" ");
-        if(hay.indexOf(q) < 0) return false;
+      // 기간 — 개통일로만 먼저 거릅니다. 등록일은 아래에서 봅니다.
+      if(dType === "activateDate"){
+        const d = String(it.activateDate||"").replace(/\D/g,"");
+        if(from && (!d || d < from)) return false;
+        if(to && (!d || d > to)) return false;
       }
       return true;
     });
@@ -45068,8 +45041,8 @@
                     || String(a.serialNumber||"").localeCompare(String(b.serialNumber||"")));
 
     // ── 개통 기록을 읽어 등록일(작업일)을 붙이고, 못 이은 건도 목록에 넣습니다. ──
-    const regFrom = String((document.getElementById("act-reg-from")||{}).value || "").replace(/\D/g,"");
-    const regTo   = String((document.getElementById("act-reg-to")||{}).value || "").replace(/\D/g,"");
+    const regFrom = (dType === "regDate") ? from : "";
+    const regTo   = (dType === "regDate") ? to   : "";
     try{
       const aq = await getDocs(collection(db,"activations"));
       const orphan = [];
@@ -45099,20 +45072,15 @@
           status: "개통", listPrice: 0, location: ""
         });
       });
-      // 거르기를 똑같이 걸어줍니다.
+      // 기간만 먼저 걸어둡니다. 나머지 조건은 펼친 뒤에 봅니다.
       const keep = orphan.filter(function(it){
-        const dt = String(it.activateDate||"").replace(/\D/g,"");
-        if(from && (!dt || dt < from)) return false;
-        if(to && (!dt || dt > to)) return false;
-        if(regFrom && (!it._regDate || it._regDate < regFrom)) return false;
-        if(regTo   && (!it._regDate || it._regDate > regTo)) return false;
-        if(mon && String(it.supportMonth||"") !== mon) return false;
-        if(codeF && String(it.activationCode||"") !== codeF) return false;
-        if(q){
-          const hay = [it.serialNumber, it.systemModel, it.carrier, it.subNumber,
-                       it.activationCode, it.supportMonth]
-            .map(function(v){ return String(v||"").toLowerCase(); }).join(" ");
-          if(hay.indexOf(q) < 0) return false;
+        if(dType === "activateDate"){
+          const dt = String(it.activateDate||"").replace(/\D/g,"");
+          if(from && (!dt || dt < from)) return false;
+          if(to && (!dt || dt > to)) return false;
+        }else{
+          if(regFrom && (!it._regDate || it._regDate < regFrom)) return false;
+          if(regTo   && (!it._regDate || it._regDate > regTo)) return false;
         }
         return true;
       });
@@ -45162,14 +45130,30 @@
         expanded.push({ ...it, _sup:x, _first:(ix===0), _n:sup.length });
       });
     });
-    // 구분으로 거르기 — 펼친 뒤에 봅니다.
-    const kindF = String((document.getElementById("act-kind-f")||{}).value || "");
-    rows = kindF
-      ? expanded.filter(function(x){
-          if(kindF === "none") return !x._sup;
-          return x._sup && x._sup.kind === kindF;
-        })
-      : expanded;
+    //  칸을 고른 조건과 전체 찾기 — 펼친 뒤에 봅니다. (지원금 칸까지 함께 볼 수 있게)
+    rows = expanded.filter(function(x){
+      // ① 칸을 고른 조건
+      if(cField){
+        const col = ACT_COLS.find(function(c){ return c.key === cField; });
+        const v = col ? String(col.raw ? col.raw(x) : "").trim() : "";
+        const lv = v.toLowerCase();
+        if(cMatch === "빈칸"){ if(v !== "" && v !== "-") return false; }
+        else if(cMatch === "빈칸아님"){ if(v === "" || v === "-") return false; }
+        else if(cVal){
+          if(cMatch === "일치"){ if(lv !== cVal) return false; }
+          else if(lv.indexOf(cVal) < 0) return false;
+        }
+      }
+      // ② 전체에서 찾기 — 보이는 모든 칸에서 찾습니다.
+      if(q){
+        const hay = ACT_COLS.map(function(c){
+          try{ return String(c.raw ? c.raw(x) : ""); }catch(e){ return ""; }
+        }).join(" ").toLowerCase();
+        const words = q.split(/\s+/).filter(function(w){ return w; });
+        if(!words.every(function(w){ return hay.indexOf(w) >= 0; })) return false;
+      }
+      return true;
+    });
 
     // 요약 카드
     if(cardEl){
@@ -46674,6 +46658,17 @@
   function listActDensity(){
     try{ return localStorage.getItem("actDensity") || "normal"; }catch(e){ return "normal"; }
   }
+  //  검색할 칸 목록을 채웁니다. 열이 늘어나면 자동으로 따라옵니다.
+  window.fillActCondFields = function(){
+    const sel = document.getElementById("act-cond-field");
+    if(!sel) return;
+    const cur = sel.value;
+    sel.innerHTML = '<option value="">칸 고르기</option>'
+      + ACT_COLS.map(function(c){
+          return '<option value="'+c.key+'">'+comboEsc(c.label)+'</option>'; }).join("");
+    if(cur) sel.value = cur;
+  };
+
   window.toggleActPicker = function(){
     const el = document.getElementById("act-col-picker");
     if(!el) return;
@@ -48871,6 +48866,7 @@
       loadActivationList();
       try{ loadSupportList(); }catch(e){}
       try{ loadActCodesIntoSelects(); }catch(e){}
+      try{ fillActCondFields(); }catch(e){}
     }
     if(tabId==="tab-site" && typeof renderHiddenList === "function") renderHiddenList();
     if(tabId==="tab-site" && typeof renderCacheTargets === "function") renderCacheTargets();
