@@ -400,7 +400,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-06 v1097</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-06 v1099</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -1010,8 +1010,8 @@
               <input type="number" step="0.01" id="be-bulk-otherpct" placeholder="타할인%" style="width:90px;height:28px;border:1px solid var(--line);padding:0 6px;font-size:12.5px;margin-left:-1px;box-sizing:border-box;">
               <select id="be-bulk-dest" onchange="onBulkDestBase()" style="width:150px;height:28px;border:1px solid var(--line);padding:0 6px;font-size:12.5px;margin-left:-1px;box-sizing:border-box;"><option value="">판매처 (선택)</option></select>
               <select id="be-bulk-salebase" title="판매할인%를 어디에 곱할지 고릅니다." style="width:150px;height:28px;border:1px solid var(--line);padding:0 6px;font-size:12.5px;margin-left:-1px;box-sizing:border-box;">
-                <option value="unit">판매할인 기준: 출고가</option>
-                <option value="supply">판매할인 기준: 공급가</option>
+                <option value="unit">출고가(개당)</option>
+                <option value="supply">공급가(삼전)</option>
               </select>
               <input type="number" step="0.01" id="be-bulk-salepct" placeholder="판매할인%" style="width:100px;height:28px;border:1px solid var(--line);padding:0 6px;font-size:12.5px;margin-left:-1px;box-sizing:border-box;">
               <label style="display:flex;align-items:center;gap:4px;font-size:12px;cursor:pointer;height:28px;border:1px solid var(--line);padding:0 8px;margin-left:-1px;box-sizing:border-box;background:#fff;white-space:nowrap;" title="판매가를 입고가와 똑같이 넣습니다. 앞으로 입고가가 바뀌면 판매가도 따라갑니다.">
@@ -1720,16 +1720,16 @@
             <input type="number" id="co-cashrate-input" step="0.01" placeholder="예: 0.3  (비우면 자동으로 안 채움)"></div>
           <div class="stack-row"><label>매입할인 기준 <span class="info-tip" title="대당 = 단말기 한 대의 출고가에 할인율을 걸고 원 단위로 반올림합니다. 합계 = 주문 전체 출고가 합계에 할인율을 한 번 겁니다. 삼성전자유통은 합계 기준으로 확인됐습니다.">ⓘ</span></label>
             <select id="co-discbase-input">
-              <option value="unit">대당 (한 대씩 계산 후 반올림)</option>
-              <option value="total">합계 (주문 전체 합계에 한 번)</option>
-              <option value="supply">공급가 기준 (삼성전자 방식)</option>
+              <option value="unit">출고가(개당)</option>
+              <option value="total">출고가(합계)</option>
+              <option value="supply">공급가(삼전)</option>
             </select>
           </div>
           <div class="stack-row"><label>판매할인 기준 <span class="info-tip" title="이 업체에 팔 때 판매할인%를 어디에 곱할지 정합니다. 대부분 거래처는 출고가(VAT 포함)에 곱하고, 삼성전자처럼 공급가에 곱하는 곳만 「공급가 기준」으로 두세요.">ⓘ</span></label>
             <select id="co-salebase-input">
-              <option value="unit">대당 (출고가에 걸기)</option>
-              <option value="total">합계 (출고가 합계에 한 번)</option>
-              <option value="supply">공급가 기준 (삼성전자 방식)</option>
+              <option value="unit">출고가(개당)</option>
+              <option value="total">출고가(합계)</option>
+              <option value="supply">공급가(삼전)</option>
             </select>
           </div>
         </div>
@@ -3096,9 +3096,9 @@
         <div class="stack-form" style="margin-bottom:10px;">
           <div class="stack-row"><label>바꿀 매입할인 기준</label>
             <select id="rebase-target" onchange="rebaseRecalc()">
-              <option value="unit">출고가 기준 (대당)</option>
-              <option value="total">출고가 기준 (합계)</option>
-              <option value="supply">공급가 기준 (삼성전자 방식)</option>
+              <option value="unit">출고가(개당)</option>
+              <option value="total">출고가(합계)</option>
+              <option value="supply">공급가(삼전)</option>
             </select></div>
         </div>
         <div style="margin-bottom:8px;">
@@ -3397,9 +3397,9 @@
           <div class="stack-row"><label>매입할인 기준 <span class="info-tip" title="선할인%·타할인%를 어디에 곱할지 정합니다. 업체정보에 저장해둔 기준이 자동으로 들어옵니다. 이 주문에서만 다르게 하려면 바꾸세요.">ⓘ</span></label>
             <select id="os-base" onchange="osRecalc()">
               <option value="">비어 있음 (고르지 않음)</option>
-              <option value="unit">대당 (출고가에 걸기)</option>
-              <option value="total">합계 (출고가 합계에 한 번)</option>
-              <option value="supply">공급가 기준 (삼성전자 방식)</option>
+              <option value="unit">출고가(개당)</option>
+              <option value="total">출고가(합계)</option>
+              <option value="supply">공급가(삼전)</option>
             </select></div>
           <div class="stack-row"><label>출고가</label><input type="number" id="os-listprice" oninput="osRecalc('list')"></div>
           <div class="stack-row"><label>선할인</label><input type="number" id="os-preamt" oninput="osRecalc('preamt')" placeholder="예: 20000"></div>
@@ -3436,9 +3436,9 @@
           <div class="stack-row"><label>매입할인 기준 <span class="info-tip" title="선할인%·타할인%를 어디에 곱할지 정합니다. 업체정보에 저장해둔 기준이 자동으로 들어옵니다. 이 주문에서만 다르게 하려면 바꾸세요. 저장한 설정은 안 바뀝니다.">ⓘ</span></label>
             <select id="order-base-select" onchange="onOrderBaseChange()">
               <option value="">비어 있음 (고르지 않음)</option>
-              <option value="unit">대당 (출고가에 걸기)</option>
-              <option value="total">합계 (출고가 합계에 한 번)</option>
-              <option value="supply">공급가 기준 (삼성전자 방식)</option>
+              <option value="unit">출고가(개당)</option>
+              <option value="total">출고가(합계)</option>
+              <option value="supply">공급가(삼전)</option>
             </select>
           </div>
           <div class="stack-row"><label>입고처</label><select id="order-source-select" onchange="onOrderSourceChange()"><option value="">선택</option></select></div>
@@ -3566,9 +3566,9 @@
           <div class="stack-row resv-buy-only"><label>매입할인 기준 <span class="info-tip" title="선할인%·타할인%를 어디에 곱할지 정합니다. 거래처에 저장해둔 기준이 자동으로 들어옵니다. 이 예약에서만 다르게 하려면 바꾸세요.">ⓘ</span></label>
             <select id="resv-base-select" onchange="onResvBaseChange()">
               <option value="">비어 있음 (고르지 않음)</option>
-              <option value="unit">대당 (출고가에 걸기)</option>
-              <option value="total">합계 (출고가 합계에 한 번)</option>
-              <option value="supply">공급가 기준 (삼성전자 방식)</option>
+              <option value="unit">출고가(개당)</option>
+              <option value="total">출고가(합계)</option>
+              <option value="supply">공급가(삼전)</option>
             </select>
           </div>
           <div class="stack-row resv-buy-only"><label>선할인 <span class="info-tip" title="대당 금액입니다. 금액이나 %% 중 하나만 넣으면 나머지가 계산됩니다. 저장은 수량을 곱한 합계로 담깁니다.">ⓘ</span></label><input type="number" id="resv-prediscountamt-input" oninput="onResvBuyDisc('pre','amt')" placeholder="대당 금액 (예: 5062)"></div>
@@ -3782,9 +3782,9 @@
           <div class="stack-row resv-paste-buy-only"><label>매입할인 기준 <span class="info-tip" title="선할인%·타할인%를 어디에 곱할지 정합니다. 거래처에 저장해둔 기준이 자동으로 들어옵니다. 이 등록에서만 다르게 하려면 바꾸세요.">ⓘ</span></label>
             <select id="resv-paste-base" onchange="onResvPasteDisc('pre','pct')">
               <option value="">비어 있음 (고르지 않음)</option>
-              <option value="unit">대당 (출고가에 걸기)</option>
-              <option value="total">합계 (출고가 합계에 한 번)</option>
-              <option value="supply">공급가 기준 (삼성전자 방식)</option>
+              <option value="unit">출고가(개당)</option>
+              <option value="total">출고가(합계)</option>
+              <option value="supply">공급가(삼전)</option>
             </select>
           </div>
           <div class="stack-row"><label>거래처 <span class="info-tip" title="붙여넣은 줄에 거래처를 안 적었으면 여기서 고른 곳으로 넣습니다. 줄 맨 앞에 거래처를 적으셨으면 그 값이 우선합니다.">ⓘ</span></label><select id="resv-paste-dest" onchange="onResvPasteDest()"><option value="">(줄에 적은 대로)</option></select></div>
@@ -4163,9 +4163,9 @@
           <div class="stack-row"><label>매입할인 기준 <span class="info-tip" title="선할인%·타할인%를 어디에 곱할지 정합니다. 입고처에 저장해둔 기준이 자동으로 들어옵니다. 이 재고에서만 다르게 하려면 바꾸세요.">ⓘ</span></label>
             <select id="item-base-select" onchange="onItemBaseChange()">
               <option value="">비어 있음 (입고처 설정을 따름)</option>
-              <option value="unit">출고가 기준 (대당)</option>
-              <option value="total">출고가 기준 (합계)</option>
-              <option value="supply">공급가 기준 (삼성전자 방식)</option>
+              <option value="unit">출고가(개당)</option>
+              <option value="total">출고가(합계)</option>
+              <option value="supply">공급가(삼전)</option>
             </select>
           </div>
           <div class="stack-row"><label>선할인</label><input type="number" id="item-purchasediscountamt-input" placeholder="예: 20000" oninput="onPurchaseDiscountAmtInput()"></div>
@@ -4187,9 +4187,9 @@
           <div class="stack-row"><label>판매할인 기준 <span class="info-tip" title="판매할인%를 어디에 곱할지 정합니다. 매입과 판매는 별개라 따로 정합니다. 판매처에 저장해둔 기준이 자동으로 들어옵니다.">ⓘ</span></label>
             <select id="item-salebase-select" onchange="onItemSaleBaseChange()">
               <option value="">비어 있음 (판매할 때 정해짐)</option>
-              <option value="unit">출고가 기준 (대당)</option>
-              <option value="total">출고가 기준 (합계)</option>
-              <option value="supply">공급가 기준 (삼성전자 방식)</option>
+              <option value="unit">출고가(개당)</option>
+              <option value="total">출고가(합계)</option>
+              <option value="supply">공급가(삼전)</option>
             </select>
           </div>
           <div class="stack-row"><label>공시지원금</label><input type="number" id="item-subsidyamount-input" placeholder="본사에서 유치수수료로 주는 금액"></div>
@@ -4409,7 +4409,7 @@
     {
       const saved = String((it && it.saleDiscountBase) || "");
       if(saved === "supply" || saved === "total" || saved === "unit"){
-        const lab = (saved === "supply") ? "공급가" : (saved === "total" ? "합계" : "출고가");
+        const lab = (saved === "supply") ? "공급가(삼전)" : (saved === "total" ? "출고가(합계)" : "출고가(개당)");
         // 「입고동일」 이면 그 표시를 먼저 보여드립니다.
         if(it && it.salePriceFollowsBuy === true) return "입고동일";
         return lab;
@@ -4432,8 +4432,8 @@
     if(!(Number(a) > 0)) return "판매할인 금액 없음";
     const r = baseOfPctAmt(L, p, a);
     if(!r) return "구분 안 됨";
-    if(r.k === "off") return (r.base === "supply" ? "공급가" : "출고가") + " " + r.pct + "%";
-    return (r.k === "supply") ? "공급가" : "출고가";
+    if(r.k === "off") return (r.base === "supply" ? "공급가(삼전)" : "출고가(개당)") + " " + r.pct + "%";
+    return (r.k === "supply") ? "공급가(삼전)" : "출고가(개당)";
   }
   window.actualSaleBase = actualSaleBase;
 
@@ -4449,7 +4449,7 @@
     // 저장해 둔 기준이 있으면 그것을 먼저 보여드립니다. (업체정보는 처음 들어오는 값일 뿐입니다)
     const saved = String((it && it.discountBase) || "");
     if(saved === "supply" || saved === "total" || saved === "unit"){
-      const lab = (saved === "supply") ? "공급가" : (saved === "total" ? "합계" : "출고가");
+      const lab = (saved === "supply") ? "공급가(삼전)" : (saved === "total" ? "출고가(합계)" : "출고가(개당)");
       // 금액이 부가세 포함으로 통일되어 두 기준의 차이가 1원뿐입니다.
       //  금액으로 기준을 되짚을 수 없으므로 저장된 기준을 그대로 보여드립니다.
       return { kind:"one", base: saved, savedLabel: lab };
@@ -4485,8 +4485,8 @@
     const list  = [pre, other].filter(Boolean);
     if(list.length === 0) return { kind:"none" };
     const lab = v => !v ? "-" : (v.k === "off")
-      ? ((v.base === "supply" ? "공급가" : "출고가") + " " + v.pct + "%")
-      : (v.k === "supply" ? "공급가" : "출고가");
+      ? ((v.base === "supply" ? "공급가(삼전)" : "출고가(개당)") + " " + v.pct + "%")
+      : (v.k === "supply" ? "공급가(삼전)" : "출고가(개당)");
     // 하나라도 딱 안 맞으면 실제 비율을 보여줍니다.
     if(list.some(x=> x.k === "off")){
       if(pre && other) return { kind:"mixed", preLab: lab(pre), otherLab: lab(other) };
@@ -4503,9 +4503,9 @@
     //  저장해 둔 기준이 있으면 할인 금액이 없어도 그대로 보여줍니다.
     //   (예전에는 할인이 0 이면 무조건 «-» 로 나와서, 저장했는데도 안 들어간 것처럼 보였습니다)
     const saved = String((it && it.discountBase) || "");
-    if(saved === "supply") return "공급가";
-    if(saved === "total")  return "합계";
-    if(saved === "unit")   return "출고가";
+    if(saved === "supply") return "공급가(삼전)";
+    if(saved === "total")  return "출고가(합계)";
+    if(saved === "unit")   return "출고가(개당)";
     const L = Number(it && it.listPrice)||0;
     if(!L) return "출고가 없음";
     const pp = Number(it && it.purchaseDiscount)||0, op = Number(it && it.otherDiscountPct)||0;
@@ -4513,7 +4513,7 @@
     // 저장된 기준도 없고 할인도 없으면 가릴 것이 없습니다.
     if(!(pp > 0) && !(op > 0) && !(pa > 0) && !(oa > 0)) return "-";
     const base = (typeof itemDiscountBase === "function") ? itemDiscountBase(it) : "unit";
-    return (base === "supply") ? "공급가" : (base === "total" ? "합계" : "출고가");
+    return (base === "supply") ? "공급가(삼전)" : (base === "total" ? "출고가(합계)" : "출고가(개당)");
   }
   window.discountBaseLabel = discountBaseLabel;
 
@@ -9187,7 +9187,7 @@
           discountBase:"매입할인 기준", source:"입고처", destination:"판매처",
           status:"현재상태", location:"위치", carrier:"통신사",
           inDate:"입고일", outDate:"판매일", activateDate:"개통일", orderDate:"주문일" };
-        const BLAB = { unit:"출고가 기준 (대당)", total:"출고가 기준 (합계)", supply:"공급가 기준" };
+        const BLAB = { unit:"출고가(개당)", total:"출고가(합계)", supply:"공급가 기준" };
         const parts = Object.keys(WATCH).filter(chg).map(k=>{
           const f = v => (v === undefined || v === null || v === "") ? "(없음)"
             : (k === "discountBase" ? (BLAB[String(v)]||String(v))
@@ -9401,9 +9401,9 @@
             : '<span style="color:var(--gray);">-</span>') + '</td>' +
         (function(){
           //  대당·합계는 둘 다 출고가(VAT 포함) 기준입니다. 공급가만 삼성전자 방식입니다.
-          const lab = (base)=> base === "supply" ? '<span style="color:#2e7d32;font-weight:700;">공급가</span>'
-                    : base === "total"  ? '<span style="color:var(--navy);">합계 (출고가)</span>'
-                    : base === "unit"   ? '<span style="color:var(--navy);">대당 (출고가)</span>'
+          const lab = (base)=> base === "supply" ? '<span style="color:#2e7d32;font-weight:700;">공급가(삼전)</span>'
+                    : base === "total"  ? '<span style="color:var(--navy);">출고가(합계)</span>'
+                    : base === "unit"   ? '<span style="color:var(--navy);">출고가(개당)</span>'
                     : '<span style="color:var(--gray);">미지정</span>';
           const rate = (c.cashRate === "" || c.cashRate == null) ? null : Number(c.cashRate);
           return '<td style="white-space:nowrap;">'
@@ -10042,7 +10042,7 @@
     if(el){
       el.style.display = "block";
       el.innerHTML = '<span style="color:var(--navy);">매입할인 기준을 <b>'
-        + (base === "supply" ? "공급가" : (base === "total" ? "합계" : "출고가"))
+        + (base === "supply" ? "공급가(삼전)" : (base === "total" ? "출고가(합계)" : "출고가(개당)"))
         + '</b> 로 바꿔 ' + n + '줄을 다시 계산했습니다.'
         + (lockedTrs.length ? ' <span style="color:var(--gray);">(도착된 ' + lockedTrs.length + '줄 포함)</span>' : '')
         + ' <b>수정 저장</b> 을 눌러야 재고·판매요청·여신까지 반영됩니다.</span>';
@@ -10120,7 +10120,7 @@
         try{ await lockBaseIfCredit("order-base-select", name); }catch(e){}
         bs.title = c && c.discountBase
           ? ("업체정보에 저장된 기준: "
-             + (c.discountBase === "supply" ? "공급가" : c.discountBase === "total" ? "합계" : "대당"))
+             + (c.discountBase === "supply" ? "공급가(삼전)" : c.discountBase === "total" ? "출고가(합계)" : "출고가(개당)"))
           : "";
       } }
     // 무엇을 읽었는지 화면에 보여드립니다. (기준이 안 따라올 때 원인을 바로 알 수 있게)
@@ -10130,7 +10130,7 @@
         el0.style.display = "block";
         el0.innerHTML = c
           ? ('<b>' + comboEsc(name) + '</b> 업체정보를 읽었습니다 · 매입할인 기준 <b style="color:#2e7d32;">'
-             + (base === "supply" ? "공급가" : (base === "total" ? "합계" : "대당"))
+             + (base === "supply" ? "공급가(삼전)" : (base === "total" ? "출고가(합계)" : "출고가(개당)"))
              + '</b>' + (rate ? ' · 현금할인 ' + rate + '%' : ''))
           : ('<b style="color:var(--danger);">' + comboEsc(name)
              + '</b> 업체정보를 못 찾았습니다. (읽은 업체 ' + (companiesCache||[]).length
@@ -10148,8 +10148,8 @@
       }else{
         el.style.display = "block";
         el.innerHTML = '<b>' + comboEsc(name) + '</b> 현금할인 <b>' + rate + '%</b> · 계산 기준 <b>'
-          + (base === "supply" ? "공급가 기준 (삼성전자 방식)"
-             : base === "total" ? "합계 (주문 전체에 한 번)" : "대당 (한 대씩 반올림)") + '</b>'
+          + (base === "supply" ? "공급가(삼전)"
+             : base === "total" ? "출고가(합계)" : "출고가(개당)") + '</b>'
           + '<br><span style="color:var(--gray);">비어 있는 선할인% 칸에 채워드립니다. 기준을 바꾸려면 업체정보에서 고쳐주세요.</span>';
       }
     }
@@ -13304,8 +13304,8 @@
         + '</tr></thead><tbody>';
       amtFixRows.forEach((r,i)=>{
         const co = (companiesCache||[]).find(x=> String(x.name||"").trim() === String(r.b.source||"").trim());
-        const base = (co && co.discountBase === "supply") ? "공급가"
-                   : (co && co.discountBase === "total") ? "합계" : "대당";
+        const base = (co && co.discountBase === "supply") ? "공급가(삼전)"
+                   : (co && co.discountBase === "total") ? "출고가(합계)" : "출고가(개당)";
         const gap = v => v ? '<span style="color:var(--danger);font-weight:700;">' + (v>0?"+":"") + v.toLocaleString() + '</span>' : '<span style="color:var(--gray);">-</span>';
         h += '<tr>'
           + '<td><input type="checkbox" class="amtfix-ck" value="'+i+'" checked></td>'
@@ -14021,13 +14021,13 @@
         // 할인 계산 기준 — 이 줄에 저장된 값이 없으면 묶음(입고처) 기준을 씁니다.
         '<td style="white-space:nowrap;">' + comboEsc((function(){
             const bs = String(o.discountBase || b.discountBase || "");
-            if(bs === "supply") return "공급가";
-            if(bs === "total")  return "합계";
-            if(bs === "unit")   return "대당";
+            if(bs === "supply") return "공급가(삼전)";
+            if(bs === "total")  return "출고가(합계)";
+            if(bs === "unit")   return "출고가(개당)";
             try{
               const bb = itemDiscountBase({ source: b.source || "" });
-              return bb === "supply" ? "공급가" : (bb === "total" ? "합계" : "대당");
-            }catch(e){ return "대당"; }
+              return bb === "supply" ? "공급가(삼전)" : (bb === "total" ? "출고가(합계)" : "출고가(개당)");
+            }catch(e){ return "출고가(개당)"; }
           })()) + '</td>' +
         '<td class="ta-right">'+discFmt(o.listPrice)+'</td>' +
         '<td class="ta-right">'+discFmt(o.preDiscountAmt)+'</td>' +
@@ -26154,9 +26154,9 @@
             + '<b>판매가 넣기</b> <span style="color:var(--gray);font-size:11.5px;">모델을 알아봤으니 이제 넣으시면 됩니다. 줄에 판매가를 적으셨으면 그 값이 우선합니다.</span>'
             + '<div style="display:flex;gap:0;flex-wrap:wrap;align-items:center;margin-top:6px;">'
             + '<select id="resv-paste-salebase" onchange="onResvPasteSale(\'pct\')" style="height:28px;border:1px solid var(--line);padding:0 6px;font-size:12.5px;box-sizing:border-box;">'
-              + '<option value="unit">대당 (출고가에 걸기)</option>'
-              + '<option value="total">합계 (출고가 합계에 한 번)</option>'
-              + '<option value="supply">공급가 기준 (삼성전자 방식)</option>'
+              + '<option value="unit">출고가(개당)</option>'
+              + '<option value="total">출고가(합계)</option>'
+              + '<option value="supply">공급가(삼전)</option>'
             + '</select>'
             + '<input type="number" id="resv-paste-saleamt" placeholder="판매할인 (대당)" oninput="onResvPasteSale(\'amt\')" style="width:130px;height:28px;border:1px solid var(--line);padding:0 6px;font-size:12.5px;margin-left:-1px;box-sizing:border-box;">'
             + '<input type="number" step="0.01" id="resv-paste-salepct" placeholder="판매할인%" oninput="onResvPasteSale(\'pct\')" style="width:105px;height:28px;border:1px solid var(--line);padding:0 6px;font-size:12.5px;margin-left:-1px;box-sizing:border-box;">'
@@ -27224,9 +27224,9 @@
         const curBase = String(b.discountBase || "");
         h += '<div class="stack-row"><label>매입할인 기준 <span class="info-tip" title="선할인%·타할인%를 어디에 곱할지 정합니다. 바꾸신 뒤 [모든 줄에 적용] 을 눌러주세요.">ⓘ</span></label>'
           + '<select id="be-base" onchange="onBeBaseChange()"><option value=""'+(curBase?'':' selected')+'>비어 있음 (안 바꿈)</option>'
-          + '<option value="unit"'   + (curBase==="unit"?' selected':'')   + '>대당 (출고가에 걸기)</option>'
-          + '<option value="total"'  + (curBase==="total"?' selected':'')  + '>합계 (출고가 합계에 한 번)</option>'
-          + '<option value="supply"' + (curBase==="supply"?' selected':'') + '>공급가 기준 (삼성전자 방식)</option>'
+          + '<option value="unit"'   + (curBase==="unit"?' selected':'')   + '>출고가(개당)</option>'
+          + '<option value="total"'  + (curBase==="total"?' selected':'')  + '>출고가(합계)</option>'
+          + '<option value="supply"' + (curBase==="supply"?' selected':'') + '>공급가(삼전)</option>'
           + '</select></div>';
       }
       // 입고처 — 할인 계산 기준 다음에 둡니다. (새 주문 창과 같은 자리)
@@ -27818,7 +27818,7 @@
         const L0 = Number((first.querySelector(".be-listprice")||{}).value) || 0;
         const p0 = (first.querySelector(".be-preamt")||{}).value || "-";
         const o0 = (first.querySelector(".be-otheramt")||{}).value || "-";
-        const baseLab = buyBase === "supply" ? "공급가" : (buyBase === "total" ? "합계" : "출고가");
+        const baseLab = buyBase === "supply" ? "공급가(삼전)" : (buyBase === "total" ? "출고가(합계)" : "출고가(개당)");
         detail = "\n\n[첫 줄 기준]\n"
           + "  매입할인 기준  " + baseLab + "\n"
           + "  넣으신 값  선할인" + (prePct !== "" ? "% " + prePct : " " + (preAmt||"-"))
@@ -28490,7 +28490,7 @@
       const bsv2 = String((document.getElementById("be-base")||{}).value || "");
       if(bsv2){
         baseMsg = "  매입할인 기준 "
-          + (bsv2==="supply" ? "공급가" : bsv2==="total" ? "출고가(합계)" : "출고가(대당)")
+          + (bsv2==="supply" ? "공급가(삼전)" : bsv2==="total" ? "출고가(합계)" : "출고가(개당)")
           + " · 품목 " + Object.keys(perLine).length + "줄"
           + " · 재고 " + (fixItems ? itemTargets.length + "대 반영" : "안 바꿈");
       }
@@ -28501,7 +28501,7 @@
       const bsv3 = String((document.getElementById("be-base")||{}).value || "");
       if(bsv3 && kind === "order"){
         alert("매입할인 기준을 저장했습니다.\n\n"
-          + "  기준  " + (bsv3==="supply"?"공급가":bsv3==="total"?"출고가(합계)":"출고가(대당)") + "\n"
+          + "  기준  " + (bsv3==="supply"?"공급가(삼전)":bsv3==="total"?"출고가(합계)":"출고가(개당)") + "\n"
           + "  주문 품목  " + Object.keys(perLine).length + "줄\n"
           + "  재고  " + (fixItems ? itemTargets.length + "대에 반영" : "0대 (못 찾음)") + "\n\n"
           + (fixItems && itemTargets.length
@@ -30766,7 +30766,7 @@
         + '<td>'+comboEsc(it.destination||"-")+'</td>'
         + '<td class="ta-right">'+c.L.toLocaleString()+'</td>'
         + '<td class="ta-right">'+c.soldPrice.toLocaleString()+'</td>'
-        + '<td>'+(c.base === "supply" ? "공급가" : "출고가")+'</td>'
+        + '<td>'+(c.base === "supply" ? "공급가(삼전)" : "출고가(개당)")+'</td>'
         + '<td class="ta-right">'+Math.round(c.pre).toLocaleString()+'</td>'
         + '<td class="ta-right">'+(c.pct == null ? "-" : c.pct + "%")+'</td>'
         + '<td class="ta-right">'
@@ -33350,7 +33350,7 @@
   window.showBaseFillList = function(){
     const el = document.getElementById("datacheck-detail");
     if(!el || baseFillCache.length === 0){ if(el) el.innerHTML = '<div class="list-empty">채울 것이 없습니다.</div>'; return; }
-    const lab = v => (v === "supply") ? "공급가" : (v === "unit") ? "출고가" : "-";
+    const lab = v => (v === "supply") ? "공급가(삼전)" : (v === "unit") ? "출고가(개당)" : "-";
     // 기준을 골라주셔야 채울 수 있는 건 (%가 저장돼 있지 않아 역산이 안 되는 것)
     const askN = baseFillCache.filter(r=> r.saleAsk || r.buyAsk).length;
     let h = '<div style="border:1px solid var(--navy);padding:10px 12px;margin-top:10px;">'
@@ -33410,7 +33410,7 @@
   // 확인하시라고 엑셀로 내려드립니다. (자료는 바꾸지 않습니다)
   window.downloadBaseFillExcel = function(){
     if(baseFillCache.length === 0){ alert("받을 것이 없습니다."); return; }
-    const lab = v => (v === "supply") ? "공급가" : (v === "unit") ? "출고가" : "";
+    const lab = v => (v === "supply") ? "공급가(삼전)" : (v === "unit") ? "출고가(개당)" : "";
     const head = ["일련번호","전산모델명","색상","입고처","판매처","상태","입고일","판매일",
                   "출고가","선할인","선할인%","타할인","타할인%","입고가","역산 매입 기준",
                   "판매가","판매할인","판매할인%","역산 판매 기준"];
@@ -33436,7 +33436,7 @@
   window.fillBaseAsk = async function(want){
     const rows = baseFillCache.filter(r=> r.saleAsk || r.buyAsk);
     if(rows.length === 0){ alert("골라서 채울 건이 없습니다."); return; }
-    const lab = (want === "supply") ? "공급가 기준" : "출고가 기준";
+    const lab = (want === "supply") ? "공급가(삼전)" : "출고가(개당)";
     const calcPct = (L, amt)=>{
       const B = (want === "supply") ? (L/1.1) : L;
       const v0 = pctOnBase(amt, L, want);
@@ -33517,7 +33517,7 @@
           if(r.buyWant)  patch.discountBase = r.buyWant;
           if(r.saleWant) patch.saleDiscountBase = r.saleWant;
           bt.update(doc(db,"inventoryItems", r.id), patch);
-          const lab = v => (v === "supply") ? "공급가 기준" : "출고가 기준";
+          const lab = v => (v === "supply") ? "공급가(삼전)" : "출고가(개당)";
           ihRows.push({ id:r.id, serialNumber:r.it.serialNumber||"", systemModel:r.it.systemModel||"",
             detail: "할인 기준을 실제 금액에서 찾아 채움"
               + (r.buyWant  ? " · 매입 " + lab(r.buyWant) : "")
@@ -35080,7 +35080,7 @@
   window.showOrderBaseDiffList = function(){
     const rows = orderBaseDiffCache || [];
     if(rows.length === 0){ alert("어긋난 주문이 없습니다."); return; }
-    const lab = b => b === "supply" ? "공급가" : (b === "total" ? "합계" : "출고가");
+    const lab = b => b === "supply" ? "공급가(삼전)" : (b === "total" ? "출고가(합계)" : "출고가(개당)");
     alert("주문의 할인 금액이 기준과 다른 건 " + rows.length + "개\n\n"
       + rows.slice(0,15).map(function(r){
           return "  " + r.date + "  " + r.src + "  " + r.model + " " + r.color
@@ -35407,7 +35407,7 @@
           rows.push({ id, it, L,
             curPre, wantPre, curOther, wantOther,
             curBuy: Number(it.purchasePrice)||0, wantBuy,
-            base: (c.discountBase === "supply") ? "공급가" : "출고가",
+            base: (c.discountBase === "supply") ? "공급가(삼전)" : "출고가(개당)",
             paid: paid,
             source: String(it.source||"-") });
         });
@@ -35949,8 +35949,8 @@
           let saleWant = null, saleAsk = false;
           if(!String(it.saleDiscountBase||"")){
             const t = actualSaleBase(it);
-            if(t === "공급가") saleWant = "supply";
-            else if(t === "출고가") saleWant = "unit";
+            if(t.indexOf("공급가") === 0) saleWant = "supply";
+            else if(t.indexOf("출고가") === 0 && t.indexOf("출고가 없음") !== 0) saleWant = "unit";
             else if(t === "판매할인% 없음"){
               // %가 저장돼 있지 않아 가릴 수 없는 건입니다.
               //  금액과 출고가는 있으니, 기준을 골라주시면 %까지 채울 수 있습니다.
@@ -39903,9 +39903,9 @@
     }
     if(fieldDef.type === "basefix"){
       wrap.innerHTML = '<select id="bulk-edit-value" style="padding:5px 8px;border:1px solid #c7c7c7;font-size:12.5px;height:28px;box-sizing:border-box;">'
-        + '<option value="unit">출고가 기준 (대당)</option>'
-        + '<option value="total">출고가 기준 (합계)</option>'
-        + '<option value="supply">공급가 기준 (삼성전자 방식)</option>'
+        + '<option value="unit">출고가(개당)</option>'
+        + '<option value="total">출고가(합계)</option>'
+        + '<option value="supply">공급가(삼전)</option>'
         + '</select>'
         + '<div style="font-size:12px;color:var(--gray);line-height:1.7;margin-top:6px;">'
         + '고른 기준을 <b>그 재고에 저장</b>하고, <b>선할인·타할인 금액과 입고가</b>를 그 기준으로 다시 냅니다. '
@@ -40315,7 +40315,7 @@
           + '</select>';
       }else if(f.type === "options"){
         // 값과 화면에 보일 이름이 다른 항목(할인 계산 기준 등)을 위해 이름표를 씁니다.
-        const OPT_LABEL = { unit:"출고가 기준 (대당)", total:"출고가 기준 (합계)", supply:"공급가 기준 (삼성전자 방식)" };
+        const OPT_LABEL = { unit:"출고가(개당)", total:"출고가(합계)", supply:"공급가(삼전)" };
         input = '<select id="'+meId(f.key)+'"'
           + (f.link ? ' onchange="multiRecalc(\''+f.link+'\')"' : '')
           + ' style="flex:1;border:none;padding:5px 8px;font-size:12.5px;">'
@@ -40667,8 +40667,8 @@
     // 할인 계산 기준 — 그 재고에 기준을 저장하고 금액까지 그 기준으로 다시 냅니다.
     if(fieldDef.type === "basefix"){
       const want = String(newVal||"");
-      const baseLabel = (want === "supply") ? "공급가 기준"
-                      : (want === "total")  ? "출고가 기준 (합계)" : "출고가 기준 (대당)";
+      const baseLabel = (want === "supply") ? "공급가(삼전)"
+                      : (want === "total")  ? "출고가(합계)" : "출고가(개당)";
       const list = ids.map(id=> (lastRenderedItems||[]).find(x=> x.id === id)).filter(Boolean);
       if(list.length === 0){ alert("고른 재고가 없습니다."); return; }
 
@@ -45939,7 +45939,7 @@
   function renderRebase(){
     const want = String(document.getElementById("rebase-target").value||"unit");
     const lab = function(v){
-      return v === "supply" ? "공급가" : v === "total" ? "출고가(합계)" : v === "unit" ? "출고가(대당)" : "비어 있음";
+      return v === "supply" ? "공급가(삼전)" : v === "total" ? "출고가(합계)" : v === "unit" ? "출고가(개당)" : "비어 있음";
     };
     const el = document.getElementById("rebase-body");
     let diffSum = 0;
@@ -46051,7 +46051,7 @@
       diffSum += (rebaseBuy(r) - (Number(r.curBuy)||0)) * (Number(r.qty)||0);
       itemN += (r.itemIds||[]).length;
     });
-    const lab = want === "supply" ? "공급가 기준" : want === "total" ? "출고가 기준 (합계)" : "출고가 기준 (대당)";
+    const lab = want === "supply" ? "공급가(삼전)" : want === "total" ? "출고가(합계)" : "출고가(개당)";
     if(!confirm("고른 " + picked.length + "개 품목의 매입할인 기준을\n「" + lab + "」 으로 바꿉니다.\n\n"
       + "  주문 품목 " + picked.length + "개\n"
       + "  이어진 재고 " + itemN + "대\n"
@@ -48591,8 +48591,8 @@
       + ' <span style="color:var(--gray);font-size:11.5px;margin-left:6px;">앞으로 입고가가 바뀌면 판매가도 따라갑니다</span></span></div>';
     html += '<div class="stack-row"><label>판매할인 기준 <span class="info-tip" title="판매할인%를 어디에 곱할지 정합니다. 삼성전자처럼 공급가에 곱하는 곳만 공급가 기준으로 두세요.">ⓘ</span></label>'
       + '<span><select id="paste-sale-base" onchange="onPasteSaleDisc(\'pct\')" style="height:28px;">'
-      + '<option value="unit">출고가 기준 (VAT 포함)</option>'
-      + '<option value="supply">공급가 기준 (삼성전자 방식)</option>'
+      + '<option value="unit">출고가(개당)</option>'
+      + '<option value="supply">공급가(삼전)</option>'
       + '</select> <span style="color:var(--gray);font-size:11.5px;margin-left:6px;">판매할인%를 곱할 금액</span></span></div>';
     html += '<div class="stack-row"><label>판매할인 <span class="info-tip" title="모든 줄에 똑같이 넣습니다. 금액이나 %% 중 하나만 넣으시면 나머지는 알아서 계산합니다. 안 넣으시면 할인 없이 판매가 그대로 들어갑니다.">ⓘ</span></label>'
       + '<span><input type="number" id="paste-sale-discamt" placeholder="할인 금액" style="width:120px;" oninput="onPasteSaleDisc(\'amt\')"> 원'
