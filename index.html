@@ -400,7 +400,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-06 v1041</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-06 v1045</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -649,6 +649,7 @@
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
           <h3 style="margin:0;">개통 관리 <span class="info-tip" title="포피플에서 직접 개통한 단말기입니다. 판매와 달리 거래처에서 받을 돈이 없어 입금 대조에서 빠집니다. 공시지원금을 함께 적어둘 수 있습니다.">ⓘ</span></h3>
           <span class="btn-row">
+          <button class="btn small danger" style="width:auto;" onclick="cancelActivationSelected()">선택 개통 취소</button>
           <button class="btn small secondary" style="width:auto;" onclick="openSupportModal()">지원금 등록</button>
           <button class="btn small" style="width:auto;" onclick="openPasteActivateModal()">+ 개통 등록</button>
           </span>
@@ -671,7 +672,10 @@
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
           <h3 style="margin:0;">지원금 내역 <span class="info-tip" title="유통폰지원금의 지급·환수를 건별로 모아 봅니다. 재고를 못 찾은 건은 검은 글씨로 나옵니다.">ⓘ</span></h3>
           <span class="btn-row">
-            <button class="btn small secondary" style="width:auto;" onclick="matchSupportAll()">재고와 잇기</button>
+            <button class="btn small secondary" style="width:auto;" onclick="matchSupportSelected()">선택 잇기</button>
+            <button class="btn small secondary" style="width:auto;" onclick="unmatchSupportSelected()">선택 잇기 취소</button>
+            <button class="btn small danger" style="width:auto;" onclick="deleteSupportSelected()">선택 삭제</button>
+            <button class="btn small secondary" style="width:auto;" onclick="matchSupportAll()">전체 잇기</button>
             <button class="btn small secondary" style="width:auto;" onclick="toggleSupPicker()">보기 설정</button>
             <span id="dl-suplist"></span>
           </span>
@@ -29341,6 +29345,7 @@
   const IH_TYPES = {
     inbound:   { label:"입고",     color:"#1565c0" },
     arrival_cancel: { label:"도착취소", color:"var(--danger)" },
+    support:   { label:"지원금",   color:"#6a1b9a" },
     location:  { label:"위치이동",  color:"#6b6b6b" },
     status:    { label:"상태변경",  color:"#6b6b6b" },
     salereq:   { label:"판매요청",  color:"#1565c0" },
@@ -30900,7 +30905,7 @@
       if(na !== nb) return na - nb;
       // 그래도 같으면 실제 일어나는 순서로 세웁니다.
       const RANK = { inbound:1, replaced:1, restored:1, salereq:2, matched:2,
-                     outbound:3, arrival_cancel:3.5, activate:4, location:5, price:5, edited:5,
+                     outbound:3, arrival_cancel:3.5, activate:4, support:4.5, location:5, price:5, edited:5,
                      status:6, deactivate:6, returned:7, deleted:8 };
       return (RANK[a.type] || 5) - (RANK[b.type] || 5);
     });
@@ -31221,7 +31226,7 @@
       if(na !== nb) return na - nb;
       // 그래도 같으면 실제 일어나는 순서로 세웁니다.
       const RANK = { inbound:1, replaced:1, restored:1, salereq:2, matched:2,
-                     outbound:3, arrival_cancel:3.5, activate:4, location:5, price:5, edited:5,
+                     outbound:3, arrival_cancel:3.5, activate:4, support:4.5, location:5, price:5, edited:5,
                      status:6, deactivate:6, returned:7, deleted:8 };
       return (RANK[a.type] || 5) - (RANK[b.type] || 5);
     });
@@ -44457,6 +44462,7 @@
     }
     const canDo = hasPerm(currentUserPerms, "bulkEdit") || hasPerm(currentUserPerms, "menuInvWork");
     let h = '<div style="overflow-x:auto;"><table class="data-table resv-dest-fit" style="width:auto;"><thead><tr>'
+      + '<th class="no-print"><input type="checkbox" id="act-check-all" onclick="toggleActAll(this.checked)"></th>'
       + '<th>일련번호</th><th>전산모델명</th><th>색상</th><th>통신사</th><th>개통일</th><th>가입번호</th><th>개통코드</th>'
       + '<th class="ta-right">출고가</th><th class="ta-right">공시지원금</th>'
       + '<th class="ta-right">유통폰지원금</th><th class="ta-right">환수</th><th class="ta-right">최종</th>'
@@ -44471,6 +44477,7 @@
         + (canDo ? '<button class="btn small danger" style="width:auto;margin-left:4px;" data-act-cancel="'+it.id+'">개통 취소</button>' : '')
         + '<button class="btn small secondary" style="width:auto;margin-left:4px;" data-act-hist="'+comboEsc(it.serialNumber||"")+'" data-act-model="'+comboEsc(it.systemModel||it.baseModel||"")+'">이력</button>';
       h += '<tr class="rbd-clickable" data-row-act="act|'+it.id+'">'
+        + '<td class="no-print"><input type="checkbox" class="act-cb" value="'+it.id+'" data-act-sn="'+comboEsc(it.serialNumber||"")+'" onclick="event.stopPropagation();"></td>'
         + '<td><b>'+comboEsc(it.serialNumber||"-")+'</b></td>'
         + '<td>'+comboEsc(it.systemModel||"-")+'</td>'
         + '<td>'+comboEsc(it.systemColor||it.manufacturerColor||"-")+'</td>'
@@ -44488,7 +44495,7 @@
         + '<td>'+comboEsc(it.location||"-")+'</td>'
         + '</tr>'
         + '<tr class="row-actions" data-row-actions="act|'+it.id+'" style="display:none;">'
-        + '<td colspan="14" style="background:#fafafa;padding:6px 8px;text-align:left;">' + btns + '</td></tr>';
+        + '<td colspan="15" style="background:#fafafa;padding:6px 8px;text-align:left;">' + btns + '</td></tr>';
     });
     h += '</tbody></table></div>';
     listEl.innerHTML = h;
@@ -44618,6 +44625,75 @@
     return { rows, skipped };
   }
 
+  //  방금 등록한 것을 담아둡니다. 창을 닫거나 새로 고치면 사라집니다.
+  let lastActivateBatch = [];
+  let lastSupportBatch  = [];
+
+  // 방금 등록한 개통을 한 번에 되돌립니다.
+  window.undoLastActivate = async function(){
+    if(!lastActivateBatch.length){ alert("되돌릴 개통 등록이 없습니다."); return; }
+    const n = lastActivateBatch.length;
+    if(!confirm("방금 등록한 개통 " + n + "대를 되돌립니다.\n\n"
+      + "  재고 상태  개통 → 보유중\n"
+      + "  개통일 · 가입번호 · 공시지원금 · 개통코드를 지웁니다\n"
+      + "  개통 등록으로 넣은 지원금 지급 기록도 지웁니다\n\n"
+      + "따로 넣으신 환수 기록은 그대로 둡니다.\n\n진행할까요?")) return;
+    let done = 0;
+    try{
+      for(const r of lastActivateBatch){
+        // 개통 등록으로 만들어진 지급 기록을 지웁니다.
+        try{
+          const q = await getDocs(query(collection(db,"supportLogs"), where("itemId","==", r.id)));
+          for(const d of q.docs){ if(d.data().fromActivation === true) await deleteDoc(doc(db,"supportLogs", d.id)); }
+        }catch(e){}
+        await updateDoc(doc(db,"inventoryItems", r.id), {
+          status:"보유중", activateDate:"", subNumber:"", subsidyAmount:null, activationCode:""
+        });
+        await refreshItemSupport(r.id);
+        await logItem(r.id, r.serial, "deactivate", "개통 등록 되돌리기 (일괄)", {});
+        done++;
+      }
+    }catch(e){ alert("되돌리다 멈췄습니다.\n" + ((e&&e.message)?e.message:String(e))); }
+    logAction("개통 등록 되돌리기", done + "대");
+    alert(done + "대를 되돌렸습니다.");
+    lastActivateBatch = [];
+    clearCache("inventory"); clearDashCache();
+    try{ loadActivationList(true); }catch(e){}
+    try{ loadSupportList(); }catch(e){}
+    try{ if(typeof loadInventoryList === "function") loadInventoryList(); }catch(e){}
+  };
+
+  // 방금 등록한 지원금을 한 번에 되돌립니다.
+  window.undoLastSupport = async function(){
+    if(!lastSupportBatch.length){ alert("되돌릴 지원금 등록이 없습니다."); return; }
+    const n = lastSupportBatch.length;
+    if(!confirm("방금 등록한 지원금 " + n + "건을 지웁니다.\n\n"
+      + "재고의 지급·환수 합계도 함께 맞춰집니다.\n\n진행할까요?")) return;
+    let done = 0;
+    const touched = new Set();
+    try{
+      for(let i=0;i<lastSupportBatch.length;i+=300){
+        const bt = writeBatch(db);
+        lastSupportBatch.slice(i, i+300).forEach(function(x){
+          bt.delete(doc(db,"supportLogs", x.id));
+          if(x.itemId) touched.add(x.itemId);
+          done++;
+        });
+        await withTimeout(bt.commit(), 15000, "지원금 되돌리기");
+      }
+      for(const id of touched){ await refreshItemSupport(id); }
+      for(const id of touched){
+        try{ await logItem(id, "", "support", "지원금 등록 되돌리기 (일괄)", {}); }catch(e){}
+      }
+    }catch(e){ alert("되돌리다 멈췄습니다.\n" + ((e&&e.message)?e.message:String(e))); }
+    logAction("지원금 등록 되돌리기", done + "건");
+    alert(done + "건을 지웠습니다.");
+    lastSupportBatch = [];
+    clearCache("inventory"); clearDashCache();
+    try{ loadSupportList(); }catch(e){}
+    try{ loadActivationList(true); }catch(e){}
+  };
+
   // ---------- 지원금 내역 목록 ----------
   //  열은 여기서 관리합니다. 나중에 늘어나면 이 목록에만 더하면 됩니다.
   const SUP_COLS = [
@@ -44667,9 +44743,9 @@
       + '</div>'
       + '<div style="border-top:1px solid var(--line);margin-top:10px;padding-top:8px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:12.5px;">'
       + '<span>줄 간격</span>'
-      + ['normal','tight'].map(function(k){
-          return '<label style="display:flex;align-items:center;gap:4px;"><input type="radio" name="sup-density" value="'+k+'"'
-            + (d===k?' checked':'')+'>'+(k==="tight"?"좁게":"보통")+'</label>'; }).join("")
+      + [['normal','보통'],['tight','좁게'],['tiny','아주 좁게']].map(function(x){
+          return '<label style="display:flex;align-items:center;gap:4px;"><input type="radio" name="sup-density" value="'+x[0]+'"'
+            + (d===x[0]?' checked':'')+'>'+x[1]+'</label>'; }).join("")
       + '<button class="btn small" style="width:auto;margin-left:auto;" onclick="applySupCols()">적용</button>'
       + '<button class="btn small secondary" style="width:auto;" onclick="resetSupCols()">기본값</button>'
       + '</div>';
@@ -44763,22 +44839,25 @@
     const { pageItems } = paginateSlice(view, "supportLogs");
     const onKeys = listSupCols();
     const cols = SUP_COLS.filter(function(c){ return onKeys.includes(c.key); });
-    const tight = listSupDensity() === "tight";
-    const pad = tight ? "3px 6px" : "";
-    let h = '<div style="overflow-x:auto;"><table class="data-table" style="width:auto;"><thead><tr>'
+    // 재고 목록과 같게 — 좌우 여백을 줄이고 줄바꿈하지 않습니다.
+    const dense = listSupDensity();
+    const dcls = (dense === "tiny") ? " vc-tiny" : (dense === "tight" ? " vc-tight" : "");
+    let h = '<div class="' + (dcls ? dcls.trim() : "") + '" style="overflow-x:auto;">'
+      + '<table class="data-table resv-dest-fit"><thead><tr>'
+      + '<th class="no-print"><input type="checkbox" id="sup-check-all" onclick="toggleSupAll(this.checked)"></th>'
       + cols.map(function(c){
-          return '<th'+(c.right?' class="ta-right"':'')+(pad?' style="padding:'+pad+';"':'')+'>'
-            + comboEsc(c.label) + '</th>'; }).join("")
-      + '<th class="ta-right no-print"'+(pad?' style="padding:'+pad+';"':'')+'>관리</th>'
+          return '<th'+(c.right?' class="ta-right"':'')+'>' + comboEsc(c.label) + '</th>'; }).join("")
+      + '<th class="ta-right no-print">관리</th>'
       + '</tr></thead><tbody>';
     pageItems.forEach(function(r){
       const gray = r.linked ? ' style="color:var(--gray);"' : '';
       h += '<tr'+gray+'>'
+        + '<td class="no-print"><input type="checkbox" class="sup-cb" value="'+r.id+'" '
+          + 'data-sup-item="'+(r.itemId||"")+'" data-sup-sn="'+comboEsc(r.serialNumber||"")+'" '
+          + 'data-sup-linked="'+(r.linked?"1":"0")+'"></td>'
         + cols.map(function(c){
-            const st = (c.right ? ' class="ta-right"' : '')
-              + (pad ? ' style="padding:'+pad+';white-space:nowrap;"' : ' style="white-space:nowrap;"');
-            return '<td'+st+'>' + c.get(r) + '</td>'; }).join("")
-        + '<td class="ta-right no-print"'+(pad?' style="padding:'+pad+';"':'')+'>'
+            return '<td'+(c.right ? ' class="ta-right"' : '')+'>' + c.get(r) + '</td>'; }).join("")
+        + '<td class="ta-right no-print">'
           + (r.linked
               ? '<button class="btn small secondary" style="width:auto;" data-sup-log="'+(r.itemId||"")+'" data-sup-sn="'+comboEsc(r.serialNumber||"")+'">내역</button>'
               : '<button class="btn small secondary" style="width:auto;" data-sup-one="'+r.id+'">잇기</button>')
@@ -44798,6 +44877,116 @@
     });
     el.prepend(renderPaginationBar("supportLogs", view.length, loadSupportList));
     try{ addDownloadBtn("dl-suplist", "suplist", "지원금내역"); }catch(e){}
+  };
+
+  window.toggleSupAll = function(on){
+    document.querySelectorAll(".sup-cb").forEach(function(cb){ cb.checked = !!on; });
+  };
+  function supChecked(){
+    return Array.from(document.querySelectorAll(".sup-cb:checked")).map(function(cb){
+      return { id: cb.value, itemId: cb.dataset.supItem || "", serial: cb.dataset.supSn || "",
+               linked: cb.dataset.supLinked === "1" };
+    });
+  }
+
+  // 고른 건만 재고와 잇습니다.
+  window.matchSupportSelected = async function(){
+    const list = supChecked().filter(function(x){ return !x.linked; });
+    if(list.length === 0){ alert("이을 건을 골라주세요. (이미 이어진 건은 빠집니다)"); return; }
+    if(!confirm("고른 " + list.length + "건을 일련번호로 재고와 잇습니다.\n\n진행할까요?")) return;
+    let done = 0, fail = 0;
+    const touched = new Set();
+    for(const x of list){
+      let r = null;
+      try{ const d = await getDoc(doc(db,"supportLogs", x.id)); if(d.exists()) r = { id:d.id, ...d.data() }; }catch(e){}
+      if(!r){ fail++; continue; }
+      const it = await findItemForSupport(r);
+      if(!it){ fail++; continue; }
+      try{
+        await updateDoc(doc(db,"supportLogs", x.id), { itemId: it.id });
+        touched.add(it.id); done++;
+        // 단말 이력에 남깁니다.
+        await logItem(it.id, it.serialNumber||"", "support",
+          "지원금 재고 잇기 · " + (r.month||"-") + " " + (r.kind==="claw"?"환수":"지급")
+          + " " + (Number(r.amount)||0).toLocaleString(),
+          { systemModel: it.systemModel||"" });
+      }catch(e){ fail++; }
+    }
+    for(const id of touched){ await refreshItemSupport(id); }
+    logAction("지원금 선택 잇기", done + "건 이음 / " + fail + "건 못 찾음");
+    alert("이었습니다.\n\n  이어짐 " + done + "건\n  못 찾음 " + fail + "건");
+    clearCache("inventory"); clearDashCache();
+    loadSupportList();
+    try{ loadActivationList(true); }catch(e){}
+  };
+
+  // 고른 건의 재고 연결을 풉니다. (기록은 남고 재고 합계에서만 빠집니다)
+  window.unmatchSupportSelected = async function(){
+    const list = supChecked().filter(function(x){ return x.linked; });
+    if(list.length === 0){ alert("잇기를 취소할 건을 골라주세요. (이어진 건만 됩니다)"); return; }
+    if(!confirm("고른 " + list.length + "건의 재고 연결을 풉니다.\n\n"
+      + "  지원금 기록은 그대로 남습니다\n"
+      + "  재고의 지급·환수 합계에서는 빠집니다\n\n"
+      + "나중에 다시 [선택 잇기] 로 이으실 수 있습니다.\n\n진행할까요?")) return;
+    let done = 0;
+    const touched = new Set();
+    try{
+      for(const x of list){
+        let r = null;
+        try{ const d = await getDoc(doc(db,"supportLogs", x.id)); if(d.exists()) r = d.data(); }catch(e){}
+        await updateDoc(doc(db,"supportLogs", x.id), { itemId: null });
+        if(x.itemId){
+          touched.add(x.itemId);
+          // 단말 이력에 남깁니다.
+          try{
+            await logItem(x.itemId, x.serial, "support",
+              "지원금 잇기 취소 · " + ((r && r.month) || "-") + " "
+              + ((r && r.kind === "claw") ? "환수" : "지급") + " "
+              + ((r && Number(r.amount)) || 0).toLocaleString(), {});
+          }catch(e){}
+        }
+        done++;
+      }
+      for(const id of touched){ await refreshItemSupport(id); }
+    }catch(e){ alert("풀다 멈췄습니다.\n" + ((e&&e.message)?e.message:String(e))); }
+    logAction("지원금 잇기 취소", done + "건");
+    alert(done + "건의 연결을 풀었습니다.");
+    clearCache("inventory"); clearDashCache();
+    loadSupportList();
+    try{ loadActivationList(true); }catch(e){}
+  };
+
+  // 고른 건을 지웁니다.
+  window.deleteSupportSelected = async function(){
+    const list = supChecked();
+    if(list.length === 0){ alert("지울 건을 골라주세요."); return; }
+    if(!hasPerm(currentUserPerms, "cancelDelete")){ alert("삭제 권한이 없습니다."); return; }
+    if(!confirm("고른 " + list.length + "건을 지웁니다.\n\n"
+      + "재고의 지급·환수 합계도 함께 맞춰집니다.\n\n되돌릴 수 없습니다. 진행할까요?")) return;
+    let done = 0;
+    const touched = new Set();
+    try{
+      for(let i=0;i<list.length;i+=300){
+        const bt = writeBatch(db);
+        list.slice(i, i+300).forEach(function(x){
+          bt.delete(doc(db,"supportLogs", x.id));
+          if(x.itemId) touched.add(x.itemId);
+          done++;
+        });
+        await withTimeout(bt.commit(), 15000, "지원금 삭제");
+      }
+      for(const id of touched){ await refreshItemSupport(id); }
+      // 단말 이력에 남깁니다.
+      for(const x of list){
+        if(!x.itemId) continue;
+        try{ await logItem(x.itemId, x.serial, "support", "지원금 기록 삭제", {}); }catch(e){}
+      }
+    }catch(e){ alert("지우다 멈췄습니다.\n" + ((e&&e.message)?e.message:String(e))); }
+    logAction("지원금 선택 삭제", done + "건");
+    alert(done + "건을 지웠습니다.");
+    clearCache("inventory"); clearDashCache();
+    loadSupportList();
+    try{ loadActivationList(true); }catch(e){}
   };
 
   // 한 건만 재고와 잇습니다.
@@ -45048,11 +45237,13 @@
     const resEl = document.getElementById("support-result");
     resEl.innerHTML = "처리 중...";
     let done = 0;
+    const madeIds = [];
     try{
       for(let i=0;i<rows.length;i+=300){
         const bt = writeBatch(db);
         rows.slice(i, i+300).forEach(function(r){
           const ref = doc(collection(db,"supportLogs"));
+          madeIds.push({ id: ref.id, itemId: r.itemId || null });
           bt.set(ref, {
             serialNumber: r.serial, itemId: r.itemId || null,
             openDate: r.openDate || "", subNumber: r.phone || "",
@@ -45068,12 +45259,24 @@
       // 재고의 합계를 다시 냅니다.
       const ids = [...new Set(rows.map(function(r){ return r.itemId; }).filter(Boolean))];
       for(const id of ids){ await refreshItemSupport(id); }
+      // 단말 이력에 남깁니다.
+      for(const r of rows){
+        if(!r.itemId) continue;
+        try{
+          await logItem(r.itemId, r.serial, "support",
+            (r.month||"-") + " " + (r.kind==="claw"?"환수":"지급") + " "
+            + (Number(r.amt)||0).toLocaleString() + (r.reason ? " · " + r.reason : ""),
+            { systemModel: r.model||"" });
+        }catch(e){}
+      }
     }catch(e){
       resEl.innerHTML = '<span style="color:var(--danger);">저장 중 오류: ' + comboEsc((e&&e.message)?e.message:String(e)) + '</span>';
       return;
     }
+    lastSupportBatch = madeIds;
     logAction("지원금 등록", done + "건 / 지급 " + payAmt.toLocaleString() + " / 환수 " + clawAmt.toLocaleString());
-    resEl.innerHTML = '<b>' + done + '건을 등록했습니다.</b>';
+    resEl.innerHTML = '<b>' + done + '건을 등록했습니다.</b>'
+ + ' <span style="color:var(--gray);">지원금 내역에서 골라 지우거나 잇기를 취소하실 수 있습니다.</span>';
     clearCache("inventory"); clearDashCache();
     try{ if(typeof loadActivationList === "function") loadActivationList(true); }catch(e){}
     try{ if(typeof loadSupportList === "function") loadSupportList(); }catch(e){}
@@ -45163,13 +45366,97 @@
     if(!confirm("이 지원금 기록을 지우시겠습니까?")) return;
     try{
       await deleteDoc(doc(db,"supportLogs", id));
-      if(itemId) await refreshItemSupport(itemId);
+      if(itemId){
+        await refreshItemSupport(itemId);
+        try{ await logItem(itemId, serial||"", "support", "지원금 기록 삭제", {}); }catch(e){}
+      }
     }catch(e){ alert("지우지 못했습니다."); return; }
     logAction("지원금 기록 삭제", serial || id);
     clearCache("inventory");
     if(itemId || serial) openSupLog(itemId, serial, "");
     try{ if(typeof loadActivationList === "function") loadActivationList(true); }catch(e){}
     try{ if(typeof loadSupportList === "function") loadSupportList(); }catch(e){}
+  };
+
+  window.toggleActAll = function(on){
+    document.querySelectorAll(".act-cb").forEach(function(cb){ cb.checked = !!on; });
+  };
+
+  // 고른 개통 건을 한 번에 취소합니다.
+  //  재고가 있으면 보유중으로 되돌리고, 재고가 없으면 지원금 기록만 정리합니다.
+  window.cancelActivationSelected = async function(){
+    if(!hasPerm(currentUserPerms, "cancelDelete")){ alert("취소 권한이 없습니다."); return; }
+    const picked = Array.from(document.querySelectorAll(".act-cb:checked")).map(function(cb){
+      return { id: cb.value, serial: cb.dataset.actSn || "" };
+    });
+    if(picked.length === 0){ alert("취소할 개통 건을 골라주세요."); return; }
+
+    // 재고를 확인합니다.
+    const items = [], gone = [];
+    for(const p of picked){
+      try{
+        const d = await getDoc(doc(db,"inventoryItems", p.id));
+        if(d.exists()) items.push({ id:d.id, ...d.data() });
+        else gone.push(p);
+      }catch(e){ gone.push(p); }
+    }
+    const openOnes = items.filter(function(x){ return String(x.status||"") === "개통"; });
+    const notOpen  = items.filter(function(x){ return String(x.status||"") !== "개통"; });
+
+    const reason = prompt("개통 취소 사유를 입력해주세요. (필수)", "");
+    if(reason === null) return;
+    if(!String(reason).trim()){ alert("사유를 입력해주세요."); return; }
+    const cDate = askCancelDate("개통 취소");
+    if(cDate === null) return;
+
+    if(!confirm("고른 " + picked.length + "건을 개통 취소합니다.\n\n"
+      + "  되돌릴 재고  " + openOnes.length + "대\n"
+      + (notOpen.length ? "  개통 상태가 아닌 것 " + notOpen.length + "대 — 건너뜁니다\n" : "")
+      + (gone.length ? "  재고가 없는 것 " + gone.length + "건 — 지원금 기록만 정리합니다\n" : "")
+      + "\n  재고 상태  개통 → 보유중\n"
+      + "  개통일 · 가입번호 · 공시지원금 · 개통코드를 지웁니다\n"
+      + "  개통 등록으로 넣은 지원금 지급 기록도 지웁니다\n\n"
+      + "따로 넣으신 환수 기록은 그대로 둡니다.\n\n진행할까요?")) return;
+
+    let done = 0, supDel = 0;
+    try{
+      for(const it of openOnes){
+        // 개통 등록으로 만들어진 지급 기록을 지웁니다.
+        try{
+          const q = await getDocs(query(collection(db,"supportLogs"), where("itemId","==", it.id)));
+          for(const d of q.docs){
+            if(d.data().fromActivation === true){ await deleteDoc(doc(db,"supportLogs", d.id)); supDel++; }
+          }
+        }catch(e){}
+        await updateDoc(doc(db,"inventoryItems", it.id), {
+          status:"보유중", activateDate:"", subNumber:"", subsidyAmount:null, activationCode:""
+        });
+        await refreshItemSupport(it.id);
+        await logItem(it.id, it.serialNumber||"", "deactivate",
+          "개통 취소 · 취소일 " + cDate + " · 사유: " + String(reason).trim()
+          + (it.activateDate ? " (원래 개통일 " + it.activateDate + ")" : ""),
+          { systemModel: it.systemModel||"", date: cDate });
+        done++;
+      }
+      // 재고가 없는 건 — 일련번호로 남은 지원금 기록을 정리합니다.
+      for(const g of gone){
+        if(!g.serial) continue;
+        try{
+          const q = await getDocs(query(collection(db,"supportLogs"), where("serialNumber","==", g.serial)));
+          for(const d of q.docs){
+            if(d.data().fromActivation === true){ await deleteDoc(doc(db,"supportLogs", d.id)); supDel++; }
+          }
+        }catch(e){}
+      }
+    }catch(e){ alert("취소하다 멈췄습니다.\n" + ((e&&e.message)?e.message:String(e))); }
+
+    logAction("개통 선택 취소", done + "대 / 지원금 " + supDel + "건 정리 / 사유: " + String(reason).trim());
+    alert("개통을 취소했습니다.\n\n  되돌린 재고 " + done + "대"
+      + (supDel ? "\n  지원금 지급 기록 " + supDel + "건 정리" : ""));
+    clearCache("inventory"); clearDashCache();
+    try{ loadActivationList(true); }catch(e){}
+    try{ loadSupportList(); }catch(e){}
+    try{ if(typeof loadInventoryList === "function") loadInventoryList(); }catch(e){}
   };
 
   // 개통 취소 — 재고를 보유중으로 되돌리고 개통 때 넣은 값도 지웁니다.
@@ -45383,8 +45670,11 @@
       resEl.innerHTML = '<span style="color:var(--danger);">처리 중 오류: ' + comboEsc((e&&e.message)?e.message:String(e)) + '</span>';
       return;
     }
+    // 방금 처리한 목록을 담아두어 한 번에 되돌릴 수 있게 합니다.
+    lastActivateBatch = rows.map(function(r){ return { id:r.id, serial:r.serial }; });
     logAction("개통 일괄처리", done + "대 / 개통일 " + date);
-    resEl.innerHTML = '<b>' + done + '대를 개통 처리했습니다.</b>';
+    resEl.innerHTML = '<b>' + done + '대를 개통 처리했습니다.</b>'
+ + ' <span style="color:var(--gray);">개통 관리 목록에서 골라 취소하실 수 있습니다.</span>';
     clearCache("inventory"); clearDashCache();
     if(typeof loadActivationList === "function") loadActivationList(true);
   };
