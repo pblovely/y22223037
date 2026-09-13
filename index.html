@@ -400,7 +400,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-06 v1119</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-06 v1122</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -9096,6 +9096,14 @@
       orderId: currentOrderLinkId||null,
       profit, imei, status, orderDate, inDate, expectedSaleDate, outDate, activateDate
     };
+    //  주문으로 들어온 재고면 「묶음 번호」도 함께 담습니다.
+    //   나중에 주문을 고칠 때 재고를 바로 찾기 위해서입니다.
+    if(currentOrderLinkId){
+      try{
+        const od = await getDoc(doc(db,"orders", currentOrderLinkId));
+        if(od.exists()) base.orderBatchId = String(od.data().batchId || "");
+      }catch(e){}
+    }
 
     if(editingItemId){
       // 판매요청에 묶인 재고면 판매 관련 값이 바뀌는지 보고 알려줍니다.
@@ -14876,7 +14884,7 @@
       const dp = document.getElementById("rb-deppick");
       if(dp && dp.value && prePaidSel !== false){
         const used = Math.min(Number(dp.options[dp.selectedIndex].dataset.left)||0, planTot);
-        await useDeposit(dp.value, used, document.getElementById("rb-dest").value || "");
+        await useDeposit(dp.value, used, document.getElementById("rb-dest").value || "", "", "resv");
       }
     }catch(e){}
     logAction("예약 판매요청 생성", made + "대 / " + rbPlan.length + "건");
@@ -15034,7 +15042,7 @@
       const dp = document.getElementById("rb-deppick");
       if(dp && dp.value && prePaid !== false){
         const used = Math.min(Number(dp.options[dp.selectedIndex].dataset.left)||0, planTotal);
-        await useDeposit(dp.value, used, document.getElementById("rb-dest").value || "");
+        await useDeposit(dp.value, used, document.getElementById("rb-dest").value || "", "", "resv");
       }
     }catch(e){}
     logAction("예약 일련번호 일괄 배정", done + "대 / 예약 " + Object.keys(groups).length + "건");
@@ -19963,18 +19971,8 @@
         const doneRow = (r.finished || r.canceled) && !r.onHold;
         // 버튼은 줄을 눌렀을 때 아래로 펼쳐지는 칸에 모아 둡니다. (가로로 밀리지 않게)
         //  아직 요청에 안 붙인 통장 내역은 바로 지울 수 있게 합니다.
-        const canDelCb = r.cb && !r.cbUsed && hasPerm(currentUserPerms, "cancelDelete");
-        //  이미 붙어 있는 통장 내역은 배분을 풀 수 있게 합니다. (붙은 요청이 없어졌을 때)
-        const canRelCb = r.cb && r.cbUsed > 0 && hasPerm(currentUserPerms, "paymentProcess");
         const btns =
-            (canDelCb
-              ? '<button class="btn small danger" style="width:auto;margin-right:4px;" data-rbd-delcb="' + r.id + '">삭제</button>'
-              : '')
-            + (canRelCb
-              ? '<button class="btn small secondary" style="width:auto;margin-right:4px;" title="붙은 요청이 없어졌을 때 씁니다. 쓴 금액을 0 으로 되돌립니다." data-rbd-relcb="' + r.id + '">배분 풀기</button>'
-                + '<button class="btn small danger" style="width:auto;margin-right:4px;" title="배분을 풀고 내역까지 지웁니다." data-rbd-fdelcb="' + r.id + '">삭제</button>'
-              : '')
-            + ((r.canProcess && !r.canceled && !r.finished && canDo)
+            ((r.canProcess && !r.canceled && !r.finished && canDo)
               ? '<button class="btn small" style="width:auto;" data-rbd-do="' + r.kind + '|' + r.id + '">처리</button>'
                 + '<button class="btn small secondary" style="width:auto;margin-left:4px;" data-rbd-hold="' + r.kind + '|' + r.id + '|' + (r.onHold ? "0" : "1") + '">'
                 + (r.onHold ? '보류 해제' : '보류') + '</button>' : '') +
@@ -19986,7 +19984,8 @@
               ? '<button class="btn small danger" style="width:auto;margin-left:4px;" data-rbd-del="' + r.kind + '|' + r.id + '">삭제</button>' : '') +
             ((r.cb && canDo)
               ? '<button class="btn small secondary" style="width:auto;margin-left:4px;" data-rbd-cbco="' + r.id + '">매칭</button>'
-                + ((r.cbUsed > 0) ? ''
+                + ((r.cbUsed > 0)
+                   ? '<button class="btn small secondary" style="width:auto;margin-left:4px;" title="붙은 요청이 없어졌을 때 씁니다. 쓴 금액을 0 으로 되돌립니다." data-rbd-relcb="' + r.id + '">배분 풀기</button>'
                    : '<button class="btn small danger" style="width:auto;margin-left:4px;" data-rbd-cbdel="' + r.id + '">삭제</button>') : '') +
             ((r.recs.length === 1 && hasPerm(currentUserPerms, "paymentProcess"))
               ? '<button class="btn small secondary" style="width:auto;margin-left:4px;" data-delrec="' + r.kind + '|' + r.id + '|0">입금기록 지우기</button>' : '');
@@ -20086,14 +20085,8 @@
       const [kind, id, on] = b.dataset.rbdHold.split("|");
       b.onclick = ()=> toggleReqHold(kind, id, on === "1");
     });
-    document.querySelectorAll("#tab-reqboard [data-rbd-delcb]").forEach(b=>{
-      b.onclick = ()=> deleteBankDup(b.dataset.rbdDelcb);
-    });
     document.querySelectorAll("#tab-reqboard [data-rbd-relcb]").forEach(b=>{
       b.onclick = ()=> releaseDepositEntry(b.dataset.rbdRelcb);
-    });
-    document.querySelectorAll("#tab-reqboard [data-rbd-fdelcb]").forEach(b=>{
-      b.onclick = ()=> forceDeleteDeposit(b.dataset.rbdFdelcb);
     });
     document.querySelectorAll("#tab-reqboard [data-rbd-edit]").forEach(b=>{
       const [kind, id] = b.dataset.rbdEdit.split("|");
@@ -23773,7 +23766,8 @@
   };
 
   // 입금을 쓴 만큼 차감합니다.
-  window.useDeposit = async function(id, amount, destination){
+  //  reqId 를 함께 받습니다. 나중에 그 요청을 지우거나 취소하면 이 돈이 풀립니다.
+  window.useDeposit = async function(id, amount, destination, reqId, reqKind){
     if(!id || !(amount > 0)) return;
     try{
       const snap = await getDoc(doc(db,"bankDeposits", id));
@@ -23781,7 +23775,8 @@
       const x = snap.data();
       await updateDoc(doc(db,"bankDeposits", id), {
         usedAmount: (Number(x.usedAmount)||0) + Number(amount),
-        uses: [...(x.uses||[]), { amount: Number(amount), date: todayStr(), destination: destination||"", by: currentUser.name }],
+        uses: [...(x.uses||[]), { amount: Number(amount), date: todayStr(), destination: destination||"",
+                reqId: String(reqId||""), reqKind: String(reqKind||"in"), by: currentUser.name }],
         ...(x.company ? {} : { company: destination||"" })
       });
     }catch(e){ console.error("입금 차감 실패", e); }
@@ -31327,6 +31322,7 @@
           purchasePrice: Math.round(c.buy), discountBase: c.base,
           kind: it.kind || "",                // 1차 재고의 구분을 그대로 씁니다
           status: "보유중", orderId: orderIdOf[it.id] || null,
+          orderBatchId: batchRef.id,
           // ── 되사오기 표시 ──
           isRebuy: true, rebuyFromItemId: it.id,
           rebuySerial: it.serialNumber||"", rebuyFromDest: it.destination||"",
@@ -35105,6 +35101,102 @@
     try{ if(typeof loadInventoryList === "function") loadInventoryList(); }catch(e){}
   };
 
+  let ghostBankCache = [];
+
+  //  붙은 요청이 없는데 쓴 금액이 남은 통장 내역을 보여주고 한 번에 풉니다.
+  window.showGhostBankList = function(){
+    const rows = ghostBankCache || [];
+    if(rows.length === 0){ alert("정리할 것이 없습니다."); return; }
+    const sumGap = rows.reduce(function(n,x){ return n + (Number(x.gap)||0); }, 0);
+    const head = document.getElementById("suplog-head");
+    const body = document.getElementById("suplog-body");
+    head.innerHTML = '<b>붙은 요청이 없는데 쓴 금액이 남은 통장 내역</b> — ' + rows.length + '건'
+      + ' · 묶인 돈 <b>' + sumGap.toLocaleString() + '</b>'
+      + '<br><span style="color:var(--gray);">요청을 지우거나 취소했는데 통장 쪽이 안 풀린 옛 기록입니다. '
+      + '풀면 다시 매칭하실 수 있습니다. 요청 쪽 기록은 건드리지 않습니다.</span>';
+    body.innerHTML =
+      '<div style="margin-bottom:8px;">'
+      + '<button class="btn small" style="width:auto;" onclick="fixGhostBankAll()">전부 풀기 ('+rows.length+'건)</button>'
+      + '</div>'
+      + '<div style="overflow-x:auto;max-height:420px;overflow-y:auto;border:1px solid var(--line);">'
+      + '<table class="data-table resv-dest-fit"><thead><tr>'
+      + '<th>구분</th><th>날짜</th><th>입금자·받는곳</th><th>거래처</th>'
+      + '<th class="ta-right">금액</th><th class="ta-right">쓴 금액</th>'
+      + '<th class="ta-right">살아 있는 배분</th><th class="ta-right">풀릴 금액</th>'
+      + '<th class="ta-right no-print">관리</th></tr></thead><tbody>'
+      + rows.map(function(r, ix){
+          return '<tr>'
+            + '<td>' + (String(r.kind||"in") === "out"
+                ? '<span style="color:var(--danger);font-weight:700;">출금</span>'
+                : '<span style="color:#1565c0;font-weight:700;">입금</span>') + '</td>'
+            + '<td>'+comboEsc(r.date||"-")+'</td>'
+            + '<td>'+comboEsc(r.payer||"-")+'</td>'
+            + '<td>'+comboEsc(r.company||"-")+'</td>'
+            + '<td class="ta-right">'+(Number(r.amount)||0).toLocaleString()+'</td>'
+            + '<td class="ta-right">'+(Number(r.used)||0).toLocaleString()+'</td>'
+            + '<td class="ta-right">'+(Number(r.aliveSum)||0).toLocaleString()+'</td>'
+            + '<td class="ta-right" style="color:#2e7d32;font-weight:700;">'+(Number(r.gap)||0).toLocaleString()+'</td>'
+            + '<td class="ta-right no-print"><button class="btn small" style="width:auto;" '
+              + 'data-fixghost="'+ix+'">풀기</button></td></tr>';
+        }).join("")
+      + '</tbody></table></div>';
+    body.querySelectorAll("[data-fixghost]").forEach(function(b){
+      b.onclick = ()=> fixGhostBankOne(Number(b.dataset.fixghost));
+    });
+    document.getElementById("suplog-overlay").style.display = "flex";
+  };
+
+  async function ghostBankPatch(r){
+    //  살아 있는 배분만 남기고, 나머지는 풉니다.
+    const keep = (r.uses||[]).filter(function(u){ return String(u.reqId||""); });
+    await updateDoc(doc(db,"bankDeposits", r.id), {
+      usedAmount: Number(r.aliveSum)||0,
+      uses: keep
+    });
+  }
+
+  window.fixGhostBankOne = async function(ix){
+    const r = (ghostBankCache||[])[ix];
+    if(!r) return;
+    if(!confirm("이 내역의 묶인 돈을 풉니다.\n\n"
+      + "  " + (r.date||"-") + " · " + (Number(r.amount)||0).toLocaleString()
+      + " · " + (r.payer || r.company || "-") + "\n"
+      + "  풀릴 금액 " + (Number(r.gap)||0).toLocaleString() + "\n\n"
+      + "요청 쪽 기록은 건드리지 않습니다.\n\n진행할까요?")) return;
+    try{ await ghostBankPatch(r); }
+    catch(e){ alert("풀지 못했습니다."); return; }
+    logAction("통장 묶인 돈 풀기", (r.date||"-") + " / " + (Number(r.gap)||0).toLocaleString()
+      + " / " + (r.payer || r.company || "-"));
+    ghostBankCache = (ghostBankCache||[]).filter(function(x,i){ return i !== ix; });
+    try{ clearCache("bank"); }catch(e){}
+    try{ if(typeof loadReqBoard === "function") loadReqBoard(); }catch(e){}
+    try{ if(typeof loadDepositEntryList === "function") loadDepositEntryList(); }catch(e){}
+    if(ghostBankCache.length) showGhostBankList();
+    else{ closeSupLog(); alert("전부 풀었습니다."); }
+  };
+
+  window.fixGhostBankAll = async function(){
+    const rows = (ghostBankCache||[]).slice();
+    if(rows.length === 0) return;
+    const sumGap = rows.reduce(function(n,x){ return n + (Number(x.gap)||0); }, 0);
+    if(!confirm(rows.length + "건의 묶인 돈을 한 번에 풉니다.\n\n"
+      + "  풀릴 금액 합계 " + sumGap.toLocaleString() + "\n\n"
+      + "요청 쪽 기록은 건드리지 않습니다.\n"
+      + "풀린 돈은 <안 붙임> 으로 돌아가 다시 매칭하실 수 있습니다.\n\n진행할까요?")) return;
+    let n = 0;
+    try{
+      for(const r of rows){ await ghostBankPatch(r); n++; }
+    }catch(e){ alert("풀다 멈췄습니다."); }
+    logAction("통장 묶인 돈 일괄 풀기", n + "건 / " + sumGap.toLocaleString());
+    ghostBankCache = [];
+    closeSupLog();
+    alert(n + "건을 풀었습니다.\n\n입출금리스트에서 <안 붙임> 으로 보입니다.");
+    try{ clearCache("bank"); clearDashCache(); }catch(e){}
+    try{ if(typeof loadReqBoard === "function") loadReqBoard(); }catch(e){}
+    try{ if(typeof loadDepositEntryList === "function") loadDepositEntryList(); }catch(e){}
+    try{ if(typeof loadCashbook === "function") loadCashbook(); }catch(e){}
+  };
+
   let bankDupCache = [];
 
   //  같은 날·같은 금액 입출금 내역을 보여드립니다. (지우는 것은 직접 고르십니다)
@@ -35919,6 +36011,51 @@
                 + "1차와 2차를 이어두면 목록에서 구분되고 이력이 이어집니다. "
                 + "금액·날짜는 그대로 두고 이어둔 표시만 넣습니다.",
               fix:"showRebuyPairList()", fixLabel:"확인·잇기" });
+          }
+        }
+        // 붙은 요청이 없는데 쓴 금액이 남은 통장 내역 (옛 기록)
+        {
+          const ghost = [];
+          try{
+            // 살아 있는 요청 번호를 모읍니다.
+            const live = new Set();
+            for(const col of ["paymentRequests","saleDepositRequests"]){
+              try{
+                const q = await getDocs(collection(db, col));
+                q.forEach(function(d){
+                  const v = d.data();
+                  if(v.status === "취소") return;
+                  live.add(d.id);
+                });
+              }catch(e){}
+            }
+            const q2 = await getDocs(collection(db,"bankDeposits"));
+            q2.forEach(function(d){
+              const v = d.data();
+              if(v.deleted === true) return;
+              const used = Number(v.usedAmount)||0;
+              if(used <= 0) return;
+              const uses = (v.uses||[]);
+              // 붙은 기록이 아예 없거나, 있는 기록이 전부 없어진 요청을 가리키면 유령입니다.
+              const alive = uses.filter(function(u){
+                const rid = String(u.reqId||"");
+                return rid && live.has(rid);
+              });
+              const aliveSum = alive.reduce(function(n,u){ return n + (Number(u.amount)||0); }, 0);
+              if(aliveSum < used){
+                ghost.push({ id:d.id, ...v, used, aliveSum, gap: used - aliveSum,
+                             noTag: uses.some(function(u){ return !String(u.reqId||""); }) });
+              }
+            });
+          }catch(e){}
+          ghostBankCache = ghost;
+          if(ghost.length){
+            const sumGap = ghost.reduce(function(n,x){ return n + (Number(x.gap)||0); }, 0);
+            issues.push({ n:"붙은 요청이 없는데 쓴 금액이 남은 통장 내역", cnt: ghost.length, unit:"건",
+              why:"요청을 지우거나 취소했는데 통장 쪽이 안 풀린 옛 기록입니다. "
+                + "합계 " + sumGap.toLocaleString() + " 이 묶여 있습니다. "
+                + "풀면 다시 매칭하실 수 있습니다.",
+              fix:"showGhostBankList()", fixLabel:"확인·정리" });
           }
         }
         // 같은 날 · 같은 금액 · 같은 구분의 입출금 내역이 두 건 이상
