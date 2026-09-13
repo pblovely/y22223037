@@ -580,21 +580,6 @@
         </div>
         <div id="master-stock-table-area"></div>
       </div>
-      <div class="card" style="max-width:700px;">
-        <h3>공시지원금 일괄입력</h3>
-        <p class="desc">엑셀 칸: <b>귀속월(YYYYMM) / 모델명 / 일련번호 / 공시지원금(또는 공시지원금환수)</b>. 모델명+일련번호가 일치하는 재고를 찾아서 자동으로 반영합니다.</p>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px;">
-          <span style="font-size:12.5px;width:110px;">지급(신규) 파일</span>
-          <input type="file" id="subsidy-grant-file-input" accept=".xlsx,.xls" style="font-size:13px;">
-          <button class="btn small" style="width:auto;" onclick="uploadSubsidyFile('grant')">업로드</button>
-        </div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
-          <span style="font-size:12.5px;width:110px;">환수 파일</span>
-          <input type="file" id="subsidy-clawback-file-input" accept=".xlsx,.xls" style="font-size:13px;">
-          <button class="btn small" style="width:auto;" onclick="uploadSubsidyFile('clawback')">업로드</button>
-        </div>
-        <div id="subsidy-upload-result" style="font-size:12.5px;margin-top:10px;"></div>
-      </div>
     </div>
 
     <!-- ===== 작업: 주문 관리 ===== -->
@@ -680,9 +665,12 @@
           <span class="tbar-sep" style="margin:0 4px;">|</span>
           <select id="act-link-f" onchange="loadActivationList()" style="width:130px;height:28px;border:1px solid var(--line);padding:0 6px;font-size:12.5px;box-sizing:border-box;">
             <option value="">전체</option>
-            <option value="yes">재고 이어짐</option>
-            <option value="no">재고 없음</option>
-            <option value="sold">이미 판매됨</option>
+            <option value="yes">완료 (재고 이어짐)</option>
+            <option value="notyet">미완료 (전부)</option>
+            <option value="no">└ 재고 없음</option>
+            <option value="sold">└ 이미 판매됨</option>
+            <option value="odd">└ 재고 상태 다름</option>
+            <option value="norec">개통 기록 없음</option>
           </select>
           <input type="text" id="act-q" placeholder="전체에서 찾기 (모든 칸)" onchange="loadActivationList()" style="width:180px;height:28px;border:1px solid var(--line);padding:0 8px;font-size:12.5px;box-sizing:border-box;">
           <button class="btn small secondary" style="width:auto;margin-left:-1px;" onclick="clearActCond()">비우기</button>
@@ -3145,8 +3133,9 @@
         <button onclick="closePasteActivateModal()" style="position:absolute;top:12px;right:12px;background:none;border:1px solid var(--navy);width:26px;height:26px;cursor:pointer;font-size:13px;">✕</button>
         <h3 style="margin-top:0;margin-bottom:4px;">텍스트로 붙여넣기 개통처리</h3>
         <p class="desc" style="margin-top:0;">보유중인 재고를 여러 대 한 번에 <b>개통 처리</b>합니다.<br>
-          <b>열 순서</b> — 귀속월 · 모델명 · 일련번호 · 개통일 · 가입번호 · 공시지원금 · 유통폰지원금<br>
-          탭이나 빈칸으로 나눠 붙여넣으세요. 뒤쪽 칸은 없어도 됩니다. 줄에 값이 없으면 아래 칸의 값을 씁니다.</p>
+          <b>열 순서</b> — 귀속월 · 모델명 · 일련번호 · 개통일 · 가입번호 · 공시지원금 · 유통폰지원금 · <b>개통코드 · 개통팀 · 개통자</b><br>
+          탭으로 나눠 붙여넣으세요. 뒤쪽 칸은 없어도 됩니다. 줄에 값이 없으면 아래 칸의 값을 씁니다.<br>
+          <span style="color:var(--gray);">개통코드·개통팀·개통자는 비워두시면 나중에 [개통정보 등록] 으로 넣으실 수 있습니다.</span></p>
         <div class="stack-form" style="margin-bottom:10px;">
           <div class="stack-row"><label>귀속월 <span class="info-tip" title="지원금이 어느 달에 귀속되는지 적어둡니다. 줄에 202608 같은 6자리가 있으면 그것을 씁니다.">ⓘ</span></label><input type="text" id="paste-act-month" maxlength="6" inputmode="numeric" placeholder="예: 202608"></div>
         </div>
@@ -3156,7 +3145,7 @@
           <button class="btn small secondary" style="width:auto;" onclick="downloadActTemplate()">양식 받기</button>
           <span id="act-xlsx-msg" style="font-size:12px;color:var(--gray);"></span>
         </div>
-        <textarea id="paste-act-textarea" rows="8" style="width:100%;box-sizing:border-box;padding:8px;border:1px solid #c7c7c7;font-size:12.5px;font-family:monospace;" placeholder="예:&#10;202608&#9;SM-F971N512&#9;1204067&#9;20260814&#9;01012345678&#9;500000&#9;150000&#10;202608&#9;SM-F971N512&#9;1204068&#9;20260814&#9;01012345679&#9;500000&#9;150000&#10;&#10;일련번호만 넣으셔도 됩니다:&#10;1204067&#10;1204068"></textarea>
+        <textarea id="paste-act-textarea" rows="8" style="width:100%;box-sizing:border-box;padding:8px;border:1px solid #c7c7c7;font-size:12.5px;font-family:monospace;" placeholder="예:&#10;202608&#9;SM-X236N-NP&#9;1121245&#9;20260804&#9;514839978101&#9;200000&#9;200000&#9;충남&#9;1팀&#9;홍길동&#10;202608&#9;SM-X236N-NP&#9;1121246&#9;20260804&#9;514839978102&#9;200000&#9;200000&#10;&#10;일련번호만 넣으셔도 됩니다:&#10;1121245&#10;1121246"></textarea>
         <div class="stack-form" style="margin-top:10px;">
           <div class="stack-row"><label>개통일 <span class="info-tip" title="줄에 개통일이 없을 때 이 값을 씁니다.">ⓘ</span></label><input type="text" id="paste-act-date" maxlength="8" inputmode="numeric" placeholder="예: 20260617"></div>
           <div class="stack-row"><label>공시지원금 (선택) <span class="info-tip" title="줄마다 금액이 없을 때 이 값을 씁니다. 비워두면 넣지 않습니다.">ⓘ</span></label><input type="number" id="paste-act-subsidy" placeholder="모든 줄에 같이 넣을 금액 (선택)"></div>
@@ -4169,16 +4158,6 @@
             </select>
           </div>
           <div class="stack-row"><label>공시지원금</label><input type="number" id="item-subsidyamount-input" placeholder="본사에서 유치수수료로 주는 금액"></div>
-          <div class="stack-row"><label>공시지원금 상태</label>
-            <select id="item-subsidystatus-select" onchange="onSubsidyStatusChange()">
-              <option value="">해당없음</option>
-              <option value="지급대기">지급대기</option>
-              <option value="지급완료">지급완료</option>
-              <option value="환수">환수</option>
-            </select>
-          </div>
-          <div class="stack-row" id="item-clawback-row" style="display:none;"><label>환수액</label><input type="number" id="item-clawbackamount-input"></div>
-          <div class="stack-row" id="item-subsidymonth-row"><label>공시지원금 귀속월</label><input type="text" id="item-subsidymonth-input" placeholder="YYYYMM" maxlength="6" inputmode="numeric"></div>
           <div class="stack-row"><label>현재상태</label><select id="item-status-select"></select></div>
           <div class="stack-row"><label>비고1 <span class="info-tip" title="자유롭게 적어두는 칸입니다. 나중에 검색·엑셀다운으로 대조할 때 쓰세요.">ⓘ</span></label><input type="text" id="item-note1-input" placeholder="자유 입력 (선택)"></div>
           <div class="stack-row"><label>비고2</label><input type="text" id="item-note2-input" placeholder="자유 입력 (선택)"></div>
@@ -4671,9 +4650,6 @@
                   || String(it.status||"").indexOf("개통") >= 0 || !!it.destination;
         return it.saleRequestId ? "있음" : (sold ? "없음" : "-");
       }, html:true },
-    { key:"subsidyStatus", label:"공시지원금 상태", hide:true, get:it=>it.subsidyStatus||"-" },
-    { key:"clawbackAmount", label:"환수액 (옛 항목)", hide:true, get:it=> (it.clawbackAmount!=null)?Number(it.clawbackAmount).toLocaleString():"-", getRaw:it=>it.clawbackAmount!=null?Number(it.clawbackAmount):"" },
-    { key:"subsidyAccrualMonth", label:"공시지원금 귀속월 (옛 항목)", hide:true, get:it=>it.subsidyAccrualMonth||"-" },
     { key:"payState", label:"입금",
       get:it=>{
         const p = payStatusOf(it);
@@ -8300,9 +8276,9 @@
       disp.value = "";
     }
   };
+  //  공시지원금 환수는 없앴습니다. (유통폰지원금 환수로 통일)
   window.onSubsidyStatusChange = function(){
-    const status = document.getElementById("item-subsidystatus-select").value;
-    document.getElementById("item-clawback-row").style.display = (status==="환수") ? "flex" : "none";
+    return;
   };
   // ---------- 할인 금액 ↔ % 양방향 계산 (모든 화면 공통 규칙) ----------
   // 금액을 넣으면 %를 계산하고, %를 넣으면 금액을 계산합니다.
@@ -8646,13 +8622,13 @@
     ["item-serial-input","item-imei-input","item-listprice-input","item-purchaseprice-input",
       "item-purchasediscount-input","item-purchasediscountamt-input","item-saleprice-input","item-salediscount-input","item-salediscountamt-input",
       "item-orderdate-input","item-indate-input","item-expectedsaledate-input","item-outdate-input","item-activatedate-input",
-      "item-subsidyamount-input","item-clawbackamount-input","item-subsidymonth-input",
+      "item-subsidyamount-input",
       "item-otherdiscountamt-input","item-otherdiscountpct-input"].forEach(id=>{ document.getElementById(id).value = ""; });
     document.getElementById("item-profit-display").value = "";
     document.getElementById("item-totaldiscount-display").value = "";
     document.getElementById("item-qty-input").value = "1";
-    document.getElementById("item-subsidystatus-select").value = "";
-    document.getElementById("item-clawback-row").style.display = "none";
+
+
     ["item-source-select","item-manufacturer-select","item-carrier-select","item-location-select",
       "item-model-select","item-dest-select"].forEach(id=>{ document.getElementById(id).value = ""; });
     document.getElementById("item-status-select").selectedIndex = 0;
@@ -8781,9 +8757,9 @@
     document.getElementById("item-outdate-input").value = it.outDate || "";
     document.getElementById("item-activatedate-input").value = it.activateDate || "";
     document.getElementById("item-subsidyamount-input").value = it.subsidyAmount || "";
-    document.getElementById("item-subsidystatus-select").value = it.subsidyStatus || "";
-    document.getElementById("item-clawbackamount-input").value = it.clawbackAmount || "";
-    document.getElementById("item-subsidymonth-input").value = it.subsidyAccrualMonth || "";
+
+
+
     document.getElementById("item-note1-input").value = it.note1 || "";
     document.getElementById("item-note2-input").value = it.note2 || "";
     {
@@ -8796,7 +8772,7 @@
       document.getElementById("item-otherdiscountpct-input").value = v(op);
     }
     updateTotalDiscountDisplay();
-    document.getElementById("item-clawback-row").style.display = (it.subsidyStatus==="환수") ? "flex" : "none";
+
     { // 매입 기준 — 이 재고에 저장된 값이 먼저, 없으면 입고처 설정
       const own = String(it.discountBase||"");
       const c0 = (companiesCache||[]).find(x=> String(x.name||"").trim() === String(it.source||"").trim());
@@ -9020,9 +8996,9 @@
     const outDate = document.getElementById("item-outdate-input").value || "";
     const activateDate = (document.getElementById("item-activatedate-input").value || "").replace(/\D/g,"");
     const subsidyAmount = document.getElementById("item-subsidyamount-input").value;
-    const subsidyStatus = document.getElementById("item-subsidystatus-select").value;
-    const clawbackAmount = document.getElementById("item-clawbackamount-input").value;
-    const subsidyAccrualMonth = document.getElementById("item-subsidymonth-input").value.trim();
+    const subsidyStatus = "";
+    const clawbackAmount = "";
+    const subsidyAccrualMonth = "";
     const otherDiscountAmt = document.getElementById("item-otherdiscountamt-input").value;
     const otherDiscountPct = document.getElementById("item-otherdiscountpct-input").value;
 
@@ -39404,9 +39380,6 @@
     { key:"saleDiscountAmt", label:"판매할인", type:"number" },
     { key:"saleDiscount", label:"판매할인%", type:"number" },
     { key:"subsidyAmount", label:"공시지원금", type:"number" },
-    { key:"subsidyStatus", label:"공시지원금 상태", type:"options", options:["지급대기","지급완료","환수"] },
-    { key:"clawbackAmount", label:"환수액", type:"number" },
-    { key:"subsidyAccrualMonth", label:"공시지원금 귀속월", type:"text", placeholder:"예: 202607" },
     { key:"note1", label:"비고1", type:"text", placeholder:"자유 입력" },
     { key:"note2", label:"비고2", type:"text", placeholder:"자유 입력" },
     // 이 재고에서만 쓰는 할인 계산 기준입니다. 업체정보 값보다 먼저 적용됩니다.
@@ -39856,9 +39829,6 @@
     { key:"saleDiscountAmt",  label:"판매할인",      type:"number", link:"saleamt" },
     { key:"saleDiscount",     label:"판매할인%",     type:"number", link:"salepct" },
     { key:"subsidyAmount",    label:"공시지원금",     type:"number" },
-    { key:"subsidyStatus",    label:"공시지원금 상태", type:"options", options:["지급대기","지급완료","환수"] },
-    { key:"clawbackAmount",   label:"환수액",        type:"number" },
-    { key:"subsidyAccrualMonth", label:"공시지원금 귀속월", type:"text", ph:"예: 202607" }
   ];
 
   window.closeMultiEdit = function(){
@@ -41758,75 +41728,6 @@
   let currentMasterStockBatchId = null;
 
   // ---------- 공시지원금 일괄입력 (귀속월 기준) ----------
-  window.uploadSubsidyFile = async function(mode){
-    const inputId = mode==="grant" ? "subsidy-grant-file-input" : "subsidy-clawback-file-input";
-    const fileInput = document.getElementById(inputId);
-    const resultEl = document.getElementById("subsidy-upload-result");
-    if(!fileInput.files || fileInput.files.length===0){ alert("엑셀 파일을 먼저 선택해주세요."); return; }
-    resultEl.textContent = "확인 중...";
-
-    const file = fileInput.files[0];
-    const buf = await file.arrayBuffer();
-    const wb = XLSX.read(buf, { type:"array", cellDates:true });
-    const ws = wb.Sheets[wb.SheetNames[0]];
-    const rows = XLSX.utils.sheet_to_json(ws, { defval:"" });
-    if(rows.length===0){ resultEl.textContent = "읽을 데이터가 없습니다."; return; }
-
-    // 전체 재고를 모델명+일련번호로 조회 가능하게 캐시
-    const snap = await getDocs(collection(db,"inventoryItems"));
-    const bySerial = new Map(); // serialNumber -> {id, baseModel, petName, systemModel}
-    snap.forEach(d=>{
-      const it = d.data();
-      if(it.serialNumber) bySerial.set(String(it.serialNumber).trim(), { id:d.id, ...it });
-    });
-
-    const amtField = mode==="grant" ? "공시지원금" : "공시지원금환수";
-    const ops = [];
-    let matched = 0; const unmatched = [];
-    rows.forEach((r, idx)=>{
-      const month = String(r["귀속월"]||"").trim();
-      const modelName = String(r["모델명"]||"").trim();
-      const serial = String(r["일련번호"]||"").trim();
-      const amt = r[amtField];
-      if(!serial || amt===""){ return; }
-      const found = bySerial.get(serial);
-      if(!found || (modelName && found.baseModel!==modelName && found.petName!==modelName && found.systemModel!==modelName)){
-        unmatched.push((idx+2)+"행: "+modelName+" / "+serial);
-        return;
-      }
-      matched++;
-      const patch = mode==="grant"
-        ? { subsidyAmount: Number(amt), subsidyStatus:"지급완료", subsidyAccrualMonth: month||null }
-        : { clawbackAmount: Number(amt), subsidyStatus:"환수", subsidyAccrualMonth: month||null };
-      ops.push(batch => batch.update(doc(db,"inventoryItems", found.id), patch));
-    });
-
-    if(ops.length===0){
-      resultEl.innerHTML = '<span style="color:var(--danger);">매칭된 재고가 없습니다. 모델명+일련번호를 확인해주세요.</span>';
-      return;
-    }
-
-    // Firestore batch 500개 제한 고려해 청크로 처리
-    let done = 0;
-    for(let i=0; i<ops.length; i+=450){
-      const chunk = ops.slice(i, i+450);
-      const batch = writeBatch(db);
-      chunk.forEach(fn=> fn(batch));
-      await batch.commit();
-      done += chunk.length;
-      resultEl.textContent = "반영 중... ("+done+"/"+ops.length+")";
-    }
-
-    logAction("공시지원금 일괄입력", (mode==="grant"?"지급":"환수")+" "+matched+"건");
-    let html = '<b>'+matched+'건 반영 완료</b>';
-    if(unmatched.length>0){
-      html += '<div style="color:var(--danger);margin-top:6px;">매칭 안 된 '+unmatched.length+'건:<br>'+unmatched.slice(0,20).join("<br>")+(unmatched.length>20?'<br>...':'')+'</div>';
-    }
-    resultEl.innerHTML = html;
-    fileInput.value = "";
-    if(document.getElementById("tab-dashboard").classList.contains("active")) loadDashboard();
-  };
-
   async function loadDataUploadTab(){
     const batchSnap = await getDocs(query(collection(db,"masterStockBatches"), orderBy("uploadedAt","desc")));
     const listEl = document.getElementById("master-stock-batch-list");
@@ -44455,10 +44356,7 @@
     { header:"판매할인", key:"saleDiscountAmt", type:"number" },
     { header:"판매할인%", key:"saleDiscount", type:"number" },
     { header:"공시지원금", key:"subsidyAmount", type:"number" },
-    { header:"공시지원금상태", key:"subsidyStatus", type:"text" },
-    { header:"환수액", key:"clawbackAmount", type:"number" },
-    { header:"공시지원금귀속월", key:"subsidyAccrualMonth", type:"text" },
-    { header:"주문일", key:"orderDate", type:"text" },
+          { header:"주문일", key:"orderDate", type:"text" },
     { header:"입고일", key:"inDate", type:"text" },
     { header:"판매예정일", key:"expectedSaleDate", type:"text" },
     { header:"판매일", key:"outDate", type:"text" },
@@ -45112,14 +45010,47 @@
       const orphan = [];
       // 재고에 이어진 건은 그 재고에 등록일을 적어둡니다.
       const regByItem = {};
+      const linkedActs = [];      // itemId 가 있는 개통 기록
       aq.forEach(function(d){
         const v = d.data();
         if(!v.itemId) return;
+        linkedActs.push({ id:d.id, ...v });
         const w = (v.createdAt && v.createdAt.seconds)
           ? new Date(v.createdAt.seconds*1000).toISOString().slice(0,10).replace(/-/g,"") : "";
         if(w) regByItem[v.itemId] = w;
       });
-      rows.forEach(function(it){ if(regByItem[it.id]) it._regDate = regByItem[it.id]; });
+      rows.forEach(function(it){
+        if(regByItem[it.id]) it._regDate = regByItem[it.id];
+        //  개통 기록 없이 재고만 개통 상태인 것도 구분해 둡니다.
+        it._noRec = !regByItem[it.id] && !linkedActs.some(function(v){ return v.itemId === it.id; });
+      });
+
+      //  이어져 있는데 재고가 개통 상태가 아니거나 지워진 건도 목록에 넣습니다.
+      //   (재고 상태를 손으로 바꾸거나 판매하면 양쪽에서 사라지던 문제)
+      const shown = {};
+      rows.forEach(function(it){ shown[it.id] = true; });
+      const byId = {};
+      items.forEach(function(it){ byId[it.id] = it; });
+      linkedActs.forEach(function(v){
+        if(shown[v.itemId]) return;              // 이미 나오고 있으면 넘어갑니다
+        const it = byId[v.itemId];
+        const w = (v.createdAt && v.createdAt.seconds)
+          ? new Date(v.createdAt.seconds*1000).toISOString().slice(0,10).replace(/-/g,"") : "";
+        orphan.push({
+          id: "act:" + v.id, _actId: v.id, _orphan: true, _regDate: w,
+          _oddLink: true,                         // 이어져 있는데 재고가 안 맞는 건
+          serialNumber: v.serialNumber||"", systemModel: v.systemModel||"",
+          carrier: (it && it.carrier) || v.carrier || "",
+          activateDate: v.activateDate||"",
+          subNumber: v.subNumber||"", activationCode: v.activationCode||"",
+          activationTeam: v.activationTeam||"", activationBy: v.activationBy||"",
+          subsidyAmount: (v.subsidyAmount != null ? v.subsidyAmount : null),
+          supportMonth: v.month||"",
+          linkState: it ? ("odd:" + (it.status||"-")) : "gone",
+          status: "개통", listPrice: (it && it.listPrice) || 0,
+          location: (it && it.location) || ""
+        });
+      });
       aq.forEach(function(d){
         const v = d.data();
         if(v.itemId) return;                       // 이미 재고에 이어진 건은 재고 쪽에서 나옵니다
@@ -45200,9 +45131,14 @@
     rows = expanded.filter(function(x){
       // ⓪ 재고 연결 상태로 거르기
       if(linkF){
-        if(linkF === "yes"  && x._orphan) return false;
-        if(linkF === "no"   && !(x._orphan && x.linkState !== "sold")) return false;
-        if(linkF === "sold" && !(x._orphan && x.linkState === "sold")) return false;
+        const st = String(x.linkState||"");
+        const odd = x._orphan && (st === "gone" || st.indexOf("odd:") === 0);
+        if(linkF === "norec"  && !x._noRec) return false;
+        if(linkF === "yes"    && (x._orphan || x._noRec)) return false;
+        if(linkF === "notyet" && !x._orphan) return false;
+        if(linkF === "no"     && !(x._orphan && st === "none")) return false;
+        if(linkF === "sold"   && !(x._orphan && st === "sold")) return false;
+        if(linkF === "odd"    && !odd) return false;
       }
       // ① 칸을 고른 조건
       if(cField){
@@ -45243,8 +45179,18 @@
         + '<div style="font-size:11.5px;color:var(--gray);margin-bottom:4px;">'+label+'</div>'
         + '<div style="font-size:19px;font-weight:800;color:'+(color||'var(--navy)')+';">'+val+'</div>'
         + (note ? '<div style="font-size:10.5px;color:var(--gray);margin-top:3px;">'+note+'</div>' : '') + '</div>';
+      const doneN = firsts.filter(function(x){ return !x._orphan && !x._noRec; }).length;
+      const norecN= firsts.filter(function(x){ return x._noRec; }).length;
+      const todoN = firsts.filter(function(x){ return x._orphan; }).length;
+      const oddN  = firsts.filter(function(x){
+        const st = String(x.linkState||"");
+        return x._orphan && (st === "gone" || st.indexOf("odd:") === 0); }).length;
       cardEl.innerHTML =
         card("개통 대수", firsts.length, "var(--navy)", rows.length + "줄") +
+        card("완료 (재고 이어짐)", doneN, "#2e7d32") +
+        card("미완료", todoN, todoN ? "#b8860b" : "var(--gray)",
+             oddN ? "그중 상태 이상 " + oddN + "건" : "") +
+        (norecN ? card("개통 기록 없음", norecN, "#b8860b", "재고만 개통 상태") : "") +
         card("출고가 합계", listSum.toLocaleString(), "#1565c0") +
         card("공시지원금 합계", subSum.toLocaleString(), "#2e7d32",
              noSub ? "미입력 " + noSub + "대" : "") +
@@ -46718,12 +46664,29 @@
     { key:"regDate",  label:"등록일", get:it=> comboEsc(it._regDate||"-"), raw:it=> it._regDate||"" },
     { key:"invLink",  label:"재고연결", html:true,
       get:it=>{
-        if(!it._orphan) return '<span style="color:#2e7d32;">이어짐</span>';
-        return it.linkState === "sold"
-          ? '<span style="color:#b8860b;font-weight:700;">이미 판매됨 · 되사옴 필요</span>'
-          : '<span style="color:#b8860b;font-weight:700;">재고 없음</span>';
+        if(!it._orphan){
+          return it._noRec
+            ? '<span style="color:#b8860b;">개통 기록 없음</span>'
+            : '<span style="color:#2e7d32;">이어짐</span>';
+        }
+        const st = String(it.linkState||"");
+        if(st === "gone")
+          return '<span style="color:var(--danger);font-weight:700;">재고가 지워짐</span>';
+        if(st.indexOf("odd:") === 0)
+          return '<span style="color:var(--danger);font-weight:700;">재고 상태 다름 ('
+            + comboEsc(st.slice(4)) + ')</span>';
+        if(st === "sold")
+          return '<span style="color:#b8860b;font-weight:700;">이미 판매됨 · 되사옴 필요</span>';
+        return '<span style="color:#b8860b;font-weight:700;">재고 없음</span>';
       },
-      raw:it=> it._orphan ? (it.linkState === "sold" ? "이미 판매됨" : "재고 없음") : "이어짐" },
+      raw:it=>{
+        if(!it._orphan) return it._noRec ? "개통 기록 없음" : "이어짐";
+        const st = String(it.linkState||"");
+        if(st === "gone") return "재고가 지워짐";
+        if(st.indexOf("odd:") === 0) return "재고 상태 다름 " + st.slice(4);
+        if(st === "sold") return "이미 판매됨";
+        return "재고 없음";
+      } },
     { key:"location", label:"위치",       get:it=> comboEsc(it.location||"-"), raw:it=> it.location||"" }
   ];
   const ACT_COLS_DEFAULT = ["serial","model","carrier","actDate","subNo","actCode",
@@ -47533,13 +47496,16 @@
         const cP = pick(head, ["가입번호"]);
         const cSu= pick(head, ["공시지원금","공시"]);
         const cDi= pick(head, ["유통폰지원금","유통폰","유통"]);
+        const cC = pick(head, ["개통코드"]);
+        const cT = pick(head, ["개통팀"]);
+        const cB = pick(head, ["개통자"]);
         if(cS < 0){ show("「일련번호」 열을 찾지 못했습니다.", "var(--danger)"); return; }
         for(let i=hi+1;i<aoa.length;i++){
           const r = aoa[i]||[];
           const g = ix => (ix >= 0 ? String(r[ix]||"").trim() : "");
           const sn = g(cS);
           if(!sn) continue;
-          out.push([g(cM), g(cMo), sn, g(cD), g(cP), g(cSu), g(cDi)]
+          out.push([g(cM), g(cMo), sn, g(cD), g(cP), g(cSu), g(cDi), g(cC), g(cT), g(cB)]
             .map(function(v){ return String(v).replace(/[\t\n]/g," ").trim(); }).join("\t"));
         }
       }else{
@@ -47561,12 +47527,12 @@
   //  개통 등록용 엑셀 양식을 내려받습니다.
   window.downloadActTemplate = function(){
     const sample = [
-      ["귀속월","모델명","일련번호","개통일","가입번호","공시지원금","유통폰지원금"],
-      ["202608","SM-X236N-NP","1121245","20260804","514839978101","200000","200000"],
-      ["202608","SM-X236N-NP","1121246","20260804","514839978102","200000","200000"]
+      ["귀속월","모델명","일련번호","개통일","가입번호","공시지원금","유통폰지원금","개통코드","개통팀","개통자"],
+      ["202608","SM-X236N-NP","1121245","20260804","514839978101","200000","200000","충남","1팀","홍길동"],
+      ["202608","SM-X236N-NP","1121246","20260804","514839978102","200000","200000","","",""]
     ];
     const ws = XLSX.utils.aoa_to_sheet(sample);
-    ws["!cols"] = [{wch:10},{wch:16},{wch:14},{wch:12},{wch:16},{wch:12},{wch:14}];
+    ws["!cols"] = [{wch:10},{wch:16},{wch:14},{wch:12},{wch:16},{wch:12},{wch:14},{wch:10},{wch:10},{wch:10}];
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "개통등록");
     XLSX.writeFile(wb, "개통등록_양식.xlsx");
