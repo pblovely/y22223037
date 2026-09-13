@@ -400,7 +400,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-06 v1147</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-06 v1152</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -4810,6 +4810,31 @@ const firebaseConfig = {
   }
   window.actualSaleBase = actualSaleBase;
 
+  //  재고 목록의 「판매할인 기준」 칸에 쓰는 이름입니다.
+  //   정해진 네 가지 말고는 절대 내보내지 않습니다.
+  //     출고가(개당) · 출고가(합계) · 공급가(삼전) · 출고가(정액)
+  //   아직 안 판 재고만 「-」 입니다.
+  //   저장된 기준이 먼저입니다. 판매할인이 0% 여도 그대로 보여줍니다.
+  function saleBaseLabel(it){
+    const nm = function(b){
+      return b === "supply" ? "공급가(삼전)"
+           : b === "total"  ? "출고가(합계)"
+           : b === "flat"   ? "출고가(정액)" : "출고가(개당)";
+    };
+    const sold = (it && (it.salePrice != null || it.destination));
+    if(!sold) return "-";
+    const saved = String((it && it.saleDiscountBase) || "");
+    if(saved === "unit" || saved === "total" || saved === "supply" || saved === "flat") return nm(saved);
+    //  포피플 자체개통은 출고가(개당) 입니다.
+    if(String(it.status||"") === "개통" && String(it.destination||"") === "포피플") return "출고가(개당)";
+    //  기준을 안 적어둔 옛 자료만 금액에서 가려봅니다.
+    let r = "";
+    try{ r = String(actualSaleBase(it) || ""); }catch(e){}
+    if(r.indexOf("공급가") === 0) return "공급가(삼전)";
+    return "출고가(개당)";
+  }
+  window.saleBaseLabel = saleBaseLabel;
+
   // 저장된 할인 금액이 「실제로」 어느 기준으로 나온 값인지 역산합니다.
   //  적어둔 %를 출고가에 곱한 값인지, 공급가(출고가÷1.1)에 곱한 값인지 맞춰봅니다.
   //  딱 떨어지지 않으면 「안 맞음」이라고 뭉뚱그리지 않고, 그 금액이 실제로 몇 %인지 돌려줍니다.
@@ -5045,9 +5070,9 @@ const firebaseConfig = {
     { key:"salePrice", label:"판매가", get:it=>it.salePrice?Number(it.salePrice).toLocaleString():"-", getRaw:it=>it.salePrice!=null?Number(it.salePrice):"" },
     { key:"saleDiscountAmt", label:"판매할인", get:it=> discFmt(saleDiscountAmtOf(it)), getRaw:it=> discRaw(saleDiscountAmtOf(it)) },
     { key:"saleDiscount", label:"판매할인%", get:it=> discPctFmt(saleDiscountPctOf(it)), getRaw:it=> discRaw(saleDiscountPctOf(it)) },
-    // 판매할인이 실제로 출고가에 걸린 값인지, 공급가에 걸린 값인지 역산해 보여줍니다.
+    // 판매할인 기준 — 저장된 기준을 그대로 보여줍니다. (정해진 네 가지만)
     { key:"saleDiscountBase", label:"판매할인 기준",
-      get:it=> actualSaleBase(it), getRaw:it=> actualSaleBase(it) },
+      get:it=> saleBaseLabel(it), getRaw:it=> saleBaseLabel(it) },
     // 판매요청이 걸려 있는지 한눈에 보여줍니다. 없으면 돈을 못 받습니다.
     { key:"saleReqState", label:"판매요청",
       get:it=>{
@@ -5097,8 +5122,22 @@ const firebaseConfig = {
           ? ("되사감" + (it.rebuyBackAt ? " (" + it.rebuyBackAt + ")" : "")) : "-") },
     { key:"note1", label:"비고1", get:it=>it.note1||"-", getRaw:it=>it.note1||"" },
     { key:"note2", label:"비고2", get:it=>it.note2||"-", getRaw:it=>it.note2||"" },
-    { key:"profit", label:"수익", get:it=> (it.profit!=null)?Number(it.profit).toLocaleString():"-", getRaw:it=>it.profit!=null?Number(it.profit):"" }
+    //  수익 = 판매가 − 입고가
+    //   저장된 값이 있으면 그대로, 없으면 그 자리에서 계산해 보여줍니다.
+    //   (자료를 고치지는 않습니다. 보여주기만 합니다)
+    { key:"profit", label:"수익",
+      get:it=>{ const v = profitOf(it); return (v != null) ? Number(v).toLocaleString() : "-"; },
+      getRaw:it=>{ const v = profitOf(it); return (v != null) ? Number(v) : ""; } }
   ];
+  function profitOf(it){
+    if(!it) return null;
+    if(it.profit != null && it.profit !== "") return Number(it.profit);
+    const sp = (it.salePrice     == null || it.salePrice     === "") ? null : Number(it.salePrice);
+    const bp = (it.purchasePrice == null || it.purchasePrice === "") ? null : Number(it.purchasePrice);
+    if(sp == null || bp == null) return null;
+    return sp - bp;
+  }
+  window.profitOf = profitOf;
   //  hide:true 인 열은 기본으로 안 보입니다. (보기 설정에서 켜실 수 있습니다)
   const DEFAULT_VIEW_SETTINGS = INV_COLUMNS.filter(c=> c.hide !== true).map(c=>c.key);
 
@@ -35513,7 +35552,7 @@ let ghostBankCache = [];
       outDate: r.actDate || "",
       salePrice: r.L || null,
       saleDiscountAmt: 0, saleDiscount: 0,
-      saleDiscountBase: null
+      saleDiscountBase: "unit"      // 자체개통은 출고가(개당) 기준입니다
     });
     await logItem(r.id, r.sn, "edited",
       "자체개통 정보 맞춤 · 판매처 포피플 · 판매가 " + (r.L||0).toLocaleString(), {});
@@ -35793,6 +35832,66 @@ let ghostBankCache = [];
 
   let orderBaseDiffCache = [];
   let orderAmtDiffCache = [];
+  let selfActBaseCache = [];
+
+  //  자체개통인데 판매할인 기준이 비어 있는 재고를 보여주고, 출고가(개당) 으로 채웁니다.
+  window.showSelfActBaseList = function(){
+    const rows = selfActBaseCache || [];
+    if(rows.length === 0){ alert("채울 재고가 없습니다."); return; }
+    const head = document.getElementById("suplog-head");
+    const body = document.getElementById("suplog-body");
+    if(!head || !body){ alert("화면을 찾지 못했습니다."); return; }
+    head.innerHTML = '<b>자체개통인데 판매할인 기준이 안 채워짐</b> — ' + rows.length + '대'
+      + '<br><span style="color:var(--gray);">포피플 자체개통은 <b>출고가(개당)</b> 하나로 정해져 있습니다. '
+      + '금액·판매가·수익은 건드리지 않고 기준 칸만 채웁니다.</span>';
+    body.innerHTML =
+      '<div style="margin-bottom:8px;"><button class="btn small" style="width:auto;" onclick="fixSelfActBaseAll()">'
+      + '전부 맞추기 (' + rows.length + '대)</button></div>'
+      + '<div style="overflow-x:auto;max-height:360px;overflow-y:auto;">'
+      + '<table class="data-table" style="width:auto;"><thead><tr>'
+      + '<th>개통일</th><th>전산모델명</th><th>일련번호</th><th>지금</th><th>바뀔 값</th>'
+      + '</tr></thead><tbody>'
+      + rows.slice(0,300).map(function(r){
+          return '<tr><td>' + comboEsc(r.date||"-") + '</td>'
+            + '<td>' + comboEsc(r.model||"-") + '</td>'
+            + '<td><b>' + comboEsc(r.sn||"-") + '</b></td>'
+            + '<td style="color:var(--gray);">' + comboEsc(r.cur) + '</td>'
+            + '<td style="color:#2e7d32;font-weight:700;">출고가(개당)</td></tr>';
+        }).join("")
+      + '</tbody></table></div>'
+      + (rows.length > 300 ? '<div style="font-size:11.5px;color:var(--gray);margin-top:6px;">'
+          + '위에 300대까지만 보여드립니다. [전부 맞추기] 는 ' + rows.length + '대 모두 처리합니다.</div>' : '');
+  };
+
+  window.fixSelfActBaseAll = async function(){
+    const rows = selfActBaseCache || [];
+    if(rows.length === 0){ alert("채울 재고가 없습니다."); return; }
+    if(!hasPerm(currentUserPerms, "paymentProcess")){ alert("권한이 없습니다."); return; }
+    if(!confirm("포피플 자체개통 " + rows.length + "대의 판매할인 기준을\n"
+      + "«출고가(개당)» 으로 채웁니다.\n\n"
+      + "· 판매가 · 판매할인 · 입고가 · 수익은 바뀌지 않습니다\n"
+      + "· 기준 칸 하나만 채웁니다\n\n진행할까요?")) return;
+    let done = 0;
+    try{
+      for(let i=0; i<rows.length; i+=300){
+        const bt = writeBatch(db);
+        rows.slice(i, i+300).forEach(function(r){
+          bt.update(doc(db,"inventoryItems", r.id), { saleDiscountBase: "unit" });
+        });
+        await withTimeout(bt.commit(), 20000, "판매할인 기준 저장");
+        done += Math.min(300, rows.length - i);
+      }
+    }catch(e){
+      alert("맞추다 멈췄습니다. " + done + "대까지 저장했습니다.\n"
+        + ((e && e.message) ? e.message : String(e)));
+      return;
+    }
+    logAction("자체개통 판매할인 기준 채움", done + "대 / 출고가(개당)");
+    clearCache("inventory"); clearDashCache();
+    selfActBaseCache = [];
+    alert(done + "대를 출고가(개당) 으로 채웠습니다.\n\n[다시 점검] 을 눌러 확인해주세요.");
+  };
+
 
   //  주문과 재고가 다른 건을 표로 보여주고, 주문 기준으로 맞춥니다.
   //   맞추는 일은 syncAfterOrderLines 하나가 합니다. (품목 수정·주문 수정과 같은 함수)
@@ -36234,6 +36333,35 @@ let ghostBankCache = [];
               unit:"", why:"주문에 적힌 매입할인 기준으로 %를 다시 곱하면 금액이 달라지는 건입니다. "
                 + "그 주문을 열어 [모든 줄에 적용] 하신 뒤 저장하시면 맞춰집니다.",
               fix:"showOrderBaseDiffList()", fixLabel:"확인하기" });
+          }
+        }
+        // ── 포피플 자체개통인데 판매할인 기준이 안 채워진 재고 ──
+        //  자체개통은 «출고가(개당)» 하나로 정해져 있습니다.
+        //  값을 가려내지 않습니다. 정해진 값을 그대로 넣습니다.
+        {
+          const sRows = [];
+          try{
+            Object.keys(items).forEach(function(id){
+              const it = items[id];
+              if(it.deleted === true) return;
+              if(String(it.status||"") !== "개통") return;
+              if(String(it.destination||"") !== "포피플") return;
+              if(String(it.saleDiscountBase||"") === "unit") return;
+              sRows.push({ id,
+                sn:    it.serialNumber || "",
+                model: it.systemModel || it.baseModel || "",
+                date:  it.activateDate || it.outDate || "",
+                cur:   String(it.saleDiscountBase||"") || "(비어 있음)" });
+            });
+            sRows.sort(function(a,b){ return String(b.date).localeCompare(String(a.date)); });
+          }catch(e){}
+          if(sRows.length){
+            selfActBaseCache = sRows;
+            issues.push({ n:"자체개통인데 판매할인 기준이 안 채워짐", cnt: sRows.length, unit:"대",
+              why:"포피플 자체개통은 판매할인 기준이 «출고가(개당)» 하나로 정해져 있습니다. "
+                + "예전에는 이 값을 비워둔 채 저장해서 칸이 비어 있습니다. "
+                + "[전부 맞추기] 를 누르면 출고가(개당) 으로 채웁니다. 금액은 건드리지 않습니다.",
+              fix:"showSelfActBaseList()", fixLabel:"확인하기" });
           }
         }
         // ── 주문과 재고의 금액·할인이 다른 건 ──
@@ -46711,9 +46839,51 @@ let ghostBankCache = [];
     const isPhone = x => /^[0-9]{9,13}$/.test(String(x).replace(/-/g,""));
     const numOf = x => { const v = String(x||"").replace(/[^0-9-]/g,""); return v === "" ? null : Number(v); };
 
-    const lines = String(text||"").split(/\r?\n/).map(l=>l.trim()).filter(l=>l);
+    const lines = String(text||"").split(/\r?\n/).map(l=>l.replace(/\s+$/,"")).filter(l=>l.trim());
     const rows = []; const skipped = [];
+    //  귀속월인지 봅니다. (202204 처럼 뒤 두 자리가 01~12)
+    const isYm6c = v => {
+      if(!/^(19|20)[0-9]{4}$/.test(String(v||""))) return false;
+      const mm = Number(String(v).slice(4));
+      return mm >= 1 && mm <= 12;
+    };
+    //  금액 칸 — 빈 칸은 «없음», 0 은 «0» 으로 읽습니다.
+    const moneyCell = v => {
+      const s = String(v||"").replace(/,/g,"").trim();
+      if(s === "" || s === "-") return null;
+      if(!/^-?[0-9]+$/.test(s)) return null;
+      return Number(s);
+    };
     lines.forEach(line=>{
+      // ── 엑셀에서 붙여넣은 줄(탭으로 나뉜 줄) ──
+      //  칸 자리를 그대로 지킵니다. «빈 칸도 한 칸»으로 셉니다.
+      //   전에는 빈 칸을 없애버려서 뒤 칸이 앞으로 당겨졌습니다.
+      //   (공시·유통폰지원금이 비면 개통코드가 공시지원금 자리로 밀려 들어갔습니다)
+      //  열 순서 — 귀속월 · 모델명 · 일련번호 · 개통일 · 가입번호 ·
+      //            공시지원금 · 유통폰지원금 · 개통코드 · 개통팀 · 개통자
+      if(line.indexOf("\t") >= 0){
+        const c = line.split("\t").map(x=> String(x||"").trim());
+        const hasMonth = isYm6c(c[0]) || c[0] === "";   // 빈 칸이어도 그 자리는 귀속월입니다
+        const at = i => { const v = c[hasMonth ? i : (i-1)]; return (v == null) ? "" : v; };
+        const serial0 = at(2);
+        const date0   = at(3);
+        const okShape = isSn(serial0) && !isYmd(serial0) && !isYm6c(serial0)
+                     && (date0 === "" || isYmd(date0));
+        if(okShape){
+          rows.push({
+            serial: serial0,
+            date:   isYmd(date0) ? date0 : "",
+            phone:  isPhone(at(4)) ? String(at(4)).replace(/-/g,"") : "",
+            sub:    moneyCell(at(5)),
+            dist:   moneyCell(at(6)),
+            model:  at(1),
+            month:  hasMonth ? c[0] : "",
+            code:   at(7), team: at(8), by: at(9)
+          });
+          return;
+        }
+        //  자리가 안 맞으면 아래 「글자로 찾아 읽기」 로 넘어갑니다.
+      }
       const parts = line.split(/\t+| {2,}|\s+/).map(p=>p.trim()).filter(p=>p);
       if(parts.length === 0) return;
 
@@ -48772,7 +48942,8 @@ let ghostBankCache = [];
           status: "개통",
           activateDate: a.activateDate || "",
           destination: "포피플", outDate: a.activateDate || "",
-          ...(L ? { salePrice: L, saleDiscountAmt: 0, saleDiscount: 0 } : {}),
+          ...(L ? { salePrice: L, saleDiscountAmt: 0, saleDiscount: 0,
+                    saleDiscountBase: "unit" } : {}),   // 자체개통은 출고가(개당)
           ...(a.subNumber      ? { subNumber: a.subNumber } : {}),
           ...(a.subsidyAmount != null ? { subsidyAmount: Number(a.subsidyAmount) } : {}),
           ...(a.activationCode ? { activationCode: a.activationCode } : {}),
@@ -49051,13 +49222,29 @@ window.toggleActAll = function(on){
         + bad.map(b=> '<b>' + comboEsc(b.serial) + '</b> — ' + b.why).join("<br>") + '</div>';
     }
     if(ok.length){
+      //  표에서 바로 고칠 수 있게 입력칸으로 그립니다.
+      //   고치면 그 자리에서 등록에 쓰는 목록에 함께 들어갑니다.
+      //   파란 테두리 = 붙여넣은 줄에서 못 읽어 비어 있는 칸입니다.
+      const inpCss = function(w, own){
+        return 'width:'+w+';font-size:11.5px;padding:3px 4px;box-sizing:border-box;'
+             + 'border:1px solid ' + (own ? 'var(--line)' : '#1565c0') + ';'
+             + (own ? '' : 'background:#f5f9ff;');
+      };
+      const tin = function(ix, key, val, w, own){
+        return '<td><input type="text" class="pa-ed" data-i="'+ix+'" data-k="'+key+'"'
+          + ' value="'+comboEsc(val == null ? "" : String(val))+'" style="'+inpCss(w, own)+'"></td>';
+      };
+      const nin = function(ix, key, val, w){
+        return '<td class="ta-right"><input type="number" class="pa-ed" data-i="'+ix+'" data-k="'+key+'"'
+          + ' value="'+(val == null ? "" : String(val))+'" placeholder="비움" style="'+inpCss(w, val != null)+'text-align:right;"></td>';
+      };
       h += '<div style="overflow-x:auto;border:1px solid var(--line);max-height:280px;overflow-y:auto;"><table class="data-table resv-dest-fit" style="width:auto;"><thead><tr>'
         + '<th>귀속월</th><th>전산모델명</th><th>일련번호</th><th>개통일</th><th>가입번호</th>'
         + '<th class="ta-right">공시지원금</th><th class="ta-right">유통폰지원금</th>'
         + '<th>개통코드</th><th>개통팀</th><th>개통자</th>'
         + '<th>색상</th><th>통신사</th><th class="ta-right">출고가</th>'
         + '<th>재고</th></tr></thead><tbody>';
-      ok.forEach(r=>{
+      ok.forEach((r, ix)=>{
         const it = r.it || {};
         const lab = r.link === "new"  ? '<span style="color:#2e7d32;">반영</span>'
                   : r.link === "none" ? '<span style="color:#b8860b;">재고 없음</span>'
@@ -49067,19 +49254,24 @@ window.toggleActAll = function(on){
           + '<td>'+comboEsc(r.month || "-")+'</td>'
           + '<td>'+comboEsc(it.systemModel || r.model || "-")+'</td>'
           + '<td><b>'+comboEsc(r.serial)+'</b></td>'
-          + '<td'+(r.ownDate ? '' : ' style="color:var(--gray);"')+'>'+comboEsc(r.date)+'</td>'
-          + '<td'+(r.ownPhone ? '' : ' style="color:var(--gray);"')+'>'+comboEsc(r.phone || "-")+'</td>'
-          + '<td class="ta-right">'+(r.subsidy != null ? Number(r.subsidy).toLocaleString() : '<span style="color:var(--gray);">-</span>')+'</td>'
-          + '<td class="ta-right">'+(r.dist ? r.dist.toLocaleString() : '<span style="color:var(--gray);">-</span>')+'</td>'
-          + '<td'+(r.ownCode ? '' : ' style="color:var(--gray);"')+'>'+comboEsc(r.code || "-")+'</td>'
-          + '<td'+(r.ownTeam ? '' : ' style="color:var(--gray);"')+'>'+comboEsc(r.team || "-")+'</td>'
-          + '<td'+(r.ownBy   ? '' : ' style="color:var(--gray);"')+'>'+comboEsc(r.by   || "-")+'</td>'
+          + tin(ix,'date',  r.date,  '78px', r.ownDate)
+          + tin(ix,'phone', r.phone, '112px', r.ownPhone)
+          + nin(ix,'subsidy', r.subsidy, '86px')
+          + nin(ix,'dist',    r.dist,    '86px')
+          + tin(ix,'code', r.code, '68px', r.ownCode)
+          + tin(ix,'team', r.team, '78px', r.ownTeam)
+          + tin(ix,'by',   r.by,   '72px', r.ownBy)
           + '<td>'+comboEsc(it.systemColor || it.manufacturerColor || "-")+'</td>'
           + '<td>'+comboEsc(it.carrier||"-")+'</td>'
           + '<td class="ta-right">'+(Number(it.listPrice)||0 ? Number(it.listPrice).toLocaleString() : '<span style="color:var(--gray);">-</span>')+'</td>'
           + '<td>'+lab+'</td></tr>';
       });
       h += '</tbody></table></div>';
+      h += '<div style="font-size:11.5px;color:var(--gray);margin-top:6px;line-height:1.7;">'
+        + '표의 칸을 <b>직접 고치실 수 있습니다.</b> 고친 값 그대로 등록됩니다.<br>'
+        + '<span style="color:#1565c0;">파란 칸</span>은 붙여넣은 줄에서 못 읽은 것, '
+        + '<span style="color:#2e7d32;">초록 칸</span>은 방금 고치신 것입니다. '
+        + '금액 칸을 비우면 <b>없음</b>, 0 을 넣으면 <b>0</b> 으로 들어갑니다.</div>';
       h += '<button class="btn small" style="width:auto;margin-top:10px;" onclick="submitPasteActivate()">이 목록으로 등록 ('+ok.length+'건)</button>';
     }
     h += '<div id="paste-act-result" style="font-size:12.5px;margin-top:10px;"></div>';
@@ -49092,6 +49284,32 @@ window.toggleActAll = function(on){
                                                    carrier:(r.it && r.it.carrier) || "",
                                                    location:(r.it && r.it.location) || "" })));
     el.dataset.date = date;
+
+    //  표에서 고친 값을 그 자리에서 등록 목록에 넣습니다.
+    //   금액 칸을 «비우면 없음», «0 을 넣으면 0» 으로 들어갑니다.
+    el.querySelectorAll(".pa-ed").forEach(function(inp){
+      inp.oninput = function(){
+        let list = [];
+        try{ list = JSON.parse(el.dataset.rows || "[]"); }catch(e){ return; }
+        const i = Number(inp.dataset.i), k = String(inp.dataset.k);
+        if(!list[i]) return;
+        const raw = String(inp.value || "").trim();
+        if(k === "subsidy" || k === "dist"){
+          list[i][k] = (raw === "") ? null : (isNaN(Number(raw)) ? null : Number(raw));
+        }else if(k === "date"){
+          const d = raw.replace(/\D/g,"");
+          list[i].date = (d.length === 8) ? d : "";
+        }else if(k === "phone"){
+          list[i].phone = raw.replace(/[^0-9]/g,"");
+        }else{
+          list[i][k] = raw;
+        }
+        el.dataset.rows = JSON.stringify(list);
+        // 고치신 칸은 「직접 넣은 값」으로 표시합니다.
+        inp.style.borderColor = "#2e7d32";
+        inp.style.background  = "#f3faf3";
+      };
+    });
   };
 
   window.submitPasteActivate = async function(){
@@ -49120,7 +49338,8 @@ window.toggleActAll = function(on){
           bt.update(doc(db,"inventoryItems", r.id), {
             status:"개통", activateDate: (r.date || date),
             destination: "포피플", outDate: (r.date || date),
-            ...(L ? { salePrice: L, saleDiscountAmt: 0, saleDiscount: 0 } : {}),
+            ...(L ? { salePrice: L, saleDiscountAmt: 0, saleDiscount: 0,
+                      saleDiscountBase: "unit" } : {}),   // 자체개통은 출고가(개당)
             ...(r.subsidy != null ? { subsidyAmount: Number(r.subsidy) } : {}),
             ...(r.dist  ? { distSupport: r.dist } : {}),
             ...(r.phone ? { subNumber: r.phone } : {}),
@@ -50647,6 +50866,18 @@ window.toggleActAll = function(on){
           if(at >= 0) alive.splice(at + 1, 0, k); else alive.push(k);
         });
         currentViewSettings = alive;
+        //  공시지원금은 언제나 유통폰지원금 «바로 왼쪽» 입니다.
+        //   전에 저장해 두신 순서 때문에 둘이 떨어져 있으면 여기서 붙여줍니다.
+        //   (다른 열 순서는 그대로 둡니다)
+        {
+          const a = currentViewSettings.indexOf("subsidyAmount");
+          const b = currentViewSettings.indexOf("distSupport");
+          if(a >= 0 && b >= 0 && a !== b - 1){
+            currentViewSettings.splice(a, 1);
+            const b2 = currentViewSettings.indexOf("distSupport");
+            currentViewSettings.splice(b2, 0, "subsidyAmount");
+          }
+        }
       }else{
         currentViewSettings = DEFAULT_VIEW_SETTINGS.slice();
       }
