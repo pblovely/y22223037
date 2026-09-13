@@ -400,7 +400,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-06 v1157</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-06 v1158</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -4266,13 +4266,22 @@ const firebaseConfig = {
   //     개통코드 · 개통팀 · 개통자
   //     판매처(포피플) · 출고일 · 판매가 · 판매할인 · 판매할인% · 판매할인 기준 · 수익
   //   취소하는 곳이 여러 군데라 여기 한 곳만 씁니다. 따로 만들지 마세요.
+  //  판매를 취소하면 «판매로 들어간 값»을 전부 되돌립니다.
+  //   판매처 · 출고일 · 판매가 · 판매할인 · 판매할인% · 판매할인 기준 · 수익 · 판매요청 연결
+  //   취소하는 곳이 여러 군데라 여기 한 곳만 씁니다. 따로 만들지 마세요.
+  const SALE_CANCEL_PATCH = {
+    status: "보유중", outDate: "", destination: "",
+    salePrice: null, saleDiscountAmt: null, saleDiscount: null, saleDiscountBase: null,
+    profit: null, saleRequestId: null
+  };
+
   const ACT_CANCEL_PATCH = {
     status: "보유중",
     activateDate: "", subNumber: "", subsidyAmount: null, supportMonth: null,
     activationCode: "", activationTeam: "", activationBy: "",
     destination: "", outDate: "",
     salePrice: null, saleDiscountAmt: null, saleDiscount: null, saleDiscountBase: null,
-    profit: null
+    profit: null, saleRequestId: null
   };
 
   //  주문 품목을 넣은 순서대로 되돌립니다. (줄번호 → 만든 시각)
@@ -25965,9 +25974,7 @@ window.showDepositUses = async function(id){
         const bt = writeBatch(db);
         picked.slice(i, i+300).forEach(x=>{
           bt.update(doc(db,"inventoryItems", x.id), {
-            status:"보유중", outDate:"", destination:"",
-            salePrice:null, saleDiscountAmt:null, saleDiscount:null,
-            profit:null, saleRequestId:null,
+            ...SALE_CANCEL_PATCH,
             lastSaleRequestId: x.lineId || null,      // 되돌릴 때 찾으려고 남겨둡니다
             lastSaleBatchId: r.id || null
           });
@@ -26155,9 +26162,7 @@ window.showDepositUses = async function(id){
         const batch = writeBatch(db);
         picked.slice(i, i+300).forEach(x=>{
           batch.update(doc(db,"inventoryItems", x.id), {
-            status:"보유중", outDate:"", destination:"",
-            salePrice:null, saleDiscountAmt:null, saleDiscount:null,
-            profit:null, saleRequestId:null,
+            ...SALE_CANCEL_PATCH,
             lastSaleRequestId: saleRequestId || null,   // 되돌릴 때 찾으려고 남겨둡니다
             lastSaleBatchId: (sr && sr.batchId) || null
           });
@@ -26313,9 +26318,7 @@ window.showDepositUses = async function(id){
           const batch = writeBatch(db);
           ids.slice(i, i+300).forEach(id=>{
             batch.update(doc(db,"inventoryItems", id), {
-              status: "보유중", outDate: "", destination: "",
-              salePrice: null, saleDiscountAmt: null, saleDiscount: null,
-              profit: null, saleRequestId: null
+              ...SALE_CANCEL_PATCH
             });
           });
           await batch.commit();
@@ -32386,7 +32389,7 @@ window.showDepositUses = async function(id){
         }catch(e){}
       }
       await updateDoc(doc(db,"inventoryItems", itemId), {
-        status:"보유중", outDate:"", activateDate:"", saleRequestId: null,
+        ...ACT_CANCEL_PATCH,
         deactivateDate: date, deactivateReason: String(reason).trim()
       });
       await logItem(itemId, serial, "deactivate", date + " · 사유: " + String(reason).trim() + " · 재판매 가능", { systemModel: it.systemModel||"" });
@@ -36592,7 +36595,11 @@ let ghostBankCache = [];
               const it = items[id];
               if(it.deleted === true) return;
               if(String(it.status||"") === "개통") return;          // 지금 개통인 건 제외
-              if(String(it.destination||"") !== "포피플") return;    // 자체개통 흔적만
+              //  자체개통 흔적 — 판매처가 포피플이거나, 개통일이 남아 있는 것
+              //   (주문에서 판매처·판매가를 미리 정한 재고를 잘못 잡지 않게 좁게 봅니다)
+              const looksAct = (String(it.destination||"") === "포피플")
+                            || !!String(it.activateDate||"");
+              if(!looksAct) return;
               const left = [];
               if(String(it.destination||""))            left.push("판매처");
               if(String(it.outDate||""))                left.push("출고일");
@@ -39050,7 +39057,7 @@ let ghostBankCache = [];
                 if(!isnap.exists()) continue;
                 const it = isnap.data();
                 await updateDoc(doc(db,"inventoryItems", iid), {
-                  status:"보유중", outDate:"", saleRequestId:null
+                  ...SALE_CANCEL_PATCH
                 });
                 await logItem(iid, it.serialNumber||"", "status",
                   "판매요청 취소로 <보유중> 되돌림 · 사유: " + String(reason).trim(),
@@ -49009,8 +49016,7 @@ let ghostBankCache = [];
         }
       }catch(e){}
       await updateDoc(doc(db,"inventoryItems", itemId), {
-        status:"보유중", activateDate:"", subNumber:"", subsidyAmount:null,
-        activationCode:"", activationTeam:"", activationBy:""
+        ...ACT_CANCEL_PATCH
       });
       await refreshItemSupport(itemId);
       await logItem(itemId, sn||"", "deactivate",
