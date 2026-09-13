@@ -400,7 +400,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-06 v1109</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-06 v1116</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -12262,15 +12262,52 @@
             + "먼저 [도착 취소] 로 재고와 판매요청을 되돌린 뒤 주문을 취소해주세요.");
           return;
         }
+        //  이 주문에 붙은 출금요청이 있으면 함께 풀어야 통장 돈이 되돌아갑니다.
+        const prId = String(r.b.paymentRequestId||"");
+        let prInfo = null, prOthers = 0;
+        if(prId){
+          try{
+            const pd = await getDoc(doc(db,"paymentRequests", prId));
+            if(pd.exists()){
+              prInfo = pd.data();
+              prOthers = Math.max(0, (prInfo.orderBatchIds||[]).length - 1);
+            }
+          }catch(e){}
+        }
         if(!confirm("이 주문 전체를 취소하시겠습니까?\n\n"
           + "  " + (r.b.source||"-") + " · " + (r.b.orderDate||"-") + " · 품목 " + r.lines.length + "개\n"
           + (isCredit && usedAmt
               ? "\n※ 여신결제 주문입니다. 여신 차감 " + usedAmt.toLocaleString() + " 이 함께 되돌아갑니다.\n"
               : "")
+          + (prInfo
+              ? "\n※ 이 주문에 붙은 출금요청도 함께 취소합니다.\n"
+                + "   " + (prInfo.requestDate||"-") + " · " + (Number(prInfo.totalAmount)||0).toLocaleString()
+                + (Number(prInfo.paidAmount) ? " · 이미 이체 " + (Number(prInfo.paidAmount)||0).toLocaleString() : "")
+                + "\n   통장에 붙였던 돈이 다시 <안 붙임> 으로 돌아갑니다.\n"
+                + (prOthers ? "   ※ 같은 요청에 다른 주문 " + prOthers + "건이 함께 묶여 있습니다.\n" : "")
+              : "")
           + "\n도착 등록된 재고는 없습니다.")) return;
         const reason = prompt("취소 사유를 입력해주세요. (필수)", "");
         if(reason === null) return;
         if(!String(reason).trim()){ alert("취소 사유를 입력해주세요."); return; }
+        //  붙은 출금요청을 먼저 풉니다. 통장에 붙였던 돈도 되돌립니다.
+        if(prInfo){
+          try{
+            await releaseBankUses("out", prId, (prInfo.payments||[]));
+            await updateDoc(doc(db,"paymentRequests", prId), {
+              status:"취소", cancelReason:"주문 취소로 함께 취소 · " + String(reason).trim(),
+              cancelledAt: serverTimestamp(), cancelledBy: currentUser.name,
+              transferCompleted:false, transferCompleteDate:""
+            });
+            // 이 요청에 묶여 있던 주문들의 결제 표시도 풉니다.
+            for(const bId of (prInfo.orderBatchIds||[])){
+              try{ await updateDoc(doc(db,"orderBatches", bId),
+                { paymentRequestId: null, depositPaid:false, depositPaidDate:"" }); }catch(e){}
+            }
+            logAction("출금요청 취소 (주문 취소로)",
+              (prInfo.requestDate||"-") + " / " + (Number(prInfo.totalAmount)||0).toLocaleString());
+          }catch(e){}
+        }
         await updateDoc(doc(db,"orderBatches", r.id), { status:"취소", cancelReason:String(reason).trim(),
           cancelledAt: serverTimestamp(), cancelledBy: currentUser.name });
         for(const o of r.lines){ await updateDoc(doc(db,"orders", o.id), { status:"취소" }); }
@@ -12279,8 +12316,16 @@
           try{ await replaceB2BOrderUse(r.id, 0, r.b.orderDate || todayStr(), r.b.source || ""); }catch(e){}
         }
         logAction("주문 전체 취소", r.b.source + " / 사유: " + String(reason).trim()
-          + (isCredit && usedAmt ? " / 여신 되돌림 " + usedAmt.toLocaleString() : ""));
+          + (isCredit && usedAmt ? " / 여신 되돌림 " + usedAmt.toLocaleString() : "")
+          + (prInfo ? " / 출금요청도 취소" : ""));
+        if(prInfo) alert("주문과 출금요청을 함께 취소했습니다.\n\n"
+          + "통장에 붙였던 돈이 <안 붙임> 으로 돌아갔습니다.\n"
+          + "입출금리스트에서 확인해주세요.");
+        try{ clearCache("bank"); }catch(e){}
         loadOrderList();
+        try{ if(typeof loadReqBoard === "function") loadReqBoard(); }catch(e){}
+        try{ if(typeof loadDepositEntryList === "function") loadDepositEntryList(); }catch(e){}
+        try{ if(typeof loadPaymentRequestList === "function") loadPaymentRequestList(); }catch(e){}
       };
     });
 
@@ -19724,18 +19769,31 @@
         // 여신 충전으로 나간 출금은 위 「선입금」 줄과 같은 돈이라 두 번 나옵니다.
         //  그래서 기본 화면에서는 뺍니다.
         //  다만 「입출금 내역」 구분을 고르시면 그때는 보여드립니다.
-        if(v.creditPartner && !(reqBoardKind === "cb")) return;
+        //  여신 「충전」 건만 뺍니다. (선입금 줄과 같은 돈이라 두 번 나옵니다)
+        //   여신 기록에 이어둔 「상환」 건은 그대로 보여드립니다.
+        if(v.creditPartner && !v.fromLedgerId && !(reqBoardKind === "cb")) return;
         const isIn = (v.kind !== "out");
         const isOpen = left > 0;
         rows.push({
           kind: isIn ? "cbin" : "cbout",
-          label: (v.creditPartner ? "여신충전" : (v.fromLoanId ? "B2B" : (isIn ? "입금내역" : "출금내역"))),
-          color: (v.creditPartner ? "#2e7d32" : (v.fromLoanId ? "#6a1b9a" : (isIn ? "#1565c0" : "var(--danger)"))),
+          //  여신 기록에 이어둔 건은 그 기록의 구분을 그대로 씁니다.
+          label: (v.fromLedgerId
+                    ? ((typeof B2B_CATEGORY_LABELS !== "undefined" && B2B_CATEGORY_LABELS[v.ledgerCategory])
+                        || "여신 관련")
+                  : (v.creditPartner ? "여신충전"
+                  : (v.fromLoanId ? "B2B" : (isIn ? "입금내역" : "출금내역")))),
+          color: (v.fromLedgerId ? "var(--danger)"
+                  : (v.creditPartner ? "#2e7d32"
+                  : (v.fromLoanId ? "#6a1b9a" : (isIn ? "#1565c0" : "var(--danger)")))),
           isLoan: !!v.fromLoanId,
           id: d.id, p:null, cb:true, cbUsed: used,
           who: (v.company || "").trim() || (v.payer || "-"),
           noCompany: !String(v.company||"").trim(),
-          sub: (v.creditPartner
+          sub: (v.fromLedgerId
+                 ? ("삼성여신에 이어둔 " + (isIn ? "입금" : "출금")
+                    + (v.company ? " · " + v.company : "")
+                    + (v.memo ? " · " + v.memo : ""))
+                 : v.creditPartner
                  ? (v.creditPartner + " 여신으로 충전됨" + (v.memo ? " · " + v.memo : ""))
                  : v.fromLoanId
                  ? String(v.memo||"B2B 대출 실행").replace(/^B2B 대출 실행:\s*/, "")
@@ -19868,7 +19926,7 @@
         const canDelCb = r.cb && !r.cbUsed && hasPerm(currentUserPerms, "cancelDelete");
         const btns =
             (canDelCb
-              ? '<button class="btn small danger" style="width:auto;margin-right:4px;" data-rbd-delcb="' + r.id + '">내역 지우기</button>'
+              ? '<button class="btn small danger" style="width:auto;margin-right:4px;" data-rbd-delcb="' + r.id + '">삭제</button>'
               : '')
             + ((r.canProcess && !r.canceled && !r.finished && canDo)
               ? '<button class="btn small" style="width:auto;" data-rbd-do="' + r.kind + '|' + r.id + '">처리</button>'
@@ -19883,7 +19941,7 @@
             ((r.cb && canDo)
               ? '<button class="btn small secondary" style="width:auto;margin-left:4px;" data-rbd-cbco="' + r.id + '">매칭</button>'
                 + ((r.cbUsed > 0) ? ''
-                   : '<button class="btn small danger" style="width:auto;margin-left:4px;" data-rbd-cbdel="' + r.id + '">지우기</button>') : '') +
+                   : '<button class="btn small danger" style="width:auto;margin-left:4px;" data-rbd-cbdel="' + r.id + '">삭제</button>') : '') +
             ((r.recs.length === 1 && hasPerm(currentUserPerms, "paymentProcess"))
               ? '<button class="btn small secondary" style="width:auto;margin-left:4px;" data-delrec="' + r.kind + '|' + r.id + '|0">입금기록 지우기</button>' : '');
 
@@ -22419,7 +22477,7 @@
             '<td class="ta-right" style="white-space:nowrap;">' +
               (canDo
                 ? '<button class="btn small secondary" style="width:auto;" data-cb-co="' + r.id + '">업체 찾기</button>'
-                  + '<button class="btn small secondary" style="width:auto;margin-left:4px;" data-cb-del="' + r.id + '">지우기</button>'
+                  + '<button class="btn small secondary" style="width:auto;margin-left:4px;" data-cb-del="' + r.id + '">삭제</button>'
                 : '<span style="color:var(--gray);">-</span>') +
             '</td></tr>';
           if(r.uses.length){
@@ -23466,14 +23524,31 @@
     const el = document.getElementById("deposit-entry-list");
     if(!el) return;
     el.innerHTML = '<div class="list-empty">불러오는 중...</div>';
-    const snap = await getDocs(query(collection(db,"bankDeposits"), orderBy("date","desc")));
+    //  date 가 없는 문서도 빠지지 않게 전부 읽고 여기서 세웁니다.
+    const rawSnap = await getDocs(collection(db,"bankDeposits"));
+    const allDocs = [];
+    rawSnap.forEach(function(d){
+      const v = d.data();
+      if(v.deleted === true) return;
+      allDocs.push({ id:d.id, ...v });
+    });
+    allDocs.sort(function(a,b){
+      const da = String(a.date||"").replace(/\D/g,"");
+      const db2 = String(b.date||"").replace(/\D/g,"");
+      if(da !== db2) return db2.localeCompare(da);
+      const ta = (a.createdAt && a.createdAt.seconds) || 0;
+      const tb = (b.createdAt && b.createdAt.seconds) || 0;
+      return tb - ta;
+    });
+    const snap = { empty: allDocs.length === 0,
+                   forEach: function(f){ allDocs.forEach(function(x){ f({ id:x.id, data:function(){ return x; } }); }); } };
     if(snap.empty){
-      el.innerHTML = '<div class="list-empty">등록된 입금이 없습니다. <b>+ 입금 등록</b>으로 추가해주세요.</div>';
+      el.innerHTML = '<div class="list-empty">등록된 입출금 내역이 없습니다. <b>+ 입금 등록</b>으로 추가해주세요.</div>';
       return;
     }
     let totAmt = 0, totUsed = 0;
     let h = '<div style="overflow-x:auto;"><table class="data-table resv-dest-fit" style="width:auto;"><thead><tr>'
-      + '<th>입금일</th><th>입금자명</th><th>거래처</th>'
+      + '<th>구분</th><th>날짜</th><th>입금자·받는곳</th><th>거래처</th>'
       + '<th class="ta-right">금액</th><th class="ta-right">사용</th><th class="ta-right">잔액</th>'
       + '<th>상태</th><th class="ta-left">메모</th><th class="ta-right">관리</th></tr></thead><tbody>';
     snap.forEach(d=>{
@@ -23484,7 +23559,13 @@
       const state = left <= 0 ? '<span style="color:#2e7d32;font-weight:700;">사용완료</span>'
         : (used > 0 ? '<span style="color:#b8860b;font-weight:700;">일부사용</span>'
                     : '<span style="color:var(--navy);font-weight:700;">미사용</span>');
+      const isOut = String(x.kind||"in") === "out";
       h += '<tr'+(left<=0?' style="color:var(--gray);"':'')+'>'
+        + '<td>' + (isOut
+            ? '<span style="color:var(--danger);font-weight:700;">출금</span>'
+            : '<span style="color:#1565c0;font-weight:700;">입금</span>')
+          + (x.creditPartner ? ' <span style="color:#2e7d32;font-size:11px;">여신</span>' : '')
+          + '</td>'
         + '<td>'+comboEsc(x.date||"-")+'</td>'
         + '<td>'+comboEsc(x.payer||"-")+'</td>'
         + '<td>'+comboEsc(x.company||"-")+'</td>'
@@ -23495,11 +23576,12 @@
         + '<td class="ta-left" style="font-size:11px;color:var(--gray);">'+comboEsc(x.memo||"")+'</td>'
         + '<td class="ta-right" style="white-space:nowrap;">'
         + ((x.uses||[]).length ? '<button class="btn small secondary" style="width:auto;" data-dep-use="'+x.id+'">사용 내역</button>' : '')
-        + (used === 0 ? '<button class="btn small danger" style="width:auto;" data-dep-del="'+x.id+'">삭제</button>' : '')
+        + (used === 0 ? '<button class="btn small danger" style="width:auto;" data-dep-del="'+x.id+'">삭제</button>'
+            : '<button class="btn small secondary" style="width:auto;" title="붙은 요청이 없어졌을 때 씁니다. 쓴 금액을 0 으로 되돌립니다." data-dep-release="'+x.id+'">배분 풀기</button>')
         + '</td></tr>';
     });
     h += '<tr style="background:#fff;font-weight:700;border-top:2px solid var(--navy);">'
-      + '<td colspan="3">합계</td>'
+      + '<td colspan="4">합계</td>'
       + '<td class="ta-right">'+totAmt.toLocaleString()+'</td>'
       + '<td class="ta-right">'+totUsed.toLocaleString()+'</td>'
       + '<td class="ta-right">'+(totAmt-totUsed).toLocaleString()+'</td>'
@@ -23508,10 +23590,50 @@
     el.innerHTML = h;
     el.querySelectorAll("[data-dep-del]").forEach(b=> b.onclick = ()=> deleteDepositEntry(b.dataset.depDel));
     el.querySelectorAll("[data-dep-use]").forEach(b=> b.onclick = ()=> showDepositUses(b.dataset.depUse));
+    el.querySelectorAll("[data-dep-release]").forEach(b=> b.onclick = ()=> releaseDepositEntry(b.dataset.depRelease));
   
     foldActionColumn("deposit-entry-list");
     addDownloadBtn("dl-deposit", "deposit-entry-list", "통장입금");
     addViewCfgBtn("dl-deposit", "deposit-entry-list");
+  };
+
+  //  붙은 요청이 없어졌을 때, 쓴 금액을 0 으로 되돌립니다.
+  //   요청 쪽은 건드리지 않습니다. 통장 내역만 「안 붙임」으로 만듭니다.
+  window.releaseDepositEntry = async function(id){
+    if(!hasPerm(currentUserPerms, "paymentProcess")){ alert("권한이 없습니다."); return; }
+    let v = null;
+    try{
+      const d = await getDoc(doc(db,"bankDeposits", id));
+      if(!d.exists()){ alert("이미 지워진 내역입니다."); return; }
+      v = d.data();
+    }catch(e){ alert("읽지 못했습니다."); return; }
+    const used = Number(v.usedAmount)||0;
+    if(used <= 0){ alert("이미 안 붙은 내역입니다."); return; }
+    const uses = (v.uses||[]);
+    if(!confirm("이 내역의 배분을 풉니다.\n\n"
+      + "  " + (v.date||"-") + " · " + (Number(v.amount)||0).toLocaleString()
+      + " · " + (v.payer || v.company || "-") + "\n"
+      + "  지금 쓴 금액 " + used.toLocaleString() + "\n"
+      + (uses.length ? "\n[붙어 있던 기록]\n"
+          + uses.slice(0,6).map(function(u){
+              return "  " + (u.date||"-") + " · " + (Number(u.amount)||0).toLocaleString()
+                   + (u.destination ? " · " + u.destination : "")
+                   + (u.memo ? " · " + u.memo : "");
+            }).join("\n")
+          + (uses.length > 6 ? "\n  ... 외 " + (uses.length-6) + "건" : "") + "\n" : "")
+      + "\n쓴 금액을 0 으로 되돌립니다.\n"
+      + "요청 쪽 기록은 건드리지 않습니다.\n\n"
+      + "붙었던 요청이 이미 없어졌을 때만 쓰세요.\n\n진행할까요?")) return;
+    try{
+      await updateDoc(doc(db,"bankDeposits", id), { usedAmount: 0, uses: [] });
+    }catch(e){ alert("풀지 못했습니다.\n" + ((e&&e.message)?e.message:String(e))); return; }
+    logAction("입출금 내역 배분 풀기",
+      (v.date||"-") + " / " + (Number(v.amount)||0).toLocaleString()
+      + " / " + (v.payer || v.company || "-") + " / 풀린 금액 " + used.toLocaleString());
+    alert("배분을 풀었습니다.\n\n이제 <삭제> 하시거나 다시 매칭하실 수 있습니다.");
+    try{ clearCache("bank"); }catch(e){}
+    loadDepositEntryList();
+    try{ if(typeof loadReqBoard === "function") loadReqBoard(); }catch(e){}
   };
 
   window.showDepositUses = async function(id){
@@ -34918,7 +35040,7 @@
               + (used ? ' · <span style="color:#2e7d32;">쓴 금액 ' + used.toLocaleString() + '</span>'
                       : ' · <span style="color:var(--gray);">아직 안 씀</span>')
               + (used ? '' : ' <button class="btn small danger" style="width:auto;margin-left:6px;" '
-                  + 'data-delbank="' + v.id + '">지우기</button>');
+                  + 'data-delbank="' + v.id + '">삭제</button>');
           }).join("<br>")
         + '</div></div>';
     }).join("");
@@ -39062,7 +39184,10 @@
         const ref = await addDoc(collection(db,"bankDeposits"), {
           kind:"out", date: e.date||todayStr(), amount: amt,
           payer, company: partner, memo, account,
-          usedAmount: 0, uses: [], creditPartner: partner,
+          //  여신 「충전」이 아니라 여신 기록에 이어둔 건입니다.
+          //   그 여신 기록의 구분을 그대로 가져와 목록에 보여드립니다.
+          usedAmount: 0, uses: [], fromLedgerId: id,
+          ledgerCategory: String(e.category||""),
           createdBy: currentUser.name, createdByUsername: currentUser.username, createdAt: serverTimestamp()
         });
         bankId = ref.id;
@@ -39107,20 +39232,50 @@
           + "  " + (v.payer||v.company||"-") + (v.account ? "  (" + v.account + ")" : "");
       }
     }catch(err){}
+    //  이 잇기로 만든 통장 내역이면 함께 지울지 여쭙니다.
+    let madeHere = false, bankUsed = 0;
+    try{
+      const bd0 = await getDoc(doc(db,"bankDeposits", e.fromBankDepositId));
+      if(bd0.exists()){
+        const v0 = bd0.data();
+        madeHere = !!(v0.fromLedgerId || v0.creditPartner);   // 여신 잇기로 만든 표시
+        bankUsed = Number(v0.usedAmount)||0;
+      }
+    }catch(err){}
+
     if(!confirm("이어둔 통장 기록을 풉니다." + info + "\n\n"
-      + "통장 내역 자체는 그대로 남습니다. 연결만 끊깁니다.\n"
+      + (madeHere && bankUsed === 0
+          ? "이 통장 내역은 <통장 잇기> 로 만든 것입니다.\n연결을 풀면서 그 내역도 함께 지울지 다음에 여쭙겠습니다.\n\n"
+          : "통장 내역 자체는 그대로 남습니다. 연결만 끊깁니다.\n")
       + "다시 이으시려면 [통장 잇기] 를 누르시면 됩니다.\n\n진행할까요?")) return;
+
+    const bankId0 = e.fromBankDepositId;
     try{
       await updateDoc(doc(db,"b2bLedger", id), { fromBankDepositId: null });
     }catch(err){
       alert("풀지 못했습니다.\n" + ((err&&err.message)?err.message:String(err)));
       return;
     }
+    //  잇기로 만든 내역이고 아직 안 쓴 것이면 지울지 여쭙습니다.
+    let delMsg = "";
+    if(madeHere && bankUsed === 0){
+      if(confirm("<통장 잇기> 로 만든 출금 내역도 지울까요?\n" + info + "\n\n"
+        + "  예    — 입출금리스트에서 없어집니다 (권합니다)\n"
+        + "  아니오 — 내역은 남겨둡니다")){
+        try{
+          await deleteDoc(doc(db,"bankDeposits", bankId0));
+          delMsg = "\n출금 내역도 지웠습니다.";
+          logAction("통장 잇기 내역 삭제", (e.partner||"-") + " / " + (Number(e.amount)||0).toLocaleString());
+        }catch(err){ delMsg = "\n출금 내역은 지우지 못했습니다."; }
+      }
+    }
     logAction("여신 기록 통장 잇기 풀기",
       (e.partner||"-") + " / " + (e.date||"-") + " / " + (Number(e.amount)||0).toLocaleString());
-    try{ clearCache("b2b"); clearDashCache(); }catch(err){}
-    alert("연결을 풀었습니다.");
+    try{ clearCache("b2b"); clearCache("bank"); clearDashCache(); }catch(err){}
+    alert("연결을 풀었습니다." + delMsg);
     loadB2BTab();
+    try{ if(typeof loadDepositEntryList === "function") loadDepositEntryList(); }catch(err){}
+    try{ if(typeof loadReqBoard === "function") loadReqBoard(); }catch(err){}
   };
 
   // ---------- 여신잔액 맞추기 ----------
