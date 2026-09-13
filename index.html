@@ -400,7 +400,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-06 v1164</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-06 v1165</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -36004,7 +36004,14 @@ let ghostBankCache = [];
         if(head) head.innerHTML = '<b>맞추는 중...</b> ' + Math.min(i+300, rows.length) + ' / ' + rows.length;
         const bt = writeBatch(db);
         rows.slice(i, i+300).forEach(function(r){
-          const patch = { salePrice: r.wantSale, saleDiscountPct: r.wantPct };
+          //  검사한 네 칸을 «전부» 씁니다.
+          //   전에는 판매가·%만 써서 판매할인 금액이 안 맞은 채 계속 남았습니다.
+          const patch = {
+            salePrice:       r.wantSale,
+            saleDiscountAmt: r.wantAmt,
+            saleDiscountPct: r.wantPct
+          };
+          if(r.wantBase) patch.saleDiscountBase = r.wantBase;
           bt.update(doc(db,"orders", r.id), patch);
           if(r.batchId) batches.add(r.batchId);
         });
@@ -36733,7 +36740,8 @@ let ghostBankCache = [];
                 model: o.systemModel || "-", qty: Number(o.quantity)||0,
                 what: diff.join(" · "),
                 curSale: o.salePrice, wantSale: sb.salePrice,
-                curPct: o.saleDiscountPct, wantPct: sb.saleDiscountPct });
+                curPct: o.saleDiscountPct, wantPct: sb.saleDiscountPct,
+                wantAmt: sb.saleDiscountAmt, wantBase: sb.saleDiscountBase });
             });
             kRows.sort(function(a,b){ return String(b.date).localeCompare(String(a.date)); });
           }catch(e){}
