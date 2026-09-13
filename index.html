@@ -400,7 +400,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-06 v1122</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-06 v1125</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -8316,11 +8316,7 @@
       disp.value = "";
     }
   };
-  //  공시지원금 환수는 없앴습니다. (유통폰지원금 환수로 통일)
-  window.onSubsidyStatusChange = function(){
-    return;
-  };
-  // ---------- 할인 금액 ↔ % 양방향 계산 (모든 화면 공통 규칙) ----------
+// ---------- 할인 금액 ↔ % 양방향 계산 (모든 화면 공통 규칙) ----------
   // 금액을 넣으면 %를 계산하고, %를 넣으면 금액을 계산합니다.
   // 어느 한쪽을 비우면 짝이 되는 칸도 함께 비웁니다(옛 값이 남아 오등록되는 것 방지).
   // 출고가가 없으면 비율을 낼 기준이 없으므로 계산하지 않습니다.
@@ -19215,7 +19211,7 @@
   //  문서는 사라지고 이력(관리자 > 이력)에는 내용이 남습니다.
   //  요청에서 쓴 돈을 통장 내역으로 되돌립니다.
   //   (요청을 지우거나 취소하면 그 돈이 다시 「안 붙인 돈」이 되어야 합니다)
-  async function releaseBankUses(kind, reqId, recs){
+  window.releaseBankUses = async function(kind, reqId, recs){
     let n = 0;
     try{
       const list = Array.isArray(recs) ? recs : [];
@@ -19285,7 +19281,7 @@
       }
     }catch(e){}
     return n;
-  }
+  };
 
   window.deleteReqBoardItem = async function(kind, reqId){
     if(!hasPerm(currentUserPerms, "paymentProcess")){ alert("권한이 없습니다."); return; }
@@ -32598,52 +32594,7 @@
     runDataCheck();
   };
 
-  // 승인 대기로 남은 옛 기록을 전부 승인 처리합니다.
-  window.approveAllOld = async function(){
-    const rows = window.__dcNotAppr || [];
-    if(rows.length === 0) return;
-    if(!hasPerm(currentUserPerms, "paymentProcess")){ alert("권한이 없습니다."); return; }
-    const sum = rows.reduce((n,r)=> n + (Number(r.amt)||0), 0);
-    if(!confirm(rows.length + "건의 승인 대기 기록을 승인 처리합니다.\n\n"
-      + "  합계 " + sum.toLocaleString() + "\n\n"
-      + "승인 절차를 쓰지 않기로 하여 정리하는 것입니다.\n진행할까요?")) return;
-    let done = 0;
-    try{
-      for(const r of rows){
-        const s = await getDoc(doc(db, r.col, r.id));
-        if(!s.exists()) continue;
-        const v = s.data();
-        const list = (v[r.listKey] || []).map(x=> ({
-          ...x, approved:true,
-          approvedBy: x.approvedBy || currentUser.name,
-          approvedAt: x.approvedAt || x.date || todayStr()
-        }));
-        const total = Number(v.totalAmount)||0;
-        const sum2 = list.reduce((n,x)=> n + (Number(x.amount)||0), 0);
-        const full = total > 0 && sum2 >= total;
-        const last = list.map(x=> x.date).sort().slice(-1)[0] || "";
-        const patch = { [r.listKey]: list };
-        if(r.col === "saleDepositRequests"){
-          patch.receivedAmount = sum2;
-          patch.depositCompleted = full;
-          patch.depositCompleteDate = full ? last : "";
-        }else{
-          patch.paidAmount = sum2;
-          patch.transferCompleted = full;
-          patch.transferCompleteDate = full ? last : "";
-          patch.status = full ? "이체완료" : "부분이체";
-        }
-        await updateDoc(doc(db, r.col, r.id), patch);
-        done++;
-      }
-      logAction("데이터 점검 — 승인 대기 정리", done + "건 승인 처리");
-    }catch(e){ alert("처리하지 못했습니다.\n" + ((e&&e.message)?e.message:String(e))); return; }
-    alert(done + "건을 승인 처리했습니다.");
-    payStatusMap = null;
-    runDataCheck();
-  };
-
-  // 같은 일련번호로 등록된 재고를 모아 보여주고, 골라서 지웁니다.
+// 같은 일련번호로 등록된 재고를 모아 보여주고, 골라서 지웁니다.
   //  프로그램이 스스로 고르지 않습니다. 어느 것을 남길지 사람이 정합니다.
   let dupSerialCache = {};
 
@@ -34997,111 +34948,7 @@
 
   let buyFixCache = { orders: [], items: [] };
   // 입고가가 할인과 안 맞는 건을 찾습니다.
-  //  공급가 기준인데 할인을 VAT 포함으로 환산하지 않고 뺀 건입니다.
-  window.findBuyPriceMismatch = async function(){
-    const orders = [], items = [];
-    try{
-      const obAll = {};
-      (await getDocs(collection(db,"orderBatches"))).forEach(function(d){ obAll[d.id] = d.data(); });
-      (await getDocs(collection(db,"orders"))).forEach(function(d){
-        const o = d.data();
-        if(o.status === "취소") return;
-        const bt = obAll[o.batchId];
-        if(bt && bt.status === "취소") return;
-        const L = Number(o.listPrice)||0;
-        const cur = Number(o.purchasePrice)||0;
-        if(!L || !cur) return;
-        const base = String(o.discountBase || (bt && bt.discountBase) || "");
-        if(base !== "supply") return;                       // 공급가 기준만 해당
-        // 화면·저장 모두 부가세 포함 금액이어야 합니다. %로 다시 내어 견줍니다.
-        const su = Math.round(L / 1.1);
-        const pp = Number(o.preDiscountPct)||0, op = Number(o.otherDiscountPct)||0;
-        const wPre = pp > 0 ? Math.round(Math.round(su * pp / 100) * 1.1) : (Number(o.preDiscountAmt)||0);
-        const wOth = op > 0 ? Math.round(Math.round(su * op / 100) * 1.1) : (Number(o.otherDiscountAmt)||0);
-        const want = L - wPre - wOth;
-        if(Math.abs(want - cur) <= 1) return;
-        orders.push({ id:d.id, batchId:o.batchId, wPre, wOth, date:o.orderDate||"-",
-          src:(bt && bt.source)||"-", model:o.systemModel||"-",
-          color:o.systemColor||o.manufacturerColor||"-", L, cur, want });
-      });
-      (await getDocs(collection(db,"inventoryItems"))).forEach(function(d){
-        const it = d.data();
-        if(it.deleted === true) return;
-        const L = Number(it.listPrice)||0;
-        const cur = Number(it.purchasePrice)||0;
-        if(!L || !cur) return;
-        if(String(it.discountBase||"") !== "supply") return;
-        const su2 = Math.round(L / 1.1);
-        const pp2 = Number(it.purchaseDiscount)||0, op2 = Number(it.otherDiscountPct)||0;
-        const wPre2 = pp2 > 0 ? Math.round(Math.round(su2 * pp2 / 100) * 1.1) : (Number(it.purchaseDiscountAmt)||0);
-        const wOth2 = op2 > 0 ? Math.round(Math.round(su2 * op2 / 100) * 1.1) : (Number(it.otherDiscountAmt)||0);
-        const want = L - wPre2 - wOth2;
-        if(Math.abs(want - cur) <= 1) return;
-        items.push({ wPre: wPre2, wOth: wOth2, id:d.id, sn:it.serialNumber||"-", model:it.systemModel||"-",
-          color:it.systemColor||it.manufacturerColor||"-", L, cur, want,
-          sameBuy: it.salePriceFollowsBuy === true, salePrice: Number(it.salePrice)||0 });
-      });
-    }catch(e){ alert("읽지 못했습니다.\n" + ((e&&e.message)?e.message:String(e))); return null; }
-    buyFixCache = { orders, items };
-    return buyFixCache;
-  };
-
-  // 찾은 건들의 입고가를 한 번에 맞춥니다.
-  window.fixBuyPriceAll = async function(){
-    const r = await findBuyPriceMismatch();
-    if(!r) return;
-    const { orders, items } = r;
-    if(orders.length === 0 && items.length === 0){ alert("입고가가 어긋난 건이 없습니다."); return; }
-    const won = v => (Number(v)||0).toLocaleString();
-    if(!confirm("입고가가 할인과 안 맞는 건을 맞춥니다.\n\n"
-      + "  주문 품목  " + orders.length + "줄\n"
-      + "  재고       " + items.length + "대\n\n"
-      + (orders.length ? orders.slice(0,5).map(function(o){
-          return "  " + o.date + " " + o.model + " " + o.color
-               + "  " + won(o.cur) + " → " + won(o.want); }).join("\n") + "\n" : "")
-      + (orders.length > 5 ? "  ... 외 " + (orders.length-5) + "줄\n" : "")
-      + "\n공급가 기준으로 넣은 할인은 부가세를 뺀 금액입니다.\n"
-      + "출고가(부가세 포함)에서 빼려면 1.1 을 곱해야 합니다.\n\n"
-      + "「입고동일」 재고는 판매가도 함께 맞춥니다.\n\n진행할까요?")) return;
-    let n1 = 0, n2 = 0;
-    try{
-      for(let i=0; i<orders.length; i+=300){
-        const bt = writeBatch(db);
-        orders.slice(i, i+300).forEach(function(o){
-          const p = { purchasePrice: o.want };
-          if(o.wPre != null) { p.preDiscountAmt = o.wPre; p.purchaseDiscountAmt = o.wPre; }
-          if(o.wOth != null) p.otherDiscountAmt = o.wOth;
-          bt.update(doc(db,"orders", o.id), p);
-          n1++;
-        });
-        await withTimeout(bt.commit(), 15000, "주문 저장");
-      }
-      for(let i=0; i<items.length; i+=300){
-        const bt = writeBatch(db);
-        items.slice(i, i+300).forEach(function(it){
-          const patch = { purchasePrice: it.want };
-          if(it.wPre != null){ patch.purchaseDiscountAmt = it.wPre; }
-          if(it.wOth != null){ patch.otherDiscountAmt = it.wOth; }
-          // 「입고동일」 이면 판매가·판매할인도 함께 맞춥니다.
-          if(it.sameBuy){
-            patch.salePrice = it.want;
-            patch.saleDiscountAmt = it.L - it.want;
-            const div = Math.round(it.L / 1.1);
-            patch.saleDiscount = pctOnBase(it.L - it.want, it.L, "supply");
-          }
-          bt.update(doc(db,"inventoryItems", it.id), patch);
-          n2++;
-        });
-        await withTimeout(bt.commit(), 15000, "재고 저장");
-      }
-    }catch(e){ alert("맞추다 멈췄습니다.\n" + ((e&&e.message)?e.message:String(e))); return; }
-    logAction("입고가 일괄 정정", "주문 " + n1 + "줄 / 재고 " + n2 + "대");
-    alert("맞췄습니다.\n\n  주문 품목 " + n1 + "줄\n  재고 " + n2 + "대");
-    try{ loadOrderList(); }catch(e){}
-    try{ if(typeof loadInventoryList === "function") loadInventoryList(); }catch(e){}
-  };
-
-  let ghostBankCache = [];
+let ghostBankCache = [];
 
   //  붙은 요청이 없는데 쓴 금액이 남은 통장 내역을 보여주고 한 번에 풉니다.
   window.showGhostBankList = function(){
@@ -35958,27 +35805,9 @@
               fix:"showOrderBaseDiffList()", fixLabel:"확인하기" });
           }
         }
-        // 입고가가 할인과 안 맞는 건 (공급가 기준에서 부가세 환산을 안 한 건)
-        {
-          let bad2 = 0;
-          try{
-            Object.keys(items).forEach(function(id){
-              const it = items[id];
-              if(it.deleted === true) return;
-              const L = Number(it.listPrice)||0, cur = Number(it.purchasePrice)||0;
-              if(!L || !cur) return;
-              if(String(it.discountBase||"") !== "supply") return;
-              const want = L - Math.round(((Number(it.purchaseDiscountAmt)||0) + (Number(it.otherDiscountAmt)||0)) * 1.1);
-              if(Math.abs(want - cur) > 1) bad2++;
-            });
-          }catch(e){}
-          if(bad2){
-            issues.push({ n:"입고가가 할인과 안 맞음", cnt: bad2, unit:"",
-              why:"공급가 기준으로 넣은 할인은 부가세를 뺀 금액입니다. "
-                + "출고가(부가세 포함)에서 빼려면 1.1 을 곱해야 하는데 그냥 뺀 건입니다.",
-              fix:"fixBuyPriceAll()", fixLabel:"한 번에 맞추기" });
-          }
-        }
+        //  「입고가가 할인과 안 맞음」 점검은 없앴습니다.
+        //   옛 규칙(할인에 1.1 을 곱해서 뺀다)으로 검사하던 것이라,
+        //   지금 규칙(할인이 이미 부가세 포함이라 그대로 뺀다)과 맞지 않았습니다.
         // 같은 모델·일련번호인데 되사오기로 안 이어진 재고
         //  뒤늦게 1차·2차를 따로 넣으시면 생깁니다.
         {
@@ -48240,75 +48069,7 @@
   };
 
   //  잘못 넣으신 개통 등록분을 되돌립니다.
-  //   넣은 날짜로 골라 개통 기록과 재고 반영을 함께 되돌립니다.
-  window.deleteActByDate = async function(){
-    if(!hasPerm(currentUserPerms, "cancelDelete")){ alert("권한이 없습니다."); return; }
-    const day = prompt("되돌릴 등록분의 <작업일> 을 넣어주세요. (20260906 형태)\n\n"
-      + "그 날 개통 등록으로 만들어진 기록을 전부 되돌립니다.", todayStr());
-    if(day === null) return;
-    const d8 = String(day).replace(/\D/g,"");
-    if(d8.length !== 8){ alert("20260906 형태로 넣어주세요."); return; }
-
-    let list = [];
-    try{
-      const q = await getDocs(collection(db,"activations"));
-      q.forEach(function(d){
-        const v = d.data();
-        const when = (v.createdAt && v.createdAt.seconds)
-          ? new Date(v.createdAt.seconds*1000).toISOString().slice(0,10).replace(/-/g,"") : "";
-        if(when === d8) list.push({ id:d.id, ...v });
-      });
-    }catch(e){ alert("읽지 못했습니다."); return; }
-    if(list.length === 0){ alert(d8 + " 에 등록된 개통 기록이 없습니다."); return; }
-
-    const linked = list.filter(function(x){ return x.itemId; });
-    if(!confirm(d8 + " 에 등록한 개통 기록 " + list.length + "건을 되돌립니다.\n\n"
-      + "  개통 기록 " + list.length + "건 지움\n"
-      + (linked.length ? "  재고 " + linked.length + "건 <보유중> 으로 되돌림\n"
-          + "     개통일 · 가입번호 · 공시지원금 · 개통코드 지움\n" : "")
-      + "  개통 등록으로 만든 지원금 지급 기록도 지움\n"
-      + "\n따로 넣으신 환수 기록은 그대로 둡니다.\n\n되돌릴 수 없습니다. 진행할까요?")) return;
-
-    let done = 0, invN = 0, supN = 0;
-    const touched = new Set();
-    try{
-      for(const a of list){
-        // 개통 등록으로 만들어진 지급 기록을 지웁니다.
-        try{
-          const sq = await getDocs(query(collection(db,"supportLogs"),
-            where("serialNumber","==", String(a.serialNumber||""))));
-          for(const d of sq.docs){
-            const v = d.data();
-            if(v.fromActivation !== true) continue;
-            const w = (v.createdAt && v.createdAt.seconds)
-              ? new Date(v.createdAt.seconds*1000).toISOString().slice(0,10).replace(/-/g,"") : "";
-            if(w !== d8) continue;
-            await deleteDoc(doc(db,"supportLogs", d.id)); supN++;
-          }
-        }catch(e){}
-        // 재고에 반영된 것을 되돌립니다.
-        if(a.itemId){
-          try{
-            await updateDoc(doc(db,"inventoryItems", a.itemId), {
-              status:"보유중", activateDate:"", subNumber:"", subsidyAmount:null,
-              activationCode:"", supportMonth:null
-            });
-            touched.add(a.itemId); invN++;
-            await logItem(a.itemId, a.serialNumber||"", "deactivate",
-              "개통 등록분 되돌리기 · " + d8, { systemModel: a.systemModel||"" });
-          }catch(e){}
-        }
-        await deleteDoc(doc(db,"activations", a.id));
-        done++;
-      }
-      for(const id of touched){ await refreshItemSupport(id); }
-    }catch(e){ alert("되돌리다 멈췄습니다.\n" + ((e&&e.message)?e.message:String(e))); }
-    logAction("개통 등록분 되돌리기", d8 + " / 기록 " + done + "건 / 재고 " + invN + "건 / 지원금 " + supN + "건");
-    alert("되돌렸습니다.\n\n  개통 기록 " + done + "건\n  재고 " + invN + "건\n  지원금 " + supN + "건");
-    refreshAfterSupport();
-  };
-
-  //  재고와 못 이은 개통 기록을 지웁니다.
+//  재고와 못 이은 개통 기록을 지웁니다.
   window.deleteActivationRec = async function(actId, sn){
     if(!hasPerm(currentUserPerms, "cancelDelete")){ alert("삭제 권한이 없습니다."); return; }
     // 재고와 이어져 있으면 재고도 보유중으로 되돌립니다.
@@ -48489,148 +48250,12 @@
     refreshAfterSupport();
   };
 
-  window.linkActivationAllOld = async function(){
-    let list = [];
-    try{
-      const q = await getDocs(collection(db,"activations"));
-      q.forEach(function(d){ const v=d.data(); if(!v.itemId) list.push({ id:d.id, ...v }); });
-    }catch(e){ alert("읽지 못했습니다."); return; }
-    if(list.length === 0){ alert("재고와 못 이은 개통 기록이 없습니다."); return; }
-    let done = 0, skip = 0, sold = 0;
-    for(const a of list){
-      let cands = [];
-      try{
-        const q = await getDocs(query(collection(db,"inventoryItems"),
-          where("serialNumber","==", String(a.serialNumber||""))));
-        q.forEach(function(d){ const v=d.data(); if(v.deleted !== true) cands.push({ id:d.id, ...v }); });
-      }catch(e){}
-      if(a.systemModel){
-        const m = cands.filter(function(x){
-          return modelDupKey(String(x.systemModel||"")) === modelDupKey(String(a.systemModel)); });
-        if(m.length) cands = m;
-      }
-      const usable = cands.filter(function(x){ return String(x.status||"").indexOf("판매") < 0; });
-      if(usable.length !== 1){
-        if(cands.length && !usable.length) sold++; else skip++;
-        continue;
-      }
-      const it = usable[0];
-      try{
-        await updateDoc(doc(db,"activations", a.id), { itemId: it.id, linkState: "new" });
-        await updateDoc(doc(db,"inventoryItems", it.id), {
-          status: "개통",
-          activateDate: a.activateDate || "",
-          ...(a.subNumber      ? { subNumber: a.subNumber } : {}),
-          ...(a.subsidyAmount != null ? { subsidyAmount: Number(a.subsidyAmount) } : {}),
-          ...(a.activationCode ? { activationCode: a.activationCode } : {}),
-          ...(a.activationTeam ? { activationTeam: a.activationTeam } : {}),
-          ...(a.activationBy   ? { activationBy: a.activationBy } : {}),
-          ...(a.month          ? { supportMonth: a.month } : {})
-        });
-        try{
-          const sq = await getDocs(query(collection(db,"supportLogs"),
-            where("serialNumber","==", String(a.serialNumber||""))));
-          for(const d of sq.docs){
-            if(d.data().itemId) continue;
-            await updateDoc(doc(db,"supportLogs", d.id), { itemId: it.id });
-          }
-        }catch(e){}
-        await refreshItemSupport(it.id);
-        await logItem(it.id, it.serialNumber||"", "activate",
-          "개통 기록과 이음 (일괄) · 개통일 " + (a.activateDate||"-"),
-          { systemModel: it.systemModel||"", eventDate: a.activateDate||"" });
-        done++;
-      }catch(e){ skip++; }
-    }
-    logAction("개통 기록 일괄 잇기", done + "건 이음 / " + skip + "건 건너뜀 / " + sold + "건 판매됨");
-    alert("이었습니다.\n\n  이어짐 " + done + "건\n  못 찾음·여러 대 " + skip + "건"
-      + (sold ? "\n  이미 판매됨 " + sold + "건 — 되사오기 후 다시 눌러주세요." : ""));
-    refreshAfterSupport();
-  };
-
-  window.toggleActAll = function(on){
+window.toggleActAll = function(on){
     document.querySelectorAll(".act-cb").forEach(function(cb){ cb.checked = !!on; });
   };
 
   // 고른 개통 건을 한 번에 취소합니다.
-  //  재고가 있으면 보유중으로 되돌리고, 재고가 없으면 지원금 기록만 정리합니다.
-  window.cancelActivationSelected = async function(){
-    if(!hasPerm(currentUserPerms, "cancelDelete")){ alert("취소 권한이 없습니다."); return; }
-    const picked = Array.from(document.querySelectorAll(".act-cb:checked")).map(function(cb){
-      return { id: cb.value, serial: cb.dataset.actSn || "" };
-    });
-    if(picked.length === 0){ alert("취소할 개통 건을 골라주세요."); return; }
-
-    // 재고를 확인합니다.
-    const items = [], gone = [];
-    for(const p of picked){
-      try{
-        const d = await getDoc(doc(db,"inventoryItems", p.id));
-        if(d.exists()) items.push({ id:d.id, ...d.data() });
-        else gone.push(p);
-      }catch(e){ gone.push(p); }
-    }
-    const openOnes = items.filter(function(x){ return String(x.status||"") === "개통"; });
-    const notOpen  = items.filter(function(x){ return String(x.status||"") !== "개통"; });
-
-    const reason = prompt("개통 취소 사유를 입력해주세요. (필수)", "");
-    if(reason === null) return;
-    if(!String(reason).trim()){ alert("사유를 입력해주세요."); return; }
-    const cDate = askCancelDate("개통 취소");
-    if(cDate === null) return;
-
-    if(!confirm("고른 " + picked.length + "건을 개통 취소합니다.\n\n"
-      + "  되돌릴 재고  " + openOnes.length + "대\n"
-      + (notOpen.length ? "  개통 상태가 아닌 것 " + notOpen.length + "대 — 건너뜁니다\n" : "")
-      + (gone.length ? "  재고가 없는 것 " + gone.length + "건 — 지원금 기록만 정리합니다\n" : "")
-      + "\n  재고 상태  개통 → 보유중\n"
-      + "  개통일 · 가입번호 · 공시지원금 · 개통코드를 지웁니다\n"
-      + "  개통 등록으로 넣은 지원금 지급 기록도 지웁니다\n\n"
-      + "따로 넣으신 환수 기록은 그대로 둡니다.\n\n진행할까요?")) return;
-
-    let done = 0, supDel = 0;
-    try{
-      for(const it of openOnes){
-        // 개통 등록으로 만들어진 지급 기록을 지웁니다.
-        try{
-          const q = await getDocs(query(collection(db,"supportLogs"), where("itemId","==", it.id)));
-          for(const d of q.docs){
-            if(d.data().fromActivation === true){ await deleteDoc(doc(db,"supportLogs", d.id)); supDel++; }
-          }
-        }catch(e){}
-        await updateDoc(doc(db,"inventoryItems", it.id), {
-          status:"보유중", activateDate:"", subNumber:"", subsidyAmount:null, activationCode:"", activationTeam:"", activationBy:""
-        });
-        try{
-          const aq = await getDocs(query(collection(db,"activations"), where("itemId","==", it.id)));
-          for(const d of aq.docs) await updateDoc(doc(db,"activations", d.id), { itemId:null, linkState:"none" });
-        }catch(e){}
-        await refreshItemSupport(it.id);
-        await logItem(it.id, it.serialNumber||"", "deactivate",
-          "개통 취소 · 취소일 " + cDate + " · 사유: " + String(reason).trim()
-          + (it.activateDate ? " (원래 개통일 " + it.activateDate + ")" : ""),
-          { systemModel: it.systemModel||"", date: cDate });
-        done++;
-      }
-      // 재고가 없는 건 — 일련번호로 남은 지원금 기록을 정리합니다.
-      for(const g of gone){
-        if(!g.serial) continue;
-        try{
-          const q = await getDocs(query(collection(db,"supportLogs"), where("serialNumber","==", g.serial)));
-          for(const d of q.docs){
-            if(d.data().fromActivation === true){ await deleteDoc(doc(db,"supportLogs", d.id)); supDel++; }
-          }
-        }catch(e){}
-      }
-    }catch(e){ alert("취소하다 멈췄습니다.\n" + ((e&&e.message)?e.message:String(e))); }
-
-    logAction("개통 선택 취소", done + "대 / 지원금 " + supDel + "건 정리 / 사유: " + String(reason).trim());
-    alert("개통을 취소했습니다.\n\n  되돌린 재고 " + done + "대"
-      + (supDel ? "\n  지원금 지급 기록 " + supDel + "건 정리" : ""));
-    refreshAfterSupport();
-  };
-
-  // 개통 취소 — 재고를 보유중으로 되돌리고 개통 때 넣은 값도 지웁니다.
+// 개통 취소 — 재고를 보유중으로 되돌리고 개통 때 넣은 값도 지웁니다.
   //  개통 등록으로 만들어진 지원금 「지급」 기록도 함께 지웁니다.
   //  나중에 따로 넣으신 환수 기록은 남겨둡니다. (실제로 있었던 일이니까요)
   window.cancelActivation = async function(itemId){
