@@ -400,7 +400,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-06 v1067</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-06 v1069</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -635,6 +635,7 @@
         </div>
         <div id="order-col-picker" style="display:none;border:1px solid var(--navy);background:#fff;padding:10px 12px;margin-bottom:8px;"></div>
         <div id="order-price-notice" style="display:none;font-size:12.5px;padding:9px 11px;margin-bottom:8px;border:1px solid var(--danger);background:#fdecea;line-height:1.7;"></div>
+        <div id="order-model-notice" style="display:none;font-size:12.5px;padding:9px 11px;margin-bottom:8px;border:1px solid var(--danger);background:#fdecea;line-height:1.7;"></div>
         <div id="order-daily-box" style="margin-bottom:10px;"></div>
         <div style="display:flex;gap:18px;align-items:flex-start;flex-wrap:wrap;margin-bottom:10px;">
           <div id="pending-arrival-box" style="flex:0 1 auto;"></div>
@@ -2990,6 +2991,7 @@
 
         <div style="overflow-x:auto;">
         <div id="inv-pick-bar" style="display:none;border:1px solid var(--navy);background:#f4f7fb;padding:8px 11px;margin-bottom:8px;font-size:12.5px;"></div>
+        <div id="inv-model-notice" style="display:none;font-size:12.5px;padding:9px 11px;margin-bottom:8px;border:1px solid var(--danger);background:#fdecea;line-height:1.7;"></div>
         <div id="inventory-list"></div>
         </div>
       </div>
@@ -7321,7 +7323,35 @@
               await batch.commit();
             }
             logAction("모델 수정 재고반영", (newFields.systemModel||"-") + " → 재고 " + ids.length + "건");
-            alert("재고 " + ids.length + "건에 반영했습니다.");
+            // 주문·예약·판매요청에도 함께 반영합니다. (지표가 옛 펫네임으로 나오지 않게)
+            let etcN = 0;
+            for(const col of ["orders","reservations","saleRequests"]){
+              try{
+                const tids = new Set();
+                if(m.systemModel){
+                  const sq = await getDocs(query(collection(db,col), where("systemModel","==",m.systemModel)));
+                  sq.forEach(function(dd){ tids.add(dd.id); });
+                }
+                if(m.baseModel){
+                  const bq = await getDocs(query(collection(db,col), where("baseModel","==",m.baseModel)));
+                  bq.forEach(function(dd){
+                    const v = dd.data();
+                    if(!m.capacity || String(v.capacity||"") === String(m.capacity)) tids.add(dd.id);
+                  });
+                }
+                const list = Array.from(tids);
+                for(let i=0; i<list.length; i+=400){
+                  const bt = writeBatch(db);
+                  list.slice(i, i+400).forEach(function(id){ bt.update(doc(db,col,id), patch); });
+                  await bt.commit();
+                }
+                etcN += list.length;
+              }catch(e){}
+            }
+            if(etcN) logAction("모델 수정 주문·예약·판매요청 반영", (newFields.systemModel||"-") + " → " + etcN + "건");
+            alert("재고 " + ids.length + "건에 반영했습니다."
+              + (etcN ? "\n주문·예약·판매요청 " + etcN + "건에도 반영했습니다." : ""));
+            try{ clearCache("inventory"); clearCache("orders"); clearDashCache(); }catch(e){}
           }catch(e){
             showModelMsg("me-result-msg", "재고 반영에 실패했습니다.<br>" + comboEsc((e && e.message) ? e.message : String(e)), true);
             return;
@@ -10996,7 +11026,30 @@
     { key:"payMethod",  label:"결제",     get:r=> r.b.paymentMethod==="b2b_credit" ? '<span style="color:#6a1b9a;font-weight:700;">여신</span>' : "일반" },
     { key:"credit",     label:"여신차감", get:r=> r.b.paymentMethod==="b2b_credit" ? (Number(r.b.creditUsed!=null?r.b.creditUsed:r.b.depositRequired)||0).toLocaleString() : "-", num:true,
       sort:r=> Number(r.b.creditUsed!=null?r.b.creditUsed:r.b.depositRequired)||0 },
+    { key:"listAmount", label:"출고가",   num:true,
+      //  품목의 출고가 × 수량 을 더합니다. (취소된 줄은 뺍니다)
+      get:r=>{
+        const v = (r.lines||[]).filter(function(o){ return o.status !== "취소"; })
+          .reduce(function(n,o){ return n + (Number(o.listPrice)||0) * (Number(o.quantity)||0); }, 0);
+        return v ? v.toLocaleString() : "-";
+      },
+      sort:r=> (r.lines||[]).filter(function(o){ return o.status !== "취소"; })
+        .reduce(function(n,o){ return n + (Number(o.listPrice)||0) * (Number(o.quantity)||0); }, 0) },
     { key:"amount",     label:"입고가",   get:r=> (Number(r.b.depositRequired)||0).toLocaleString(), num:true, sort:r=> Number(r.b.depositRequired)||0 },
+    { key:"discAmount", label:"할인금액", num:true,
+      //  출고가 합계 − 입고가 합계
+      get:r=>{
+        const L = (r.lines||[]).filter(function(o){ return o.status !== "취소"; })
+          .reduce(function(n,o){ return n + (Number(o.listPrice)||0) * (Number(o.quantity)||0); }, 0);
+        const buy = Number(r.b.depositRequired)||0;
+        if(!L) return "-";
+        return (L - buy).toLocaleString();
+      },
+      sort:r=>{
+        const L = (r.lines||[]).filter(function(o){ return o.status !== "취소"; })
+          .reduce(function(n,o){ return n + (Number(o.listPrice)||0) * (Number(o.quantity)||0); }, 0);
+        return L - (Number(r.b.depositRequired)||0);
+      } },
     { key:"collateral", label:"계산서",   get:r=> r.b.collateralId
         ? '<span style="color:#2e7d32;font-weight:700;white-space:nowrap;"'
           + (r.b.collateralNo ? ' title="계산서번호 ' + comboEsc(r.b.collateralNo) + '"' : '')
@@ -11105,7 +11158,7 @@
     { key:"createdBy",   label:"작성",    get:r=> comboEsc(r.b.createdBy||"-") },
     { key:"createdAt",   label:"작성일",  get:r=> fmtStamp(r.b.createdAt), sort:r=> (r.b.createdAt&&r.b.createdAt.seconds)||0 }
   ];
-  const ORDER_COLS_DEFAULT = ["orderDate","source","carrier","lineCount","qty","arrive","payMethod","amount","payState","status"];
+  const ORDER_COLS_DEFAULT = ["orderDate","source","carrier","lineCount","qty","arrive","payMethod","listAmount","amount","payState","status"];
   const SALE_COLS_DEFAULT  = ["requestDate","destination","carrier","lineCount","qty","match","amount","payState","payReqDate","status"];
 
   // 취소된 줄 — 사유를 아랫줄로 빼지 않고 상태 칸 한 줄에 같이 보여줍니다.
@@ -12177,6 +12230,7 @@
     });
 
     listEl.prepend(renderPaginationBar("orders", visibleBatches.length, loadOrderList));
+    try{ renderModelSyncNotice("order-model-notice", "orders"); }catch(e){}
     applyCustomTabLabels();
   
     addDownloadBtn("dl-orders", "order-list", "주문목록");
@@ -12185,7 +12239,7 @@
 
   // 어떤 컬렉션이든 모델 정보(펫네임·모델명·기가수·전산모델명)를 모델 등록 기준으로 맞춥니다.
   const MODEL_SYNC_LABELS = {
-    saleRequests: "판매요청", reservations: "예약", inventoryItems: "재고"
+    orders: "주문", saleRequests: "판매요청", reservations: "예약", inventoryItems: "재고"
   };
   window.syncModelInfoIn = async function(col){
     await fetchModelsCache();
@@ -43824,6 +43878,7 @@
     table.appendChild(tbody);
     listEl.appendChild(table);
     listEl.prepend(renderPaginationBar("inventory", items.length, loadInventoryList, false));
+    try{ renderModelSyncNotice("inv-model-notice", "inventoryItems"); }catch(e){}
     applyCustomTabLabels();
     // 줄을 누르면 관리 버튼이 아래로 펼쳐집니다. (다른 목록과 같게)
     foldActionColumn("inventory-list");
