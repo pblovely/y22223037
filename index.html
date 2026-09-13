@@ -400,7 +400,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-06 v1139</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-06 v1144</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -4258,6 +4258,173 @@ const firebaseConfig = {
   const app = initializeApp(firebaseConfig);
   const auth = getAuth(app);
   const db = getFirestore(app);
+
+  //  주문 품목을 넣은 순서대로 되돌립니다. (줄번호 → 만든 시각)
+  //   Firestore 는 문서 번호 순으로 읽어 오므로, 정렬하지 않으면 순서가 뒤섞입니다.
+  //   줄번호가 없는 옛 자료는 원래 순서를 그대로 둡니다.
+  function sortOrderLines(arr){
+    if(!Array.isArray(arr)) return arr;
+    arr.sort(function(a,b){
+      const la = Number(a.lineNo)||0, lb = Number(b.lineNo)||0;
+      if(la && lb && la !== lb) return la - lb;
+      const ta = (a.createdAt && a.createdAt.seconds) || 0;
+      const tb = (b.createdAt && b.createdAt.seconds) || 0;
+      return ta - tb;
+    });
+    return arr;
+  }
+
+  //  주문 품목 한 줄에 이어진 재고를 찾습니다. (주문 수정과 똑같은 네 가지 방법)
+  //   ① 품목에 적힌 재고 번호 (linkedItemIds)
+  //   ② 재고의 orderId 가 이 품목을 가리키는 것
+  //   ③ 재고의 orderBatchId 가 이 주문을 가리키고 모델·색상이 같은 것
+  //   ④ 그래도 없으면 「입고처 + 주문일 + 모델」 로 찾습니다 (번호가 없는 옛 자료)
+  async function findItemsOfOrderLine(lineId, batchId, line){
+    const L = line || {};
+    const ids = new Set();
+    (Array.isArray(L.linkedItemIds) ? L.linkedItemIds : []).forEach(function(x){ if(x) ids.add(x); });
+    try{
+      const q1 = await getDocs(query(collection(db,"inventoryItems"), where("orderId","==", lineId)));
+      q1.forEach(function(d){ if(d.data().deleted !== true) ids.add(d.id); });
+    }catch(e){}
+    if(batchId){
+      try{
+        const q2 = await getDocs(query(collection(db,"inventoryItems"), where("orderBatchId","==", batchId)));
+        q2.forEach(function(d){
+          const v = d.data();
+          if(v.deleted === true) return;
+          if(v.orderId && String(v.orderId) !== String(lineId)) return;   // 다른 품목 것은 뺍니다
+          const sameM = modelDupKey(String(v.systemModel||"")) === modelDupKey(String(L.systemModel||""));
+          const sameC = !L.systemColor || String(v.systemColor||"") === String(L.systemColor||"");
+          if(sameM && sameC) ids.add(d.id);
+        });
+      }catch(e){}
+    }
+    if(ids.size === 0){
+      try{
+        const src0 = String(L.source||"").trim();
+        const od0  = String(L.orderDate||"").replace(/\D/g,"");
+        //  주문일이 없으면 ④ 를 쓰지 않습니다.
+        //   입고처·모델만으로 고르면 다른 주문의 재고까지 덮어쓸 수 있습니다.
+        if(src0 && od0){
+          const q3 = await getDocs(query(collection(db,"inventoryItems"), where("source","==", src0)));
+          q3.forEach(function(d){
+            const v = d.data();
+            if(v.deleted === true) return;
+            // 다른 주문에 이어진 재고는 뺍니다. (이 주문 것만 씁니다)
+            if(v.orderBatchId && batchId && String(v.orderBatchId) !== String(batchId)) return;
+            if(v.orderId && String(v.orderId) !== String(lineId)) return;
+            // 주문일이 적혀 있고 같은 것만 씁니다.
+            if(String(v.orderDate||"").replace(/\D/g,"") !== od0) return;
+            if(modelDupKey(String(v.systemModel||"")) !== modelDupKey(String(L.systemModel||""))) return;
+            if(L.systemColor && String(v.systemColor||"") !== String(L.systemColor||"")) return;
+            ids.add(d.id);
+          });
+        }
+      }catch(e){}
+    }
+    return Array.from(ids);
+  }
+
+  // ===== 주문 품목을 고친 뒤 이어진 곳을 전부 맞춥니다 =====
+  //  어느 화면에서 고치든 이 함수 하나만 부르면 됩니다.
+  //   품목 수정 · 주문 수정 모두 여기를 씁니다. (따로 만들지 마세요)
+  //  기준은 언제나 «Firestore에 저장된 주문 품목» 입니다. 화면 값이 아닙니다.
+  //   ① 재고        출고가 · 선할인 · 타할인 · 입고가 · 판매 금액
+  //   ② 판매요청·여신  syncItemLinks
+  //   ③ 묶음 합계     depositRequired
+  //   ④ 여신차감액     creditUsed + 여신 원장
+  //  이미 같은 값이면 쓰지 않습니다. 몇 번을 불러도 결과가 같습니다.
+  async function syncAfterOrderLines(batchId, lineIds){
+    const out = { items:0, credit:null, total:0 };
+    if(!batchId) return out;
+    const snap = await getDocs(query(collection(db,"orders"), where("batchId","==", batchId)));
+    const all = []; snap.forEach(function(d){ all.push({ id:d.id, ...d.data() }); });
+    const live = all.filter(function(l){ return l.status !== "취소"; });
+    const pick = (Array.isArray(lineIds) && lineIds.length)
+      ? live.filter(function(l){ return lineIds.indexOf(l.id) >= 0; })
+      : live;
+
+    // ① 재고 — 주문에 저장된 값을 그대로 옮깁니다. 비어 있는 칸은 재고에서도 비웁니다.
+    const writes = [], linkRows = [];
+    for(const l of pick){
+      let ids = [];
+      try{ ids = await findItemsOfOrderLine(l.id, batchId, l); }catch(e){}
+      for(const iid of ids){
+        let it0 = {};
+        try{ const sn = await getDoc(doc(db,"inventoryItems", iid)); if(sn.exists()) it0 = sn.data(); }catch(e){}
+        const p = {
+          listPrice:           (l.listPrice        != null ? l.listPrice        : null),
+          purchasePrice:       (l.purchasePrice    != null ? l.purchasePrice    : null),
+          purchaseDiscountAmt: (l.preDiscountAmt   != null ? l.preDiscountAmt   : null),
+          purchaseDiscount:    (l.preDiscountPct   != null ? l.preDiscountPct   : null),
+          otherDiscountAmt:    (l.otherDiscountAmt != null ? l.otherDiscountAmt : null),
+          otherDiscountPct:    (l.otherDiscountPct != null ? l.otherDiscountPct : null),
+          salePrice:           (l.salePrice        != null ? l.salePrice        : null),
+          saleDiscountAmt:     (l.saleDiscountAmt  != null ? l.saleDiscountAmt  : null),
+          saleDiscount:        (l.saleDiscountPct  != null ? l.saleDiscountPct  : null)
+        };
+        if(l.discountBase)     p.discountBase     = l.discountBase;
+        if(l.saleDiscountBase) p.saleDiscountBase = l.saleDiscountBase;
+        if(p.salePrice != null && p.purchasePrice != null) p.profit = p.salePrice - p.purchasePrice;
+        if(!it0.orderId)      p.orderId      = l.id;
+        if(!it0.orderBatchId) p.orderBatchId = batchId;
+        // 이미 같으면 쓰지 않습니다.
+        const same = Object.keys(p).every(function(k){
+          const a = (it0[k] == null) ? "" : String(it0[k]);
+          const b = (p[k]   == null) ? "" : String(p[k]);
+          return a === b;
+        });
+        if(same) continue;
+        writes.push({ iid, p });
+        linkRows.push({ id: iid, before: it0, after: { ...it0, ...p } });
+      }
+    }
+    for(let i=0; i<writes.length; i+=300){
+      const bt = writeBatch(db);
+      writes.slice(i, i+300).forEach(function(w){ bt.update(doc(db,"inventoryItems", w.iid), w.p); });
+      await withTimeout(bt.commit(), 15000, "재고 저장");
+    }
+    out.items = writes.length;
+
+    // ② 재고와 이어진 판매요청·여신
+    if(linkRows.length){
+      try{ await withTimeout(syncItemLinks(linkRows), 25000, "연동"); }catch(e){}
+      clearCache("inventory"); clearDashCache();
+    }
+
+    // ③ 묶음 합계 (입금필요)
+    const total = live.reduce(function(n,l){
+      return n + (Number(l.purchasePrice)||0) * (Number(l.quantity)||0); }, 0);
+    out.total = total;
+    try{ await updateDoc(doc(db,"orderBatches", batchId), { depositRequired: total }); }catch(e){}
+
+    // ④ 여신차감액 + 여신 원장
+    try{
+      const bs = await getDoc(doc(db,"orderBatches", batchId));
+      if(bs.exists()){
+        const bb = bs.data();
+        if(bb.paymentMethod === "b2b_credit" && bb.status !== "취소"){
+          const want = creditFromLines(bb.source, live, bb.discountBase);
+          const led = await getDocs(query(collection(db,"b2bLedger"), where("fromOrderBatchId","==", batchId)));
+          let now = 0, cnt = 0;
+          led.forEach(function(d){ now += (Number(d.data().amount)||0); cnt++; });
+          if(now !== want || cnt > 1){
+            await replaceB2BOrderUse(batchId, want,
+              bb.depositPaidDate || bb.orderDate || todayStr(), bb.source || "-");
+            out.credit = { from: now, to: want };
+          }
+          if((Number(bb.creditUsed)||0) !== want){
+            await updateDoc(doc(db,"orderBatches", batchId), { creditUsed: want });
+            if(orderBatchCache && orderBatchCache[batchId]) orderBatchCache[batchId].creditUsed = want;
+            if(!out.credit) out.credit = { from: Number(bb.creditUsed)||0, to: want };
+          }
+        }
+      }
+    }catch(e){}
+    return out;
+  }
+  window.syncAfterOrderLines = syncAfterOrderLines;
 
   //   요청 쪽은 건드리지 않습니다. 통장 내역만 「안 붙임」으로 만듭니다.
   window.releaseDepositEntry = async function(id){
@@ -10381,19 +10548,12 @@ const firebaseConfig = {
         el.innerHTML = '<b>' + comboEsc(name) + '</b> 현금할인 <b>' + rate + '%</b> · 계산 기준 <b>'
           + (base === "supply" ? "공급가(삼전)"
              : base === "total" ? "출고가(합계)" : "출고가(개당)") + '</b>'
-          + '<br><span style="color:var(--gray);">비어 있는 선할인% 칸에 채워드립니다. 기준을 바꾸려면 업체정보에서 고쳐주세요.</span>';
+          + '<br><span style="color:var(--gray);">참고용입니다. <b>칸에 자동으로 넣지 않습니다.</b> 선할인%는 직접 넣어주세요.</span>';
       }
     }
-    // 비어 있는 줄에만 채웁니다. 이미 넣은 값은 건드리지 않습니다.
-    if(rate != null && rate > 0){
-      document.querySelectorAll("#order-lines-body tr").forEach(tr=>{
-        const p = tr.querySelector(".ol-prediscountpct");
-        if(p && String(p.value||"").trim() === ""){
-          p.value = rate;
-          if(typeof onOrderLinePrePctInput === "function") onOrderLinePrePctInput(tr);
-        }
-      });
-    }
+    //  업체정보의 현금할인율을 선할인% 칸에 넣지 않습니다.
+    //   전에는 비어 있는 칸에 자동으로 넣어, 주문에 넣으신 값과 다른 값이 저장되곤 했습니다.
+    //   넣으신 값만 저장되어야 합니다.
     if(typeof recalcOrderTotal === "function") recalcOrderTotal();
   };
 
@@ -14155,40 +14315,18 @@ const firebaseConfig = {
       saleDiscountPct: document.getElementById("ole-salepct").value ? Number(oleNum("ole-salepct").toFixed(2)) : null
     };
 
+    let itemFixed = 0;
     try{
       msg("저장 중...", false);
       await withTimeout(updateDoc(doc(db,"orders", id), patch), 12000, "품목 수정");
 
-      // 주문 묶음의 주문금액 합계(입금필요)를 다시 계산합니다.
-      if(batchId){
-        const lineSnap = await getDocs(query(collection(db,"orders"), where("batchId","==",batchId)));
-        let total = 0;
-        const liveLines = [];
-        lineSnap.forEach(d=>{
-          const l = d.data();
-          if(l.status === "취소") return;
-          liveLines.push(l);
-          total += (Number(l.purchasePrice)||0) * (Number(l.quantity)||0);
-        });
-        await updateDoc(doc(db,"orderBatches", batchId), { depositRequired: total });
-
-        // 여신 차감액도 그 자리에서 다시 맞춥니다. (주문 관리를 열 때까지 기다리지 않게)
-        try{
-          const bs = await getDoc(doc(db,"orderBatches", batchId));
-          if(bs.exists()){
-            const bb = bs.data();
-            const isCredit = bb.paymentMethod === "b2b_credit" && bb.status !== "취소";
-            const want = isCredit ? creditFromLines(bb.source, liveLines, bb.discountBase) : 0;
-            const led = await getDocs(query(collection(db,"b2bLedger"), where("fromOrderBatchId","==", batchId)));
-            let now = 0, cnt = 0;
-            led.forEach(d=>{ now += (Number(d.data().amount)||0); cnt++; });
-            if(now !== want || cnt > 1){
-              await replaceB2BOrderUse(batchId, want, bb.depositPaidDate || bb.orderDate || todayStr(), bb.source || "-");
-              creditMoved = { from: now, to: want };
-            }
-          }
-        }catch(e){}
-      }
+      // ── 이어진 곳을 전부 맞춥니다 ──
+      //  재고 · 판매요청 · 묶음 합계 · 여신차감액 · 여신 원장
+      //  주문 수정(묶음)과 «똑같은 함수» 를 씁니다. 따로 만들지 않습니다.
+      msg("이어진 재고·판매요청·여신을 맞추는 중...", false);
+      const sres = await syncAfterOrderLines(batchId, [id]);
+      itemFixed = sres.items;
+      creditMoved = sres.credit;
     }catch(e){
       msg("<b>저장에 실패했습니다.</b><br>" + comboEsc((e && e.message) ? e.message : String(e)), true);
       return;
@@ -14197,6 +14335,8 @@ const firebaseConfig = {
       + (patch.purchasePrice ? " / 입고가 " + patch.purchasePrice.toLocaleString() : "")
       + (creditMoved ? " / 여신 차감 " + creditMoved.from.toLocaleString() + "→" + creditMoved.to.toLocaleString() : ""));
     msg("저장되었습니다. 주문금액 합계도 다시 계산했습니다."
+      + (itemFixed ? "<br><b>이어진 재고 " + itemFixed + "대도 함께 맞췄습니다.</b>"
+                   : "<br><span style=\"color:var(--gray);\">이어진 재고를 찾지 못해 재고는 그대로입니다.</span>")
       + (creditMoved ? "<br><b>여신 차감액도 " + creditMoved.from.toLocaleString()
           + " → " + creditMoved.to.toLocaleString() + " 로 바꿨습니다.</b>" : ""), false);
     loadOrderList();
@@ -14208,7 +14348,7 @@ const firebaseConfig = {
           const bSnap = await getDoc(doc(db,"orderBatches", batchId));
           const lineSnap = await getDocs(query(collection(db,"orders"), where("batchId","==",batchId)));
           const fresh = []; lineSnap.forEach(d=> fresh.push({ id:d.id, ...d.data() }));
-          orderBatchLinesCache[batchId] = fresh;
+          orderBatchLinesCache[batchId] = sortOrderLines(fresh);
           if(bSnap.exists()) await openOrderBatchDetailModal(batchId, bSnap.data());
         }catch(e){ console.error(e); }
       }
@@ -14220,7 +14360,7 @@ const firebaseConfig = {
     try{
       const snap = await getDocs(query(collection(db,"orders"), where("batchId","==", batchId)));
       const arr = []; snap.forEach(function(d){ arr.push({ id:d.id, ...d.data() }); });
-      orderBatchLinesCache[batchId] = arr;
+      orderBatchLinesCache[batchId] = sortOrderLines(arr);
     }catch(e){}
     const lines = orderBatchLinesCache[batchId] || [];
     document.getElementById("order-detail-heading").textContent = "주문 요청서";
@@ -15805,7 +15945,7 @@ const firebaseConfig = {
         const bSnap = await getDoc(doc(db,"orderBatches", currentPoBatch.batchId));
         const lineSnap = await getDocs(query(collection(db,"orders"), where("batchId","==",currentPoBatch.batchId)));
         const fresh = []; lineSnap.forEach(d=> fresh.push({ id:d.id, ...d.data() }));
-        orderBatchLinesCache[currentPoBatch.batchId] = fresh;
+        orderBatchLinesCache[currentPoBatch.batchId] = sortOrderLines(fresh);
         if(bSnap.exists()) await openOrderBatchDetailModal(currentPoBatch.batchId, bSnap.data());
       }catch(e){}
     }
@@ -28963,25 +29103,24 @@ window.showDepositUses = async function(id){
       + (Object.keys(perLine).length ? " / 금액수정 " + Object.keys(perLine).length + "줄" : "")
       + (fixItems && itemTargets.length ? " / 재고 " + itemTargets.length + "대 금액 함께 수정" : ""));
     }catch(e){}
-    // 품목을 저장한 뒤 여신 차감을 새 금액으로 다시 맞춥니다.
-    //  (앞의 여신 처리는 저장 전에 돌아 옛 금액으로 계산됩니다)
+    // 품목을 저장한 뒤, 품목 수정과 «똑같은 함수» 로 이어진 곳을 전부 맞춥니다.
+    //  (재고 · 판매요청 · 묶음 합계 · 여신차감액 · 여신 원장)
+    //  이미 같은 값이면 아무것도 쓰지 않습니다.
     let creditMsg = "";
     try{
-      const pm2 = document.getElementById("be-paymethod");
-      if(kind === "order" && pm2 && pm2.value === "b2b_credit"){
-        msg("여신 차감을 새 금액으로 맞추는 중...", false);
-        const before = await withTimeout(getB2BBalance(), 12000, "여신 잔액");
-        const amt2 = await withTimeout(creditAmountOfBatch(id), 15000, "여신 계산");
-        await withTimeout(replaceB2BOrderUse(id, amt2,
-          b.depositPaidDate || d1 || todayStr(), party), 20000, "여신 차감");
-        // 화면에 결과를 알려드립니다. (바뀌었는지 바로 보이게)
-        try{
-          clearCache("b2b"); clearCache("loan");
-          if(typeof clearScreenCache === "function") clearScreenCache("loan");
-          const after = await withTimeout(getB2BBalance(), 12000, "여신 잔액");
-          creditMsg = "  여신 차감 " + amt2.toLocaleString()
-            + " · 잔여 " + (before||0).toLocaleString() + " → " + (after||0).toLocaleString();
-        }catch(e){}
+      if(kind === "order"){
+        msg("이어진 재고·판매요청·여신을 맞추는 중...", false);
+        const before0 = await withTimeout(getB2BBalance(), 12000, "여신 잔액").catch(function(){ return null; });
+        const sres2 = await syncAfterOrderLines(id, null);
+        clearCache("b2b"); clearCache("loan");
+        if(typeof clearScreenCache === "function") clearScreenCache("loan");
+        if(sres2.credit){
+          const after0 = await withTimeout(getB2BBalance(), 12000, "여신 잔액").catch(function(){ return null; });
+          creditMsg = "  여신 차감 " + sres2.credit.to.toLocaleString()
+            + ((before0 != null && after0 != null)
+                ? " · 잔여 " + before0.toLocaleString() + " → " + after0.toLocaleString() : "");
+        }
+        if(sres2.items) creditMsg += (creditMsg ? "\n" : "") + "  재고 " + sres2.items + "대 함께 맞춤";
       }
     }catch(e){}
 
@@ -29732,10 +29871,11 @@ window.showDepositUses = async function(id){
       });
       for(let i=0; i<orderPasteRows.length; i+=300){
         const bt = writeBatch(db);
-        orderPasteRows.slice(i, i+300).forEach(r=>{
+        orderPasteRows.slice(i, i+300).forEach((r, j)=>{
           const m = r.model;
           bt.set(doc(collection(db,"orders")), {
             batchId: batchRef.id, source, orderDate, expectedArrivalDate: "",
+            lineNo: i + j + 1,   // 붙여넣은 순서를 그대로 남깁니다
             modelId: m.id, baseModel: m.baseModel||"",
             capacity: m.capacity||"", systemModel: m.systemModel||"", petName: m.petName||"",
             manufacturerColor: r.colorObj ? (r.colorObj.manufacturerColor||"") : "",
@@ -35629,6 +35769,67 @@ let ghostBankCache = [];
   };
 
   let orderBaseDiffCache = [];
+  let orderItemDiffCache = [];
+
+  //  주문과 재고가 다른 건을 표로 보여주고, 주문 기준으로 맞춥니다.
+  //   맞추는 일은 syncAfterOrderLines 하나가 합니다. (품목 수정·주문 수정과 같은 함수)
+  window.showOrderItemDiffList = function(){
+    const rows = orderItemDiffCache || [];
+    if(rows.length === 0){ alert("주문과 재고가 다른 건이 없습니다."); return; }
+    const head = document.getElementById("suplog-head");
+    const body = document.getElementById("suplog-body");
+    if(!head || !body){ alert("화면을 찾지 못했습니다."); return; }
+    head.innerHTML = '<b>주문과 재고의 금액·할인이 다름</b> — 주문 ' + rows.length + '건'
+      + '<br><span style="color:var(--gray);">주문에 저장된 값이 맞습니다. '
+      + '[맞추기] 를 누르면 그 주문의 재고·판매요청·여신차감액까지 함께 맞춰집니다. '
+      + '값을 새로 만들지 않습니다.</span>';
+    const f = function(n){ return (Number(n)||0).toLocaleString(); };
+    body.innerHTML =
+      '<div style="overflow-x:auto;"><table class="data-table" style="width:auto;"><thead><tr>'
+      + '<th>주문일</th><th>입고처</th><th class="ta-right">재고</th><th>다른 항목</th>'
+      + '<th>보기 (주문 → 재고)</th><th></th></tr></thead><tbody>'
+      + rows.map(function(r, ix){
+          const sp = r.sample || {};
+          return '<tr>'
+            + '<td>' + comboEsc(r.date) + '</td>'
+            + '<td>' + comboEsc(r.src) + '</td>'
+            + '<td class="ta-right">' + r.cnt + '대</td>'
+            + '<td style="color:var(--danger);">' + comboEsc(r.what) + '</td>'
+            + '<td style="font-size:11.5px;color:var(--gray);">'
+              + comboEsc(String(sp.model||"-")) + ' · 선할인% <b>' + comboEsc(String(sp.oPct))
+              + '</b> → ' + comboEsc(String(sp.iPct))
+              + ' · 입고가 <b>' + f(sp.oBuy) + '</b> → ' + f(sp.iBuy) + '</td>'
+            + '<td><button class="btn small" style="width:auto;" data-oidiff="' + ix + '">맞추기</button></td>'
+            + '</tr>';
+        }).join("")
+      + '</tbody></table></div>';
+    body.querySelectorAll("[data-oidiff]").forEach(function(b){
+      b.onclick = function(){ fixOrderItemDiffOne(Number(b.dataset.oidiff)); };
+    });
+  };
+
+  window.fixOrderItemDiffOne = async function(ix){
+    const r = (orderItemDiffCache || [])[Number(ix)];
+    if(!r){ alert("찾지 못했습니다."); return; }
+    if(!hasPerm(currentUserPerms, "paymentProcess")){ alert("권한이 없습니다."); return; }
+    if(!confirm(r.date + " · " + r.src + "\n\n"
+      + "재고 " + r.cnt + "대를 주문에 저장된 값으로 맞춥니다.\n"
+      + "다른 항목: " + r.what + "\n\n"
+      + "· 주문 값은 바뀌지 않습니다\n"
+      + "· 재고 · 판매요청 · 여신차감액이 함께 맞춰집니다\n\n진행할까요?")) return;
+    try{
+      const res = await syncAfterOrderLines(r.batchId, null);
+      logAction("주문 기준으로 재고 맞추기",
+        r.date + " / " + r.src + " / 재고 " + res.items + "대"
+        + (res.credit ? " / 여신 " + res.credit.from.toLocaleString() + "→" + res.credit.to.toLocaleString() : ""));
+      alert("맞췄습니다.\n\n  재고 " + res.items + "대"
+        + (res.credit ? "\n  여신차감액 " + res.credit.from.toLocaleString()
+            + " → " + res.credit.to.toLocaleString() : "")
+        + "\n\n[다시 점검] 을 눌러 확인해주세요.");
+    }catch(e){
+      alert("맞추지 못했습니다.\n" + ((e && e.message) ? e.message : String(e)));
+    }
+  };
   // 주문의 할인 금액이 기준과 다른 건을 보여줍니다.
   window.showOrderBaseDiffList = function(){
     const rows = orderBaseDiffCache || [];
@@ -36010,6 +36211,67 @@ let ghostBankCache = [];
               unit:"", why:"주문에 적힌 매입할인 기준으로 %를 다시 곱하면 금액이 달라지는 건입니다. "
                 + "그 주문을 열어 [모든 줄에 적용] 하신 뒤 저장하시면 맞춰집니다.",
               fix:"showOrderBaseDiffList()", fixLabel:"확인하기" });
+          }
+        }
+        // ── 주문과 재고의 금액·할인이 다른 건 ──
+        //  주문을 고쳤는데 재고가 안 따라온 경우입니다. «주문에 저장된 값»이 맞습니다.
+        //  값을 만들어내지 않습니다. 주문에 저장된 값을 재고로 옮길 뿐입니다.
+        {
+          const dRows = [];
+          try{
+            const obAll2 = {};
+            (await getDocs(collection(db,"orderBatches"))).forEach(function(d){ obAll2[d.id] = d.data(); });
+            const ordById = {};
+            (await getDocs(collection(db,"orders"))).forEach(function(d){
+              const o = d.data();
+              if(o.status === "취소") return;
+              const bt = obAll2[o.batchId];
+              if(bt && bt.status === "취소") return;
+              ordById[d.id] = { id:d.id, ...o,
+                _src:  (bt && bt.source)    || o.source    || "-",
+                _date: (bt && bt.orderDate) || o.orderDate || "-" };
+            });
+            const V = function(x){ return (x == null || x === "") ? "" : String(Number(x)); };
+            const byBatch = {};
+            Object.keys(items).forEach(function(iid){
+              const it = items[iid];
+              if(it.deleted === true) return;
+              const o = ordById[String(it.orderId||"")];
+              if(!o) return;                       // 주문에 안 이어진 재고는 여기서 안 봅니다
+              const diff = [];
+              if(V(it.listPrice)           !== V(o.listPrice))        diff.push("출고가");
+              if(V(it.purchaseDiscount)    !== V(o.preDiscountPct))   diff.push("선할인%");
+              if(V(it.purchaseDiscountAmt) !== V(o.preDiscountAmt))   diff.push("선할인");
+              if(V(it.otherDiscountPct)    !== V(o.otherDiscountPct)) diff.push("타할인%");
+              if(V(it.otherDiscountAmt)    !== V(o.otherDiscountAmt)) diff.push("타할인");
+              if(V(it.purchasePrice)       !== V(o.purchasePrice))    diff.push("입고가");
+              if(diff.length === 0) return;
+              const k = String(o.batchId||"");
+              if(!byBatch[k]) byBatch[k] = { batchId:k, src:o._src, date:o._date,
+                                             cnt:0, what:new Set(), sample:null };
+              byBatch[k].cnt++;
+              diff.forEach(function(x){ byBatch[k].what.add(x); });
+              if(!byBatch[k].sample) byBatch[k].sample = {
+                model: o.systemModel || "-",
+                oPct: (o.preDiscountPct == null ? "-" : o.preDiscountPct),
+                iPct: (it.purchaseDiscount == null ? "-" : it.purchaseDiscount),
+                oBuy: Number(o.purchasePrice)||0,
+                iBuy: Number(it.purchasePrice)||0 };
+            });
+            Object.keys(byBatch).forEach(function(k){
+              const g = byBatch[k];
+              dRows.push({ batchId:g.batchId, src:g.src, date:g.date, cnt:g.cnt,
+                what: Array.from(g.what).join(" · "), sample:g.sample });
+            });
+            dRows.sort(function(a,b){ return String(b.date).localeCompare(String(a.date)); });
+          }catch(e){}
+          if(dRows.length){
+            orderItemDiffCache = dRows;
+            issues.push({ n:"주문과 재고의 금액·할인이 다름", cnt: dRows.length, unit:"주문",
+              why:"주문을 고쳤는데 재고가 따라오지 않은 건입니다. 주문에 저장된 값이 맞습니다. "
+                + "[맞추기] 를 누르면 그 주문의 재고·판매요청·여신차감액까지 함께 맞춰집니다. "
+                + "값을 새로 만들지 않고, 주문에 저장된 값을 그대로 옮깁니다.",
+              fix:"showOrderItemDiffList()", fixLabel:"확인하기" });
           }
         }
         //  「입고가가 할인과 안 맞음」 점검은 없앴습니다.
@@ -46591,6 +46853,7 @@ let ghostBankCache = [];
       if(bd.exists()) b = { id:bd.id, ...bd.data() };
       const lq = await getDocs(query(collection(db,"orders"), where("batchId","==", batchId)));
       lq.forEach(function(d){ const v=d.data(); if(v.status !== "취소") lines.push({ id:d.id, ...v }); });
+      sortOrderLines(lines);
     }catch(e){ alert("읽지 못했습니다."); return; }
     if(lines.length === 0){ alert("품목이 없습니다."); return; }
 
