@@ -400,7 +400,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-06 v1129</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-06 v1132</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -4259,6 +4259,113 @@ const firebaseConfig = {
   const auth = getAuth(app);
   const db = getFirestore(app);
 
+  //   요청 쪽은 건드리지 않습니다. 통장 내역만 「안 붙임」으로 만듭니다.
+  window.releaseDepositEntry = async function(id){
+    if(!hasPerm(currentUserPerms, "paymentProcess")){ alert("권한이 없습니다."); return; }
+    let v = null;
+    try{
+      const d = await getDoc(doc(db,"bankDeposits", id));
+      if(!d.exists()){ alert("이미 지워진 내역입니다."); return; }
+      v = d.data();
+    }catch(e){ alert("읽지 못했습니다."); return; }
+    const used = Number(v.usedAmount)||0;
+    if(used <= 0){ alert("이미 안 붙은 내역입니다."); return; }
+    const uses = (v.uses||[]);
+    if(!confirm("이 내역의 배분을 풉니다.\n\n"
+      + "  " + (v.date||"-") + " · " + (Number(v.amount)||0).toLocaleString()
+      + " · " + (v.payer || v.company || "-") + "\n"
+      + "  지금 쓴 금액 " + used.toLocaleString() + "\n"
+      + "\n붙어 있던 요청의 이체·입금 기록도 함께 지웁니다.\n"
+      + "그 요청은 다시 「미확인」 이 되어 새로 매칭하실 수 있습니다.\n"
+      + (uses.length ? "\n[붙어 있던 기록]\n"
+          + uses.slice(0,6).map(function(u){
+              return "  " + (u.date||"-") + " · " + (Number(u.amount)||0).toLocaleString()
+                   + (u.destination ? " · " + u.destination : "")
+                   + (u.memo ? " · " + u.memo : "");
+            }).join("\n")
+          + (uses.length > 6 ? "\n  ... 외 " + (uses.length-6) + "건" : "") + "\n" : "")
+      + "\n쓴 금액을 0 으로 되돌립니다.\n\n진행할까요?")) return;
+    //  통장과 요청은 늘 함께 움직입니다.
+    const reqIds = [...new Set(uses.map(function(u){ return String(u.reqId||""); }).filter(Boolean))];
+    //  통장과 요청은 늘 함께 움직입니다. 따로 묻지 않습니다.
+    const alsoReq = reqIds.length > 0;
+    try{
+      await updateDoc(doc(db,"bankDeposits", id), { usedAmount: 0, uses: [] });
+      if(alsoReq){
+        for(const rid of reqIds){
+          for(const col of ["paymentRequests","saleDepositRequests"]){
+            try{
+              const rd = await getDoc(doc(db, col, rid));
+              if(!rd.exists()) continue;
+              const rv = rd.data();
+              const isIn2 = (col === "saleDepositRequests");
+              // 이 통장에서 붙인 기록만 뺍니다.
+              const list = (isIn2 ? (rv.receipts||[]) : (rv.payments||[]))
+                .filter(function(x){ return String(x.depositId||x.bankId||x.pickId||"") !== String(id); });
+              const sum2 = list.filter(function(x){ return x.approved; })
+                .reduce(function(n,x){ return n + (Number(x.amount)||0); }, 0);
+              const tot2 = Number(rv.totalAmount)||0;
+              const full2 = tot2 > 0 && sum2 >= tot2;
+              await updateDoc(doc(db, col, rid), isIn2
+                ? { receipts:list, receivedAmount:sum2, depositCompleted:full2,
+                    depositCompleteDate: full2 ? (rv.depositCompleteDate||"") : "",
+                    status: full2 ? "입금완료" : (sum2 > 0 ? "부분입금" : "요청중") }
+                : { payments:list, paidAmount:sum2, transferCompleted:full2,
+                    transferCompleteDate: full2 ? (rv.transferCompleteDate||"") : "",
+                    status: full2 ? "이체완료" : (sum2 > 0 ? "부분이체" : "요청중") });
+              break;
+            }catch(e){}
+          }
+        }
+      }
+    }catch(e){ alert("풀지 못했습니다.\n" + ((e&&e.message)?e.message:String(e))); return; }
+    logAction("입출금 내역 배분 풀기",
+      (v.date||"-") + " / " + (Number(v.amount)||0).toLocaleString()
+      + " / " + (v.payer || v.company || "-") + " / 풀린 금액 " + used.toLocaleString());
+    alert("배분을 풀었습니다."
+      + (alsoReq ? "\n요청의 이체·입금 기록도 지웠습니다." : "")
+      + "\n\n이제 <삭제> 하시거나 다시 매칭하실 수 있습니다.");
+    try{ clearCache("bank"); }catch(e){}
+    try{ if(typeof loadDepositEntryList === "function") loadDepositEntryList(); }catch(e){}
+    try{ if(typeof loadReqBoard === "function") loadReqBoard(); }catch(e){}
+    try{ if(typeof loadCashbook === "function") loadCashbook(); }catch(e){}
+  };
+
+  //  붙은 요청이 없어졌을 때, 쓴 금액을 0 으로 되돌립니다.
+//  배분이 남아 있어도 확인 후 지웁니다. (붙은 요청이 없어졌을 때)
+  window.forceDeleteDeposit = async function(id){
+    if(!hasPerm(currentUserPerms, "cancelDelete")){ alert("권한이 없습니다."); return; }
+    let v = null;
+    try{
+      const d = await getDoc(doc(db,"bankDeposits", id));
+      if(!d.exists()){ alert("이미 지워진 내역입니다."); return; }
+      v = d.data();
+    }catch(e){ alert("읽지 못했습니다."); return; }
+    const used = Number(v.usedAmount)||0;
+    const uses = (v.uses||[]);
+    if(!confirm("이 입출금 내역을 지웁니다.\n\n"
+      + "  " + (v.date||"-") + " · " + (Number(v.amount)||0).toLocaleString()
+      + " · " + (v.payer || v.company || "-") + "\n"
+      + (used ? "  쓴 금액 " + used.toLocaleString() + "\n" : "")
+      + (uses.length ? "\n[붙어 있던 기록]\n"
+          + uses.slice(0,6).map(function(u){
+              return "  " + (u.date||"-") + " · " + (Number(u.amount)||0).toLocaleString()
+                   + (u.destination ? " · " + u.destination : "");
+            }).join("\n") + "\n" : "")
+      + "\n요청 쪽 기록은 건드리지 않습니다.\n"
+      + "되돌릴 수 없습니다. 진행할까요?")) return;
+    try{ await deleteDoc(doc(db,"bankDeposits", id)); }
+    catch(e){ alert("지우지 못했습니다.\n" + ((e&&e.message)?e.message:String(e))); return; }
+    logAction("입출금 내역 삭제 (배분 있음)",
+      (v.date||"-") + " / " + (Number(v.amount)||0).toLocaleString()
+      + " / " + (v.payer || v.company || "-") + (used ? " / 쓴 금액 " + used.toLocaleString() : ""));
+    alert("지웠습니다.");
+    try{ clearCache("bank"); }catch(e){}
+    try{ if(typeof loadDepositEntryList === "function") loadDepositEntryList(); }catch(e){}
+    try{ if(typeof loadReqBoard === "function") loadReqBoard(); }catch(e){}
+    try{ if(typeof loadCashbook === "function") loadCashbook(); }catch(e){}
+  };
+
   //  요청에서 쓴 돈을 통장 내역으로 되돌립니다.
   //   (요청을 지우거나 취소하면 그 돈이 다시 「안 붙인 돈」이 되어야 합니다)
   window.releaseBankUses = async function(kind, reqId, recs){
@@ -4268,7 +4375,7 @@ const firebaseConfig = {
       // 어느 통장 내역에서 얼마를 썼는지 모으고, 그만큼 되돌립니다.
       const back = {};
       list.forEach(function(r){
-        const bid = String(r.bankId || r.pickId || r.fromBankDepositId || "");
+        const bid = String(r.depositId || r.bankId || r.pickId || r.fromBankDepositId || "");
         const amt = Number(r.amount)||0;
         if(!bid || !amt) return;
         back[bid] = (back[bid]||0) + amt;
@@ -23690,81 +23797,7 @@ window.deleteReqBoardItem = async function(kind, reqId){
     addViewCfgBtn("dl-deposit", "deposit-entry-list");
   };
 
-  //  붙은 요청이 없어졌을 때, 쓴 금액을 0 으로 되돌립니다.
-  //   요청 쪽은 건드리지 않습니다. 통장 내역만 「안 붙임」으로 만듭니다.
-  window.releaseDepositEntry = async function(id){
-    if(!hasPerm(currentUserPerms, "paymentProcess")){ alert("권한이 없습니다."); return; }
-    let v = null;
-    try{
-      const d = await getDoc(doc(db,"bankDeposits", id));
-      if(!d.exists()){ alert("이미 지워진 내역입니다."); return; }
-      v = d.data();
-    }catch(e){ alert("읽지 못했습니다."); return; }
-    const used = Number(v.usedAmount)||0;
-    if(used <= 0){ alert("이미 안 붙은 내역입니다."); return; }
-    const uses = (v.uses||[]);
-    if(!confirm("이 내역의 배분을 풉니다.\n\n"
-      + "  " + (v.date||"-") + " · " + (Number(v.amount)||0).toLocaleString()
-      + " · " + (v.payer || v.company || "-") + "\n"
-      + "  지금 쓴 금액 " + used.toLocaleString() + "\n"
-      + (uses.length ? "\n[붙어 있던 기록]\n"
-          + uses.slice(0,6).map(function(u){
-              return "  " + (u.date||"-") + " · " + (Number(u.amount)||0).toLocaleString()
-                   + (u.destination ? " · " + u.destination : "")
-                   + (u.memo ? " · " + u.memo : "");
-            }).join("\n")
-          + (uses.length > 6 ? "\n  ... 외 " + (uses.length-6) + "건" : "") + "\n" : "")
-      + "\n쓴 금액을 0 으로 되돌립니다.\n"
-      + "요청 쪽 기록은 건드리지 않습니다.\n\n"
-      + "붙었던 요청이 이미 없어졌을 때만 쓰세요.\n\n진행할까요?")) return;
-    try{
-      await updateDoc(doc(db,"bankDeposits", id), { usedAmount: 0, uses: [] });
-    }catch(e){ alert("풀지 못했습니다.\n" + ((e&&e.message)?e.message:String(e))); return; }
-    logAction("입출금 내역 배분 풀기",
-      (v.date||"-") + " / " + (Number(v.amount)||0).toLocaleString()
-      + " / " + (v.payer || v.company || "-") + " / 풀린 금액 " + used.toLocaleString());
-    alert("배분을 풀었습니다.\n\n이제 <삭제> 하시거나 다시 매칭하실 수 있습니다.");
-    try{ clearCache("bank"); }catch(e){}
-    try{ if(typeof loadDepositEntryList === "function") loadDepositEntryList(); }catch(e){}
-    try{ if(typeof loadReqBoard === "function") loadReqBoard(); }catch(e){}
-    try{ if(typeof loadCashbook === "function") loadCashbook(); }catch(e){}
-  };
-
-  //  배분이 남아 있어도 확인 후 지웁니다. (붙은 요청이 없어졌을 때)
-  window.forceDeleteDeposit = async function(id){
-    if(!hasPerm(currentUserPerms, "cancelDelete")){ alert("권한이 없습니다."); return; }
-    let v = null;
-    try{
-      const d = await getDoc(doc(db,"bankDeposits", id));
-      if(!d.exists()){ alert("이미 지워진 내역입니다."); return; }
-      v = d.data();
-    }catch(e){ alert("읽지 못했습니다."); return; }
-    const used = Number(v.usedAmount)||0;
-    const uses = (v.uses||[]);
-    if(!confirm("이 입출금 내역을 지웁니다.\n\n"
-      + "  " + (v.date||"-") + " · " + (Number(v.amount)||0).toLocaleString()
-      + " · " + (v.payer || v.company || "-") + "\n"
-      + (used ? "  쓴 금액 " + used.toLocaleString() + "\n" : "")
-      + (uses.length ? "\n[붙어 있던 기록]\n"
-          + uses.slice(0,6).map(function(u){
-              return "  " + (u.date||"-") + " · " + (Number(u.amount)||0).toLocaleString()
-                   + (u.destination ? " · " + u.destination : "");
-            }).join("\n") + "\n" : "")
-      + "\n요청 쪽 기록은 건드리지 않습니다.\n"
-      + "되돌릴 수 없습니다. 진행할까요?")) return;
-    try{ await deleteDoc(doc(db,"bankDeposits", id)); }
-    catch(e){ alert("지우지 못했습니다.\n" + ((e&&e.message)?e.message:String(e))); return; }
-    logAction("입출금 내역 삭제 (배분 있음)",
-      (v.date||"-") + " / " + (Number(v.amount)||0).toLocaleString()
-      + " / " + (v.payer || v.company || "-") + (used ? " / 쓴 금액 " + used.toLocaleString() : ""));
-    alert("지웠습니다.");
-    try{ clearCache("bank"); }catch(e){}
-    try{ if(typeof loadDepositEntryList === "function") loadDepositEntryList(); }catch(e){}
-    try{ if(typeof loadReqBoard === "function") loadReqBoard(); }catch(e){}
-    try{ if(typeof loadCashbook === "function") loadCashbook(); }catch(e){}
-  };
-
-  window.showDepositUses = async function(id){
+window.showDepositUses = async function(id){
     const area = document.getElementById("dep-use-area");
     const snap = await getDoc(doc(db,"bankDeposits", id));
     if(!snap.exists()) return;
