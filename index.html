@@ -400,7 +400,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-06 v1092</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-06 v1095</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -28167,7 +28167,6 @@
             const rest = [];
             q2.forEach(function(d){ if(d.data().deleted !== true) rest.push({ id:d.id, ...d.data() }); });
             if(rest.length){
-              // 모델·색상이 같은 품목에 붙입니다. 하나뿐이면 그 품목에 전부 붙입니다.
               priceChanged.forEach(function(lid){
                 const src = lines.find(x=> x.id === lid) || {};
                 rest.forEach(function(it){
@@ -28179,25 +28178,83 @@
               });
             }
           }catch(e){}
+          // ④ 그래도 못 찾으면 「입고처 + 주문일 + 모델」 로 찾습니다.
+          //    옛 주문이라 재고에 주문 번호가 아예 없는 경우입니다.
+          const stillNone = priceChanged.filter(function(lid){
+            return !byLine[lid] || byLine[lid].size === 0; });
+          if(stillNone.length){
+            try{
+              const src0 = String(batchPatch.source || b.source || "").trim();
+              const od0  = String(batchPatch.orderDate || b.orderDate || "").replace(/\D/g,"");
+              if(src0){
+                const q3 = await getDocs(query(collection(db,"inventoryItems"),
+                  where("source","==", src0)));
+                const pool = [];
+                q3.forEach(function(d){
+                  const v = d.data();
+                  if(v.deleted === true) return;
+                  // 이미 다른 주문에 이어진 재고는 건드리지 않습니다.
+                  if(v.orderId || v.orderBatchId) return;
+                  // 주문일이 있으면 같은 날 것만 봅니다.
+                  if(od0 && String(v.orderDate||"").replace(/\D/g,"") && String(v.orderDate||"").replace(/\D/g,"") !== od0) return;
+                  pool.push({ id:d.id, ...v });
+                });
+                stillNone.forEach(function(lid){
+                  const src = lines.find(x=> x.id === lid) || {};
+                  pool.forEach(function(it){
+                    const sameM = modelDupKey(String(it.systemModel||"")) === modelDupKey(String(src.systemModel||""));
+                    if(!sameM) return;
+                    const sameC = !src.systemColor || String(it.systemColor||"") === String(src.systemColor||"");
+                    if(sameC) addId(lid, it.id);
+                  });
+                });
+              }
+            }catch(e){}
+          }
         }
         Object.keys(byLine).forEach(function(lid){
-          byLine[lid].forEach(function(iid){ itemTargets.push({ iid, p: perLine[lid] }); });
+          byLine[lid].forEach(function(iid){ itemTargets.push({ iid, lid, p: perLine[lid] }); });
         });
         if(itemTargets.length){
-          fixItems = confirm(
-            (kind === "order"
-              ? "이 주문으로 이미 들어온 재고 "
-              : "이 판매요청에 붙어 있는 재고 ") + itemTargets.length + "대가 있습니다.\n\n"
-            + "재고에도 이번에 고친 값을 함께 넣을까요?\n"
-            + "  모델 · 색상 · 출고가 · 입고가 · 할인 기준 · 선할인 · 타할인 · 판매 금액\n\n"
-            + "  예   — 재고가 " + (kind === "order" ? "주문" : "판매요청") + "과 같아집니다 (권합니다)\n"
-            + "  아니오 — " + (kind === "order" ? "주문" : "판매요청") + "만 바뀌고 재고는 지금 값 그대로입니다");
+          //  주문을 고치면 재고도 같이 고칩니다. 따로 묻지 않습니다.
+          fixItems = true;
         }else if(kind === "order"){
-          //  재고를 하나도 못 찾았으면 알려드립니다. 그냥 넘어가면 원인을 모르십니다.
-          alert("이 주문으로 들어온 재고를 찾지 못했습니다.\n\n"
-            + "주문만 바뀌고 재고는 그대로입니다.\n\n"
-            + "재고 목록에서 그 단말기를 직접 고치시거나,\n"
-            + "[데이터 점검] 에서 주문과 재고를 다시 이어주세요.");
+          //  재고를 못 찾았으면, 입고처가 같은 재고를 보여드리고 직접 고르게 합니다.
+          let cand = [];
+          try{
+            const src0 = String(batchPatch.source || b.source || "").trim();
+            if(src0){
+              const q4 = await getDocs(query(collection(db,"inventoryItems"),
+                where("source","==", src0)));
+              q4.forEach(function(d){
+                const v = d.data();
+                if(v.deleted === true) return;
+                cand.push({ id:d.id, ...v });
+              });
+            }
+          }catch(e){}
+          if(cand.length === 0){
+            alert("이 주문으로 들어온 재고를 찾지 못했습니다.\n\n"
+              + "주문만 바뀌고 재고는 그대로입니다.");
+          }else{
+            // 모델이 같은 것만 남깁니다.
+            const models = new Set(priceChanged.map(function(lid){
+              const src = lines.find(x=> x.id === lid) || {};
+              return modelDupKey(String(src.systemModel||"")); }));
+            const fit = cand.filter(function(it){
+              return models.has(modelDupKey(String(it.systemModel||""))); });
+            const use = fit.length ? fit : cand;
+            //  모델이 같은 재고에 바로 넣습니다. 따로 묻지 않습니다.
+            const lid0 = priceChanged[0];
+            use.forEach(function(it){
+              const own = priceChanged.find(function(lid){
+                const src = lines.find(x=> x.id === lid) || {};
+                return modelDupKey(String(src.systemModel||"")) === modelDupKey(String(it.systemModel||""));
+              }) || lid0;
+              itemTargets.push({ iid: it.id, lid: own, p: perLine[own] });
+            });
+            fixItems = true;
+          }
         }
       }
     }
@@ -28294,6 +28351,12 @@
             // 할인 계산 기준도 재고로 옮깁니다. 재고 목록·판매 계산이 같은 기준으로 돕니다.
             if(t.p.discountBase) patch.discountBase = t.p.discountBase;
             if(t.p.saleDiscountBase) patch.saleDiscountBase = t.p.saleDiscountBase;
+            //  이번에 찾은 김에 주문과의 연결도 붙여둡니다. 다음부터는 바로 찾습니다.
+            if(kind === "order"){
+              const it1 = (invItemsForFix && invItemsForFix[t.iid]) || {};
+              if(!it1.orderBatchId) patch.orderBatchId = id;
+              if(!it1.orderId && t.lid) patch.orderId = t.lid;
+            }
             // 「입고동일」 표시도 함께 옮깁니다. 그래야 앞으로 입고가가 바뀔 때 판매가도 따라갑니다.
             if(t.p.salePriceFollowsBuy != null){
               patch.salePriceFollowsBuy = t.p.salePriceFollowsBuy;
@@ -28418,7 +28481,18 @@
         + " (" + one(sp, v=>v + "%") + ")"
         + " · " + arr.length + "줄";
     }catch(e){}
-    msg("저장되었습니다." + (addedLines ? "  품목 " + addedLines + "줄을 더했습니다." : "") + creditMsg + savedMsg, false);
+    //  매입할인 기준과 재고 반영 결과도 함께 보여드립니다.
+    let baseMsg = "";
+    try{
+      const bsv2 = String((document.getElementById("be-base")||{}).value || "");
+      if(bsv2){
+        baseMsg = "  매입할인 기준 "
+          + (bsv2==="supply" ? "공급가" : bsv2==="total" ? "출고가(합계)" : "출고가(대당)")
+          + " · 품목 " + Object.keys(perLine).length + "줄"
+          + " · 재고 " + (fixItems ? itemTargets.length + "대 반영" : "안 바꿈");
+      }
+    }catch(e){}
+    msg("저장되었습니다." + (addedLines ? "  품목 " + addedLines + "줄을 더했습니다." : "") + creditMsg + savedMsg + baseMsg, false);
     // 창을 먼저 닫고 목록은 뒤에서 새로 읽습니다. (목록 읽기가 오래 걸려도 창이 남지 않게)
     setTimeout(function(){
       try{ closeBatchEdit(); }catch(e){}
