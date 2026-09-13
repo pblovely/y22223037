@@ -400,7 +400,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-06 v1128</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-06 v1129</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -2636,7 +2636,7 @@
               <input type="checkbox" id="b2b-bank-on" onchange="onB2BBankOn()"> 입출금리스트에 함께 등록
             </label>
           </div>
-          <div class="stack-row b2b-bank-row" style="display:none;"><label>받는 곳·보내는 곳</label>
+          <div class="stack-row b2b-bank-row" style="display:none;"><label>입금자명</label>
             <input type="text" id="b2b-bank-payer" placeholder="예: 삼성유통"></div>
           <div class="stack-row b2b-bank-row" style="display:none;"><label>통장 메모</label>
             <input type="text" id="b2b-bank-memo" placeholder="통장에 적힌 그대로"></div>
@@ -2765,7 +2765,7 @@
         <div style="font-weight:700;font-size:12.5px;margin:12px 0 4px;">② 없으면 새로 만들어 잇기</div>
         <div class="stack-form">
           <div class="stack-row"><label>계좌</label><select id="ledbank-account"><option value="">(선택 안 함)</option></select></div>
-          <div class="stack-row"><label>받는 곳</label><input type="text" id="ledbank-payer" placeholder="예: 삼성전자(주)"></div>
+          <div class="stack-row"><label>입금자명</label><input type="text" id="ledbank-payer" placeholder="예: 삼성전자(주)"></div>
           <div class="stack-row"><label>메모 (선택)</label><input type="text" id="ledbank-memo" placeholder="선택"></div>
         </div>
         <div id="ledbank-msg" style="font-size:12.5px;margin:8px 0;line-height:1.7;"></div>
@@ -23216,7 +23216,7 @@ window.deleteReqBoardItem = async function(kind, reqId){
     document.getElementById("pp-amount").value = left || "";
     document.getElementById("pp-date").value   = todayStr();
     document.getElementById("pp-payer").value  = who.split(",")[0].trim();
-    document.getElementById("pp-payer-label").textContent = isIn ? "입금자명" : "받는 곳";
+    document.getElementById("pp-payer-label").textContent = "입금자명";
     document.getElementById("pp-tax").checked = !!p.taxInvoiceIssued;
     document.getElementById("pp-taxdate").value = p.taxInvoiceDate || "";
     document.getElementById("pp-taxamount").value = p.taxInvoiceAmount || "";
@@ -23638,7 +23638,7 @@ window.deleteReqBoardItem = async function(kind, reqId){
     }
     let totAmt = 0, totUsed = 0;
     let h = '<div style="overflow-x:auto;"><table class="data-table resv-dest-fit" style="width:auto;"><thead><tr>'
-      + '<th>구분</th><th>날짜</th><th>입금자·받는곳</th><th>거래처</th>'
+      + '<th>구분</th><th>날짜</th><th>입금자명</th><th>거래처</th>'
       + '<th class="ta-right">금액</th><th class="ta-right">사용</th><th class="ta-right">잔액</th>'
       + '<th>상태</th><th class="ta-left">메모</th><th class="ta-right">관리</th></tr></thead><tbody>';
     snap.forEach(d=>{
@@ -35018,7 +35018,7 @@ let ghostBankCache = [];
       + '</div>'
       + '<div style="overflow-x:auto;max-height:420px;overflow-y:auto;border:1px solid var(--line);">'
       + '<table class="data-table resv-dest-fit"><thead><tr>'
-      + '<th>구분</th><th>날짜</th><th>입금자·받는곳</th><th>거래처</th>'
+      + '<th>구분</th><th>날짜</th><th>입금자명</th><th>거래처</th>'
       + '<th class="ta-right">금액</th><th class="ta-right">쓴 금액</th>'
       + '<th class="ta-right">살아 있는 배분</th><th class="ta-right">풀릴 금액</th>'
       + '<th class="ta-right no-print">관리</th></tr></thead><tbody>'
@@ -38760,7 +38760,7 @@ let ghostBankCache = [];
     if(b) b.style.display = isAdj ? "" : "none";
   };
   // 여신 거래 등록 — 목록만 보이게 하고 입력은 팝업으로 옮겼습니다.
-  //  「통장에도 남기기」를 켜면 칸을 보여주고, 받는 곳을 대상으로 미리 채웁니다.
+  //  「통장에도 남기기」를 켜면 칸을 보여주고, 입금자명을 대상으로 미리 채웁니다.
   window.onB2BBankOn = function(){
     const on = !!(document.getElementById("b2b-bank-on")||{}).checked;
     document.querySelectorAll(".b2b-bank-row").forEach(function(r){
@@ -39341,13 +39341,13 @@ let ghostBankCache = [];
       const account = (document.getElementById("ledbank-account")||{}).value || "";
       const payer = String((document.getElementById("ledbank-payer")||{}).value||"").trim();
       const memo  = String((document.getElementById("ledbank-memo")||{}).value||"").trim();
-      if(!payer) return bad("받는 곳을 넣어주세요.");
+      if(!payer) return bad("입금자명을 넣어주세요.");
       if(!confirm(
         "통장 출금 내역을 새로 만들어 잇습니다.\n\n"
         + "  날짜   " + (e.date||"-") + "\n"
         + "  금액   " + amt.toLocaleString() + "\n"
         + "  계좌   " + (account || "(선택 안 함)") + "\n"
-        + "  받는 곳 " + payer + "\n\n"
+        + "  입금자명 " + payer + "\n\n"
         + "실제로 통장에서 나간 돈일 때만 만들어주세요. 이력에 남습니다.")) return;
       if(!(await warnDupBank("out", e.date||todayStr(), amt, payer))) return;
       try{
