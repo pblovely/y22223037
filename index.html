@@ -400,7 +400,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-06 v1101</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-06 v1102</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -12116,6 +12116,16 @@
       if(orderListFilter==="waiting" && !(!cancelled && b.paymentRequestId && b.depositPaid !== true)) return;
       if(orderListFilter==="cancel"  && !cancelled) return;
       visibleBatches.push({ id:bd.id, b, lines });
+    });
+
+    //  주문일이 늦은 것(최근)이 위로 옵니다. 같은 날이면 나중에 만든 것이 위입니다.
+    visibleBatches.sort(function(x,y){
+      const dx = String(x.b.orderDate||"").replace(/\D/g,"");
+      const dy = String(y.b.orderDate||"").replace(/\D/g,"");
+      if(dx !== dy) return dy.localeCompare(dx);
+      const tx = (x.b.createdAt && x.b.createdAt.seconds) || 0;
+      const ty = (y.b.createdAt && y.b.createdAt.seconds) || 0;
+      return ty - tx;
     });
 
     if(visibleBatches.length === 0){
@@ -37573,6 +37583,16 @@
       if(saleListFilter === "cancel")  return cancelled;
       return true;
     });
+    //  요청일이 늦은 것(최근)이 위로 옵니다. 같은 날이면 나중에 만든 것이 위입니다.
+    visibleSale.sort(function(x,y){
+      const dx = String((x.b && x.b.requestDate)||"").replace(/\D/g,"");
+      const dy = String((y.b && y.b.requestDate)||"").replace(/\D/g,"");
+      if(dx !== dy) return dy.localeCompare(dx);
+      const tx = (x.b && x.b.createdAt && x.b.createdAt.seconds) || 0;
+      const ty = (y.b && y.b.createdAt && y.b.createdAt.seconds) || 0;
+      return ty - tx;
+    });
+
     if(visibleSale.length === 0){
       const label = { all:"", ing:"진행중인", done:"최종완료된", waiting:"입금확인중인", cancel:"취소된" }[saleListFilter] || "";
       const finCnt = saleRows.filter(r=> r.b.status!=="취소" && isSaleFinal(r.b, r.lines)).length;
