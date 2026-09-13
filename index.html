@@ -400,7 +400,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-06 v1065</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-06 v1066</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -666,6 +666,8 @@
           <input type="text" id="act-from" placeholder="개통 시작일 20260701" onchange="loadActivationList()" style="width:150px;height:28px;border:1px solid var(--line);padding:0 8px;font-size:12.5px;margin-left:-1px;box-sizing:border-box;">
           <input type="text" id="act-to" placeholder="개통 종료일 20260731" onchange="loadActivationList()" style="width:150px;height:28px;border:1px solid var(--line);padding:0 8px;font-size:12.5px;margin-left:-1px;box-sizing:border-box;">
           <input type="text" id="act-month" maxlength="6" inputmode="numeric" placeholder="지원금 귀속월 202608" onchange="loadActivationList()" style="width:160px;height:28px;border:1px solid var(--line);padding:0 8px;font-size:12.5px;margin-left:-1px;box-sizing:border-box;">
+          <input type="text" id="act-reg-from" maxlength="8" inputmode="numeric" placeholder="등록일 시작 20260906" onchange="loadActivationList()" style="width:160px;height:28px;border:1px solid var(--line);padding:0 8px;font-size:12.5px;margin-left:-1px;box-sizing:border-box;">
+          <input type="text" id="act-reg-to" maxlength="8" inputmode="numeric" placeholder="등록일 종료 20260906" onchange="loadActivationList()" style="width:160px;height:28px;border:1px solid var(--line);padding:0 8px;font-size:12.5px;margin-left:-1px;box-sizing:border-box;">
           <select id="act-kind-f" onchange="loadActivationList()" style="width:120px;height:28px;border:1px solid var(--line);padding:0 6px;font-size:12.5px;margin-left:-1px;box-sizing:border-box;">
             <option value="">구분 전체</option>
             <option value="pay">지급</option>
@@ -45004,7 +45006,7 @@
   // ---------- 개통 관리 ----------
   //  포피플에서 직접 개통한 단말기입니다. 거래처에 넘긴 것이 아니라 받을 돈이 없습니다.
   window.clearActCond = function(){
-    ["act-q","act-from","act-to","act-month"].forEach(id=>{ const e=document.getElementById(id); if(e) e.value=""; });
+    ["act-q","act-from","act-to","act-month","act-reg-from","act-reg-to"].forEach(id=>{ const e=document.getElementById(id); if(e) e.value=""; });
     ["act-code-f","act-sup-f","act-kind-f"].forEach(id=>{ const e=document.getElementById(id); if(e) e.value=""; });
     loadActivationList();
   };
@@ -45065,20 +45067,34 @@
     rows.sort((a,b)=> String(b.activateDate||"").localeCompare(String(a.activateDate||""))
                     || String(a.serialNumber||"").localeCompare(String(b.serialNumber||"")));
 
-    // ── 재고와 못 이은 개통 기록도 목록에 넣습니다. ──
-    //   나중에 재고가 들어오거나 되사오시면 [재고와 잇기] 로 이어집니다.
+    // ── 개통 기록을 읽어 등록일(작업일)을 붙이고, 못 이은 건도 목록에 넣습니다. ──
+    const regFrom = String((document.getElementById("act-reg-from")||{}).value || "").replace(/\D/g,"");
+    const regTo   = String((document.getElementById("act-reg-to")||{}).value || "").replace(/\D/g,"");
     try{
       const aq = await getDocs(collection(db,"activations"));
       const orphan = [];
+      // 재고에 이어진 건은 그 재고에 등록일을 적어둡니다.
+      const regByItem = {};
+      aq.forEach(function(d){
+        const v = d.data();
+        if(!v.itemId) return;
+        const w = (v.createdAt && v.createdAt.seconds)
+          ? new Date(v.createdAt.seconds*1000).toISOString().slice(0,10).replace(/-/g,"") : "";
+        if(w) regByItem[v.itemId] = w;
+      });
+      rows.forEach(function(it){ if(regByItem[it.id]) it._regDate = regByItem[it.id]; });
       aq.forEach(function(d){
         const v = d.data();
         if(v.itemId) return;                       // 이미 재고에 이어진 건은 재고 쪽에서 나옵니다
+        const when = (v.createdAt && v.createdAt.seconds)
+          ? new Date(v.createdAt.seconds*1000).toISOString().slice(0,10).replace(/-/g,"") : "";
         orphan.push({
-          id: "act:" + d.id, _actId: d.id, _orphan: true,
+          id: "act:" + d.id, _actId: d.id, _orphan: true, _regDate: when,
           serialNumber: v.serialNumber||"", systemModel: v.systemModel||"",
           carrier: v.carrier||"", activateDate: v.activateDate||"",
           subNumber: v.subNumber||"", activationCode: v.activationCode||"",
-          subsidyAmount: v.subsidyAmount||null, supportMonth: v.month||"",
+          subsidyAmount: (v.subsidyAmount != null ? v.subsidyAmount : null),
+          supportMonth: v.month||"",
           linkState: v.linkState || "none",
           status: "개통", listPrice: 0, location: ""
         });
@@ -45088,6 +45104,8 @@
         const dt = String(it.activateDate||"").replace(/\D/g,"");
         if(from && (!dt || dt < from)) return false;
         if(to && (!dt || dt > to)) return false;
+        if(regFrom && (!it._regDate || it._regDate < regFrom)) return false;
+        if(regTo   && (!it._regDate || it._regDate > regTo)) return false;
         if(mon && String(it.supportMonth||"") !== mon) return false;
         if(codeF && String(it.activationCode||"") !== codeF) return false;
         if(q){
@@ -45098,6 +45116,14 @@
         }
         return true;
       });
+      // 재고 쪽도 등록일로 거릅니다.
+      if(regFrom || regTo){
+        rows = rows.filter(function(it){
+          if(regFrom && (!it._regDate || it._regDate < regFrom)) return false;
+          if(regTo   && (!it._regDate || it._regDate > regTo)) return false;
+          return true;
+        });
+      }
       rows = rows.concat(keep);
       rows.sort((a,b)=> String(b.activateDate||"").localeCompare(String(a.activateDate||""))
                       || String(a.serialNumber||"").localeCompare(String(b.serialNumber||"")));
@@ -46628,6 +46654,7 @@
     { key:"workDate", label:"작업일",
       get:it=> comboEsc((it._sup && it._sup.when) || "-"),
       raw:it=> (it._sup && it._sup.when) || "" },
+    { key:"regDate",  label:"등록일", get:it=> comboEsc(it._regDate||"-"), raw:it=> it._regDate||"" },
     { key:"invLink",  label:"재고연결", html:true,
       get:it=>{
         if(!it._orphan) return '<span style="color:#2e7d32;">이어짐</span>';
@@ -46639,7 +46666,7 @@
     { key:"location", label:"위치",       get:it=> comboEsc(it.location||"-"), raw:it=> it.location||"" }
   ];
   const ACT_COLS_DEFAULT = ["serial","model","carrier","actDate","subNo","actCode",
-    "supMonth","supKind","supAmt","supReason","invLink","dist","claw","final","location"];
+    "supMonth","supKind","supAmt","supReason","regDate","invLink","dist","claw","final","location"];
   function listActCols(){
     try{ const v = localStorage.getItem("actCols"); if(v) return JSON.parse(v); }catch(e){}
     return ACT_COLS_DEFAULT.slice();
