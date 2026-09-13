@@ -678,8 +678,15 @@
           </select>
           <input type="text" id="act-cond-value" placeholder="검색어" onchange="loadActivationList()" style="width:130px;height:28px;border:1px solid var(--line);padding:0 8px;font-size:12.5px;margin-left:-1px;box-sizing:border-box;">
           <span class="tbar-sep" style="margin:0 4px;">|</span>
+          <select id="act-link-f" onchange="loadActivationList()" style="width:130px;height:28px;border:1px solid var(--line);padding:0 6px;font-size:12.5px;box-sizing:border-box;">
+            <option value="">전체</option>
+            <option value="yes">재고 이어짐</option>
+            <option value="no">재고 없음</option>
+            <option value="sold">이미 판매됨</option>
+          </select>
           <input type="text" id="act-q" placeholder="전체에서 찾기 (모든 칸)" onchange="loadActivationList()" style="width:180px;height:28px;border:1px solid var(--line);padding:0 8px;font-size:12.5px;box-sizing:border-box;">
           <button class="btn small secondary" style="width:auto;margin-left:-1px;" onclick="clearActCond()">비우기</button>
+
           <button class="btn small secondary" style="width:auto;margin-left:-1px;" onclick="toggleActPicker()">보기 설정</button>
           <span id="dl-activation" style="margin-left:6px;"></span>
         </div>
@@ -4513,7 +4520,6 @@
           || (x.systemModel && it.systemModel && modelDupKey(x.systemModel) === modelDupKey(it.systemModel)));
         return (m && m.kind) ? m.kind : "";
       } },
-    { key:"activateDate", label:"개통일", get:it=>it.activateDate||"-" },
     { key:"source", label:"입고처", get:it=>it.source||"-" },
     // 재고에 제조사가 없으면 모델에서 가져와 보여줍니다. (예전에 등록된 재고 대비)
     { key:"manufacturer", label:"제조사",
@@ -4598,29 +4604,7 @@
       get:it=> it.salePriceFollowsBuy === true ? "입고동일" : "-",
       isText:true,
       getRaw:it=> it.salePriceFollowsBuy === true ? "입고동일" : "-" },
-    { key:"otherDiscountPct", label:"타할인%", get:it=> discPctFmt(it.otherDiscountPct), getRaw:it=> discRaw(it.otherDiscountPct) },
-    { key:"totalPurchaseDiscount", label:"입고할인", get:it=> discFmt(totalInDiscountOf(it)), getRaw:it=> discRaw(totalInDiscountOf(it)) },
-    { key:"destination", label:"판매처", get:it=>it.destination||"-" },
-    { key:"salePrice", label:"판매가", get:it=>it.salePrice?Number(it.salePrice).toLocaleString():"-", getRaw:it=>it.salePrice!=null?Number(it.salePrice):"" },
-    { key:"saleDiscountAmt", label:"판매할인", get:it=> discFmt(saleDiscountAmtOf(it)), getRaw:it=> discRaw(saleDiscountAmtOf(it)) },
-    { key:"saleDiscount", label:"판매할인%", get:it=> discPctFmt(saleDiscountPctOf(it)), getRaw:it=> discRaw(saleDiscountPctOf(it)) },
-    // 판매할인이 실제로 출고가에 걸린 값인지, 공급가에 걸린 값인지 역산해 보여줍니다.
-    { key:"saleDiscountBase", label:"판매할인 기준",
-      get:it=> actualSaleBase(it), getRaw:it=> actualSaleBase(it) },
-    // 판매요청이 걸려 있는지 한눈에 보여줍니다. 없으면 돈을 못 받습니다.
-    { key:"saleReqState", label:"판매요청",
-      get:it=>{
-        const sold = String(it.status||"").indexOf("판매") >= 0
-                  || String(it.status||"").indexOf("개통") >= 0 || !!it.destination;
-        if(it.saleRequestId) return '<span style="color:#2e7d32;font-weight:700;">있음</span>';
-        if(sold) return '<span style="color:var(--danger);font-weight:700;">없음</span>';
-        return "-";
-      },
-      getRaw:it=>{
-        const sold = String(it.status||"").indexOf("판매") >= 0
-                  || String(it.status||"").indexOf("개통") >= 0 || !!it.destination;
-        return it.saleRequestId ? "있음" : (sold ? "없음" : "-");
-      }, html:true },
+    { key:"activateDate", label:"개통일", get:it=>it.activateDate||"-" },
     { key:"subNumber", label:"가입번호", get:it=> it.subNumber || "-", getRaw:it=> it.subNumber || "" },
     { key:"activationCode", label:"개통코드", get:it=> it.activationCode || "-", getRaw:it=> it.activationCode || "" },
     { key:"activationTeam", label:"개통팀", get:it=> it.activationTeam || "-", getRaw:it=> it.activationTeam || "" },
@@ -4664,9 +4648,32 @@
         return d - c;
       } },
     { key:"supportMonth", label:"지원금 귀속월", get:it=> it.supportMonth || "-", getRaw:it=> it.supportMonth || "" },
-    { key:"subsidyStatus", label:"공시지원금 상태", get:it=>it.subsidyStatus||"-" },
-    { key:"clawbackAmount", label:"환수액", get:it=> (it.clawbackAmount!=null)?Number(it.clawbackAmount).toLocaleString():"-", getRaw:it=>it.clawbackAmount!=null?Number(it.clawbackAmount):"" },
-    { key:"subsidyAccrualMonth", label:"공시지원금 귀속월", get:it=>it.subsidyAccrualMonth||"-" },
+    { key:"otherDiscountPct", label:"타할인%", get:it=> discPctFmt(it.otherDiscountPct), getRaw:it=> discRaw(it.otherDiscountPct) },
+    { key:"totalPurchaseDiscount", label:"입고할인", get:it=> discFmt(totalInDiscountOf(it)), getRaw:it=> discRaw(totalInDiscountOf(it)) },
+    { key:"destination", label:"판매처", get:it=>it.destination||"-" },
+    { key:"salePrice", label:"판매가", get:it=>it.salePrice?Number(it.salePrice).toLocaleString():"-", getRaw:it=>it.salePrice!=null?Number(it.salePrice):"" },
+    { key:"saleDiscountAmt", label:"판매할인", get:it=> discFmt(saleDiscountAmtOf(it)), getRaw:it=> discRaw(saleDiscountAmtOf(it)) },
+    { key:"saleDiscount", label:"판매할인%", get:it=> discPctFmt(saleDiscountPctOf(it)), getRaw:it=> discRaw(saleDiscountPctOf(it)) },
+    // 판매할인이 실제로 출고가에 걸린 값인지, 공급가에 걸린 값인지 역산해 보여줍니다.
+    { key:"saleDiscountBase", label:"판매할인 기준",
+      get:it=> actualSaleBase(it), getRaw:it=> actualSaleBase(it) },
+    // 판매요청이 걸려 있는지 한눈에 보여줍니다. 없으면 돈을 못 받습니다.
+    { key:"saleReqState", label:"판매요청",
+      get:it=>{
+        const sold = String(it.status||"").indexOf("판매") >= 0
+                  || String(it.status||"").indexOf("개통") >= 0 || !!it.destination;
+        if(it.saleRequestId) return '<span style="color:#2e7d32;font-weight:700;">있음</span>';
+        if(sold) return '<span style="color:var(--danger);font-weight:700;">없음</span>';
+        return "-";
+      },
+      getRaw:it=>{
+        const sold = String(it.status||"").indexOf("판매") >= 0
+                  || String(it.status||"").indexOf("개통") >= 0 || !!it.destination;
+        return it.saleRequestId ? "있음" : (sold ? "없음" : "-");
+      }, html:true },
+    { key:"subsidyStatus", label:"공시지원금 상태", hide:true, get:it=>it.subsidyStatus||"-" },
+    { key:"clawbackAmount", label:"환수액 (옛 항목)", hide:true, get:it=> (it.clawbackAmount!=null)?Number(it.clawbackAmount).toLocaleString():"-", getRaw:it=>it.clawbackAmount!=null?Number(it.clawbackAmount):"" },
+    { key:"subsidyAccrualMonth", label:"공시지원금 귀속월 (옛 항목)", hide:true, get:it=>it.subsidyAccrualMonth||"-" },
     { key:"payState", label:"입금",
       get:it=>{
         const p = payStatusOf(it);
@@ -4701,7 +4708,8 @@
     { key:"note2", label:"비고2", get:it=>it.note2||"-", getRaw:it=>it.note2||"" },
     { key:"profit", label:"수익", get:it=> (it.profit!=null)?Number(it.profit).toLocaleString():"-", getRaw:it=>it.profit!=null?Number(it.profit):"" }
   ];
-  const DEFAULT_VIEW_SETTINGS = INV_COLUMNS.map(c=>c.key);
+  //  hide:true 인 열은 기본으로 안 보입니다. (보기 설정에서 켜실 수 있습니다)
+  const DEFAULT_VIEW_SETTINGS = INV_COLUMNS.filter(c=> c.hide !== true).map(c=>c.key);
 
   let currentViewSettings = DEFAULT_VIEW_SETTINGS.slice();
   let modelsCache = [];
@@ -30920,6 +30928,8 @@
           ...(a.subNumber      ? { subNumber: a.subNumber } : {}),
           ...(a.subsidyAmount != null ? { subsidyAmount: Number(a.subsidyAmount) } : {}),
           ...(a.activationCode ? { activationCode: a.activationCode } : {}),
+          ...(a.activationTeam ? { activationTeam: a.activationTeam } : {}),
+          ...(a.activationBy   ? { activationBy: a.activationBy } : {}),
           ...(a.month          ? { supportMonth: a.month } : {})
         });
         await refreshItemSupport(it.id);
@@ -45050,6 +45060,7 @@
     { const e=document.getElementById("act-date-type"); if(e) e.value="activateDate"; }
     { const e=document.getElementById("act-cond-field"); if(e) e.value=""; }
     { const e=document.getElementById("act-cond-match"); if(e) e.value="포함"; }
+    { const e=document.getElementById("act-link-f"); if(e) e.value=""; }
     loadActivationList();
   };
 
@@ -45119,6 +45130,7 @@
           serialNumber: v.serialNumber||"", systemModel: v.systemModel||"",
           carrier: v.carrier||"", activateDate: v.activateDate||"",
           subNumber: v.subNumber||"", activationCode: v.activationCode||"",
+          activationTeam: v.activationTeam||"", activationBy: v.activationBy||"",
           subsidyAmount: (v.subsidyAmount != null ? v.subsidyAmount : null),
           supportMonth: v.month||"",
           linkState: v.linkState || "none",
@@ -45184,7 +45196,14 @@
       });
     });
     //  칸을 고른 조건과 전체 찾기 — 펼친 뒤에 봅니다. (지원금 칸까지 함께 볼 수 있게)
+    const linkF = String((document.getElementById("act-link-f")||{}).value || "");
     rows = expanded.filter(function(x){
+      // ⓪ 재고 연결 상태로 거르기
+      if(linkF){
+        if(linkF === "yes"  && x._orphan) return false;
+        if(linkF === "no"   && !(x._orphan && x.linkState !== "sold")) return false;
+        if(linkF === "sold" && !(x._orphan && x.linkState === "sold")) return false;
+      }
       // ① 칸을 고른 조건
       if(cField){
         const col = ACT_COLS.find(function(c){ return c.key === cField; });
@@ -45336,7 +45355,6 @@
     listEl.querySelectorAll("[data-act-unlink]").forEach(b=> b.onclick = ()=>
       unlinkActivation(b.dataset.actUnlink, b.dataset.actUsn||""));
     addDownloadBtn("dl-activation", "activation-list", "개통목록");
-    addViewCfgBtn("dl-activation", "activation-list");
     applyCustomTabLabels();   // 바꿔두신 이름·색상·글씨 크기를 다시 적용합니다
   };
 
@@ -45397,7 +45415,7 @@
 
       // 일련번호만 적은 줄
       if(parts.length === 1){
-        if(isSn(parts[0])) rows.push({ serial: parts[0], date:"", sub:null, dist:null, phone:"", model:"", month:"" });
+        if(isSn(parts[0])) rows.push({ serial: parts[0], date:"", sub:null, dist:null, phone:"", model:"", month:"", code:"", team:"", by:"" });
         else skipped.push(line);
         return;
       }
@@ -45452,18 +45470,24 @@
 
       // 남은 숫자 칸 — 앞에서부터 공시지원금 · 유통폰지원금
       //  날짜처럼 생긴 칸(20260804)과 전화번호는 금액으로 보지 않습니다.
-      const money = [];
+      const money = [], moneyIdx = [];
       parts.forEach((p,ix)=>{
         if(usedIdx.has(ix)) return;
         if(modelSet.has(norm(p)) || colorSet.has(norm(p))) return;
         if(isYmd(p) || isPhone(p) || isYm6(p)) return;
         const v = numOf(p);
-        if(v != null && /^[0-9,]+$/.test(p)) money.push(v);
+        if(v != null && /^[0-9,]+$/.test(p)){ money.push(v); moneyIdx.push(ix); }
       });
-      if(money.length >= 1) sub  = money[0];
-      if(money.length >= 2) dist = money[1];
+      if(money.length >= 1){ sub  = money[0]; usedIdx.add(moneyIdx[0]); }
+      if(money.length >= 2){ dist = money[1]; usedIdx.add(moneyIdx[1]); }
 
-      rows.push({ serial, date, phone, sub, dist, model, month });
+      //  남은 글자 칸 — 앞에서부터 개통코드 · 개통팀 · 개통자
+      const rest = parts.filter(function(p,ix){ return !usedIdx.has(ix); });
+      const code = rest[0] || "";
+      const team = rest[1] || "";
+      const by   = rest[2] || "";
+
+      rows.push({ serial, date, phone, sub, dist, model, month, code, team, by });
     });
     return { rows, skipped };
   }
@@ -46860,6 +46884,8 @@
         ...(a.subNumber      ? { subNumber: a.subNumber } : {}),
         ...(a.subsidyAmount != null ? { subsidyAmount: Number(a.subsidyAmount) } : {}),
         ...(a.activationCode ? { activationCode: a.activationCode } : {}),
+        ...(a.activationTeam ? { activationTeam: a.activationTeam } : {}),
+        ...(a.activationBy   ? { activationBy: a.activationBy } : {}),
         ...(a.month          ? { supportMonth: a.month } : {})
       });
       // ③ 같은 일련번호의 지원금 기록도 함께 이어줍니다.
@@ -47090,15 +47116,46 @@
   //  재고와 못 이은 개통 기록을 지웁니다.
   window.deleteActivationRec = async function(actId, sn){
     if(!hasPerm(currentUserPerms, "cancelDelete")){ alert("삭제 권한이 없습니다."); return; }
-    if(!confirm("이 개통 기록을 지웁니다.\n\n  " + (sn||"-") + "\n\n"
-      + "같은 일련번호의 지원금 기록은 그대로 둡니다.\n\n진행할까요?")) return;
-    try{ await deleteDoc(doc(db,"activations", actId)); }
-    catch(e){ alert("지우지 못했습니다."); return; }
-    logAction("개통 기록 삭제", sn || actId);
+    // 재고와 이어져 있으면 재고도 보유중으로 되돌립니다.
+    let a = null;
+    try{
+      const d = await getDoc(doc(db,"activations", actId));
+      if(d.exists()) a = { id:d.id, ...d.data() };
+    }catch(e){}
+    const linked = a && a.itemId;
+    if(!confirm("이 개통 기록을 지웁니다.\n\n  " + (sn || (a && a.serialNumber) || "-") + "\n\n"
+      + (linked ? "  이어진 재고도 <보유중> 으로 되돌립니다\n"
+                + "     개통일 · 가입번호 · 공시지원금 · 개통코드 · 팀 · 개통자 지움\n"
+                + "     판매처 · 판매가도 지움 (자체개통 취소)\n"
+                + "  개통 등록으로 만든 지원금 지급 기록도 지웁니다\n\n" : "")
+      + "따로 넣으신 환수 기록은 그대로 둡니다.\n\n진행할까요?")) return;
+    try{
+      if(linked){
+        // 개통 등록으로 만들어진 지급 기록을 지웁니다.
+        try{
+          const sq = await getDocs(query(collection(db,"supportLogs"), where("itemId","==", a.itemId)));
+          for(const d of sq.docs){
+            if(d.data().fromActivation === true) await deleteDoc(doc(db,"supportLogs", d.id));
+          }
+        }catch(e){}
+        await updateDoc(doc(db,"inventoryItems", a.itemId), {
+          status:"보유중", activateDate:"", subNumber:"", subsidyAmount:null,
+          activationCode:"", activationTeam:"", activationBy:"", supportMonth:null,
+          destination:"", outDate:"", salePrice:null, saleDiscountAmt:null, saleDiscount:null
+        });
+        await refreshItemSupport(a.itemId);
+        await logItem(a.itemId, sn || a.serialNumber || "", "deactivate",
+          "개통 기록 삭제로 되돌림", {});
+      }
+      await deleteDoc(doc(db,"activations", actId));
+    }catch(e){ alert("지우지 못했습니다.\n" + ((e&&e.message)?e.message:String(e))); return; }
+    logAction("개통 기록 삭제", (sn || actId) + (linked ? " / 재고 되돌림" : ""));
     refreshAfterSupport();
   };
 
   //  재고와 못 이은 개통 기록을 한 번에 잇습니다.
+  //  이을 수 있는 것을 먼저 보여드리고, 체크하신 것만 잇습니다.
+  let linkPreviewCache = [];
   window.linkActivationAll = async function(){
     let list = [];
     try{
@@ -47106,8 +47163,144 @@
       q.forEach(function(d){ const v=d.data(); if(!v.itemId) list.push({ id:d.id, ...v }); });
     }catch(e){ alert("읽지 못했습니다."); return; }
     if(list.length === 0){ alert("재고와 못 이은 개통 기록이 없습니다."); return; }
-    if(!confirm("재고와 못 이은 개통 기록 " + list.length + "건을\n일련번호·모델로 찾아 잇습니다.\n\n"
-      + "같은 일련번호 재고가 여러 대이거나 이미 판매된 것은 건너뜁니다.\n\n진행할까요?")) return;
+
+    // 이을 수 있는지 먼저 확인합니다.
+    const ready = [], many = [], soldOnly = [], none = [];
+    for(const a of list){
+      let cands = [];
+      try{
+        const q = await getDocs(query(collection(db,"inventoryItems"),
+          where("serialNumber","==", String(a.serialNumber||""))));
+        q.forEach(function(d){ const v=d.data(); if(v.deleted !== true) cands.push({ id:d.id, ...v }); });
+      }catch(e){}
+      if(a.systemModel){
+        const m = cands.filter(function(x){
+          return modelDupKey(String(x.systemModel||"")) === modelDupKey(String(a.systemModel)); });
+        if(m.length) cands = m;
+      }
+      const usable = cands.filter(function(x){ return String(x.status||"").indexOf("판매") < 0; });
+      if(usable.length === 1) ready.push({ a, it: usable[0] });
+      else if(usable.length > 1) many.push({ a, list: usable });
+      else if(cands.length) soldOnly.push({ a, list: cands });
+      else none.push({ a });
+    }
+    linkPreviewCache = ready;
+
+    const head = document.getElementById("suplog-head");
+    const body = document.getElementById("suplog-body");
+    head.innerHTML = '<b>재고와 잇기</b> — 이을 수 있는 것 ' + ready.length + '건'
+      + (many.length ? ' · <span style="color:#b8860b;">여러 대 ' + many.length + '건</span>' : '')
+      + (soldOnly.length ? ' · <span style="color:#b8860b;">이미 판매됨 ' + soldOnly.length + '건</span>' : '')
+      + (none.length ? ' · <span style="color:var(--gray);">재고 없음 ' + none.length + '건</span>' : '')
+      + '<br><span style="color:var(--gray);">확인하시고 체크하신 것만 잇습니다.</span>';
+
+    let h = '';
+    if(ready.length){
+      h += '<div style="margin-bottom:8px;">'
+        + '<label style="display:inline-flex;align-items:center;gap:5px;cursor:pointer;font-size:12.5px;">'
+        + '<input type="checkbox" id="lp-all" onclick="toggleLinkPreviewAll(this.checked)" checked> 전체</label>'
+        + ' <button class="btn small" style="width:auto;margin-left:8px;" onclick="runLinkPreview()">고른 것 잇기</button>'
+        + '</div>'
+        + '<div style="overflow-x:auto;max-height:420px;overflow-y:auto;border:1px solid var(--line);">'
+        + '<table class="data-table resv-dest-fit"><thead><tr>'
+        + '<th class="no-print"><input type="checkbox" onclick="toggleLinkPreviewAll(this.checked)" checked></th>'
+        + '<th>일련번호</th><th>전산모델명</th><th>개통일</th><th>가입번호</th><th>개통코드</th>'
+        + '<th>이을 재고</th><th>상태</th><th>입고</th><th class="ta-right">출고가</th>'
+        + '</tr></thead><tbody>'
+        + ready.map(function(r, ix){
+            return '<tr><td class="no-print"><input type="checkbox" class="lp-cb" value="'+ix+'" checked></td>'
+              + '<td><b>'+comboEsc(r.a.serialNumber||"-")+'</b></td>'
+              + '<td>'+comboEsc(r.a.systemModel||"-")+'</td>'
+              + '<td>'+comboEsc(r.a.activateDate||"-")+'</td>'
+              + '<td>'+comboEsc(r.a.subNumber||"-")+'</td>'
+              + '<td>'+comboEsc(r.a.activationCode||"-")+'</td>'
+              + '<td>'+comboEsc(r.it.systemModel||"-")+'</td>'
+              + '<td>'+comboEsc(r.it.status||"-")+'</td>'
+              + '<td>'+comboEsc(r.it.inDate||"-")+' '+comboEsc(r.it.source||"")+'</td>'
+              + '<td class="ta-right">'+(Number(r.it.listPrice)||0).toLocaleString()+'</td></tr>';
+          }).join("")
+        + '</tbody></table></div>';
+    }else{
+      h += '<div class="list-empty">바로 이을 수 있는 건이 없습니다.</div>';
+    }
+    // 못 잇는 건도 알려드립니다.
+    if(many.length || soldOnly.length || none.length){
+      h += '<div style="border:1px solid var(--line);background:#f7f7f7;padding:9px 11px;margin-top:10px;font-size:12px;line-height:1.8;">'
+        + (many.length ? '<b>같은 일련번호 재고가 여러 대 — ' + many.length + '건</b><br>'
+            + '<span style="color:var(--gray);">목록에서 그 줄의 [재고와 잇기] 를 눌러 골라주세요.</span><br>'
+            + many.slice(0,6).map(function(x){ return '&nbsp;&nbsp;· ' + comboEsc(x.a.serialNumber||"-")
+                + ' (' + x.list.length + '대)'; }).join("<br>") + '<br>' : '')
+        + (soldOnly.length ? '<b>이미 판매된 재고뿐 — ' + soldOnly.length + '건</b><br>'
+            + '<span style="color:var(--gray);">되사오기를 먼저 해주세요.</span><br>'
+            + soldOnly.slice(0,6).map(function(x){ return '&nbsp;&nbsp;· ' + comboEsc(x.a.serialNumber||"-"); }).join("<br>") + '<br>' : '')
+        + (none.length ? '<b>재고를 못 찾음 — ' + none.length + '건</b><br>'
+            + '<span style="color:var(--gray);">재고가 들어온 뒤 다시 눌러주세요.</span>' : '')
+        + '</div>';
+    }
+    body.innerHTML = h;
+    document.getElementById("suplog-overlay").style.display = "flex";
+  };
+
+  window.toggleLinkPreviewAll = function(on){
+    document.querySelectorAll(".lp-cb").forEach(function(cb){ cb.checked = !!on; });
+  };
+
+  window.runLinkPreview = async function(){
+    const picked = Array.from(document.querySelectorAll(".lp-cb:checked"))
+      .map(function(cb){ return (linkPreviewCache||[])[Number(cb.value)]; }).filter(Boolean);
+    if(picked.length === 0){ alert("이을 건을 골라주세요."); return; }
+    if(!confirm("고른 " + picked.length + "건을 재고와 잇습니다.\n\n"
+      + "  재고 상태  보유중 → 개통\n"
+      + "  개통일 · 가입번호 · 공시지원금 · 개통코드 · 개통팀 · 개통자를 넣습니다\n"
+      + "  판매처 포피플 · 판매가 출고가 로 자체개통 처리합니다\n"
+      + "  같은 일련번호 지원금 기록도 함께 이어줍니다\n\n진행할까요?")) return;
+    let done = 0;
+    for(const r of picked){
+      const a = r.a, it = r.it;
+      try{
+        await updateDoc(doc(db,"activations", a.id), { itemId: it.id, linkState: "new" });
+        const L = Number(it.listPrice)||0;
+        await updateDoc(doc(db,"inventoryItems", it.id), {
+          status: "개통",
+          activateDate: a.activateDate || "",
+          destination: "포피플", outDate: a.activateDate || "",
+          ...(L ? { salePrice: L, saleDiscountAmt: 0, saleDiscount: 0 } : {}),
+          ...(a.subNumber      ? { subNumber: a.subNumber } : {}),
+          ...(a.subsidyAmount != null ? { subsidyAmount: Number(a.subsidyAmount) } : {}),
+          ...(a.activationCode ? { activationCode: a.activationCode } : {}),
+          ...(a.activationTeam ? { activationTeam: a.activationTeam } : {}),
+          ...(a.activationBy   ? { activationBy: a.activationBy } : {}),
+          ...(a.month          ? { supportMonth: a.month } : {})
+        });
+        try{
+          const sq = await getDocs(query(collection(db,"supportLogs"),
+            where("serialNumber","==", String(a.serialNumber||""))));
+          for(const d of sq.docs){
+            if(d.data().itemId) continue;
+            await updateDoc(doc(db,"supportLogs", d.id), { itemId: it.id });
+          }
+        }catch(e){}
+        await refreshItemSupport(it.id);
+        await logItem(it.id, it.serialNumber||"", "activate",
+          "개통 기록과 이음 · 개통일 " + (a.activateDate||"-")
+          + (a.subNumber ? " · 가입번호 " + a.subNumber : ""),
+          { systemModel: it.systemModel||"", eventDate: a.activateDate||"" });
+        done++;
+      }catch(e){}
+    }
+    logAction("개통 기록 잇기", done + "건");
+    closeSupLog();
+    alert(done + "건을 이었습니다.");
+    refreshAfterSupport();
+  };
+
+  window.linkActivationAllOld = async function(){
+    let list = [];
+    try{
+      const q = await getDocs(collection(db,"activations"));
+      q.forEach(function(d){ const v=d.data(); if(!v.itemId) list.push({ id:d.id, ...v }); });
+    }catch(e){ alert("읽지 못했습니다."); return; }
+    if(list.length === 0){ alert("재고와 못 이은 개통 기록이 없습니다."); return; }
     let done = 0, skip = 0, sold = 0;
     for(const a of list){
       let cands = [];
@@ -47135,6 +47328,8 @@
           ...(a.subNumber      ? { subNumber: a.subNumber } : {}),
           ...(a.subsidyAmount != null ? { subsidyAmount: Number(a.subsidyAmount) } : {}),
           ...(a.activationCode ? { activationCode: a.activationCode } : {}),
+          ...(a.activationTeam ? { activationTeam: a.activationTeam } : {}),
+          ...(a.activationBy   ? { activationBy: a.activationBy } : {}),
           ...(a.month          ? { supportMonth: a.month } : {})
         });
         try{
@@ -47442,7 +47637,9 @@
         subsidy: (r.sub != null ? r.sub : baseSub),
         dist:    (r.dist != null ? r.dist : baseDist),
         phone:   r.phone || "",
-        month:   (r.month || baseMon), code: baseCode,
+        month:   (r.month || baseMon),
+        code:    (r.code || baseCode), team: (r.team || ""), by: (r.by || ""),
+        ownCode: !!r.code, ownTeam: !!r.team, ownBy: !!r.by,
         date:d, ownDate: !!r.date, ownSub: (r.sub != null), ownPhone: !!r.phone,
         link: "new"          // new=재고에 반영 · none=재고없음 · sold=이미판매 · done=이미개통
       };
@@ -47482,6 +47679,7 @@
       h += '<div style="overflow-x:auto;border:1px solid var(--line);max-height:280px;overflow-y:auto;"><table class="data-table resv-dest-fit" style="width:auto;"><thead><tr>'
         + '<th>귀속월</th><th>전산모델명</th><th>일련번호</th><th>개통일</th><th>가입번호</th>'
         + '<th class="ta-right">공시지원금</th><th class="ta-right">유통폰지원금</th>'
+        + '<th>개통코드</th><th>개통팀</th><th>개통자</th>'
         + '<th>색상</th><th>통신사</th><th class="ta-right">출고가</th>'
         + '<th>재고</th></tr></thead><tbody>';
       ok.forEach(r=>{
@@ -47498,6 +47696,9 @@
           + '<td'+(r.ownPhone ? '' : ' style="color:var(--gray);"')+'>'+comboEsc(r.phone || "-")+'</td>'
           + '<td class="ta-right">'+(r.subsidy != null ? Number(r.subsidy).toLocaleString() : '<span style="color:var(--gray);">-</span>')+'</td>'
           + '<td class="ta-right">'+(r.dist ? r.dist.toLocaleString() : '<span style="color:var(--gray);">-</span>')+'</td>'
+          + '<td'+(r.ownCode ? '' : ' style="color:var(--gray);"')+'>'+comboEsc(r.code || "-")+'</td>'
+          + '<td'+(r.ownTeam ? '' : ' style="color:var(--gray);"')+'>'+comboEsc(r.team || "-")+'</td>'
+          + '<td'+(r.ownBy   ? '' : ' style="color:var(--gray);"')+'>'+comboEsc(r.by   || "-")+'</td>'
           + '<td>'+comboEsc(it.systemColor || it.manufacturerColor || "-")+'</td>'
           + '<td>'+comboEsc(it.carrier||"-")+'</td>'
           + '<td class="ta-right">'+(Number(it.listPrice)||0 ? Number(it.listPrice).toLocaleString() : '<span style="color:var(--gray);">-</span>')+'</td>'
@@ -47510,7 +47711,8 @@
     el.innerHTML = h;
     el.dataset.rows = JSON.stringify(ok.map(r=> ({ id:r.id, serial:r.serial, subsidy:r.subsidy, date:r.date,
                                                    dist:r.dist, phone:r.phone, month:r.month, code:r.code,
-                                                   link:r.link,
+                                                   team:r.team, by:r.by, link:r.link,
+                                                   listPrice:(r.it && Number(r.it.listPrice)) || 0,
                                                    systemModel:(r.it && r.it.systemModel) || r.model || "",
                                                    carrier:(r.it && r.it.carrier) || "",
                                                    location:(r.it && r.it.location) || "" })));
@@ -47538,13 +47740,19 @@
       for(let i=0;i<toApply.length;i+=300){
         const bt = writeBatch(db);
         toApply.slice(i, i+300).forEach(r=>{
+          //  포피플 자체개통입니다. 판매처는 포피플, 판매가는 출고가입니다.
+          const L = Number(r.listPrice)||0;
           bt.update(doc(db,"inventoryItems", r.id), {
             status:"개통", activateDate: (r.date || date),
+            destination: "포피플", outDate: (r.date || date),
+            ...(L ? { salePrice: L, saleDiscountAmt: 0, saleDiscount: 0 } : {}),
             ...(r.subsidy != null ? { subsidyAmount: Number(r.subsidy) } : {}),
             ...(r.dist  ? { distSupport: r.dist } : {}),
             ...(r.phone ? { subNumber: r.phone } : {}),
             ...(r.month ? { supportMonth: r.month } : {}),
-            ...(r.code  ? { activationCode: r.code } : {})
+            ...(r.code  ? { activationCode: r.code } : {}),
+            ...(r.team  ? { activationTeam: r.team } : {}),
+            ...(r.by    ? { activationBy: r.by } : {})
           });
         });
         await bt.commit();
@@ -47558,6 +47766,8 @@
           activateDate: (r.date || date), subNumber: r.phone || "",
           subsidyAmount: (r.subsidy != null ? Number(r.subsidy) : null),
           activationCode: r.code || "",
+          activationTeam: r.team || "",
+          activationBy: r.by || "",
           month: r.month || String(r.date || date).slice(0,6),
           linkState: r.link,                       // new · none · sold · done
           createdBy: currentUser.name, createdByUsername: currentUser.username,
