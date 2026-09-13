@@ -400,7 +400,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-06 v1163</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-06 v1164</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -4370,7 +4370,10 @@ const firebaseConfig = {
       ? live.filter(function(l){ return lineIds.indexOf(l.id) >= 0; })
       : live;
 
-    // ① 재고 — 주문에 저장된 값을 그대로 옮깁니다. 비어 있는 칸은 재고에서도 비웁니다.
+    // ① 재고 — 주문에 저장된 값을 옮깁니다.
+    //  주문 칸이 «비어 있으면 재고를 건드리지 않습니다.»
+    //   전에는 빈 값으로 덮어써서, 검수·마감까지 끝낸 재고의 판매가가 지워졌습니다.
+    //   지우실 때는 재고에서 직접 지우거나 주문 품목 수정으로 해주세요.
     //  재고를 «한 번에» 읽습니다. 줄마다·한 대씩 읽으면 100대짜리 주문이 몇 분씩 걸립니다.
     const pool = {};
     try{
@@ -4413,17 +4416,18 @@ const firebaseConfig = {
           try{ const sn = await getDoc(doc(db,"inventoryItems", iid)); if(sn.exists()) it0 = sn.data(); }catch(e){}
           it0 = it0 || {};
         }
-        const p = {
-          listPrice:           (l.listPrice        != null ? l.listPrice        : null),
-          purchasePrice:       (l.purchasePrice    != null ? l.purchasePrice    : null),
-          purchaseDiscountAmt: (l.preDiscountAmt   != null ? l.preDiscountAmt   : null),
-          purchaseDiscount:    (l.preDiscountPct   != null ? l.preDiscountPct   : null),
-          otherDiscountAmt:    (l.otherDiscountAmt != null ? l.otherDiscountAmt : null),
-          otherDiscountPct:    (l.otherDiscountPct != null ? l.otherDiscountPct : null),
-          salePrice:           (l.salePrice        != null ? l.salePrice        : null),
-          saleDiscountAmt:     (l.saleDiscountAmt  != null ? l.saleDiscountAmt  : null),
-          saleDiscount:        (l.saleDiscountPct  != null ? l.saleDiscountPct  : null)
-        };
+        //  주문에 «값이 있는 칸만» 옮깁니다. 빈 칸은 재고를 그대로 둡니다.
+        const put = function(o, key, v){ if(v !== null && v !== undefined && v !== "") o[key] = v; };
+        const p = {};
+        put(p, "listPrice",           l.listPrice);
+        put(p, "purchasePrice",       l.purchasePrice);
+        put(p, "purchaseDiscountAmt", l.preDiscountAmt);
+        put(p, "purchaseDiscount",    l.preDiscountPct);
+        put(p, "otherDiscountAmt",    l.otherDiscountAmt);
+        put(p, "otherDiscountPct",    l.otherDiscountPct);
+        put(p, "salePrice",           l.salePrice);
+        put(p, "saleDiscountAmt",     l.saleDiscountAmt);
+        put(p, "saleDiscount",        l.saleDiscountPct);
         if(l.discountBase)     p.discountBase     = l.discountBase;
         if(l.saleDiscountBase) p.saleDiscountBase = l.saleDiscountBase;
         if(p.salePrice != null && p.purchasePrice != null) p.profit = p.salePrice - p.purchasePrice;
