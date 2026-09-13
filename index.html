@@ -400,7 +400,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-06 v1155</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-06 v1157</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -4260,6 +4260,21 @@ const firebaseConfig = {
   const auth = getAuth(app);
   const db = getFirestore(app);
 
+  //  개통을 취소하면 «개통 등록으로 넣은 값»을 전부 되돌립니다.
+  //   개통 등록에서 넣는 칸과 하나씩 짝을 맞춥니다.
+  //     status · 개통일 · 가입번호 · 공시지원금 · 귀속월
+  //     개통코드 · 개통팀 · 개통자
+  //     판매처(포피플) · 출고일 · 판매가 · 판매할인 · 판매할인% · 판매할인 기준 · 수익
+  //   취소하는 곳이 여러 군데라 여기 한 곳만 씁니다. 따로 만들지 마세요.
+  const ACT_CANCEL_PATCH = {
+    status: "보유중",
+    activateDate: "", subNumber: "", subsidyAmount: null, supportMonth: null,
+    activationCode: "", activationTeam: "", activationBy: "",
+    destination: "", outDate: "",
+    salePrice: null, saleDiscountAmt: null, saleDiscount: null, saleDiscountBase: null,
+    profit: null
+  };
+
   //  주문 품목을 넣은 순서대로 되돌립니다. (줄번호 → 만든 시각)
   //   Firestore 는 문서 번호 순으로 읽어 오므로, 정렬하지 않으면 순서가 뒤섞입니다.
   //   줄번호가 없는 옛 자료는 원래 순서를 그대로 둡니다.
@@ -4347,13 +4362,48 @@ const firebaseConfig = {
       : live;
 
     // ① 재고 — 주문에 저장된 값을 그대로 옮깁니다. 비어 있는 칸은 재고에서도 비웁니다.
+    //  재고를 «한 번에» 읽습니다. 줄마다·한 대씩 읽으면 100대짜리 주문이 몇 분씩 걸립니다.
+    const pool = {};
+    try{
+      const q0 = await getDocs(query(collection(db,"inventoryItems"), where("orderBatchId","==", batchId)));
+      q0.forEach(function(d){ const v = d.data(); if(v.deleted !== true) pool[d.id] = v; });
+    }catch(e){}
+    //  품목에 적어둔 재고 번호 중 위에서 안 읽힌 것만 따로 읽습니다.
+    {
+      const need = [];
+      pick.forEach(function(l){
+        (Array.isArray(l.linkedItemIds) ? l.linkedItemIds : []).forEach(function(x){
+          if(x && !pool[x] && need.indexOf(x) < 0) need.push(x);
+        });
+      });
+      for(const iid of need){
+        try{ const sn = await getDoc(doc(db,"inventoryItems", iid));
+             if(sn.exists() && sn.data().deleted !== true) pool[iid] = sn.data(); }catch(e){}
+      }
+    }
+    const poolIds = Object.keys(pool);
     const writes = [], linkRows = [];
     for(const l of pick){
-      let ids = [];
-      try{ ids = await findItemsOfOrderLine(l.id, batchId, l); }catch(e){}
+      //  읽어둔 것에서 고릅니다. (품목 번호가 맞거나, 모델·색상이 같은 것)
+      let ids = poolIds.filter(function(iid){
+        const v = pool[iid];
+        if(v.orderId) return String(v.orderId) === String(l.id);
+        if(Array.isArray(l.linkedItemIds) && l.linkedItemIds.indexOf(iid) >= 0) return true;
+        if(pick.length === 1) return true;
+        const sameM = modelDupKey(String(v.systemModel||"")) === modelDupKey(String(l.systemModel||""));
+        const sameC = !l.systemColor || String(v.systemColor||"") === String(l.systemColor||"");
+        return sameM && sameC;
+      });
+      //  하나도 못 찾은 줄만 옛 방식으로 한 번 더 찾습니다. (번호가 없는 옛 자료)
+      if(ids.length === 0){
+        try{ ids = await findItemsOfOrderLine(l.id, batchId, l); }catch(e){}
+      }
       for(const iid of ids){
-        let it0 = {};
-        try{ const sn = await getDoc(doc(db,"inventoryItems", iid)); if(sn.exists()) it0 = sn.data(); }catch(e){}
+        let it0 = pool[iid];
+        if(!it0){
+          try{ const sn = await getDoc(doc(db,"inventoryItems", iid)); if(sn.exists()) it0 = sn.data(); }catch(e){}
+          it0 = it0 || {};
+        }
         const p = {
           listPrice:           (l.listPrice        != null ? l.listPrice        : null),
           purchasePrice:       (l.purchasePrice    != null ? l.purchasePrice    : null),
@@ -35818,6 +35868,73 @@ let ghostBankCache = [];
   let orderAmtDiffCache = [];
   let selfActBaseCache = [];
   let batchSumDiffCache = [];
+  let actLeftoverCache = [];
+
+  //  개통이 아닌데 자체개통 흔적이 남은 재고를 보여주고, 그 칸만 비웁니다.
+  window.showActLeftoverList = function(){
+    const rows = actLeftoverCache || [];
+    if(rows.length === 0){ alert("남은 것이 없습니다."); return; }
+    const head = document.getElementById("suplog-head");
+    const body = document.getElementById("suplog-body");
+    if(!head || !body){ alert("화면을 찾지 못했습니다."); return; }
+    head.innerHTML = '<b>개통이 아닌데 자체개통 흔적이 남음</b> — ' + rows.length + '대'
+      + '<br><span style="color:var(--gray);">개통 등록으로 들어갔던 칸만 비웁니다. '
+      + '출고가 · 입고가 · 매입할인은 건드리지 않습니다.</span>';
+    body.innerHTML =
+      '<div style="margin-bottom:8px;"><button class="btn small" style="width:auto;" onclick="fixActLeftoverAll()">'
+      + '전부 지우기 (' + rows.length + '대)</button></div>'
+      + '<div style="overflow-x:auto;max-height:360px;overflow-y:auto;">'
+      + '<table class="data-table" style="width:auto;"><thead><tr>'
+      + '<th>일련번호</th><th>전산모델명</th><th>상태</th><th class="ta-right">판매가</th><th>남아 있는 칸</th>'
+      + '</tr></thead><tbody>'
+      + rows.slice(0,300).map(function(r){
+          return '<tr><td><b>' + comboEsc(r.sn||"-") + '</b></td>'
+            + '<td>' + comboEsc(r.model||"-") + '</td>'
+            + '<td>' + comboEsc(r.st) + '</td>'
+            + '<td class="ta-right">' + (r.sale ? r.sale.toLocaleString() : "-") + '</td>'
+            + '<td style="color:var(--danger);">' + comboEsc(r.left) + '</td></tr>';
+        }).join("")
+      + '</tbody></table></div>'
+      + (rows.length > 300 ? '<div style="font-size:11.5px;color:var(--gray);margin-top:6px;">'
+          + '위에 300대까지만 보여드립니다. [전부 지우기] 는 ' + rows.length + '대 모두 처리합니다.</div>' : '');
+    document.getElementById("suplog-overlay").style.display = "flex";
+  };
+
+  window.fixActLeftoverAll = async function(){
+    const rows = actLeftoverCache || [];
+    if(rows.length === 0){ alert("남은 것이 없습니다."); return; }
+    if(!hasPerm(currentUserPerms, "cancelDelete")){ alert("권한이 없습니다."); return; }
+    if(!confirm("자체개통 흔적이 남은 재고 " + rows.length + "대를 정리합니다.\n\n"
+      + "지우는 칸\n"
+      + "  판매처 · 출고일 · 판매가 · 판매할인 · 판매할인% · 판매할인 기준 · 수익\n"
+      + "  개통일 · 가입번호 · 공시지원금 · 귀속월 · 개통코드 · 팀 · 개통자\n\n"
+      + "건드리지 않는 칸\n"
+      + "  출고가 · 입고가 · 매입할인 · 타할인\n\n진행할까요?")) return;
+    const head = document.getElementById("suplog-head");
+    let done = 0;
+    try{
+      for(let i=0; i<rows.length; i+=300){
+        if(head) head.innerHTML = '<b>지우는 중...</b> ' + Math.min(i+300, rows.length) + ' / ' + rows.length;
+        const bt = writeBatch(db);
+        rows.slice(i, i+300).forEach(function(r){
+          bt.update(doc(db,"inventoryItems", r.id), { ...ACT_CANCEL_PATCH, status: r.st });
+        });
+        await withTimeout(bt.commit(), 20000, "자체개통 흔적 지우기");
+        done += Math.min(300, rows.length - i);
+      }
+    }catch(e){
+      alert("지우다 멈췄습니다. " + done + "대까지 처리했습니다.\n"
+        + ((e && e.message) ? e.message : String(e)));
+      return;
+    }
+    logAction("자체개통 흔적 지우기", done + "대");
+    clearCache("inventory"); clearDashCache();
+    actLeftoverCache = [];
+    if(head) head.innerHTML = '<b style="color:#2e7d32;">끝났습니다 — ' + done + '대를 정리했습니다.</b>'
+      + '<br><span style="color:var(--gray);">창을 닫고 <b>[다시 점검]</b> 을 눌러 확인해주세요.</span>';
+    alert(done + "대를 정리했습니다.\n\n창을 닫고 [다시 점검] 을 눌러주세요.");
+  };
+
 
   //  주문 묶음 숫자가 품목과 다른 건을 보여주고, 저장된 품목 기준으로 맞춥니다.
   window.showBatchSumDiffList = function(){
@@ -35865,6 +35982,9 @@ let ghostBankCache = [];
     if(!confirm(r.date + " · " + r.src + "\n\n저장된 품목으로 다시 세어 맞춥니다.\n\n"
       + "· 품목 값은 바뀌지 않습니다\n"
       + "· 묶음 합계 · 여신차감액 · 여신 원장 · 재고가 맞춰집니다\n\n진행할까요?")) return;
+    const head0 = document.getElementById("suplog-head");
+    if(head0) head0.innerHTML = '<b>맞추는 중...</b> ' + comboEsc(r.date) + ' · ' + comboEsc(r.src)
+      + '<br><span style="color:var(--gray);">창을 닫지 마세요.</span>';
     try{
       const res = await syncAfterOrderLines(r.batchId, null);
       logAction("주문 묶음 숫자 맞추기", r.date + " / " + r.src
@@ -35885,16 +36005,28 @@ let ghostBankCache = [];
       + "· 품목 값은 바뀌지 않습니다\n"
       + "· 묶음 합계 · 여신차감액 · 여신 원장 · 재고가 맞춰집니다\n\n"
       + "건수가 많으면 시간이 걸립니다. 진행할까요?")) return;
-    let done = 0;
-    for(const r of rows){
+    const head = document.getElementById("suplog-head");
+    const body = document.getElementById("suplog-body");
+    const note = function(t){ if(head) head.innerHTML = t; };
+    let done = 0, failed = [];
+    for(let i=0; i<rows.length; i++){
+      const r = rows[i];
+      note('<b>맞추는 중...</b> ' + (i+1) + ' / ' + rows.length
+        + '<br><span style="color:var(--gray);">' + comboEsc(r.date) + ' · ' + comboEsc(r.src)
+        + ' — 창을 닫지 마세요.</span>');
       try{ await syncAfterOrderLines(r.batchId, null); done++; }
-      catch(e){ console.error("묶음 맞추기", r.batchId, e); }
+      catch(e){ failed.push(r.date + " " + r.src); console.error("묶음 맞추기", r.batchId, e); }
     }
     logAction("주문 묶음 숫자 전부 맞추기", done + "건 / 모두 " + rows.length + "건");
     batchSumDiffCache = [];
+    note('<b style="color:#2e7d32;">끝났습니다 — ' + done + '건을 맞췄습니다.</b>'
+      + (failed.length ? '<br><span style="color:var(--danger);">못 맞춘 것 ' + failed.length + '건 · '
+          + comboEsc(failed.slice(0,5).join(" / ")) + '</span>' : '')
+      + '<br><span style="color:var(--gray);">창을 닫고 <b>[다시 점검]</b> 을 눌러 확인해주세요.</span>');
+    if(body) body.innerHTML = '';
     alert(done + "건을 맞췄습니다."
-      + (done < rows.length ? "\n" + (rows.length - done) + "건은 실패했습니다." : "")
-      + "\n\n[다시 점검] 을 눌러 확인해주세요.");
+      + (failed.length ? "\n" + failed.length + "건은 실패했습니다." : "")
+      + "\n\n창을 닫고 [다시 점검] 을 눌러주세요.");
   };
 
 
@@ -36449,6 +36581,41 @@ let ghostBankCache = [];
                 + "[맞추기] 를 누르면 저장된 품목으로 다시 세어 묶음 합계·여신차감액·여신 원장·재고까지 맞춥니다. "
                 + "품목 값은 건드리지 않습니다.",
               fix:"showBatchSumDiffList()", fixLabel:"확인하기" });
+          }
+        }
+        // ── 개통이 아닌데 자체개통 흔적이 남은 재고 ──
+        //  예전 「선택 취소」 가 판매처·판매가를 안 지웠습니다. 그 잔재입니다.
+        {
+          const gRows = [];
+          try{
+            Object.keys(items).forEach(function(id){
+              const it = items[id];
+              if(it.deleted === true) return;
+              if(String(it.status||"") === "개통") return;          // 지금 개통인 건 제외
+              if(String(it.destination||"") !== "포피플") return;    // 자체개통 흔적만
+              const left = [];
+              if(String(it.destination||""))            left.push("판매처");
+              if(String(it.outDate||""))                left.push("출고일");
+              if(it.salePrice != null)                  left.push("판매가");
+              if(it.saleDiscountAmt != null)            left.push("판매할인");
+              if(it.saleDiscount != null)               left.push("판매할인%");
+              if(String(it.saleDiscountBase||""))       left.push("판매할인 기준");
+              if(it.profit != null)                     left.push("수익");
+              if(String(it.activateDate||""))           left.push("개통일");
+              if(left.length === 0) return;
+              gRows.push({ id, sn: it.serialNumber||"", model: it.systemModel||it.baseModel||"",
+                st: String(it.status||"-"), left: left.join(" · "),
+                sale: Number(it.salePrice)||0 });
+            });
+            gRows.sort(function(a,b){ return String(a.sn).localeCompare(String(b.sn)); });
+          }catch(e){}
+          if(gRows.length){
+            actLeftoverCache = gRows;
+            issues.push({ n:"개통이 아닌데 자체개통 흔적이 남음", cnt: gRows.length, unit:"대",
+              why:"예전 개통 취소가 판매처·판매가·수익을 안 지워서 남은 자료입니다. "
+                + "[전부 지우기] 를 누르면 개통 등록으로 들어갔던 칸만 비웁니다. "
+                + "출고가·입고가·매입할인은 건드리지 않습니다.",
+              fix:"showActLeftoverList()", fixLabel:"확인하기" });
           }
         }
         // ── 포피플 자체개통인데 판매할인 기준이 안 채워진 재고 ──
@@ -47135,9 +47302,7 @@ let ghostBankCache = [];
           const q = await getDocs(query(collection(db,"supportLogs"), where("itemId","==", r.id)));
           for(const d of q.docs){ if(d.data().fromActivation === true) await deleteDoc(doc(db,"supportLogs", d.id)); }
         }catch(e){}
-        await updateDoc(doc(db,"inventoryItems", r.id), {
-          status:"보유중", activateDate:"", subNumber:"", subsidyAmount:null, activationCode:"", activationTeam:"", activationBy:""
-        });
+        await updateDoc(doc(db,"inventoryItems", r.id), { ...ACT_CANCEL_PATCH });
         await refreshItemSupport(r.id);
         await logItem(r.id, r.serial, "deactivate", "개통 등록 되돌리기 (일괄)", {});
         done++;
@@ -48882,7 +49047,8 @@ let ghostBankCache = [];
     if(!confirm("고른 " + picked.length + "건을 취소합니다.\n\n"
       + (openOnes.length ? "  재고 되돌림 " + openOnes.length + "건\n"
           + "     상태 <개통> → <보유중>\n"
-          + "     개통일 · 가입번호 · 공시지원금 · 개통코드 지움\n" : "")
+          + "     개통일 · 가입번호 · 공시지원금 · 귀속월 · 개통코드 · 팀 · 개통자 지움\n"
+          + "     판매처(포피플) · 출고일 · 판매가 · 판매할인 · 판매할인 기준 · 수익 지움\n" : "")
       + (orphans.length ? "  재고와 못 이은 기록 " + orphans.length + "건 지움\n" : "")
       + "  개통 등록으로 만든 지원금 지급 기록도 지웁니다\n"
       + "\n따로 넣으신 환수 기록은 그대로 둡니다.\n\n진행할까요?")) return;
@@ -48906,10 +49072,7 @@ let ghostBankCache = [];
           const aq = await getDocs(query(collection(db,"activations"), where("itemId","==", it.id)));
           for(const d of aq.docs){ await deleteDoc(doc(db,"activations", d.id)); recN++; }
         }catch(e){}
-        await updateDoc(doc(db,"inventoryItems", it.id), {
-          status:"보유중", activateDate:"", subNumber:"", subsidyAmount:null,
-          activationCode:"", activationTeam:"", activationBy:"", supportMonth:null
-        });
+        await updateDoc(doc(db,"inventoryItems", it.id), { ...ACT_CANCEL_PATCH });
         touched.add(it.id); invN++;
         await logItem(it.id, it.serialNumber||"", "deactivate",
           "개통 취소 · 사유: " + String(reason).trim()
@@ -48964,11 +49127,7 @@ let ghostBankCache = [];
             if(d.data().fromActivation === true) await deleteDoc(doc(db,"supportLogs", d.id));
           }
         }catch(e){}
-        await updateDoc(doc(db,"inventoryItems", a.itemId), {
-          status:"보유중", activateDate:"", subNumber:"", subsidyAmount:null,
-          activationCode:"", activationTeam:"", activationBy:"", supportMonth:null,
-          destination:"", outDate:"", salePrice:null, saleDiscountAmt:null, saleDiscount:null
-        });
+        await updateDoc(doc(db,"inventoryItems", a.itemId), { ...ACT_CANCEL_PATCH });
         await refreshItemSupport(a.itemId);
         await logItem(a.itemId, sn || a.serialNumber || "", "deactivate",
           "개통 기록 삭제로 되돌림", {});
@@ -49166,10 +49325,7 @@ window.toggleActAll = function(on){
 
     try{
       for(const p of payLogs){ await deleteDoc(doc(db,"supportLogs", p.id)); }
-      await updateDoc(doc(db,"inventoryItems", itemId), {
-        status: "보유중",
-        activateDate: "", subNumber: "", subsidyAmount: null, activationCode: "", activationTeam: "", activationBy: ""
-      });
+      await updateDoc(doc(db,"inventoryItems", itemId), { ...ACT_CANCEL_PATCH });
       // 개통 기록도 연결을 풀어 목록에 남겨둡니다. (나중에 다시 이으실 수 있게)
       try{
         const aq = await getDocs(query(collection(db,"activations"), where("itemId","==", itemId)));
