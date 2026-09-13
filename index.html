@@ -400,7 +400,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-06 v1125</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-06 v1128</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -1011,7 +1011,8 @@
               <select id="be-bulk-dest" onchange="onBulkDestBase()" style="width:150px;height:28px;border:1px solid var(--line);padding:0 6px;font-size:12.5px;margin-left:-1px;box-sizing:border-box;"><option value="">판매처 (선택)</option></select>
               <select id="be-bulk-salebase" title="판매할인%를 어디에 곱할지 고릅니다." style="width:150px;height:28px;border:1px solid var(--line);padding:0 6px;font-size:12.5px;margin-left:-1px;box-sizing:border-box;">
                 <option value="unit">출고가(개당)</option>
-                <option value="supply">공급가(삼전)</option>
+                <option value="flat">출고가(정액)</option>
+              <option value="supply">공급가(삼전)</option>
               </select>
               <input type="number" step="0.01" id="be-bulk-salepct" placeholder="판매할인%" style="width:100px;height:28px;border:1px solid var(--line);padding:0 6px;font-size:12.5px;margin-left:-1px;box-sizing:border-box;">
               <label style="display:flex;align-items:center;gap:4px;font-size:12px;cursor:pointer;height:28px;border:1px solid var(--line);padding:0 8px;margin-left:-1px;box-sizing:border-box;background:#fff;white-space:nowrap;" title="판매가를 입고가와 똑같이 넣습니다. 앞으로 입고가가 바뀌면 판매가도 따라갑니다.">
@@ -1722,6 +1723,7 @@
             <select id="co-discbase-input">
               <option value="unit">출고가(개당)</option>
               <option value="total">출고가(합계)</option>
+              <option value="flat">출고가(정액)</option>
               <option value="supply">공급가(삼전)</option>
             </select>
           </div>
@@ -1729,6 +1731,7 @@
             <select id="co-salebase-input">
               <option value="unit">출고가(개당)</option>
               <option value="total">출고가(합계)</option>
+              <option value="flat">출고가(정액)</option>
               <option value="supply">공급가(삼전)</option>
             </select>
           </div>
@@ -2627,6 +2630,18 @@
           </div>
           <div class="stack-row"><label>금액</label><input type="number" id="b2b-amount-input" placeholder="숫자만"></div>
           <div class="stack-row"><label>메모 (선택)</label><input type="text" id="b2b-memo-input" placeholder="선택"></div>
+          <div class="stack-row" style="margin-top:10px;padding-top:9px;border-top:1px dashed var(--line);">
+            <label>통장에도 남기기 <span class="info-tip" title="통장에서 실제로 오간 돈이면 켜주세요. 입출금리스트에 내역이 함께 만들어집니다.">ⓘ</span></label>
+            <label style="font-size:12.5px;display:inline-flex;align-items:center;gap:6px;">
+              <input type="checkbox" id="b2b-bank-on" onchange="onB2BBankOn()"> 입출금리스트에 함께 등록
+            </label>
+          </div>
+          <div class="stack-row b2b-bank-row" style="display:none;"><label>받는 곳·보내는 곳</label>
+            <input type="text" id="b2b-bank-payer" placeholder="예: 삼성유통"></div>
+          <div class="stack-row b2b-bank-row" style="display:none;"><label>통장 메모</label>
+            <input type="text" id="b2b-bank-memo" placeholder="통장에 적힌 그대로"></div>
+          <div class="stack-row b2b-bank-row" style="display:none;"><label>계좌 (선택)</label>
+            <select id="b2b-bank-account"><option value="">(고르지 않음)</option></select></div>
         </div>
         <div id="b2badd-msg" style="font-size:12.5px;margin:8px 0;"></div>
         <span class="btn-row">
@@ -3098,6 +3113,7 @@
             <select id="rebase-target" onchange="rebaseRecalc()">
               <option value="unit">출고가(개당)</option>
               <option value="total">출고가(합계)</option>
+              <option value="flat">출고가(정액)</option>
               <option value="supply">공급가(삼전)</option>
             </select></div>
         </div>
@@ -3399,6 +3415,7 @@
               <option value="">비어 있음 (고르지 않음)</option>
               <option value="unit">출고가(개당)</option>
               <option value="total">출고가(합계)</option>
+              <option value="flat">출고가(정액)</option>
               <option value="supply">공급가(삼전)</option>
             </select></div>
           <div class="stack-row"><label>출고가</label><input type="number" id="os-listprice" oninput="osRecalc('list')"></div>
@@ -3438,6 +3455,7 @@
               <option value="">비어 있음 (고르지 않음)</option>
               <option value="unit">출고가(개당)</option>
               <option value="total">출고가(합계)</option>
+              <option value="flat">출고가(정액)</option>
               <option value="supply">공급가(삼전)</option>
             </select>
           </div>
@@ -3568,6 +3586,7 @@
               <option value="">비어 있음 (고르지 않음)</option>
               <option value="unit">출고가(개당)</option>
               <option value="total">출고가(합계)</option>
+              <option value="flat">출고가(정액)</option>
               <option value="supply">공급가(삼전)</option>
             </select>
           </div>
@@ -3784,6 +3803,7 @@
               <option value="">비어 있음 (고르지 않음)</option>
               <option value="unit">출고가(개당)</option>
               <option value="total">출고가(합계)</option>
+              <option value="flat">출고가(정액)</option>
               <option value="supply">공급가(삼전)</option>
             </select>
           </div>
@@ -4165,6 +4185,7 @@
               <option value="">비어 있음 (입고처 설정을 따름)</option>
               <option value="unit">출고가(개당)</option>
               <option value="total">출고가(합계)</option>
+              <option value="flat">출고가(정액)</option>
               <option value="supply">공급가(삼전)</option>
             </select>
           </div>
@@ -4189,6 +4210,7 @@
               <option value="">비어 있음 (판매할 때 정해짐)</option>
               <option value="unit">출고가(개당)</option>
               <option value="total">출고가(합계)</option>
+              <option value="flat">출고가(정액)</option>
               <option value="supply">공급가(삼전)</option>
             </select>
           </div>
@@ -4223,7 +4245,8 @@
     updateDoc, arrayUnion, arrayRemove, where, writeBatch
   } from "https://www.gstatic.com/firebasejs/10.13.2/firebase-firestore.js";
 
-  const firebaseConfig = {
+
+const firebaseConfig = {
     apiKey: "AIzaSyDFMJhsoSnM1ap_r9dyJRE8FjCybrr4kco",
     authDomain: "y22223037-28352.firebaseapp.com",
     projectId: "y22223037-28352",
@@ -4235,6 +4258,80 @@
   const app = initializeApp(firebaseConfig);
   const auth = getAuth(app);
   const db = getFirestore(app);
+
+  //  요청에서 쓴 돈을 통장 내역으로 되돌립니다.
+  //   (요청을 지우거나 취소하면 그 돈이 다시 「안 붙인 돈」이 되어야 합니다)
+  window.releaseBankUses = async function(kind, reqId, recs){
+    let n = 0;
+    try{
+      const list = Array.isArray(recs) ? recs : [];
+      // 어느 통장 내역에서 얼마를 썼는지 모으고, 그만큼 되돌립니다.
+      const back = {};
+      list.forEach(function(r){
+        const bid = String(r.bankId || r.pickId || r.fromBankDepositId || "");
+        const amt = Number(r.amount)||0;
+        if(!bid || !amt) return;
+        back[bid] = (back[bid]||0) + amt;
+      });
+      // 기록에 통장 번호가 없으면 uses 에서 찾아봅니다.
+      if(Object.keys(back).length === 0){
+        const q = await getDocs(collection(db,"bankDeposits"));
+        const all = [];
+        q.forEach(function(d){ all.push({ id:d.id, ...d.data() }); });
+        // ① 요청 번호로 찾기
+        all.forEach(function(v){
+          (v.uses||[]).forEach(function(u){
+            if(String(u.reqId||"") === String(reqId)) back[v.id] = (back[v.id]||0) + (Number(u.amount)||0);
+          });
+        });
+        // ② 옛 기록에는 요청 번호가 없습니다. 날짜·금액·상대로 찾습니다.
+        if(Object.keys(back).length === 0 && list.length){
+          list.forEach(function(r){
+            const amt = Number(r.amount)||0;
+            const dt  = String(r.date||"").replace(/\D/g,"");
+            const who = String(r.payer || r.destination || "").trim();
+            if(!amt) return;
+            for(const v of all){
+              if(v.deleted === true) continue;
+              if((Number(v.usedAmount)||0) <= 0) continue;
+              const hit = (v.uses||[]).some(function(u){
+                if(String(u.reqId||"")) return false;          // 번호가 있는 건 위에서 처리됩니다
+                if((Number(u.amount)||0) !== amt) return false;
+                if(dt && String(u.date||"").replace(/\D/g,"") && String(u.date||"").replace(/\D/g,"") !== dt) return false;
+                if(who && String(u.destination||"").trim() && String(u.destination||"").trim() !== who) return false;
+                return true;
+              });
+              if(hit){ back[v.id] = (back[v.id]||0) + amt; break; }
+            }
+          });
+        }
+      }
+      for(const bid of Object.keys(back)){
+        try{
+          const d = await getDoc(doc(db,"bankDeposits", bid));
+          if(!d.exists()) continue;
+          const v = d.data();
+          const cut = Math.min(Number(v.usedAmount)||0, back[bid]);
+          //  되돌린 만큼 uses 에서도 뺍니다. 번호가 없는 옛 기록은 금액으로 맞춥니다.
+          let rest = cut;
+          const keep = [];
+          (v.uses||[]).forEach(function(u){
+            if(String(u.reqId||"") === String(reqId)) return;          // 번호가 맞으면 뺍니다
+            if(rest > 0 && !String(u.reqId||"") && (Number(u.amount)||0) <= rest){
+              rest -= (Number(u.amount)||0); return;                    // 옛 기록도 금액만큼 뺍니다
+            }
+            keep.push(u);
+          });
+          await updateDoc(doc(db,"bankDeposits", bid), {
+            usedAmount: Math.max(0, (Number(v.usedAmount)||0) - cut),
+            uses: keep
+          });
+          n++;
+        }catch(e){}
+      }
+    }catch(e){}
+    return n;
+  };
 
   const EMAIL_DOMAIN = "@upsell.local";
   function todayStr(){
@@ -4408,8 +4505,10 @@
     // 저장해 둔 기준이 있으면 그것을 먼저 보여드립니다.
     {
       const saved = String((it && it.saleDiscountBase) || "");
-      if(saved === "supply" || saved === "total" || saved === "unit"){
-        const lab = (saved === "supply") ? "공급가(삼전)" : (saved === "total" ? "출고가(합계)" : "출고가(개당)");
+      if(saved === "supply" || saved === "total" || saved === "unit" || saved === "flat"){
+        const lab = (saved === "supply") ? "공급가(삼전)"
+                  : (saved === "total") ? "출고가(합계)"
+                  : (saved === "flat") ? "출고가(정액)" : "출고가(개당)";
         // 「입고동일」 이면 그 표시를 먼저 보여드립니다.
         if(it && it.salePriceFollowsBuy === true) return "입고동일";
         return lab;
@@ -4449,7 +4548,7 @@
     // 저장해 둔 기준이 있으면 그것을 먼저 보여드립니다. (업체정보는 처음 들어오는 값일 뿐입니다)
     const saved = String((it && it.discountBase) || "");
     if(saved === "supply" || saved === "total" || saved === "unit"){
-      const lab = (saved === "supply") ? "공급가(삼전)" : (saved === "total" ? "출고가(합계)" : "출고가(개당)");
+      const lab = (saved === "supply") ? "공급가(삼전)" : (saved === "total" ? "출고가(합계)" : (saved === "flat" ? "출고가(정액)" : "출고가(개당)"));
       // 금액이 부가세 포함으로 통일되어 두 기준의 차이가 1원뿐입니다.
       //  금액으로 기준을 되짚을 수 없으므로 저장된 기준을 그대로 보여드립니다.
       return { kind:"one", base: saved, savedLabel: lab };
@@ -4503,6 +4602,8 @@
     //  저장해 둔 기준이 있으면 할인 금액이 없어도 그대로 보여줍니다.
     //   (예전에는 할인이 0 이면 무조건 «-» 로 나와서, 저장했는데도 안 들어간 것처럼 보였습니다)
     const saved = String((it && it.discountBase) || "");
+    if(saved === "flat")   return "출고가(정액)";
+    if(saved === "flat")   return "출고가(정액)";
     if(saved === "supply") return "공급가(삼전)";
     if(saved === "total")  return "출고가(합계)";
     if(saved === "unit")   return "출고가(개당)";
@@ -4513,7 +4614,7 @@
     // 저장된 기준도 없고 할인도 없으면 가릴 것이 없습니다.
     if(!(pp > 0) && !(op > 0) && !(pa > 0) && !(oa > 0)) return "-";
     const base = (typeof itemDiscountBase === "function") ? itemDiscountBase(it) : "unit";
-    return (base === "supply") ? "공급가(삼전)" : (base === "total" ? "출고가(합계)" : "출고가(개당)");
+    return (base === "supply") ? "공급가(삼전)" : (base === "total" ? "출고가(합계)" : (base === "flat" ? "출고가(정액)" : "출고가(개당)"));
   }
   window.discountBaseLabel = discountBaseLabel;
 
@@ -8357,6 +8458,10 @@
   window.amtOnBaseVat = function(pct, listPrice, base){
     const L = Number(listPrice)||0;
     if(!L || pct === "" || pct == null) return "";
+    //  「출고가(정액)」 은 금액을 직접 넣으신 것입니다.
+    //   % 는 참고값이라 그 %로 금액을 다시 만들면 원래 금액과 어긋납니다.
+    //   그래서 계산에서는 「출고가(개당)」 과 같게 두되,
+    //   기준을 바꿔 다시 계산하는 자리에서는 이 기준을 건너뜁니다.
     if(String(base) === "supply"){
       const su = Math.round(L / 1.1);
       return Math.round(Math.round(su * Number(pct) / 100) * 1.1);
@@ -10009,6 +10114,18 @@
   window.onBeBaseChange = function(){
     const base = String((document.getElementById("be-base")||{}).value || "");
     if(!base) return;                 // 비워두시면 아무것도 안 바꿉니다
+    //  「출고가(정액)」 은 금액을 직접 넣으신 것이라 다시 계산하지 않습니다.
+    //   기준만 저장되고 금액·% 는 그대로 둡니다.
+    if(base === "flat"){
+      [...document.querySelectorAll("#be-lines-body tr")].forEach(function(tr){ tr.dataset.forceSave = "1"; });
+      const el0 = document.getElementById("be-msg");
+      if(el0){
+        el0.style.display = "block";
+        el0.innerHTML = '<span style="color:#2e7d32;">출고가(정액) 으로 두었습니다. '
+          + '금액과 %는 지금 값 그대로 저장됩니다.</span>';
+      }
+      return;
+    }
     const buyBase = base;
     const trs = [...document.querySelectorAll("#be-lines-body tr")];
     // 도착된 줄은 금액이 잠겨 있습니다. 그 줄도 함께 고칠지 먼저 여쭙습니다.
@@ -10032,8 +10149,11 @@
         return (el && el.value !== "") ? Number(el.value) : null; };
       const pPct = num(".be-prepct"), oPct = num(".be-otherpct");
       //  % 가 없어도 기준은 바뀌어야 하므로 이 줄도 저장 대상에 넣습니다.
-      if(pPct != null) set(".be-preamt", amtOnBaseVat(pPct, L, base));
-      if(oPct != null) set(".be-otheramt", amtOnBaseVat(oPct, L, base));
+      //  「출고가(정액)」 은 금액을 직접 넣으신 것이라 다시 내지 않습니다.
+      if(base !== "flat"){
+        if(pPct != null) set(".be-preamt", amtOnBaseVat(pPct, L, base));
+        if(oPct != null) set(".be-otheramt", amtOnBaseVat(oPct, L, base));
+      }
       // 입고가·판매가를 다시 냅니다.
       const pre = num(".be-preamt")||0, oth = num(".be-otheramt")||0;
       set(".be-purchase", buyFromDiscounts(L, pre, oth, buyBase));
@@ -10046,7 +10166,7 @@
     if(el){
       el.style.display = "block";
       el.innerHTML = '<span style="color:var(--navy);">매입할인 기준을 <b>'
-        + (base === "supply" ? "공급가(삼전)" : (base === "total" ? "출고가(합계)" : "출고가(개당)"))
+        + (base === "supply" ? "공급가(삼전)" : (base === "total" ? "출고가(합계)" : (base === "flat" ? "출고가(정액)" : "출고가(개당)")))
         + '</b> 로 바꿔 ' + n + '줄을 다시 계산했습니다.'
         + (lockedTrs.length ? ' <span style="color:var(--gray);">(도착된 ' + lockedTrs.length + '줄 포함)</span>' : '')
         + ' <b>수정 저장</b> 을 눌러야 재고·판매요청·여신까지 반영됩니다.</span>';
@@ -10124,7 +10244,7 @@
         try{ await lockBaseIfCredit("order-base-select", name); }catch(e){}
         bs.title = c && c.discountBase
           ? ("업체정보에 저장된 기준: "
-             + (c.discountBase === "supply" ? "공급가(삼전)" : c.discountBase === "total" ? "출고가(합계)" : "출고가(개당)"))
+             + (c.discountBase === "supply" ? "공급가(삼전)" : c.discountBase === "total" ? "출고가(합계)" : c.discountBase === "flat" ? "출고가(정액)" : "출고가(개당)"))
           : "";
       } }
     // 무엇을 읽었는지 화면에 보여드립니다. (기준이 안 따라올 때 원인을 바로 알 수 있게)
@@ -10134,7 +10254,7 @@
         el0.style.display = "block";
         el0.innerHTML = c
           ? ('<b>' + comboEsc(name) + '</b> 업체정보를 읽었습니다 · 매입할인 기준 <b style="color:#2e7d32;">'
-             + (base === "supply" ? "공급가(삼전)" : (base === "total" ? "출고가(합계)" : "출고가(개당)"))
+             + (base === "supply" ? "공급가(삼전)" : (base === "total" ? "출고가(합계)" : (base === "flat" ? "출고가(정액)" : "출고가(개당)")))
              + '</b>' + (rate ? ' · 현금할인 ' + rate + '%' : ''))
           : ('<b style="color:var(--danger);">' + comboEsc(name)
              + '</b> 업체정보를 못 찾았습니다. (읽은 업체 ' + (companiesCache||[]).length
@@ -14084,12 +14204,14 @@
         // 할인 계산 기준 — 이 줄에 저장된 값이 없으면 묶음(입고처) 기준을 씁니다.
         '<td style="white-space:nowrap;">' + comboEsc((function(){
             const bs = String(o.discountBase || b.discountBase || "");
+            if(bs === "flat")   return "출고가(정액)";
             if(bs === "supply") return "공급가(삼전)";
             if(bs === "total")  return "출고가(합계)";
+            if(bs === "flat")   return "출고가(정액)";
             if(bs === "unit")   return "출고가(개당)";
             try{
               const bb = itemDiscountBase({ source: b.source || "" });
-              return bb === "supply" ? "공급가(삼전)" : (bb === "total" ? "출고가(합계)" : "출고가(개당)");
+              return bb === "supply" ? "공급가(삼전)" : (bb === "total" ? "출고가(합계)" : (bb === "flat" ? "출고가(정액)" : "출고가(개당)"));
             }catch(e){ return "출고가(개당)"; }
           })()) + '</td>' +
         '<td class="ta-right">'+discFmt(o.listPrice)+'</td>' +
@@ -19210,80 +19332,7 @@
   // 취소한 요청을 완전히 지웁니다. 취소 상태에서만 됩니다.
   //  문서는 사라지고 이력(관리자 > 이력)에는 내용이 남습니다.
   //  요청에서 쓴 돈을 통장 내역으로 되돌립니다.
-  //   (요청을 지우거나 취소하면 그 돈이 다시 「안 붙인 돈」이 되어야 합니다)
-  window.releaseBankUses = async function(kind, reqId, recs){
-    let n = 0;
-    try{
-      const list = Array.isArray(recs) ? recs : [];
-      // 어느 통장 내역에서 얼마를 썼는지 모으고, 그만큼 되돌립니다.
-      const back = {};
-      list.forEach(function(r){
-        const bid = String(r.bankId || r.pickId || r.fromBankDepositId || "");
-        const amt = Number(r.amount)||0;
-        if(!bid || !amt) return;
-        back[bid] = (back[bid]||0) + amt;
-      });
-      // 기록에 통장 번호가 없으면 uses 에서 찾아봅니다.
-      if(Object.keys(back).length === 0){
-        const q = await getDocs(collection(db,"bankDeposits"));
-        const all = [];
-        q.forEach(function(d){ all.push({ id:d.id, ...d.data() }); });
-        // ① 요청 번호로 찾기
-        all.forEach(function(v){
-          (v.uses||[]).forEach(function(u){
-            if(String(u.reqId||"") === String(reqId)) back[v.id] = (back[v.id]||0) + (Number(u.amount)||0);
-          });
-        });
-        // ② 옛 기록에는 요청 번호가 없습니다. 날짜·금액·상대로 찾습니다.
-        if(Object.keys(back).length === 0 && list.length){
-          list.forEach(function(r){
-            const amt = Number(r.amount)||0;
-            const dt  = String(r.date||"").replace(/\D/g,"");
-            const who = String(r.payer || r.destination || "").trim();
-            if(!amt) return;
-            for(const v of all){
-              if(v.deleted === true) continue;
-              if((Number(v.usedAmount)||0) <= 0) continue;
-              const hit = (v.uses||[]).some(function(u){
-                if(String(u.reqId||"")) return false;          // 번호가 있는 건 위에서 처리됩니다
-                if((Number(u.amount)||0) !== amt) return false;
-                if(dt && String(u.date||"").replace(/\D/g,"") && String(u.date||"").replace(/\D/g,"") !== dt) return false;
-                if(who && String(u.destination||"").trim() && String(u.destination||"").trim() !== who) return false;
-                return true;
-              });
-              if(hit){ back[v.id] = (back[v.id]||0) + amt; break; }
-            }
-          });
-        }
-      }
-      for(const bid of Object.keys(back)){
-        try{
-          const d = await getDoc(doc(db,"bankDeposits", bid));
-          if(!d.exists()) continue;
-          const v = d.data();
-          const cut = Math.min(Number(v.usedAmount)||0, back[bid]);
-          //  되돌린 만큼 uses 에서도 뺍니다. 번호가 없는 옛 기록은 금액으로 맞춥니다.
-          let rest = cut;
-          const keep = [];
-          (v.uses||[]).forEach(function(u){
-            if(String(u.reqId||"") === String(reqId)) return;          // 번호가 맞으면 뺍니다
-            if(rest > 0 && !String(u.reqId||"") && (Number(u.amount)||0) <= rest){
-              rest -= (Number(u.amount)||0); return;                    // 옛 기록도 금액만큼 뺍니다
-            }
-            keep.push(u);
-          });
-          await updateDoc(doc(db,"bankDeposits", bid), {
-            usedAmount: Math.max(0, (Number(v.usedAmount)||0) - cut),
-            uses: keep
-          });
-          n++;
-        }catch(e){}
-      }
-    }catch(e){}
-    return n;
-  };
-
-  window.deleteReqBoardItem = async function(kind, reqId){
+window.deleteReqBoardItem = async function(kind, reqId){
     if(!hasPerm(currentUserPerms, "paymentProcess")){ alert("권한이 없습니다."); return; }
     const isIn = (kind === "in");
     const col = isIn ? "saleDepositRequests" : "paymentRequests";
@@ -26482,6 +26531,7 @@
             + '<select id="resv-paste-salebase" onchange="onResvPasteSale(\'pct\')" style="height:28px;border:1px solid var(--line);padding:0 6px;font-size:12.5px;box-sizing:border-box;">'
               + '<option value="unit">출고가(개당)</option>'
               + '<option value="total">출고가(합계)</option>'
+              + '<option value="flat">출고가(정액)</option>'
               + '<option value="supply">공급가(삼전)</option>'
             + '</select>'
             + '<input type="number" id="resv-paste-saleamt" placeholder="판매할인 (대당)" oninput="onResvPasteSale(\'amt\')" style="width:130px;height:28px;border:1px solid var(--line);padding:0 6px;font-size:12.5px;margin-left:-1px;box-sizing:border-box;">'
@@ -27552,6 +27602,7 @@
           + '<select id="be-base" onchange="onBeBaseChange()"><option value=""'+(curBase?'':' selected')+'>비어 있음 (안 바꿈)</option>'
           + '<option value="unit"'   + (curBase==="unit"?' selected':'')   + '>출고가(개당)</option>'
           + '<option value="total"'  + (curBase==="total"?' selected':'')  + '>출고가(합계)</option>'
+          + '<option value="flat"'   + (curBase==="flat"?' selected':'')   + '>출고가(정액)</option>'
           + '<option value="supply"' + (curBase==="supply"?' selected':'') + '>공급가(삼전)</option>'
           + '</select></div>';
       }
@@ -28144,7 +28195,7 @@
         const L0 = Number((first.querySelector(".be-listprice")||{}).value) || 0;
         const p0 = (first.querySelector(".be-preamt")||{}).value || "-";
         const o0 = (first.querySelector(".be-otheramt")||{}).value || "-";
-        const baseLab = buyBase === "supply" ? "공급가(삼전)" : (buyBase === "total" ? "출고가(합계)" : "출고가(개당)");
+        const baseLab = buyBase === "supply" ? "공급가(삼전)" : (buyBase === "total" ? "출고가(합계)" : (buyBase === "flat" ? "출고가(정액)" : "출고가(개당)"));
         detail = "\n\n[첫 줄 기준]\n"
           + "  매입할인 기준  " + baseLab + "\n"
           + "  넣으신 값  선할인" + (prePct !== "" ? "% " + prePct : " " + (preAmt||"-"))
@@ -35434,7 +35485,7 @@ let ghostBankCache = [];
   window.showOrderBaseDiffList = function(){
     const rows = orderBaseDiffCache || [];
     if(rows.length === 0){ alert("어긋난 주문이 없습니다."); return; }
-    const lab = b => b === "supply" ? "공급가(삼전)" : (b === "total" ? "출고가(합계)" : "출고가(개당)");
+    const lab = b => b === "supply" ? "공급가(삼전)" : (b === "total" ? "출고가(합계)" : (b === "flat" ? "출고가(정액)" : "출고가(개당)"));
     alert("주문의 할인 금액이 기준과 다른 건 " + rows.length + "개\n\n"
       + rows.slice(0,15).map(function(r){
           return "  " + r.date + "  " + r.src + "  " + r.model + " " + r.color
@@ -35745,6 +35796,10 @@ let ghostBankCache = [];
           // 이 재고에 기준이 저장돼 있으면 그것이 먼저입니다. 없을 때만 업체 기준을 봅니다.
           const ownB = String(it.discountBase||"");
           if(!c && !ownB) return;                         // 견줄 기준이 아예 없습니다
+          //  「출고가(정액)」 은 금액을 직접 넣으신 것이라 %로 견주지 않습니다.
+          if(ownB === "flat") return;
+          //  「출고가(정액)」 은 금액을 직접 넣으신 것이라 % 로 견주지 않습니다.
+          if(ownB === "flat") return;
           const B = itemDiscountAmountBase(it, L);
           const pp = Number(it.purchaseDiscount)||0, op = Number(it.otherDiscountPct)||0;
           if(!(pp > 0) && !(op > 0)) return;              // %가 없으면 견줄 것이 없습니다
@@ -35786,6 +35841,10 @@ let ghostBankCache = [];
               const base = String(o.discountBase || (bt && bt.discountBase) || "");
               if(base !== "supply" && base !== "unit" && base !== "total") return;
               const B = (base === "supply") ? Math.round(L / 1.1) : L;
+              //  「출고가(정액)」 은 금액을 직접 넣으신 것이라 % 로 견주지 않습니다.
+              if(String(o.discountBase||"") === "flat") return;
+              //  「출고가(정액)」 은 금액을 직접 넣으신 것이라 %로 견주지 않습니다.
+              if(String(o.discountBase||"") === "flat") return;
               const pp = Number(o.preDiscountPct)||0, op = Number(o.otherDiscountPct)||0;
               if(!(pp > 0) && !(op > 0)) return;
               const wantPre = pp > 0 ? itemAmtFromPct(it, L, pp) : 0;
@@ -38701,6 +38760,22 @@ let ghostBankCache = [];
     if(b) b.style.display = isAdj ? "" : "none";
   };
   // 여신 거래 등록 — 목록만 보이게 하고 입력은 팝업으로 옮겼습니다.
+  //  「통장에도 남기기」를 켜면 칸을 보여주고, 받는 곳을 대상으로 미리 채웁니다.
+  window.onB2BBankOn = function(){
+    const on = !!(document.getElementById("b2b-bank-on")||{}).checked;
+    document.querySelectorAll(".b2b-bank-row").forEach(function(r){
+      r.style.display = on ? "" : "none"; });
+    if(on){
+      const p = document.getElementById("b2b-bank-payer");
+      if(p && !p.value){
+        // 대상(거래처)을 먼저 넣어드립니다. 통장에 다른 이름으로 찍히면 고치시면 됩니다.
+        p.value = String((document.getElementById("b2b-partner-select")||{}).value || "");
+      }
+      const m = document.getElementById("b2b-bank-memo");
+      if(m && !m.value) m.value = String((document.getElementById("b2b-memo-input")||{}).value || "");
+    }
+  };
+
   window.openB2BLedgerAdd = async function(){
     if(!hasPerm(currentUserPerms, "paymentProcess")){ alert("권한이 없습니다."); return; }
     document.getElementById("b2b-date-input").value = todayStr();
@@ -38708,6 +38783,17 @@ let ghostBankCache = [];
     document.getElementById("b2b-amount-input").value = "";
     document.getElementById("b2b-memo-input").value = "";
     document.getElementById("b2badd-msg").innerHTML = "";
+    //  통장 칸은 비워두고 접어둡니다.
+    { const cb = document.getElementById("b2b-bank-on"); if(cb) cb.checked = false; }
+    ["b2b-bank-payer","b2b-bank-memo"].forEach(function(id){
+      const el = document.getElementById(id); if(el) el.value = ""; });
+    document.querySelectorAll(".b2b-bank-row").forEach(function(r){ r.style.display = "none"; });
+    try{
+      const accs = await fetchNamesList("bankAccounts");
+      const sel = document.getElementById("b2b-bank-account");
+      if(sel) sel.innerHTML = '<option value="">(고르지 않음)</option>'
+        + accs.map(n=>'<option value="'+comboEsc(n)+'">'+comboEsc(n)+'</option>').join("");
+    }catch(err){}
     editingLedgerId = null; pendingAdjustColId = "";
     { const t = document.getElementById("b2badd-title"); if(t) t.textContent = "여신 거래 등록"; }
     fillAdjustReasonSelect("b2b-adjust-reason");
@@ -38976,14 +39062,42 @@ let ghostBankCache = [];
         + " → " + (B2B_CATEGORY_LABELS[category]||category) + " " + saveAmount.toLocaleString()
         + " / 대상 " + (ledPartner||"미지정"));
     }else{
-      await addDoc(collection(db,"b2bLedger"), Object.assign({}, payload, {
+      const newRef = await addDoc(collection(db,"b2bLedger"), Object.assign({}, payload, {
         createdBy: currentUser.name, createdByUsername: currentUser.username, createdAt: serverTimestamp()
       }));
       logAction("B2B 여신 거래 추가", "대상 " + ledPartner + " / " + B2B_CATEGORY_LABELS[category]+" "+saveAmount.toLocaleString()
         + (adjustReason ? " / 사유: " + adjustReason : "")
         + (ledSource ? " / " + ledSource : " / 입고처 미지정"));
+      //  「통장에도 남기기」를 켜셨으면 입출금 내역을 함께 만들고 이어둡니다.
+      if((document.getElementById("b2b-bank-on")||{}).checked){
+        try{
+          const bPayer = String((document.getElementById("b2b-bank-payer")||{}).value||"").trim();
+          const bMemo  = String((document.getElementById("b2b-bank-memo")||{}).value||"").trim();
+          const bAcc   = String((document.getElementById("b2b-bank-account")||{}).value||"");
+          //  여신이 늘어나는 구분(충전·예치)은 통장에서 나간 돈입니다.
+          const OUT_CATS = ["deposit","loan_deposit","collateral_cash","b2b_fee_payment",
+                            "b2b_fee_mp","b2b_interest","loan_repay"];
+          const bKind = OUT_CATS.indexOf(category) >= 0 ? "out" : "in";
+          const bRef = await addDoc(collection(db,"bankDeposits"), {
+            kind: bKind, date: dateVal, amount: saveAmount,
+            payer: bPayer || ledPartner || "", company: ledPartner || "",
+            memo: bMemo || memo || "", account: bAcc,
+            usedAmount: 0, uses: [],
+            fromLedgerId: newRef.id, ledgerCategory: category,
+            createdBy: currentUser.name, createdByUsername: currentUser.username,
+            createdAt: serverTimestamp()
+          });
+          await updateDoc(doc(db,"b2bLedger", newRef.id), { fromBankDepositId: bRef.id });
+          logAction("여신 거래에 통장 내역 함께 등록",
+            (bKind === "out" ? "출금" : "입금") + " / " + dateVal + " / " + saveAmount.toLocaleString()
+            + " / " + (bPayer || ledPartner || "-"));
+        }catch(e){}
+      }
     }
     closeB2BLedgerAdd();
+    try{ clearCache("bank"); }catch(e){}
+    try{ if(typeof loadReqBoard === "function") loadReqBoard(); }catch(e){}
+    try{ if(typeof loadDepositEntryList === "function") loadDepositEntryList(); }catch(e){}
     // 무엇이 저장됐는지 알려드립니다. (조정은 잔액이 바뀌므로 특히 확인이 필요합니다)
     alert((editingLedgerId ? "고쳤습니다." : "저장했습니다.") + "\n\n"
       + "  구분   " + (B2B_CATEGORY_LABELS[category] || category) + "\n"
@@ -40362,6 +40476,7 @@ let ghostBankCache = [];
       wrap.innerHTML = '<select id="bulk-edit-value" style="padding:5px 8px;border:1px solid #c7c7c7;font-size:12.5px;height:28px;box-sizing:border-box;">'
         + '<option value="unit">출고가(개당)</option>'
         + '<option value="total">출고가(합계)</option>'
+        + '<option value="flat">출고가(정액)</option>'
         + '<option value="supply">공급가(삼전)</option>'
         + '</select>'
         + '<div style="font-size:12px;color:var(--gray);line-height:1.7;margin-top:6px;">'
@@ -46396,7 +46511,7 @@ let ghostBankCache = [];
   function renderRebase(){
     const want = String(document.getElementById("rebase-target").value||"unit");
     const lab = function(v){
-      return v === "supply" ? "공급가(삼전)" : v === "total" ? "출고가(합계)" : v === "unit" ? "출고가(개당)" : "비어 있음";
+      return v === "supply" ? "공급가(삼전)" : v === "total" ? "출고가(합계)" : v === "flat" ? "출고가(정액)" : v === "unit" ? "출고가(개당)" : "비어 있음";
     };
     const el = document.getElementById("rebase-body");
     let diffSum = 0;
@@ -46508,7 +46623,7 @@ let ghostBankCache = [];
       diffSum += (rebaseBuy(r) - (Number(r.curBuy)||0)) * (Number(r.qty)||0);
       itemN += (r.itemIds||[]).length;
     });
-    const lab = want === "supply" ? "공급가(삼전)" : want === "total" ? "출고가(합계)" : "출고가(개당)";
+    const lab = want === "supply" ? "공급가(삼전)" : want === "total" ? "출고가(합계)" : want === "flat" ? "출고가(정액)" : "출고가(개당)";
     if(!confirm("고른 " + picked.length + "개 품목의 매입할인 기준을\n「" + lab + "」 으로 바꿉니다.\n\n"
       + "  주문 품목 " + picked.length + "개\n"
       + "  이어진 재고 " + itemN + "대\n"
@@ -48845,6 +48960,7 @@ window.toggleActAll = function(on){
     html += '<div class="stack-row"><label>판매할인 기준 <span class="info-tip" title="판매할인%를 어디에 곱할지 정합니다. 삼성전자처럼 공급가에 곱하는 곳만 공급가 기준으로 두세요.">ⓘ</span></label>'
       + '<span><select id="paste-sale-base" onchange="onPasteSaleDisc(\'pct\')" style="height:28px;">'
       + '<option value="unit">출고가(개당)</option>'
+      + '<option value="flat">출고가(정액)</option>'
       + '<option value="supply">공급가(삼전)</option>'
       + '</select> <span style="color:var(--gray);font-size:11.5px;margin-left:6px;">판매할인%를 곱할 금액</span></span></div>';
     html += '<div class="stack-row"><label>판매할인 <span class="info-tip" title="모든 줄에 똑같이 넣습니다. 금액이나 %% 중 하나만 넣으시면 나머지는 알아서 계산합니다. 안 넣으시면 할인 없이 판매가 그대로 들어갑니다.">ⓘ</span></label>'
