@@ -400,7 +400,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-06 v1132</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-06 v1135</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -4269,7 +4269,7 @@ const firebaseConfig = {
       v = d.data();
     }catch(e){ alert("읽지 못했습니다."); return; }
     const used = Number(v.usedAmount)||0;
-    if(used <= 0){ alert("이미 안 붙은 내역입니다."); return; }
+    if(used <= 0){ alert("이 내역은 아직 어느 요청에도 안 붙어 있습니다.\n\n바로 매칭하시거나 지우시면 됩니다."); return; }
     const uses = (v.uses||[]);
     if(!confirm("이 내역의 배분을 풉니다.\n\n"
       + "  " + (v.date||"-") + " · " + (Number(v.amount)||0).toLocaleString()
@@ -19958,6 +19958,97 @@ window.deleteReqBoardItem = async function(kind, reqId){
     //  기본은 「미배분」만 나옵니다. 배분이 끝난 돈은 요청 줄에 이미 나오므로 겹치지 않게 뺍니다.
     //  「입출금 내역」 구분을 고르면 배분완료까지 다 나옵니다. (입출금 내역 화면 대신)
     const showDoneCb = (reqBoardKind === "cb" || reqBoardKind === "loan") && !cbOpenOnly;
+
+    //  「B2B 대출」 구분에서는 대출로 실제로 오간 돈을 모아 보여드립니다.
+    //   대출 실행 · 낸 이자 · 낸 수수료 · 갚은 원금 — 낸 것만 나옵니다.
+    if(reqBoardKind === "loan"){
+      try{
+        const loanSnap = await getDocs(collection(db,"b2bLoans"));
+        const loanById = {};
+        loanSnap.forEach(function(d){ loanById[d.id] = { id:d.id, ...d.data() }; });
+        // ① 대출 실행
+        Object.keys(loanById).forEach(function(id){
+          const L = loanById[id];
+          if(L.deleted === true) return;
+          const amt = Number(L.principal)||0;
+          if(!amt) return;
+          const repaid = Number(L.repaidPrincipal)||0;
+          const leftP  = Math.max(0, amt - repaid);
+          const toCredit = (L.chargedToCredit === true) || String(L.fundFlow||"") === "yes";
+          //  여신으로 충전한 대출은 통장에서 나간 돈이 아닙니다. 구분해 보여드립니다.
+          const st = leftP <= 0 ? "상환완료"
+                   : (repaid > 0 ? "일부상환 · 남은 " + leftP.toLocaleString() : "진행중");
+          rows.push({
+            kind:"loanexec",
+            label: toCredit ? "대출 실행 (여신충전)" : "대출 실행 (통장출금)",
+            color: leftP <= 0 ? "#2e7d32" : "#6a1b9a", isLoan:true,
+            id, p:null, cb:false, cbUsed:0,
+            who: String(L.partner||"").trim() || String(L.bank||"-"),
+            sub: String(L.bank||"") + (L.name ? " · " + L.name : "")
+                 + (L.code ? " · " + L.code : "")
+                 + (toCredit ? " · 통장에서 나간 돈이 아닙니다" : ""),
+            date: L.startDate || L.start || "",
+            //  여신충전분은 통장 합계에 넣지 않습니다.
+            owe:0, recv: toCredit ? 0 : amt, done: amt, left:0,
+            payDate: L.startDate || L.start || "", payMemo: L.memo||"",
+            taxDate:"", taxAmount:0, status: st,
+            finished: leftP <= 0, onHold:false, holdReason:"",
+            canceled:false, recs:[], inSum:false, canProcess:false, canEdit:false
+          });
+        });
+        // ② 낸 이자·수수료
+        const costSnap = await getDocs(collection(db,"b2bLoanCost"));
+        const COSTLAB = { b2b_interest:"이자", b2b_fee_mp:"MP수수료",
+                          b2b_fee_payment:"결제수수료", other:"기타" };
+        costSnap.forEach(function(d){
+          const v = d.data();
+          if(v.deleted === true) return;
+          const amt = Number(v.amount)||0;
+          if(!amt) return;
+          const L = v.fromLoanId ? loanById[v.fromLoanId] : null;
+          rows.push({
+            kind:"loancost", label: COSTLAB[v.category] || "대출비용",
+            color:"#6a1b9a", isLoan:true,
+            id: d.id, p:null, cb:false, cbUsed:0,
+            who: String(v.partner||"").trim() || String(v.bank||"-"),
+            sub: String(v.bank||"") + (L && L.name ? " · " + L.name : "")
+                 + (v.memo ? " · " + v.memo : ""),
+            date: v.date || "",
+            owe:amt, recv:0, done:amt, left:0,
+            payDate: v.date||"", payMemo: v.memo||"",
+            taxDate:"", taxAmount:0, status:"납부",
+            finished:true, onHold:false, holdReason:"",
+            canceled:false, recs:[], inSum:false, canProcess:false, canEdit:false
+          });
+        });
+        // ③ 갚은 원금
+        Object.keys(loanById).forEach(function(id){
+          const L = loanById[id];
+          (L.payments||[]).forEach(function(x, ix){
+            if(String(x.type||"") !== "principal") return;
+            const amt = Number(x.amount)||0;
+            if(!amt) return;
+            //  이 상환으로 대출이 끝났는지 표시합니다.
+            const doneAll = (Number(L.repaidPrincipal)||0) >= (Number(L.principal)||0);
+            rows.push({
+              kind:"loanrepay",
+              label: doneAll ? "원금 상환 (완료)" : "원금 상환",
+              color: doneAll ? "#2e7d32" : "#6a1b9a", isLoan:true,
+              id: id + "|" + ix, p:null, cb:false, cbUsed:0,
+              who: String(L.partner||"").trim() || String(L.bank||"-"),
+              sub: String(L.bank||"") + (L.name ? " · " + L.name : "")
+                   + (doneAll ? " · 모두 갚았습니다" : ""),
+              date: x.date || "",
+              owe:amt, recv:0, done:amt, left:0,
+              payDate: x.date||"", payMemo:"",
+              taxDate:"", taxAmount:0, status: doneAll ? "상환완료" : "일부상환",
+              finished:true, onHold:false, holdReason:"",
+              canceled:false, recs:[], inSum:false, canProcess:false, canEdit:false
+            });
+          });
+        });
+      }catch(e){}
+    }
     try{
       const cbSnap = await getDocs(collection(db,"bankDeposits"));
       cbSnap.forEach(d=>{
@@ -20034,7 +20125,7 @@ window.deleteReqBoardItem = async function(kind, reqId){
       if(reqBoardKind === "in")  return r.kind === "in"  || r.kind === "cbin";
       if(reqBoardKind === "out") return r.kind === "out" || r.kind === "cbout";
       if(reqBoardKind === "cb")  return r.kind === "cbin" || r.kind === "cbout";
-      if(reqBoardKind === "loan") return !!r.isLoan;
+      if(reqBoardKind === "loan") return !!r.isLoan;   // 대출 실행·이자·수수료·상환 전부
       return r.kind === reqBoardKind;
     };
     const stateOk = (r)=>{
@@ -20136,9 +20227,9 @@ window.deleteReqBoardItem = async function(kind, reqId){
               ? '<button class="btn small danger" style="width:auto;margin-left:4px;" data-rbd-del="' + r.kind + '|' + r.id + '">삭제</button>' : '') +
             ((r.cb && canDo)
               ? '<button class="btn small secondary" style="width:auto;margin-left:4px;" data-rbd-cbco="' + r.id + '">매칭</button>'
-                + ((r.cbUsed > 0)
-                   ? '<button class="btn small secondary" style="width:auto;margin-left:4px;" title="붙은 요청이 없어졌을 때 씁니다. 쓴 금액을 0 으로 되돌립니다." data-rbd-relcb="' + r.id + '">배분 풀기</button>'
-                   : '<button class="btn small danger" style="width:auto;margin-left:4px;" data-rbd-cbdel="' + r.id + '">삭제</button>') : '') +
+                //  붙어 있든 아니든 풀 수 있게 둡니다. (요청 기록도 함께 풀립니다)
+                + '<button class="btn small secondary" style="width:auto;margin-left:4px;" title="붙은 요청과 함께 풉니다. 다시 매칭하실 수 있습니다." data-rbd-relcb="' + r.id + '">배분 풀기</button>'
+                + '<button class="btn small danger" style="width:auto;margin-left:4px;" data-rbd-cbdel="' + r.id + '">삭제</button>' : '') +
             ((r.recs.length === 1 && hasPerm(currentUserPerms, "paymentProcess"))
               ? '<button class="btn small secondary" style="width:auto;margin-left:4px;" data-delrec="' + r.kind + '|' + r.id + '|0">입금기록 지우기</button>' : '');
 
@@ -20279,7 +20370,8 @@ window.deleteReqBoardItem = async function(kind, reqId){
       b.onclick = ()=> setCashbookCompany(b.dataset.rbdCbco);
     });
     document.querySelectorAll("#tab-reqboard [data-rbd-cbdel]").forEach(b=>{
-      b.onclick = ()=> deleteCashbookRow(b.dataset.rbdCbdel);
+      // 쓴 금액이 있어도 붙어 있던 것을 보여드리고 확인받아 지웁니다.
+      b.onclick = ()=> forceDeleteDeposit(b.dataset.rbdCbdel);
     });
     // 엑셀 다운로드 (화면에 보이는 순서 그대로)
     addDownloadBtn("dl-reqboard", "reqboard-list", "입출금리스트");
