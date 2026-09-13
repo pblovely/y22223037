@@ -400,7 +400,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-06 v1099</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-06 v1100</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -1974,7 +1974,7 @@
         <div style="margin-bottom:8px;">
           <span class="btn-row" style="display:inline-flex;">
             <button class="btn small" id="rbd-f-all" style="width:auto;" onclick="setReqBoardFilter('all')">전체</button>
-            <button class="btn small secondary" id="rbd-f-todo" style="width:auto;" onclick="setReqBoardFilter('todo')">해야 할 일</button>
+            <button class="btn small secondary" id="rbd-f-todo" style="width:auto;" onclick="setReqBoardFilter('todo')">미확인</button>
             <button class="btn small secondary" id="rbd-f-done" style="width:auto;" onclick="setReqBoardFilter('done')">완료</button>
             <button class="btn small secondary" id="rbd-f-hold" style="width:auto;" onclick="setReqBoardFilter('hold')">보류</button>
             <button class="btn small secondary" id="rbd-f-cancel" style="width:auto;" onclick="setReqBoardFilter('cancel')">취소</button>
@@ -19721,7 +19721,7 @@
       if(reqBoardFilter === "all") return true;
       if(reqBoardFilter === "hold") return r.onHold;
       if(reqBoardFilter === "done") return r.finished;
-      // 「해야 할 일」 — 보류로 빼둔 건은 「보류」에서만 봅니다.
+      // 「미확인」 — 보류로 빼둔 건은 「보류」에서만 봅니다.
       return !r.finished && !r.onHold;
     };
     const condOk = (r)=>{
@@ -19731,11 +19731,9 @@
       if(to && d && d > to) return false;
       return true;
     };
-    // 아직 붙이지 않은 입금(미배분)을 맨 위로 올립니다. 먼저 반영하셔야 하는 돈이라서요.
-    const unmatchedFirst = (r)=> (String(r.stateLabel||"") === "미배분" || String(r.status||"") === "미배분") ? 0 : 1;
+    //  요청일이 늦은 것(최근)이 위로 옵니다.
     const view = rows.filter(r=> kindOk(r) && stateOk(r) && condOk(r))
-                     .sort((a,b)=> unmatchedFirst(a) - unmatchedFirst(b)
-                                || String(b.date).localeCompare(String(a.date)));
+                     .sort((a,b)=> String(b.date||"").localeCompare(String(a.date||"")));
 
     let sDone=0, sLeftOut=0, sLeftIn=0, holdOut=0, holdIn=0;
     rows.forEach(r=>{
