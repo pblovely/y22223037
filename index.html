@@ -3083,6 +3083,34 @@
       </div>
     </div>
 
+    <!-- 할인 기준 바꾸기 -->
+    <div id="rebase-overlay" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.55);z-index:1000;align-items:center;justify-content:center;">
+      <div style="background:#fff;border:2px solid var(--navy);max-width:1200px;width:97%;max-height:94vh;overflow-y:auto;padding:22px;position:relative;">
+        <button onclick="closeRebase()" style="position:absolute;top:12px;right:12px;background:none;border:1px solid var(--navy);width:26px;height:26px;cursor:pointer;font-size:13px;">✕</button>
+        <h3 style="margin-top:0;margin-bottom:4px;">할인 기준 바꾸기</h3>
+        <p class="desc" style="margin-top:0;">기준을 바꾸면 <b>같은 %라도 할인 금액이 달라집니다.</b><br>
+          아래에서 바뀔 값을 보시고, 필요하면 <b>% 나 금액을 직접 고쳐</b> 저장하세요.<br>
+          <b>저장하면 주문 품목과 이어진 재고에 함께 들어갑니다.</b></p>
+        <div id="rebase-head" style="font-size:12.5px;margin-bottom:10px;"></div>
+        <div class="stack-form" style="margin-bottom:10px;">
+          <div class="stack-row"><label>바꿀 매입할인 기준</label>
+            <select id="rebase-target" onchange="rebaseRecalc()">
+              <option value="unit">출고가 기준 (대당)</option>
+              <option value="total">출고가 기준 (합계)</option>
+              <option value="supply">공급가 기준 (삼성전자 방식)</option>
+            </select></div>
+        </div>
+        <div style="margin-bottom:8px;">
+          <label style="display:inline-flex;align-items:center;gap:5px;cursor:pointer;font-size:12.5px;">
+            <input type="checkbox" id="rebase-all" onclick="toggleRebaseAll(this.checked)" checked> 전체</label>
+          <button class="btn small" style="width:auto;margin-left:8px;" onclick="submitRebase()">고른 것 저장</button>
+          <span id="rebase-diff" style="font-size:12.5px;margin-left:10px;"></span>
+        </div>
+        <div id="rebase-body"></div>
+        <div id="rebase-result" style="font-size:12.5px;margin-top:10px;"></div>
+      </div>
+    </div>
+
     <!-- 지원금 등록 (지급 · 환수) -->
     <div id="support-overlay" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.55);z-index:1000;align-items:center;justify-content:center;">
       <div style="background:#fff;border:2px solid var(--navy);max-width:900px;width:96%;max-height:92vh;overflow-y:auto;padding:22px;position:relative;">
@@ -3367,6 +3395,7 @@
           <div class="stack-row"><label>수량</label><input type="number" id="os-qty" value="1" min="1" oninput="osRecalc()"></div>
           <div class="stack-row"><label>매입할인 기준 <span class="info-tip" title="선할인%·타할인%를 어디에 곱할지 정합니다. 업체정보에 저장해둔 기준이 자동으로 들어옵니다. 이 주문에서만 다르게 하려면 바꾸세요.">ⓘ</span></label>
             <select id="os-base" onchange="osRecalc()">
+              <option value="">비어 있음 (고르지 않음)</option>
               <option value="unit">대당 (출고가에 걸기)</option>
               <option value="total">합계 (출고가 합계에 한 번)</option>
               <option value="supply">공급가 기준 (삼성전자 방식)</option>
@@ -3405,6 +3434,7 @@
           <div class="stack-row"><label>입금예정일 <span class="info-tip" title="이 주문 대금을 언제까지 보내기로 했는지 적어주세요. 출금요청에 그대로 따라갑니다.">ⓘ</span></label><input type="text" id="order-paydue-input" placeholder="예: 20260731" maxlength="8" inputmode="numeric"></div>
           <div class="stack-row"><label>매입할인 기준 <span class="info-tip" title="선할인%·타할인%를 어디에 곱할지 정합니다. 업체정보에 저장해둔 기준이 자동으로 들어옵니다. 이 주문에서만 다르게 하려면 바꾸세요. 저장한 설정은 안 바뀝니다.">ⓘ</span></label>
             <select id="order-base-select" onchange="onOrderBaseChange()">
+              <option value="">비어 있음 (고르지 않음)</option>
               <option value="unit">대당 (출고가에 걸기)</option>
               <option value="total">합계 (출고가 합계에 한 번)</option>
               <option value="supply">공급가 기준 (삼성전자 방식)</option>
@@ -3534,6 +3564,7 @@
           <div class="stack-row"><label>출고가 <span class="info-tip" title="모델을 고르면 모델 등록의 출고가(VAT포함)를 자동으로 가져옵니다. 필요하면 직접 고칠 수 있습니다.">ⓘ</span></label><input type="number" id="resv-listprice-input" oninput="onResvListPriceInput();onResvBaseChange();" placeholder="모델을 고르면 자동으로 채워집니다"></div>
           <div class="stack-row resv-buy-only"><label>매입할인 기준 <span class="info-tip" title="선할인%·타할인%를 어디에 곱할지 정합니다. 거래처에 저장해둔 기준이 자동으로 들어옵니다. 이 예약에서만 다르게 하려면 바꾸세요.">ⓘ</span></label>
             <select id="resv-base-select" onchange="onResvBaseChange()">
+              <option value="">비어 있음 (고르지 않음)</option>
               <option value="unit">대당 (출고가에 걸기)</option>
               <option value="total">합계 (출고가 합계에 한 번)</option>
               <option value="supply">공급가 기준 (삼성전자 방식)</option>
@@ -3749,6 +3780,7 @@
             </label></div>
           <div class="stack-row resv-paste-buy-only"><label>매입할인 기준 <span class="info-tip" title="선할인%·타할인%를 어디에 곱할지 정합니다. 거래처에 저장해둔 기준이 자동으로 들어옵니다. 이 등록에서만 다르게 하려면 바꾸세요.">ⓘ</span></label>
             <select id="resv-paste-base" onchange="onResvPasteDisc('pre','pct')">
+              <option value="">비어 있음 (고르지 않음)</option>
               <option value="unit">대당 (출고가에 걸기)</option>
               <option value="total">합계 (출고가 합계에 한 번)</option>
               <option value="supply">공급가 기준 (삼성전자 방식)</option>
@@ -4129,6 +4161,7 @@
           <div class="stack-row"><label>입고가</label><input type="number" id="item-purchaseprice-input" oninput="onPurchasePriceInput()"></div>
           <div class="stack-row"><label>매입할인 기준 <span class="info-tip" title="선할인%·타할인%를 어디에 곱할지 정합니다. 입고처에 저장해둔 기준이 자동으로 들어옵니다. 이 재고에서만 다르게 하려면 바꾸세요.">ⓘ</span></label>
             <select id="item-base-select" onchange="onItemBaseChange()">
+              <option value="">비어 있음 (입고처 설정을 따름)</option>
               <option value="unit">출고가 기준 (대당)</option>
               <option value="total">출고가 기준 (합계)</option>
               <option value="supply">공급가 기준 (삼성전자 방식)</option>
@@ -4152,6 +4185,7 @@
           <div id="item-saledisc-note" style="display:none;border:1px solid var(--navy);background:#f4f7fb;padding:8px 10px;margin-bottom:10px;font-size:12px;line-height:1.7;"></div>
           <div class="stack-row"><label>판매할인 기준 <span class="info-tip" title="판매할인%를 어디에 곱할지 정합니다. 매입과 판매는 별개라 따로 정합니다. 판매처에 저장해둔 기준이 자동으로 들어옵니다.">ⓘ</span></label>
             <select id="item-salebase-select" onchange="onItemSaleBaseChange()">
+              <option value="">비어 있음 (판매할 때 정해짐)</option>
               <option value="unit">출고가 기준 (대당)</option>
               <option value="total">출고가 기준 (합계)</option>
               <option value="supply">공급가 기준 (삼성전자 방식)</option>
@@ -8773,27 +8807,18 @@
     }
     updateTotalDiscountDisplay();
 
-    { // 매입 기준 — 이 재고에 저장된 값이 먼저, 없으면 입고처 설정
+    { // 매입 기준 — 이 재고에 저장된 값만 씁니다.
+      //  비어 있으면 비운 채로 둡니다. 업체정보 값을 함부로 넣으면
+      //  저장할 때 엉뚱한 기준이 들어가 금액이 어긋납니다.
       const own = String(it.discountBase||"");
-      const c0 = (companiesCache||[]).find(x=> String(x.name||"").trim() === String(it.source||"").trim());
       const bs = document.getElementById("item-base-select");
-      if(bs) bs.value = (own === "unit" || own === "total" || own === "supply") ? own
-        : ((c0 && (c0.discountBase === "total" || c0.discountBase === "supply")) ? c0.discountBase : "unit");
+      if(bs) bs.value = (own === "unit" || own === "total" || own === "supply") ? own : "";
       itemBaseOverride = (bs ? String(bs.value||"") : "") || null; }
-    { // 판매 기준 — 저장된 값이 먼저, 없으면 판매처 설정, 그것도 없으면 실제 금액에서 역산
+    { // 판매 기준 — 이 재고에 저장된 값만 씁니다.
+      //  아직 안 파셨으면 비워둡니다. 판매하실 때 그 판매처 기준이 들어갑니다.
       const ownS = String(it.saleDiscountBase||"");
-      const cD = (companiesCache||[]).find(x=> String(x.name||"").trim() === String(it.destination||"").trim());
-      let v = (ownS === "unit" || ownS === "total" || ownS === "supply") ? ownS : "";
-      if(!v && cD){
-        const sb = String(cD.saleDiscountBase||"");
-        if(sb === "supply" || sb === "total" || sb === "unit") v = sb;
-        else if(sb === "follow") v = (itemBaseOverride || "unit");
-      }
-      if(!v && typeof actualSaleBase === "function"){
-        v = (String(actualSaleBase(it)).indexOf("공급가") === 0) ? "supply" : "";
-      }
       const bs2 = document.getElementById("item-salebase-select");
-      if(bs2) bs2.value = v || "unit";
+      if(bs2) bs2.value = (ownS === "unit" || ownS === "total" || ownS === "supply") ? ownS : "";
       itemSaleBaseOverride = (bs2 ? String(bs2.value||"") : "") || null; }
     { const e = document.getElementById("item-samebuy-input");
       if(e) e.checked = (it.salePriceFollowsBuy === true);
@@ -9908,21 +9933,16 @@
   }
   //  여신 대상 업체면 할인 계산 기준을 「공급가」로 고정합니다.
   //   삼성전자 여신은 DPS 방식이 정해져 있어 다른 값으로 넣으면 금액이 어긋납니다.
+  //  여신 업체라도 화면 칸을 자동으로 바꾸지 않습니다.
+  //   안내만 하고, 고르는 것은 직접 하십니다.
   window.lockBaseIfCredit = async function(selId, sourceName){
     const el = document.getElementById(selId);
     if(!el) return false;
     const isC = await isCreditCompany(sourceName);
-    if(isC){
-      el.value = "supply";
-      el.disabled = true;
-      el.style.background = "#eef7ee";
-      el.title = "여신 대상 업체입니다. 삼성전자 여신(DPS) 방식으로 고정됩니다.";
-    }else{
-      el.disabled = false;
-      el.style.background = "";
-      el.title = "";
-    }
-    return isC;
+    el.disabled = false;
+    el.style.background = "";
+    el.title = isC ? "여신 대상 업체입니다. 보통 공급가 기준을 씁니다." : "";
+    return false;      // 자동으로 넣지 않습니다
   };
 
   //  거래처를 고르면 그 업체의 할인 계산 기준을 칸에 넣어드립니다.
@@ -9937,12 +9957,10 @@
     const b = String((c && c.discountBase) || "");
     return (b === "supply" || b === "total") ? b : "unit";
   }
+  //  업체정보 기준을 화면 칸에 자동으로 넣지 않습니다.
+  //   넣으신 값만 저장되도록, 여기서는 아무것도 하지 않습니다.
   function putBase(selId, base){
-    const el = document.getElementById(selId);
-    if(!el || !base) return;
-    el.value = base;
-    el.style.background = "#eef7ee";
-    setTimeout(function(){ el.style.background = ""; }, 1200);
+    return;
   }
   //  텍스트 판매처리 — 판매처를 고르면 판매 기준
   window.onPasteSaleDestBase = async function(){
@@ -12088,6 +12106,7 @@
     const actions = (r)=>
       '<button class="btn small secondary" style="width:auto;" data-detail="'+r.id+'">상세</button>' +
       (!r.cancelled ? '<button class="btn small secondary" style="width:auto;" data-edit-batch="'+r.id+'">수정</button>' : '') +
+        (!r.cancelled ? '<button class="btn small secondary" style="width:auto;" title="매입할인 기준을 바꾸고 금액을 다시 냅니다. 이어진 재고에도 함께 들어갑니다." data-rebase="'+r.id+'">할인 기준</button>' : '') +
       (!r.cancelled
         ? ((r.lines||[]).reduce(function(n,o){ return n + (Number(o.fulfilledCount)||0); }, 0) > 0
             ? '<button class="btn small danger" style="width:auto;" title="도착을 되돌립니다. 재고와 판매요청이 지워지고 주문은 진행중으로 돌아갑니다." data-cancel-arrival="'+r.id+'">도착 취소</button>'
@@ -12110,6 +12129,9 @@
     });
     listEl.querySelectorAll('[data-edit-batch]').forEach(btn=>{
       btn.onclick = ()=> openBatchEdit("order", btn.dataset.editBatch);
+    });
+    listEl.querySelectorAll('[data-rebase]').forEach(btn=>{
+      btn.onclick = ()=> openRebase(btn.dataset.rebase);
     });
     listEl.querySelectorAll('[data-cancel-pr-order]').forEach(btn=>{
       btn.onclick = ()=> cancelPaymentRequest(btn.dataset.cancelPrOrder);
@@ -15309,7 +15331,8 @@
               saleDiscountAmt:o.saleDiscountAmt||null, saleDiscount:o.saleDiscountPct||null,
               // 할인 계산 기준 — 주문에 저장된 값을 먼저 쓰고, 없으면 업체 기준을 씁니다.
               discountBase: (o.discountBase || arrBuyBase),
-              saleDiscountBase: (o.saleDiscountBase || arrSaleBase),
+              //  판매를 안 했으면 판매할인 기준을 비워둡니다. 판매하실 때 정해집니다.
+              saleDiscountBase: (o.saleDiscountBase || (sell ? arrSaleBase : null)),
               // 「입고동일」 표시도 주문 품목에서 그대로 가져옵니다.
               salePriceFollowsBuy: (o.salePriceFollowsBuy === true),
               kind: (function(){ try{
@@ -15679,7 +15702,8 @@
         // 할인 계산 기준을 업체 기준으로 함께 넣습니다. (나중에 채우실 필요가 없게)
         // 할인 계산 기준 — 주문에 저장된 값을 먼저 쓰고, 없으면 업체 기준을 씁니다.
         discountBase: (o.discountBase || arrBuyBase2),
-        saleDiscountBase: (o.saleDiscountBase || arrSaleBase2),
+        //  판매를 안 했으면 판매할인 기준을 비워둡니다. 판매하실 때 정해집니다.
+              saleDiscountBase: (o.saleDiscountBase || (autoSell ? arrSaleBase2 : null)),
         // 「입고동일」 표시도 주문 품목에서 그대로 가져옵니다.
         salePriceFollowsBuy: (o.salePriceFollowsBuy === true),
         kind: (m && m.kind) ? m.kind : "",   // 모델의 구분을 그대로 씁니다
@@ -24106,8 +24130,9 @@
     try{ if(!companiesCache || companiesCache.length === 0) await fetchCompanies(); }catch(e){}
     const name = String((document.getElementById("resv-dest-select")||{}).value||"").trim();
     const c = (companiesCache||[]).find(x=> String(x.name||"").trim() === name);
+    //  업체정보 기준을 자동으로 넣지 않습니다. 직접 고르십니다.
     const bs = document.getElementById("resv-base-select");
-    if(bs) bs.value = (c && (c.discountBase === "total" || c.discountBase === "supply")) ? c.discountBase : "unit";
+    if(bs) bs.title = (c && c.discountBase) ? ("업체정보: " + c.discountBase) : "";
     if(typeof onResvBaseChange === "function") onResvBaseChange();
   };
 
@@ -25836,9 +25861,7 @@
     sel.innerHTML = '<option value="">(줄에 적은 대로)</option>'
       + names.map(n=> '<option value="' + comboEsc(n) + '">' + comboEsc(n) + '</option>').join("");
     if(cur && names.indexOf(cur) >= 0) sel.value = cur;
-    { const c = (companiesCache||[]).find(x=> String(x.name||"").trim() === String(sel.value||"").trim());
-      const bs = document.getElementById("resv-paste-base");
-      if(bs) bs.value = (c && (c.discountBase === "total" || c.discountBase === "supply")) ? c.discountBase : "unit"; }
+    //  업체정보 기준을 자동으로 넣지 않습니다. 직접 고르십니다.
     // (일반 드롭다운으로 둡니다 — 검색형이면 값 바뀜이 안 전해질 때가 있습니다)
     syncSearchableSelect("resv-paste-dest");
   }
@@ -27139,7 +27162,7 @@
         const curBase = String(b.discountBase || "")
           || (function(){ try{ return itemDiscountBase({ source: b.source||"" }) || "unit"; }catch(e){ return "unit"; } })();
         h += '<div class="stack-row"><label>매입할인 기준 <span class="info-tip" title="선할인%·타할인%를 어디에 곱할지 정합니다. 바꾸신 뒤 [모든 줄에 적용] 을 눌러주세요.">ⓘ</span></label>'
-          + '<select id="be-base">'
+          + '<select id="be-base"><option value="">비어 있음 (안 바꿈)</option>'
           + '<option value="unit"'   + (curBase==="unit"?' selected':'')   + '>대당 (출고가에 걸기)</option>'
           + '<option value="total"'  + (curBase==="total"?' selected':'')  + '>합계 (출고가 합계에 한 번)</option>'
           + '<option value="supply"' + (curBase==="supply"?' selected':'') + '>공급가 기준 (삼성전자 방식)</option>'
@@ -45502,6 +45525,260 @@
     clearCache("inventory"); clearDashCache();
     try{ loadSupportList(); }catch(e){}
     try{ loadActivationList(true); }catch(e){}
+  };
+
+  // ---------- 할인 기준 바꾸기 ----------
+  let rebaseRows = [], rebaseBatchId = "";
+
+  //  주문 하나의 품목과 이어진 재고를 모아 보여줍니다.
+  window.openRebase = async function(batchId){
+    if(!hasPerm(currentUserPerms, "bulkEdit") && !hasPerm(currentUserPerms, "menuInvWork")){
+      alert("권한이 없습니다."); return; }
+    rebaseBatchId = batchId;
+    let b = null, lines = [];
+    try{
+      const bd = await getDoc(doc(db,"orderBatches", batchId));
+      if(bd.exists()) b = { id:bd.id, ...bd.data() };
+      const lq = await getDocs(query(collection(db,"orders"), where("batchId","==", batchId)));
+      lq.forEach(function(d){ const v=d.data(); if(v.status !== "취소") lines.push({ id:d.id, ...v }); });
+    }catch(e){ alert("읽지 못했습니다."); return; }
+    if(lines.length === 0){ alert("품목이 없습니다."); return; }
+
+    // 이어진 재고를 읽습니다.
+    const ids = [];
+    lines.forEach(function(l){ (l.linkedItemIds||[]).forEach(function(x){ ids.push(x); }); });
+    const items = {};
+    for(let i=0;i<ids.length;i+=25){
+      const part = ids.slice(i, i+25);
+      if(part.length === 0) continue;
+      try{
+        const q = await getDocs(query(collection(db,"inventoryItems"), where("__name__","in", part)));
+        q.forEach(function(d){ items[d.id] = { id:d.id, ...d.data() }; });
+      }catch(e){}
+    }
+
+    rebaseRows = lines.map(function(l){
+      const L = Number(l.listPrice)||0;
+      const cur = String(l.discountBase||"");
+      const prePct = (l.preDiscountPct != null) ? Number(l.preDiscountPct) : null;
+      const othPct = (l.otherDiscountPct != null) ? Number(l.otherDiscountPct) : null;
+      const preAmt = Number(l.preDiscountAmt)||0;
+      const othAmt = Number(l.otherDiscountAmt)||0;
+      const qty = Number(l.quantity)||0;
+      return {
+        id: l.id, itemIds: (l.linkedItemIds||[]).slice(),
+        model: l.systemModel || l.baseModel || "-",
+        color: l.systemColor || l.manufacturerColor || "",
+        qty, L, cur,
+        prePct, othPct, preAmt, othAmt,
+        curBuy: (Number(l.purchasePrice) || (L - preAmt - othAmt)),
+        //  바꿀 값 — 처음엔 % 를 그대로 두고 금액을 다시 냅니다.
+        nPrePct: prePct, nOthPct: othPct, nPreAmt: preAmt, nOthAmt: othAmt
+      };
+    });
+
+    const head = document.getElementById("rebase-head");
+    head.innerHTML = '<b>' + comboEsc((b && b.source) || "-") + '</b> · '
+      + comboEsc((b && b.orderDate) || "-") + ' · 품목 ' + lines.length + '개'
+      + '<br><span style="color:var(--gray);">지금 기준이 품목마다 다를 수 있습니다. 아래 «지금» 칸에서 확인하세요.</span>';
+    // 지금 기준 중 가장 많은 것을 기본으로 골라둡니다.
+    const cnt = {};
+    rebaseRows.forEach(function(r){ if(r.cur) cnt[r.cur] = (cnt[r.cur]||0)+1; });
+    const top = Object.keys(cnt).sort(function(a,b2){ return cnt[b2]-cnt[a]; })[0] || "unit";
+    document.getElementById("rebase-target").value = top;
+    rebaseRecalc();
+    document.getElementById("rebase-result").innerHTML = "";
+    document.getElementById("rebase-overlay").style.display = "flex";
+  };
+  window.closeRebase = function(){ document.getElementById("rebase-overlay").style.display = "none"; };
+  window.toggleRebaseAll = function(on){
+    document.querySelectorAll(".rb-cb").forEach(function(cb){ cb.checked = !!on; });
+  };
+
+  //  고른 기준으로 바뀔 값을 다시 냅니다. (%는 그대로, 금액을 다시)
+  window.rebaseRecalc = function(){
+    const want = String(document.getElementById("rebase-target").value||"unit");
+    rebaseRows.forEach(function(r){
+      r.nPrePct = r.prePct;
+      r.nOthPct = r.othPct;
+      r.nPreAmt = (r.prePct != null) ? amtOnBaseVat(r.prePct, r.L, want) : r.preAmt;
+      r.nOthAmt = (r.othPct != null) ? amtOnBaseVat(r.othPct, r.L, want) : r.othAmt;
+    });
+    renderRebase();
+  };
+
+  function rebaseBuy(r){ return Math.round(r.L - (Number(r.nPreAmt)||0) - (Number(r.nOthAmt)||0)); }
+
+  function renderRebase(){
+    const want = String(document.getElementById("rebase-target").value||"unit");
+    const lab = function(v){
+      return v === "supply" ? "공급가" : v === "total" ? "출고가(합계)" : v === "unit" ? "출고가(대당)" : "비어 있음";
+    };
+    const el = document.getElementById("rebase-body");
+    let diffSum = 0;
+    rebaseRows.forEach(function(r){
+      diffSum += (rebaseBuy(r) - (Number(r.curBuy)||0)) * (Number(r.qty)||0);
+    });
+    document.getElementById("rebase-diff").innerHTML = diffSum
+      ? '<span style="color:' + (diffSum > 0 ? "var(--danger)" : "#2e7d32") + ';font-weight:700;">'
+        + '입고가 합계 차이 ' + (diffSum > 0 ? "+" : "") + diffSum.toLocaleString() + '</span>'
+      : '<span style="color:var(--gray);">입고가 합계 차이 없음</span>';
+
+    el.innerHTML = '<div style="overflow-x:auto;max-height:460px;overflow-y:auto;border:1px solid var(--line);">'
+      + '<table class="data-table resv-dest-fit"><thead><tr>'
+      + '<th class="no-print"><input type="checkbox" onclick="toggleRebaseAll(this.checked)" checked></th>'
+      + '<th>전산모델명</th><th>색상</th><th class="ta-right">수량</th><th class="ta-right">출고가</th>'
+      + '<th style="border-left:2px solid var(--navy);">지금 기준</th>'
+      + '<th class="ta-right">선할인%</th><th class="ta-right">선할인</th>'
+      + '<th class="ta-right">타할인%</th><th class="ta-right">타할인</th><th class="ta-right">입고가</th>'
+      + '<th style="border-left:2px solid var(--navy);" class="ta-right">바꿀 선할인%</th>'
+      + '<th class="ta-right">바꿀 선할인</th><th class="ta-right">바꿀 타할인%</th>'
+      + '<th class="ta-right">바꿀 타할인</th><th class="ta-right">바꿀 입고가</th><th class="ta-right">차이</th>'
+      + '</tr></thead><tbody>'
+      + rebaseRows.map(function(r, ix){
+          const nb = rebaseBuy(r);
+          const df = nb - (Number(r.curBuy)||0);
+          const same = String(r.cur) === want;
+          return '<tr'+(same ? ' style="color:var(--gray);"' : '')+'>'
+            + '<td class="no-print"><input type="checkbox" class="rb-cb" value="'+ix+'" checked></td>'
+            + '<td>'+comboEsc(r.model)+'</td>'
+            + '<td>'+comboEsc(r.color||"-")+'</td>'
+            + '<td class="ta-right">'+r.qty+'</td>'
+            + '<td class="ta-right">'+r.L.toLocaleString()+'</td>'
+            + '<td style="border-left:2px solid var(--navy);'+(r.cur ? '' : 'color:var(--danger);')+'">'+lab(r.cur)+'</td>'
+            + '<td class="ta-right">'+(r.prePct != null ? r.prePct : "-")+'</td>'
+            + '<td class="ta-right">'+(Number(r.preAmt)||0).toLocaleString()+'</td>'
+            + '<td class="ta-right">'+(r.othPct != null ? r.othPct : "-")+'</td>'
+            + '<td class="ta-right">'+(Number(r.othAmt)||0).toLocaleString()+'</td>'
+            + '<td class="ta-right">'+(Number(r.curBuy)||0).toLocaleString()+'</td>'
+            + '<td style="border-left:2px solid var(--navy);" class="ta-right">'
+              + '<input type="number" step="0.01" class="rb-in" data-rb="'+ix+'" data-f="prePct" value="'
+              + (r.nPrePct != null ? r.nPrePct : "") + '" style="width:78px;text-align:right;" oninput="rebaseEdit(this)"></td>'
+            + '<td class="ta-right"><input type="number" class="rb-in" data-rb="'+ix+'" data-f="preAmt" value="'
+              + (Number(r.nPreAmt)||0) + '" style="width:100px;text-align:right;" oninput="rebaseEdit(this)"></td>'
+            + '<td class="ta-right"><input type="number" step="0.01" class="rb-in" data-rb="'+ix+'" data-f="othPct" value="'
+              + (r.nOthPct != null ? r.nOthPct : "") + '" style="width:78px;text-align:right;" oninput="rebaseEdit(this)"></td>'
+            + '<td class="ta-right"><input type="number" class="rb-in" data-rb="'+ix+'" data-f="othAmt" value="'
+              + (Number(r.nOthAmt)||0) + '" style="width:100px;text-align:right;" oninput="rebaseEdit(this)"></td>'
+            + '<td class="ta-right" data-rb-buy="'+ix+'"><b>'+nb.toLocaleString()+'</b></td>'
+            + '<td class="ta-right" data-rb-diff="'+ix+'"'+(df ? ' style="color:'+(df>0?"var(--danger)":"#2e7d32")+';font-weight:700;"' : '')+'>'
+              + (df ? (df>0?"+":"") + df.toLocaleString() : "-") + '</td></tr>';
+        }).join("")
+      + '</tbody></table></div>';
+  }
+
+  //  % 를 고치면 금액을, 금액을 고치면 % 를 다시 냅니다.
+  window.rebaseEdit = function(inp){
+    const ix = Number(inp.dataset.rb), f = String(inp.dataset.f||"");
+    const r = rebaseRows[ix];
+    if(!r) return;
+    const want = String(document.getElementById("rebase-target").value||"unit");
+    const v = (inp.value === "") ? null : Number(inp.value);
+    if(f === "prePct"){
+      r.nPrePct = v;
+      r.nPreAmt = (v != null) ? amtOnBaseVat(v, r.L, want) : 0;
+      const t = document.querySelector('[data-rb="'+ix+'"][data-f="preAmt"]');
+      if(t) t.value = Number(r.nPreAmt)||0;
+    }else if(f === "preAmt"){
+      r.nPreAmt = v || 0;
+      r.nPrePct = pctOnBase(r.nPreAmt, r.L, want);
+      const t = document.querySelector('[data-rb="'+ix+'"][data-f="prePct"]');
+      if(t) t.value = (r.nPrePct === "" ? "" : r.nPrePct);
+    }else if(f === "othPct"){
+      r.nOthPct = v;
+      r.nOthAmt = (v != null) ? amtOnBaseVat(v, r.L, want) : 0;
+      const t = document.querySelector('[data-rb="'+ix+'"][data-f="othAmt"]');
+      if(t) t.value = Number(r.nOthAmt)||0;
+    }else if(f === "othAmt"){
+      r.nOthAmt = v || 0;
+      r.nOthPct = pctOnBase(r.nOthAmt, r.L, want);
+      const t = document.querySelector('[data-rb="'+ix+'"][data-f="othPct"]');
+      if(t) t.value = (r.nOthPct === "" ? "" : r.nOthPct);
+    }
+    // 그 줄의 입고가·차이를 다시 그립니다.
+    const nb = rebaseBuy(r), df = nb - (Number(r.curBuy)||0);
+    const bEl = document.querySelector('[data-rb-buy="'+ix+'"]');
+    if(bEl) bEl.innerHTML = '<b>'+nb.toLocaleString()+'</b>';
+    const dEl = document.querySelector('[data-rb-diff="'+ix+'"]');
+    if(dEl){
+      dEl.innerHTML = df ? (df>0?"+":"") + df.toLocaleString() : "-";
+      dEl.style.color = df ? (df>0?"var(--danger)":"#2e7d32") : "";
+      dEl.style.fontWeight = df ? "700" : "";
+    }
+    let diffSum = 0;
+    rebaseRows.forEach(function(x){ diffSum += (rebaseBuy(x) - (Number(x.curBuy)||0)) * (Number(x.qty)||0); });
+    document.getElementById("rebase-diff").innerHTML = diffSum
+      ? '<span style="color:' + (diffSum > 0 ? "var(--danger)" : "#2e7d32") + ';font-weight:700;">'
+        + '입고가 합계 차이 ' + (diffSum > 0 ? "+" : "") + diffSum.toLocaleString() + '</span>'
+      : '<span style="color:var(--gray);">입고가 합계 차이 없음</span>';
+  };
+
+  //  주문 품목과 이어진 재고에 함께 저장합니다.
+  window.submitRebase = async function(){
+    const want = String(document.getElementById("rebase-target").value||"unit");
+    const picked = Array.from(document.querySelectorAll(".rb-cb:checked"))
+      .map(function(cb){ return rebaseRows[Number(cb.value)]; }).filter(Boolean);
+    if(picked.length === 0){ alert("바꿀 품목을 골라주세요."); return; }
+    let diffSum = 0, itemN = 0;
+    picked.forEach(function(r){
+      diffSum += (rebaseBuy(r) - (Number(r.curBuy)||0)) * (Number(r.qty)||0);
+      itemN += (r.itemIds||[]).length;
+    });
+    const lab = want === "supply" ? "공급가 기준" : want === "total" ? "출고가 기준 (합계)" : "출고가 기준 (대당)";
+    if(!confirm("고른 " + picked.length + "개 품목의 매입할인 기준을\n「" + lab + "」 으로 바꿉니다.\n\n"
+      + "  주문 품목 " + picked.length + "개\n"
+      + "  이어진 재고 " + itemN + "대\n"
+      + "  입고가 합계 차이 " + (diffSum > 0 ? "+" : "") + diffSum.toLocaleString() + "\n\n"
+      + "선할인·타할인 금액과 입고가가 화면에 보이는 값으로 저장됩니다.\n\n진행할까요?")) return;
+
+    const resEl = document.getElementById("rebase-result");
+    resEl.innerHTML = "저장 중...";
+    let doneL = 0, doneI = 0;
+    try{
+      for(const r of picked){
+        const buy = rebaseBuy(r);
+        const patch = {
+          discountBase: want,
+          preDiscountAmt: Math.round(Number(r.nPreAmt)||0),
+          preDiscountPct: (r.nPrePct === "" || r.nPrePct == null) ? null : Number(r.nPrePct),
+          otherDiscountAmt: Math.round(Number(r.nOthAmt)||0),
+          otherDiscountPct: (r.nOthPct === "" || r.nOthPct == null) ? null : Number(r.nOthPct),
+          purchasePrice: buy
+        };
+        await updateDoc(doc(db,"orders", r.id), patch);
+        doneL++;
+        // 이어진 재고에도 같은 값을 넣습니다.
+        for(const iid of (r.itemIds||[])){
+          try{
+            await updateDoc(doc(db,"inventoryItems", iid), {
+              discountBase: want,
+              purchaseDiscountAmt: Math.round(Number(r.nPreAmt)||0),
+              purchaseDiscount: (r.nPrePct === "" || r.nPrePct == null) ? null : Number(r.nPrePct),
+              otherDiscountAmt: Math.round(Number(r.nOthAmt)||0),
+              otherDiscountPct: (r.nOthPct === "" || r.nOthPct == null) ? null : Number(r.nOthPct),
+              purchasePrice: buy
+            });
+            doneI++;
+          }catch(e){}
+        }
+      }
+      // 주문 묶음의 합계도 다시 냅니다.
+      try{
+        const lq = await getDocs(query(collection(db,"orders"), where("batchId","==", rebaseBatchId)));
+        let tot = 0;
+        lq.forEach(function(d){ const v=d.data();
+          if(v.status !== "취소") tot += (Number(v.purchasePrice)||0) * (Number(v.quantity)||0); });
+        await updateDoc(doc(db,"orderBatches", rebaseBatchId), { depositRequired: Math.round(tot) });
+      }catch(e){}
+    }catch(e){
+      resEl.innerHTML = '<span style="color:var(--danger);">저장 중 오류: ' + comboEsc((e&&e.message)?e.message:String(e)) + '</span>';
+      return;
+    }
+    logAction("할인 기준 바꾸기", lab + " / 품목 " + doneL + "개 / 재고 " + doneI + "대 / 차이 " + diffSum.toLocaleString());
+    resEl.innerHTML = '<b>품목 ' + doneL + '개 · 재고 ' + doneI + '대에 저장했습니다.</b>';
+    try{ clearCache("inventory"); clearCache("orders"); clearDashCache(); }catch(e){}
+    try{ if(typeof loadOrderList === "function") loadOrderList(); }catch(e){}
+    try{ if(typeof loadInventoryList === "function") loadInventoryList(); }catch(e){}
   };
 
   // ---------- 개통정보 (개통코드 · 개통팀 · 개통자) ----------
