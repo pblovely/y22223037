@@ -400,7 +400,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-06 v1095</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-06 v1097</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -4500,17 +4500,19 @@
 
   // 위 결과를 목록에 쓸 글자로 만듭니다. (엑셀다운도 같은 글자를 씁니다)
   function discountBaseLabel(it){
+    //  저장해 둔 기준이 있으면 할인 금액이 없어도 그대로 보여줍니다.
+    //   (예전에는 할인이 0 이면 무조건 «-» 로 나와서, 저장했는데도 안 들어간 것처럼 보였습니다)
+    const saved = String((it && it.discountBase) || "");
+    if(saved === "supply") return "공급가";
+    if(saved === "total")  return "합계";
+    if(saved === "unit")   return "출고가";
     const L = Number(it && it.listPrice)||0;
     if(!L) return "출고가 없음";
     const pp = Number(it && it.purchaseDiscount)||0, op = Number(it && it.otherDiscountPct)||0;
     const pa = Number(it && it.purchaseDiscountAmt)||0, oa = Number(it && it.otherDiscountAmt)||0;
-    // 할인 자체가 없는 재고는 가릴 것이 없으므로 빈칸으로 둡니다.
+    // 저장된 기준도 없고 할인도 없으면 가릴 것이 없습니다.
     if(!(pp > 0) && !(op > 0) && !(pa > 0) && !(oa > 0)) return "-";
-    // 저장해 둔 기준을 그대로 보여줍니다.
-    const saved = String((it && it.discountBase) || "");
-    const base = (saved === "supply" || saved === "unit" || saved === "total")
-      ? saved
-      : ((typeof itemDiscountBase === "function") ? itemDiscountBase(it) : "unit");
+    const base = (typeof itemDiscountBase === "function") ? itemDiscountBase(it) : "unit";
     return (base === "supply") ? "공급가" : (base === "total" ? "합계" : "출고가");
   }
   window.discountBaseLabel = discountBaseLabel;
@@ -28193,10 +28195,11 @@
                 q3.forEach(function(d){
                   const v = d.data();
                   if(v.deleted === true) return;
-                  // 이미 다른 주문에 이어진 재고는 건드리지 않습니다.
-                  if(v.orderId || v.orderBatchId) return;
-                  // 주문일이 있으면 같은 날 것만 봅니다.
-                  if(od0 && String(v.orderDate||"").replace(/\D/g,"") && String(v.orderDate||"").replace(/\D/g,"") !== od0) return;
+                  // 다른 주문에 이어진 재고만 뺍니다. (이 주문 것은 씁니다)
+                  if(v.orderBatchId && String(v.orderBatchId) !== String(id)) return;
+                  // 주문일이 다르면 뺍니다. 재고에 주문일이 없으면 그대로 봅니다.
+                  const vd = String(v.orderDate||"").replace(/\D/g,"");
+                  if(od0 && vd && vd !== od0) return;
                   pool.push({ id:d.id, ...v });
                 });
                 stillNone.forEach(function(lid){
@@ -28493,6 +28496,19 @@
       }
     }catch(e){}
     msg("저장되었습니다." + (addedLines ? "  품목 " + addedLines + "줄을 더했습니다." : "") + creditMsg + savedMsg + baseMsg, false);
+    //  매입할인 기준을 바꾸셨으면 결과를 알림으로도 보여드립니다. (놓치지 않으시게)
+    try{
+      const bsv3 = String((document.getElementById("be-base")||{}).value || "");
+      if(bsv3 && kind === "order"){
+        alert("매입할인 기준을 저장했습니다.\n\n"
+          + "  기준  " + (bsv3==="supply"?"공급가":bsv3==="total"?"출고가(합계)":"출고가(대당)") + "\n"
+          + "  주문 품목  " + Object.keys(perLine).length + "줄\n"
+          + "  재고  " + (fixItems ? itemTargets.length + "대에 반영" : "0대 (못 찾음)") + "\n\n"
+          + (fixItems && itemTargets.length
+              ? "재고 목록에서 확인해주세요."
+              : "재고를 찾지 못했습니다.\n재고 목록에서 [여러 항목 수정] 으로 직접 바꿔주세요."));
+      }
+    }catch(e){}
     // 창을 먼저 닫고 목록은 뒤에서 새로 읽습니다. (목록 읽기가 오래 걸려도 창이 남지 않게)
     setTimeout(function(){
       try{ closeBatchEdit(); }catch(e){}
