@@ -400,7 +400,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-06 v1038</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-06 v1041</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -665,6 +665,39 @@
         </div>
         <div id="activation-pagination"></div>
         <div id="activation-list"></div>
+      </div>
+
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+          <h3 style="margin:0;">지원금 내역 <span class="info-tip" title="유통폰지원금의 지급·환수를 건별로 모아 봅니다. 재고를 못 찾은 건은 검은 글씨로 나옵니다.">ⓘ</span></h3>
+          <span class="btn-row">
+            <button class="btn small secondary" style="width:auto;" onclick="matchSupportAll()">재고와 잇기</button>
+            <button class="btn small secondary" style="width:auto;" onclick="toggleSupPicker()">보기 설정</button>
+            <span id="dl-suplist"></span>
+          </span>
+        </div>
+        <p class="desc" style="margin-top:0;">재고와 이어진 건은 <span style="color:var(--gray);">회색</span>,
+          아직 못 찾은 건은 <b>검은 글씨</b>로 나옵니다.
+          나중에 그 재고를 넣으신 뒤 <b>재고와 잇기</b>를 누르시면 한 번에 이어집니다.</p>
+        <div class="tbar-row" style="display:flex;gap:0;flex-wrap:wrap;align-items:center;margin-bottom:8px;">
+          <input type="text" id="sup-q" placeholder="일련번호·모델·가입번호로 찾기" onchange="loadSupportList()" style="width:230px;height:28px;border:1px solid var(--line);padding:0 8px;font-size:12.5px;box-sizing:border-box;">
+          <input type="text" id="sup-month" maxlength="6" inputmode="numeric" placeholder="귀속월 202608" onchange="loadSupportList()" style="width:130px;height:28px;border:1px solid var(--line);padding:0 8px;font-size:12.5px;margin-left:-1px;box-sizing:border-box;">
+          <select id="sup-kind" onchange="loadSupportList()" style="width:110px;height:28px;border:1px solid var(--line);padding:0 6px;font-size:12.5px;margin-left:-1px;box-sizing:border-box;">
+            <option value="">전체 구분</option>
+            <option value="pay">지급</option>
+            <option value="claw">환수</option>
+          </select>
+          <select id="sup-link" onchange="loadSupportList()" style="width:130px;height:28px;border:1px solid var(--line);padding:0 6px;font-size:12.5px;margin-left:-1px;box-sizing:border-box;">
+            <option value="">전체</option>
+            <option value="no">재고 못 찾음</option>
+            <option value="yes">재고 이어짐</option>
+          </select>
+          <button class="btn small secondary" style="width:auto;margin-left:-1px;" onclick="clearSupCond()">비우기</button>
+        </div>
+        <div id="sup-col-picker" style="display:none;border:1px solid var(--navy);background:#f4f7fb;padding:10px 12px;margin-bottom:8px;"></div>
+        <div id="sup-cards" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px;"></div>
+        <div id="suplist-pagination"></div>
+        <div id="suplist"></div>
       </div>
     </div>
 
@@ -4563,13 +4596,37 @@
     { key:"subNumber", label:"가입번호", get:it=> it.subNumber || "-", getRaw:it=> it.subNumber || "" },
     { key:"activationCode", label:"개통코드", get:it=> it.activationCode || "-", getRaw:it=> it.activationCode || "" },
     { key:"subsidyAmount", label:"공시지원금", get:it=> (it.subsidyAmount!=null)?Number(it.subsidyAmount).toLocaleString():"-", getRaw:it=>it.subsidyAmount!=null?Number(it.subsidyAmount):"" },
-    { key:"distSupport", label:"유통폰지원금", get:it=> (it.distSupport!=null)?Number(it.distSupport).toLocaleString():"-", getRaw:it=>it.distSupport!=null?Number(it.distSupport):"" },
-    { key:"clawback", label:"환수", get:it=> (it.clawback!=null)?Number(it.clawback).toLocaleString():"-", getRaw:it=>it.clawback!=null?Number(it.clawback):"" },
-    { key:"supportFinal", label:"지원금 최종",
+    { key:"distSupport", label:"유통폰지원금", html:true,
+      get:it=>{
+        const d = Number(it.distSupport)||0;
+        if(!d) return '<span style="color:var(--gray);">-</span>';
+        return '<a href="#" style="color:var(--navy);text-decoration:underline;" '
+          + 'onclick="event.preventDefault();event.stopPropagation();openSupLog(\''+it.id+'\',\''
+          + comboEsc(it.serialNumber||"") + '\',\'' + comboEsc(it.systemModel||"") + '\');">'
+          + d.toLocaleString() + '</a>';
+      },
+      getRaw:it=>it.distSupport!=null?Number(it.distSupport):"" },
+    { key:"clawback", label:"환수", html:true,
+      // 금액을 누르면 언제 얼마씩 환수됐는지 내역이 열립니다.
+      get:it=>{
+        const c = Number(it.clawback)||0;
+        if(!c) return '<span style="color:var(--gray);">-</span>';
+        return '<a href="#" style="color:var(--danger);font-weight:700;text-decoration:underline;" '
+          + 'onclick="event.preventDefault();event.stopPropagation();openSupLog(\''+it.id+'\',\''
+          + comboEsc(it.serialNumber||"") + '\',\'' + comboEsc(it.systemModel||"") + '\');">'
+          + c.toLocaleString() + '</a>';
+      },
+      getRaw:it=>it.clawback!=null?Number(it.clawback):"" },
+    { key:"supportFinal", label:"지원금 최종", html:true,
       get:it=>{
         const d = Number(it.distSupport)||0, c = Number(it.clawback)||0;
-        if(!d && !c) return "-";
-        return (d - c).toLocaleString();
+        if(!d && !c) return '<span style="color:var(--gray);">-</span>';
+        const over = c > d;
+        return '<a href="#" style="' + (over ? 'color:var(--danger);font-weight:700;' : '')
+          + 'text-decoration:underline;" '
+          + 'onclick="event.preventDefault();event.stopPropagation();openSupLog(\''+it.id+'\',\''
+          + comboEsc(it.serialNumber||"") + '\',\'' + comboEsc(it.systemModel||"") + '\');">'
+          + (d - c).toLocaleString() + (over ? ' ★' : '') + '</a>';
       },
       getRaw:it=>{
         const d = Number(it.distSupport)||0, c = Number(it.clawback)||0;
@@ -31184,6 +31241,45 @@
     body.querySelectorAll("[data-ih-act]").forEach(btn=>{
       btn.onclick = ()=> doItemAction(btn.dataset.ihId, serial, btn.dataset.ihAct);
     });
+    // 이 단말기의 지원금 내역도 아래에 함께 보여드립니다.
+    (async ()=>{
+      try{
+        const q = await getDocs(query(collection(db,"supportLogs"),
+          where("serialNumber","==", String(serial||""))));
+        const sup = [];
+        q.forEach(function(d){ sup.push({ id:d.id, ...d.data() }); });
+        if(sup.length === 0) return;
+        sup.sort(function(a,b){ return String(a.month||"").localeCompare(String(b.month||"")); });
+        let pay = 0, claw = 0;
+        sup.forEach(function(r){ const a=Number(r.amount)||0; if(r.kind==="claw") claw+=a; else pay+=a; });
+        const over = claw > pay;
+        const box = document.createElement("div");
+        box.style.cssText = "margin-top:14px;";
+        box.innerHTML =
+          '<p class="desc" style="margin-bottom:4px;font-weight:700;color:var(--navy);">지원금 내역</p>'
+          + '<div style="overflow-x:auto;"><table class="data-table" style="width:auto;"><thead><tr>'
+          + '<th>귀속월</th><th>구분</th><th class="ta-right">금액</th><th>사유</th><th>작업일</th><th>작성자</th>'
+          + '</tr></thead><tbody>'
+          + sup.map(function(r){
+              const when = (r.createdAt && r.createdAt.seconds)
+                ? new Date(r.createdAt.seconds*1000).toISOString().slice(0,10).replace(/-/g,"") : "-";
+              return '<tr><td>'+comboEsc(r.month||"-")+'</td>'
+                + '<td'+(r.kind==="claw"?' style="color:var(--danger);font-weight:700;"':'')+'>'
+                  +(r.kind==="claw"?"환수":"지급")+'</td>'
+                + '<td class="ta-right">'+(Number(r.amount)||0).toLocaleString()+'</td>'
+                + '<td>'+comboEsc(r.reason||"-")+'</td>'
+                + '<td style="font-size:11.5px;">'+comboEsc(when)+'</td>'
+                + '<td style="font-size:11.5px;">'+comboEsc(r.createdBy||"-")+'</td></tr>';
+            }).join("")
+          + '</tbody><tfoot><tr style="border-top:2px solid var(--navy);font-weight:700;">'
+          + '<td colspan="2">합계</td>'
+          + '<td class="ta-right">지급 '+pay.toLocaleString()+'<br>환수 '+claw.toLocaleString()
+          + '<br><span style="color:'+(over?'var(--danger)':'#2e7d32')+';">최종 '+(pay-claw).toLocaleString()+'</span></td>'
+          + '<td colspan="3">'+(over?'<span style="color:var(--danger);">환수가 지급보다 많습니다.</span>':'')+'</td>'
+          + '</tr></tfoot></table></div>';
+        body.appendChild(box);
+      }catch(e){}
+    })();
   };
 
   // ================= 매칭 이력 =================
@@ -44522,6 +44618,276 @@
     return { rows, skipped };
   }
 
+  // ---------- 지원금 내역 목록 ----------
+  //  열은 여기서 관리합니다. 나중에 늘어나면 이 목록에만 더하면 됩니다.
+  const SUP_COLS = [
+    { key:"month",    label:"귀속월",     get:r=> comboEsc(r.month||"-"), raw:r=> r.month||"" },
+    { key:"kind",     label:"구분",       html:true,
+      get:r=> '<span'+(r.kind==="claw"?' style="color:var(--danger);font-weight:700;"':'')+'>'
+              + (r.kind==="claw"?"환수":"지급") + '</span>',
+      raw:r=> r.kind==="claw"?"환수":"지급" },
+    { key:"amount",   label:"금액", right:true,
+      get:r=> (Number(r.amount)||0).toLocaleString(), raw:r=> Number(r.amount)||0 },
+    { key:"serial",   label:"일련번호",   html:true,
+      get:r=> '<b>'+comboEsc(r.serialNumber||"-")+'</b>', raw:r=> r.serialNumber||"" },
+    { key:"model",    label:"전산모델명", get:r=> comboEsc(r.systemModel||"-"), raw:r=> r.systemModel||"" },
+    { key:"openDate", label:"개통일",     get:r=> comboEsc(r.openDate||"-"), raw:r=> r.openDate||"" },
+    { key:"subNumber",label:"가입번호",   get:r=> comboEsc(r.subNumber||"-"), raw:r=> r.subNumber||"" },
+    { key:"reason",   label:"사유",       get:r=> comboEsc(r.reason||"-"), raw:r=> r.reason||"" },
+    { key:"linked",   label:"재고",       html:true,
+      get:r=> r.linked ? '<span style="color:#2e7d32;">이어짐</span>'
+                       : '<span style="color:#b8860b;font-weight:700;">못 찾음</span>',
+      raw:r=> r.linked ? "이어짐" : "못 찾음" },
+    { key:"workDate", label:"작업일",     get:r=> comboEsc(supWhen(r)), raw:r=> supWhen(r) },
+    { key:"by",       label:"작성자",     get:r=> comboEsc(r.createdBy||"-"), raw:r=> r.createdBy||"" }
+  ];
+  const SUP_COLS_DEFAULT = ["month","kind","amount","serial","model","openDate","subNumber","reason","linked","workDate","by"];
+  function supWhen(r){
+    return (r.createdAt && r.createdAt.seconds)
+      ? new Date(r.createdAt.seconds*1000).toISOString().slice(0,10).replace(/-/g,"") : "-";
+  }
+  function listSupCols(){
+    try{ const v = localStorage.getItem("supCols"); if(v) return JSON.parse(v); }catch(e){}
+    return SUP_COLS_DEFAULT.slice();
+  }
+  function listSupDensity(){
+    try{ return localStorage.getItem("supDensity") || "normal"; }catch(e){ return "normal"; }
+  }
+  window.toggleSupPicker = function(){
+    const el = document.getElementById("sup-col-picker");
+    if(!el) return;
+    if(el.style.display !== "none"){ el.style.display = "none"; return; }
+    const on = listSupCols(), d = listSupDensity();
+    el.innerHTML = '<div style="font-size:12.5px;font-weight:700;margin-bottom:6px;">보고 싶은 열을 고르세요</div>'
+      + '<div style="display:flex;flex-wrap:wrap;gap:10px 16px;font-size:12.5px;">'
+      + SUP_COLS.map(function(c){
+          return '<label style="display:flex;align-items:center;gap:4px;white-space:nowrap;">'
+            + '<input type="checkbox" class="sup-col-cb" value="'+c.key+'"'+(on.includes(c.key)?' checked':'')+'>'
+            + comboEsc(c.label)+'</label>'; }).join("")
+      + '</div>'
+      + '<div style="border-top:1px solid var(--line);margin-top:10px;padding-top:8px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:12.5px;">'
+      + '<span>줄 간격</span>'
+      + ['normal','tight'].map(function(k){
+          return '<label style="display:flex;align-items:center;gap:4px;"><input type="radio" name="sup-density" value="'+k+'"'
+            + (d===k?' checked':'')+'>'+(k==="tight"?"좁게":"보통")+'</label>'; }).join("")
+      + '<button class="btn small" style="width:auto;margin-left:auto;" onclick="applySupCols()">적용</button>'
+      + '<button class="btn small secondary" style="width:auto;" onclick="resetSupCols()">기본값</button>'
+      + '</div>';
+    el.style.display = "block";
+  };
+  window.applySupCols = function(){
+    const on = Array.from(document.querySelectorAll(".sup-col-cb:checked")).map(function(c){ return c.value; });
+    const d = (document.querySelector('input[name="sup-density"]:checked')||{}).value || "normal";
+    try{ localStorage.setItem("supCols", JSON.stringify(on)); localStorage.setItem("supDensity", d); }catch(e){}
+    document.getElementById("sup-col-picker").style.display = "none";
+    loadSupportList();
+  };
+  window.resetSupCols = function(){
+    try{ localStorage.removeItem("supCols"); localStorage.removeItem("supDensity"); }catch(e){}
+    document.getElementById("sup-col-picker").style.display = "none";
+    loadSupportList();
+  };
+
+  window.clearSupCond = function(){
+    ["sup-q","sup-month"].forEach(function(id){ const e=document.getElementById(id); if(e) e.value=""; });
+    ["sup-kind","sup-link"].forEach(function(id){ const e=document.getElementById(id); if(e) e.value=""; });
+    loadSupportList();
+  };
+  window.loadSupportList = async function(){
+    const el = document.getElementById("suplist");
+    if(!el) return;
+    el.innerHTML = '<div class="list-empty">불러오는 중...</div>';
+    let rows = [];
+    try{
+      const q = await getDocs(collection(db,"supportLogs"));
+      q.forEach(function(d){ rows.push({ id:d.id, ...d.data() }); });
+    }catch(e){ el.innerHTML = '<div class="list-empty">읽지 못했습니다.</div>'; return; }
+
+    // 재고와 이어졌는지 확인합니다. (itemId 가 있어도 재고가 지워졌을 수 있습니다)
+    const ids = [...new Set(rows.map(function(r){ return r.itemId; }).filter(Boolean))];
+    const alive = {};
+    for(let i=0;i<ids.length;i+=25){
+      const part = ids.slice(i, i+25);
+      if(part.length === 0) continue;
+      try{
+        const q2 = await getDocs(query(collection(db,"inventoryItems"), where("__name__","in", part)));
+        q2.forEach(function(d){ alive[d.id] = true; });
+      }catch(e){}
+    }
+    rows.forEach(function(r){ r.linked = !!(r.itemId && alive[r.itemId]); });
+
+    const kw  = String((document.getElementById("sup-q")||{}).value||"").trim().toLowerCase();
+    const mon = String((document.getElementById("sup-month")||{}).value||"").replace(/\D/g,"");
+    const kind= String((document.getElementById("sup-kind")||{}).value||"");
+    const lnk = String((document.getElementById("sup-link")||{}).value||"");
+    let view = rows.filter(function(r){
+      if(mon && String(r.month||"") !== mon) return false;
+      if(kind && String(r.kind||"") !== kind) return false;
+      if(lnk === "yes" && !r.linked) return false;
+      if(lnk === "no"  &&  r.linked) return false;
+      if(kw){
+        const t = [r.serialNumber, r.systemModel, r.subNumber, r.reason]
+          .map(function(v){ return String(v||"").toLowerCase(); }).join(" ");
+        if(t.indexOf(kw) < 0) return false;
+      }
+      return true;
+    });
+    view.sort(function(a,b){
+      return String(b.month||"").localeCompare(String(a.month||""))
+          || String(a.serialNumber||"").localeCompare(String(b.serialNumber||""));
+    });
+
+    // 카드
+    const pay  = view.filter(function(r){ return r.kind !== "claw"; }).reduce(function(n,r){ return n+(Number(r.amount)||0); },0);
+    const claw = view.filter(function(r){ return r.kind === "claw"; }).reduce(function(n,r){ return n+(Number(r.amount)||0); },0);
+    const noLink = view.filter(function(r){ return !r.linked; }).length;
+    const cardEl = document.getElementById("sup-cards");
+    if(cardEl){
+      const card = (t,v,d,c)=> '<div style="flex:1;min-width:150px;border:1px solid var(--line);padding:10px 12px;">'
+        + '<div style="font-size:11.5px;color:var(--gray);">'+t+'</div>'
+        + '<div style="font-size:17px;font-weight:700;'+(c?'color:'+c+';':'')+'">'+v+'</div>'
+        + (d?'<div style="font-size:11px;color:var(--gray);">'+d+'</div>':'') + '</div>';
+      cardEl.innerHTML =
+          card("지급 합계", pay.toLocaleString(), view.filter(function(r){return r.kind!=="claw";}).length + "건", "#2e7d32")
+        + card("환수 합계", claw.toLocaleString(), view.filter(function(r){return r.kind==="claw";}).length + "건", "var(--danger)")
+        + card("최종", (pay-claw).toLocaleString(), "", (claw>pay?"var(--danger)":""))
+        + card("재고 못 찾음", noLink + "건", noLink ? "재고와 잇기를 눌러주세요" : "전부 이어짐",
+               noLink ? "#b8860b" : "");
+    }
+
+    if(view.length === 0){
+      el.innerHTML = '<div class="list-empty">지원금 내역이 없습니다.</div>';
+      try{ addDownloadBtn("dl-suplist", "suplist", "지원금내역"); }catch(e){}
+      return;
+    }
+    const { pageItems } = paginateSlice(view, "supportLogs");
+    const onKeys = listSupCols();
+    const cols = SUP_COLS.filter(function(c){ return onKeys.includes(c.key); });
+    const tight = listSupDensity() === "tight";
+    const pad = tight ? "3px 6px" : "";
+    let h = '<div style="overflow-x:auto;"><table class="data-table" style="width:auto;"><thead><tr>'
+      + cols.map(function(c){
+          return '<th'+(c.right?' class="ta-right"':'')+(pad?' style="padding:'+pad+';"':'')+'>'
+            + comboEsc(c.label) + '</th>'; }).join("")
+      + '<th class="ta-right no-print"'+(pad?' style="padding:'+pad+';"':'')+'>관리</th>'
+      + '</tr></thead><tbody>';
+    pageItems.forEach(function(r){
+      const gray = r.linked ? ' style="color:var(--gray);"' : '';
+      h += '<tr'+gray+'>'
+        + cols.map(function(c){
+            const st = (c.right ? ' class="ta-right"' : '')
+              + (pad ? ' style="padding:'+pad+';white-space:nowrap;"' : ' style="white-space:nowrap;"');
+            return '<td'+st+'>' + c.get(r) + '</td>'; }).join("")
+        + '<td class="ta-right no-print"'+(pad?' style="padding:'+pad+';"':'')+'>'
+          + (r.linked
+              ? '<button class="btn small secondary" style="width:auto;" data-sup-log="'+(r.itemId||"")+'" data-sup-sn="'+comboEsc(r.serialNumber||"")+'">내역</button>'
+              : '<button class="btn small secondary" style="width:auto;" data-sup-one="'+r.id+'">잇기</button>')
+          + '<button class="btn small danger" style="width:auto;margin-left:4px;" data-sup-del="'+r.id+'" data-sup-item="'+(r.itemId||"")+'">삭제</button>'
+          + '</td></tr>';
+    });
+    h += '</tbody></table></div>';
+    el.innerHTML = h;
+    el.querySelectorAll("[data-sup-log]").forEach(function(b){
+      b.onclick = ()=> openSupLog(b.dataset.supLog, b.dataset.supSn, "");
+    });
+    el.querySelectorAll("[data-sup-one]").forEach(function(b){
+      b.onclick = ()=> matchSupportOne(b.dataset.supOne);
+    });
+    el.querySelectorAll("[data-sup-del]").forEach(function(b){
+      b.onclick = ()=> deleteSupportLog(b.dataset.supDel, b.dataset.supItem, "");
+    });
+    el.prepend(renderPaginationBar("supportLogs", view.length, loadSupportList));
+    try{ addDownloadBtn("dl-suplist", "suplist", "지원금내역"); }catch(e){}
+  };
+
+  // 한 건만 재고와 잇습니다.
+  window.matchSupportOne = async function(logId){
+    let r = null;
+    try{
+      const d = await getDoc(doc(db,"supportLogs", logId));
+      if(!d.exists()) return;
+      r = { id:d.id, ...d.data() };
+    }catch(e){ return; }
+    const it = await findItemForSupport(r);
+    if(!it){ alert("재고를 찾지 못했습니다.\n\n일련번호 " + (r.serialNumber||"-")
+      + (r.systemModel ? " · " + r.systemModel : "")); return; }
+    try{
+      await updateDoc(doc(db,"supportLogs", logId), { itemId: it.id });
+      await refreshItemSupport(it.id);
+    }catch(e){ alert("잇지 못했습니다."); return; }
+    logAction("지원금 재고 잇기", (r.serialNumber||"-") + " → " + (it.systemModel||"-"));
+    clearCache("inventory");
+    loadSupportList();
+  };
+
+  //  일련번호(+모델)로 재고를 찾습니다.
+  async function findItemForSupport(r){
+    const sn = String(r.serialNumber||"").trim();
+    if(!sn) return null;
+    let cands = [];
+    try{
+      const q = await getDocs(query(collection(db,"inventoryItems"), where("serialNumber","==", sn)));
+      q.forEach(function(d){ const v=d.data(); if(v.deleted !== true) cands.push({ id:d.id, ...v }); });
+    }catch(e){}
+    if(cands.length === 0) return null;
+    if(cands.length === 1) return cands[0];
+    if(r.systemModel){
+      const m = cands.find(function(x){
+        return modelDupKey(String(x.systemModel||"")) === modelDupKey(String(r.systemModel)); });
+      if(m) return m;
+    }
+    // 개통일까지 맞춰봅니다.
+    if(r.openDate){
+      const m2 = cands.find(function(x){ return String(x.activateDate||"") === String(r.openDate); });
+      if(m2) return m2;
+    }
+    return cands[0];
+  }
+
+  // 재고를 못 찾은 건을 한 번에 잇습니다.
+  window.matchSupportAll = async function(){
+    let rows = [];
+    try{
+      const q = await getDocs(collection(db,"supportLogs"));
+      q.forEach(function(d){ const v=d.data(); if(!v.itemId) rows.push({ id:d.id, ...v }); });
+    }catch(e){ alert("읽지 못했습니다."); return; }
+    // itemId 는 있는데 재고가 지워진 것도 다시 찾습니다.
+    try{
+      const q2 = await getDocs(collection(db,"supportLogs"));
+      const withId = [];
+      q2.forEach(function(d){ const v=d.data(); if(v.itemId) withId.push({ id:d.id, ...v }); });
+      const ids = [...new Set(withId.map(function(x){ return x.itemId; }))];
+      const alive = {};
+      for(let i=0;i<ids.length;i+=25){
+        const part = ids.slice(i, i+25);
+        if(part.length === 0) continue;
+        const q3 = await getDocs(query(collection(db,"inventoryItems"), where("__name__","in", part)));
+        q3.forEach(function(d){ alive[d.id] = true; });
+      }
+      withId.forEach(function(x){ if(!alive[x.itemId]) rows.push(x); });
+    }catch(e){}
+
+    if(rows.length === 0){ alert("재고를 못 찾은 지원금 기록이 없습니다."); return; }
+    if(!confirm("재고를 못 찾은 지원금 기록 " + rows.length + "건을\n일련번호로 찾아 잇습니다.\n\n진행할까요?")) return;
+
+    let done = 0, fail = 0;
+    const touched = new Set();
+    for(const r of rows){
+      const it = await findItemForSupport(r);
+      if(!it){ fail++; continue; }
+      try{
+        await updateDoc(doc(db,"supportLogs", r.id), { itemId: it.id });
+        touched.add(it.id); done++;
+      }catch(e){ fail++; }
+    }
+    for(const id of touched){ await refreshItemSupport(id); }
+    logAction("지원금 재고 일괄 잇기", done + "건 이음 / " + fail + "건 못 찾음");
+    alert("이었습니다.\n\n  이어짐 " + done + "건\n  못 찾음 " + fail + "건");
+    clearCache("inventory"); clearDashCache();
+    loadSupportList();
+    try{ if(typeof loadActivationList === "function") loadActivationList(true); }catch(e){}
+  };
+
   // ---------- 지원금 (지급 · 환수) ----------
   window.closeSupportModal = function(){ document.getElementById("support-overlay").style.display = "none"; };
   window.openSupportModal = function(){
@@ -44710,6 +45076,7 @@
     resEl.innerHTML = '<b>' + done + '건을 등록했습니다.</b>';
     clearCache("inventory"); clearDashCache();
     try{ if(typeof loadActivationList === "function") loadActivationList(true); }catch(e){}
+    try{ if(typeof loadSupportList === "function") loadSupportList(); }catch(e){}
   };
 
   //  그 재고의 지급·환수 합계를 다시 내어 재고에 적어둡니다.
@@ -44774,7 +45141,22 @@
       + '<td class="ta-right">지급 '+pay.toLocaleString()+'<br>환수 '+claw.toLocaleString()
       + '<br><span style="color:'+(over?'var(--danger)':'#2e7d32')+';">최종 '+(pay-claw).toLocaleString()+'</span></td>'
       + '<td colspan="4">'+(over?'<span style="color:var(--danger);">환수가 지급보다 많습니다 — 확인이 필요합니다.</span>':'')+'</td>'
-      + '</tr></tfoot></table></div>';
+      + '</tr></tfoot></table></div>'
+      // 언제 얼마씩 빠져 최종이 되었는지 한 줄로 보여드립니다.
+      + '<div style="border:1px solid var(--line);background:#f7f7f7;padding:10px 12px;margin-top:10px;font-size:12.5px;line-height:1.9;">'
+      + '<b>흐름</b><br>'
+      + rows.map(function(r, ix){
+          const a = Number(r.amount)||0;
+          const run = rows.slice(0, ix+1).reduce(function(n,x){
+            const v = Number(x.amount)||0; return n + (x.kind === "claw" ? -v : v); }, 0);
+          return '&nbsp;&nbsp;' + comboEsc(r.month||"-") + '  '
+            + (r.kind === "claw"
+                ? '<span style="color:var(--danger);">− ' + a.toLocaleString() + '</span>'
+                : '<span style="color:#2e7d32;">+ ' + a.toLocaleString() + '</span>')
+            + (r.reason ? ' <span style="color:var(--gray);">(' + comboEsc(r.reason) + ')</span>' : '')
+            + '  →  <b>' + run.toLocaleString() + '</b>';
+        }).join('<br>')
+      + '</div>';
   };
 
   window.deleteSupportLog = async function(id, itemId, serial){
@@ -44785,8 +45167,9 @@
     }catch(e){ alert("지우지 못했습니다."); return; }
     logAction("지원금 기록 삭제", serial || id);
     clearCache("inventory");
-    openSupLog(itemId, serial, "");
+    if(itemId || serial) openSupLog(itemId, serial, "");
     try{ if(typeof loadActivationList === "function") loadActivationList(true); }catch(e){}
+    try{ if(typeof loadSupportList === "function") loadSupportList(); }catch(e){}
   };
 
   // 개통 취소 — 재고를 보유중으로 되돌리고 개통 때 넣은 값도 지웁니다.
@@ -46317,7 +46700,10 @@
     if(tabId==="tab-paycheck" && typeof loadPayCheck === "function") loadPayCheck();
     if(tabId==="tab-loan" && typeof loadLoanList === "function"){ loadCollateralList(); loadLoanList(); loadLoanCostList(); }   // 화면을 열 때는 담아둔 자료를 그대로 씁니다 (읽기 절약)
     if(tabId==="tab-accounts" && typeof loadAccountList === "function"){ loadAccountList(); loadCardList(); }
-    if(tabId==="tab-activation" && typeof loadActivationList === "function") loadActivationList();
+    if(tabId==="tab-activation" && typeof loadActivationList === "function"){
+      loadActivationList();
+      try{ loadSupportList(); }catch(e){}
+    }
     if(tabId==="tab-site" && typeof renderHiddenList === "function") renderHiddenList();
     if(tabId==="tab-site" && typeof renderCacheTargets === "function") renderCacheTargets();
     if(tabId==="tab-site"){
