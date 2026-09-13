@@ -400,7 +400,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-06 v1087</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-06 v1089</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -10111,17 +10111,15 @@
     const rate = c && c.cashRate !== "" && c.cashRate != null ? Number(c.cashRate) : null;
     const base = (c && (c.discountBase === "total" || c.discountBase === "supply")) ? c.discountBase : "unit";
     currentOrderSourceInfo = c ? { name, rate, base } : null;
-    // 업체정보에 저장해둔 기준을 칸에 넣어둡니다. 이 주문에서만 바꾸실 수 있습니다.
-    //  입고처를 안 고르셨으면 기본값(대당)으로 되돌립니다.
+    //  업체정보 기준을 칸에 넣지 않습니다. 직접 고르셔야 합니다.
+    //   (예전에는 자동으로 들어가 엉뚱한 기준으로 저장되곤 했습니다)
     { const bs = document.getElementById("order-base-select");
       if(bs){
-        bs.value = c ? base : "unit";
         try{ await lockBaseIfCredit("order-base-select", name); }catch(e){}
-        // 업체정보에서 가져온 값임을 잠깐 알려드립니다. (바꾸셔도 됩니다)
-        if(c){
-          bs.style.background = "#eef7ee";
-          setTimeout(function(){ bs.style.background = ""; }, 1200);
-        }
+        bs.title = c && c.discountBase
+          ? ("업체정보에 저장된 기준: "
+             + (c.discountBase === "supply" ? "공급가" : c.discountBase === "total" ? "합계" : "대당"))
+          : "";
       } }
     // 무엇을 읽었는지 화면에 보여드립니다. (기준이 안 따라올 때 원인을 바로 알 수 있게)
     {
@@ -19336,10 +19334,17 @@
   async function loadPaymentRequestList(){
     const el = document.getElementById("settlement-payment-requests");
     if(!el) return;
-    const snap = await getDocs(query(collection(db,"paymentRequests"), orderBy("createdAt","desc")));
+    const snap = await getDocs(collection(db,"paymentRequests"));
     if(snap.empty){ el.innerHTML = '<div class="list-empty">등록된 출금요청이 없습니다.</div>'; return; }
     el.innerHTML = "";
-    const prDocs = snap.docs;
+    //  요청일이 늦은 것(최근)이 위로 옵니다. 같으면 만든 시각 순입니다.
+    const prDocs = snap.docs.slice().sort(function(a,b){
+      const da = String(a.data().requestDate||""), db2 = String(b.data().requestDate||"");
+      if(da !== db2) return db2.localeCompare(da);
+      const ta = (a.data().createdAt && a.data().createdAt.seconds) || 0;
+      const tb = (b.data().createdAt && b.data().createdAt.seconds) || 0;
+      return tb - ta;
+    });
     const { pageItems: prPage } = paginateSlice(prDocs, "paymentRequests");
     prPage.forEach(d=>{
       const p = d.data();
@@ -23635,10 +23640,17 @@
   async function loadSaleDepositRequestList(){
     const el = document.getElementById("settlement-sale-deposit-requests");
     if(!el) return;
-    const snap = await getDocs(query(collection(db,"saleDepositRequests"), orderBy("createdAt","desc")));
+    const snap = await getDocs(collection(db,"saleDepositRequests"));
     if(snap.empty){ el.innerHTML = '<div class="list-empty">등록된 입금요청이 없습니다.</div>'; return; }
     el.innerHTML = "";
-    const sdrDocs = snap.docs;
+    //  요청일이 늦은 것(최근)이 위로 옵니다. 같으면 만든 시각 순입니다.
+    const sdrDocs = snap.docs.slice().sort(function(a,b){
+      const da = String(a.data().requestDate||""), db2 = String(b.data().requestDate||"");
+      if(da !== db2) return db2.localeCompare(da);
+      const ta = (a.data().createdAt && a.data().createdAt.seconds) || 0;
+      const tb = (b.data().createdAt && b.data().createdAt.seconds) || 0;
+      return tb - ta;
+    });
     const { pageItems: sdrPage } = paginateSlice(sdrDocs, "saleDepositRequests");
     // 업체명이 저장돼 있지 않은 옛 요청은 연결된 판매요청에서 찾아옵니다.
     // 판매요청이 지워져 찾을 수 없으면 "연결 끊김"으로 표시합니다.
@@ -24053,7 +24065,7 @@
     // 거래처를 비우고 할인 계산 기준도 기본값으로 되돌립니다.
     //  거래처를 고르면 그 업체에 저장해둔 기준이 자동으로 들어옵니다.
     { const ds = document.getElementById("resv-dest-select"); if(ds) ds.value = ""; }
-    { const bs = document.getElementById("resv-base-select"); if(bs) bs.value = "unit"; }
+    { const bs = document.getElementById("resv-base-select"); if(bs) bs.value = ""; }
     editingReservationId = null;
     if(resvListFilter === "buy" || resvListFilter === "sale") await setResvKind(resvListFilter);
     document.getElementById("resv-modal-title").textContent = "예약 추가";
@@ -25947,7 +25959,7 @@
       const el = document.getElementById(id); if(el) el.value = "";
     });
     { const e = document.getElementById("resv-paste-salebase"); if(e) e.value = "unit"; }
-    { const e = document.getElementById("resv-paste-base");     if(e) e.value = "unit"; }
+    { const e = document.getElementById("resv-paste-base");     if(e) e.value = ""; }
     { const e = document.getElementById("resv-paste-dest");     if(e) e.value = ""; }
     { const e = document.getElementById("resv-paste-nocolor");  if(e) e.checked = false; }
     { const e = document.getElementById("resv-paste-samebuy");  if(e) e.checked = false; }
