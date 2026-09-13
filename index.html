@@ -400,7 +400,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-06 v1103</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-06 v1105</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -28975,10 +28975,19 @@
       .sort((a,b)=> (parseInt(a.label,10)||0) - (parseInt(b.label,10)||0));
     const waiting = orderPastePick.filter(p=> !p.chosenId).length;
     orderPasteRows = ok;   // 등록 버튼이 쓰는 목록 — 고른 줄까지 포함합니다
+    //  검수용 합계 — 단말기 수와 출고가 합계를 보여드립니다.
+    const priceOf = function(r){ return Number(r && r.model && r.model.priceIncVat) || 0; };
+    const sumQty = ok.reduce(function(n,r){ return n + (Number(r.qty)||0); }, 0);
+    const sumList = ok.reduce(function(n,r){ return n + priceOf(r) * (Number(r.qty)||0); }, 0);
+    const waitQty = orderPastePick.filter(function(p){ return !p.chosenId; })
+      .reduce(function(n,p){ return n + (Number(p.qty)||0); }, 0);
+    const noPrice = ok.filter(function(r){ return !priceOf(r); }).length;
+
     let h = '<div style="font-weight:700;margin-bottom:8px;">분석 결과 — 정상 '+ok.length+'줄'
       + (waiting ? ' / <span style="color:#8a6d0b;">고를 줄 '+waiting+'줄</span>' : '')
       + ' / 오류 '+bad.length+'줄'
       + (skipped.length ? ' <span style="color:var(--gray);font-weight:400;">(머리글 '+skipped.length+'줄 건너뜀)</span>' : '') + '</div>';
+
     if(bad.length){
       h += '<div style="border:1px solid var(--danger);background:#fdecea;padding:8px 10px;margin-bottom:10px;max-height:180px;overflow-y:auto;">'
         + bad.map(b=>'· '+comboEsc(b.label)+' — '+comboEsc(b.reason)+'<br><span style="color:var(--gray);font-size:11px;">'+comboEsc(b.raw)+'</span>').join('<br>') + '</div>';
@@ -29060,6 +29069,14 @@
             + '<td class="ta-right">'+(r.model.priceIncVat ? Number(r.model.priceIncVat).toLocaleString() : '<span style="color:var(--danger);">미입력</span>')+'</td>'
             + '<td style="white-space:nowrap;">'+(r.colorObj && r.colorObj.sku ? comboEsc(r.colorObj.sku)
                 : (r.skuCand ? '<span style="color:#1565c0;">'+comboEsc(r.skuCand)+' <b>새로 저장</b></span>' : '-'))+'</td></tr>').join("")
+        //  맨 아래 합계 줄 — 수량·금액이 맞는지 확인하시라고 넣습니다.
+        + '<tr style="background:#f4f7fb;font-weight:700;border-top:2px solid var(--navy);">'
+          + '<td colspan="5">합계</td>'
+          + '<td class="ta-right">' + sumQty.toLocaleString() + '</td>'
+          + '<td class="ta-right">' + sumList.toLocaleString()
+            + (noPrice ? ' <span style="color:var(--danger);font-weight:400;font-size:11px;">(미입력 '+noPrice+'줄 뺌)</span>' : '')
+            + '</td>'
+          + '<td></td></tr>'
         + '</tbody></table></div>'
         + (ok.filter(r=>!r.colorObj && r.colorText).length
             ? '<div style="border:1px solid #1565c0;background:#eef4fb;padding:8px 10px;margin-bottom:10px;font-size:12.5px;line-height:1.7;">'
