@@ -400,7 +400,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-06 v1153</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-06 v1154</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -29543,27 +29543,6 @@ window.showDepositUses = async function(id){
   // 사람이 골라야 하는 줄들 — 고르면 정상 줄로 넘어갑니다.
   let orderPastePick = [];
 
-  // 색상을 직접 고치면 그 줄에 담아둡니다. 목록에 있으면 그대로 잇고, 없으면 새로 만들 색으로 표시합니다.
-  window.onOrderPasteColor = function(el){
-    const i = Number(el.dataset.i);
-    const r = orderPasteRows[i];
-    if(!r) return;
-    const v = String(el.value||"").trim();
-    const hit = (r.model.colors||[]).find(c=>
-      String(c.systemColor||"") === v || String(c.manufacturerColor||"") === v);
-    r.colorObj = hit || null;
-    r.colorText = v;
-    el.style.borderColor = hit ? "var(--line)" : "#1565c0";
-    const note = el.parentElement ? el.parentElement.querySelector("div") : null;
-    if(note) note.textContent = hit ? "" : "등록에 없음 · 새로 만듦";
-    else if(!hit && el.parentElement){
-      const d = document.createElement("div");
-      d.style.cssText = "font-size:10.5px;color:#1565c0;";
-      d.textContent = "등록에 없음 · 새로 만듦";
-      el.parentElement.appendChild(d);
-    }
-  };
-
   // 색상을 직접 고치면 그 줄에 담아둡니다. 목록에 있으면 그대로 잇고, 없으면 새로 만들 색으로 둡니다.
   window.onOrderPasteColor = function(el){
     const i = Number(el.dataset.i);
@@ -35837,6 +35816,86 @@ let ghostBankCache = [];
   let orderBaseDiffCache = [];
   let orderAmtDiffCache = [];
   let selfActBaseCache = [];
+  let batchSumDiffCache = [];
+
+  //  주문 묶음 숫자가 품목과 다른 건을 보여주고, 저장된 품목 기준으로 맞춥니다.
+  window.showBatchSumDiffList = function(){
+    const rows = batchSumDiffCache || [];
+    if(rows.length === 0){ alert("다른 주문이 없습니다."); return; }
+    const head = document.getElementById("suplog-head");
+    const body = document.getElementById("suplog-body");
+    if(!head || !body){ alert("화면을 찾지 못했습니다."); return; }
+    const f = function(n){ return (Number(n)||0).toLocaleString(); };
+    head.innerHTML = '<b>주문 묶음 합계·여신차감액이 품목과 다름</b> — 주문 ' + rows.length + '건'
+      + '<br><span style="color:var(--gray);">저장된 <b>품목</b>이 기준입니다. '
+      + '품목 값은 건드리지 않고 묶음 쪽 숫자만 다시 셉니다.</span>';
+    body.innerHTML =
+      '<div style="margin-bottom:8px;"><button class="btn small" style="width:auto;" onclick="fixBatchSumDiffAll()">'
+      + '전부 맞추기 (' + rows.length + '건)</button></div>'
+      + '<div style="overflow-x:auto;max-height:360px;overflow-y:auto;">'
+      + '<table class="data-table" style="width:auto;"><thead><tr>'
+      + '<th>주문일</th><th>입고처</th><th class="ta-right">수량</th>'
+      + '<th class="ta-right">주문금액 지금</th><th class="ta-right">→ 바뀔 값</th>'
+      + '<th class="ta-right">여신 지금</th><th class="ta-right">→ 바뀔 값</th><th></th>'
+      + '</tr></thead><tbody>'
+      + rows.map(function(r, ix){
+          return '<tr><td>' + comboEsc(r.date) + '</td>'
+            + '<td>' + comboEsc(r.src) + '</td>'
+            + '<td class="ta-right">' + r.qty + '</td>'
+            + '<td class="ta-right">' + f(r.sumCur) + '</td>'
+            + '<td class="ta-right"' + (r.sumBad ? ' style="color:#2e7d32;font-weight:700;"' : ' style="color:var(--gray);"') + '>'
+              + (r.sumBad ? f(r.sumWant) : '그대로') + '</td>'
+            + '<td class="ta-right">' + (r.isCredit ? f(r.credCur) : '<span style="color:var(--gray);">-</span>') + '</td>'
+            + '<td class="ta-right"' + (r.credBad ? ' style="color:#2e7d32;font-weight:700;"' : ' style="color:var(--gray);"') + '>'
+              + (r.isCredit ? (r.credBad ? f(r.credWant) : '그대로') : '-') + '</td>'
+            + '<td><button class="btn small secondary" style="width:auto;" data-bsd="' + ix + '">맞추기</button></td></tr>';
+        }).join("")
+      + '</tbody></table></div>';
+    body.querySelectorAll("[data-bsd]").forEach(function(b){
+      b.onclick = function(){ fixBatchSumDiffOne(Number(b.dataset.bsd)); };
+    });
+    document.getElementById("suplog-overlay").style.display = "flex";
+  };
+
+  window.fixBatchSumDiffOne = async function(ix){
+    const r = (batchSumDiffCache || [])[Number(ix)];
+    if(!r){ alert("찾지 못했습니다."); return; }
+    if(!hasPerm(currentUserPerms, "paymentProcess")){ alert("권한이 없습니다."); return; }
+    if(!confirm(r.date + " · " + r.src + "\n\n저장된 품목으로 다시 세어 맞춥니다.\n\n"
+      + "· 품목 값은 바뀌지 않습니다\n"
+      + "· 묶음 합계 · 여신차감액 · 여신 원장 · 재고가 맞춰집니다\n\n진행할까요?")) return;
+    try{
+      const res = await syncAfterOrderLines(r.batchId, null);
+      logAction("주문 묶음 숫자 맞추기", r.date + " / " + r.src
+        + " / 합계 " + (res.total||0).toLocaleString()
+        + (res.credit ? " / 여신 " + res.credit.from.toLocaleString() + "→" + res.credit.to.toLocaleString() : ""));
+      alert("맞췄습니다.\n\n  주문금액 합계 " + (res.total||0).toLocaleString()
+        + (res.credit ? "\n  여신차감액 " + res.credit.from.toLocaleString() + " → " + res.credit.to.toLocaleString() : "")
+        + (res.items ? "\n  재고 " + res.items + "대" : "")
+        + "\n\n[다시 점검] 을 눌러 확인해주세요.");
+    }catch(e){ alert("맞추지 못했습니다.\n" + ((e && e.message) ? e.message : String(e))); }
+  };
+
+  window.fixBatchSumDiffAll = async function(){
+    const rows = batchSumDiffCache || [];
+    if(rows.length === 0){ alert("맞출 주문이 없습니다."); return; }
+    if(!hasPerm(currentUserPerms, "paymentProcess")){ alert("권한이 없습니다."); return; }
+    if(!confirm("주문 " + rows.length + "건을 저장된 품목 기준으로 맞춥니다.\n\n"
+      + "· 품목 값은 바뀌지 않습니다\n"
+      + "· 묶음 합계 · 여신차감액 · 여신 원장 · 재고가 맞춰집니다\n\n"
+      + "건수가 많으면 시간이 걸립니다. 진행할까요?")) return;
+    let done = 0;
+    for(const r of rows){
+      try{ await syncAfterOrderLines(r.batchId, null); done++; }
+      catch(e){ console.error("묶음 맞추기", r.batchId, e); }
+    }
+    logAction("주문 묶음 숫자 전부 맞추기", done + "건 / 모두 " + rows.length + "건");
+    batchSumDiffCache = [];
+    alert(done + "건을 맞췄습니다."
+      + (done < rows.length ? "\n" + (rows.length - done) + "건은 실패했습니다." : "")
+      + "\n\n[다시 점검] 을 눌러 확인해주세요.");
+  };
+
 
   //  자체개통인데 판매할인 기준이 비어 있는 재고를 보여주고, 출고가(개당) 으로 채웁니다.
   window.showSelfActBaseList = function(){
@@ -36339,6 +36398,56 @@ let ghostBankCache = [];
               unit:"", why:"주문에 적힌 매입할인 기준으로 %를 다시 곱하면 금액이 달라지는 건입니다. "
                 + "그 주문을 열어 [모든 줄에 적용] 하신 뒤 저장하시면 맞춰집니다.",
               fix:"showOrderBaseDiffList()", fixLabel:"확인하기" });
+          }
+        }
+        // ── 주문 묶음의 합계·여신차감액이 품목과 다른 건 ──
+        //  품목을 고쳤는데 묶음 쪽 숫자가 안 따라온 경우입니다.
+        //  담보 계산서·여신 잔액이 주문과 안 맞는 원인이 여기 있습니다.
+        //  값을 만들어내지 않습니다. 저장된 품목으로 다시 셀 뿐입니다.
+        {
+          const bRows = [];
+          try{
+            const obAll3 = {};
+            (await getDocs(collection(db,"orderBatches"))).forEach(function(d){ obAll3[d.id] = d.data(); });
+            const linesBy = {};
+            (await getDocs(collection(db,"orders"))).forEach(function(d){
+              const o = d.data();
+              if(o.status === "취소") return;
+              if(!o.batchId) return;
+              (linesBy[o.batchId] = linesBy[o.batchId] || []).push(o);
+            });
+            Object.keys(obAll3).forEach(function(bid){
+              const b = obAll3[bid];
+              if(!b || b.status === "취소") return;
+              const lines = linesBy[bid] || [];
+              if(lines.length === 0) return;
+              const sum = lines.reduce(function(n,l){
+                return n + (Number(l.purchasePrice)||0) * (Number(l.quantity)||0); }, 0);
+              const curSum = Number(b.depositRequired)||0;
+              const isCredit = (b.paymentMethod === "b2b_credit");
+              let want = null, curCredit = null;
+              if(isCredit){
+                want = creditFromLines(b.source, lines, b.discountBase);
+                curCredit = Number(b.creditUsed)||0;
+              }
+              const sumBad = Math.abs(sum - curSum) > 1;
+              const credBad = isCredit && Math.abs((want||0) - (curCredit||0)) > 1;
+              if(!sumBad && !credBad) return;
+              bRows.push({ batchId:bid, date:b.orderDate||"-", src:b.source||"-",
+                qty: lines.reduce(function(n,l){ return n + (Number(l.quantity)||0); }, 0),
+                sumCur:curSum, sumWant:sum, sumBad:sumBad,
+                credCur:curCredit, credWant:want, credBad:credBad, isCredit:isCredit });
+            });
+            bRows.sort(function(a,b){ return String(b.date).localeCompare(String(a.date)); });
+          }catch(e){}
+          if(bRows.length){
+            batchSumDiffCache = bRows;
+            issues.push({ n:"주문 묶음 합계·여신차감액이 품목과 다름", cnt: bRows.length, unit:"주문",
+              why:"품목을 고쳤는데 주문 묶음 쪽 숫자가 안 따라온 건입니다. "
+                + "담보 계산서와 여신 잔액이 주문과 안 맞는 원인이 여기입니다. "
+                + "[맞추기] 를 누르면 저장된 품목으로 다시 세어 묶음 합계·여신차감액·여신 원장·재고까지 맞춥니다. "
+                + "품목 값은 건드리지 않습니다.",
+              fix:"showBatchSumDiffList()", fixLabel:"확인하기" });
           }
         }
         // ── 포피플 자체개통인데 판매할인 기준이 안 채워진 재고 ──
