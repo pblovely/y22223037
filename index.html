@@ -28057,7 +28057,12 @@
         const p = perLine[lid] || {};
         return p.listPrice != null || p.purchasePrice != null || p.systemModel != null
             || p.systemColor != null
-            || p.salePrice != null || p.saleDiscountAmt != null;
+            || p.salePrice != null || p.saleDiscountAmt != null
+            //  할인 기준·할인 금액·%를 고쳐도 재고에 함께 갑니다.
+            || p.discountBase != null || p.saleDiscountBase != null
+            || p.preDiscountAmt != null || p.preDiscountPct != null
+            || p.otherDiscountAmt != null || p.otherDiscountPct != null
+            || p.saleDiscountPct != null;
       });
       if(priceChanged.length){
         priceChanged.forEach(lid=>{
@@ -28073,8 +28078,9 @@
             (kind === "order"
               ? "이 주문으로 이미 들어온 재고 "
               : "이 판매요청에 붙어 있는 재고 ") + itemTargets.length + "대가 있습니다.\n\n"
-            + "재고의 모델·색상·금액도 이번에 고친 값으로 함께 바꿀까요?\n\n"
-            + "  예   — 재고 금액이 " + (kind === "order" ? "주문" : "판매요청") + "과 같아집니다 (권합니다)\n"
+            + "재고에도 이번에 고친 값을 함께 넣을까요?\n"
+            + "  모델 · 색상 · 출고가 · 입고가 · 할인 기준 · 선할인 · 타할인 · 판매 금액\n\n"
+            + "  예   — 재고가 " + (kind === "order" ? "주문" : "판매요청") + "과 같아집니다 (권합니다)\n"
             + "  아니오 — " + (kind === "order" ? "주문" : "판매요청") + "만 바뀌고 재고는 지금 값 그대로입니다");
         }
       }
