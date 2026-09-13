@@ -400,7 +400,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-06 v1045</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-06 v1046</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -656,12 +656,23 @@
         </div>
         <p class="desc" style="margin-top:0;">포피플에서 <b>직접 개통</b>한 단말기입니다. 재고에서 상태가 <b>개통</b>인 것을 그대로 보여줍니다.<br>
           거래처에 넘긴 것이 아니라 <b>받을 돈이 없으므로</b> 단말기 입금 대조에서는 빠집니다.</p>
+        <div id="act-col-picker" style="display:none;border:1px solid var(--navy);background:#f4f7fb;padding:10px 12px;margin-bottom:8px;"></div>
         <div id="act-cards" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px;"></div>
         <div class="tbar-row" style="display:flex;gap:0;flex-wrap:wrap;align-items:center;margin-bottom:8px;">
           <input type="text" id="act-q" placeholder="일련번호·모델·통신사로 찾기" onchange="loadActivationList()" style="width:230px;height:28px;border:1px solid var(--line);padding:0 8px;font-size:12.5px;box-sizing:border-box;">
           <input type="text" id="act-from" placeholder="개통 시작일 20260701" onchange="loadActivationList()" style="width:150px;height:28px;border:1px solid var(--line);padding:0 8px;font-size:12.5px;margin-left:-1px;box-sizing:border-box;">
           <input type="text" id="act-to" placeholder="개통 종료일 20260731" onchange="loadActivationList()" style="width:150px;height:28px;border:1px solid var(--line);padding:0 8px;font-size:12.5px;margin-left:-1px;box-sizing:border-box;">
+          <input type="text" id="act-month" maxlength="6" inputmode="numeric" placeholder="지원금 귀속월 202608" onchange="loadActivationList()" style="width:160px;height:28px;border:1px solid var(--line);padding:0 8px;font-size:12.5px;margin-left:-1px;box-sizing:border-box;">
+          <select id="act-code-f" onchange="loadActivationList()" style="width:130px;height:28px;border:1px solid var(--line);padding:0 6px;font-size:12.5px;margin-left:-1px;box-sizing:border-box;"><option value="">개통코드 전체</option></select>
+          <select id="act-sup-f" onchange="loadActivationList()" style="width:140px;height:28px;border:1px solid var(--line);padding:0 6px;font-size:12.5px;margin-left:-1px;box-sizing:border-box;">
+            <option value="">지원금 전체</option>
+            <option value="none">지원금 없음</option>
+            <option value="pay">지급만</option>
+            <option value="claw">환수 있음</option>
+            <option value="over">환수 초과</option>
+          </select>
           <button class="btn small secondary" style="width:auto;margin-left:-1px;" onclick="clearActCond()">비우기</button>
+          <button class="btn small secondary" style="width:auto;margin-left:-1px;" onclick="toggleActPicker()">보기 설정</button>
           <span id="dl-activation" style="margin-left:6px;"></span>
         </div>
         <div id="activation-pagination"></div>
@@ -6335,6 +6346,16 @@
   window.loadActCodesIntoSelects = async function(){
     let names = [];
     try{ names = await fetchNamesOrdered("activationCodes"); }catch(e){}
+    // 개통 목록의 거르기 칸도 함께 채웁니다.
+    {
+      const f = document.getElementById("act-code-f");
+      if(f){
+        const cur = f.value;
+        f.innerHTML = '<option value="">개통코드 전체</option>'
+          + names.map(function(n){ return '<option value="'+comboEsc(n)+'">'+comboEsc(n)+'</option>'; }).join("");
+        if(cur) f.value = cur;
+      }
+    }
     ["paste-act-code"].forEach(function(id){
       const sel = document.getElementById(id);
       if(!sel) return;
@@ -44389,7 +44410,8 @@
   // ---------- 개통 관리 ----------
   //  포피플에서 직접 개통한 단말기입니다. 거래처에 넘긴 것이 아니라 받을 돈이 없습니다.
   window.clearActCond = function(){
-    ["act-q","act-from","act-to"].forEach(id=>{ const e=document.getElementById(id); if(e) e.value=""; });
+    ["act-q","act-from","act-to","act-month"].forEach(id=>{ const e=document.getElementById(id); if(e) e.value=""; });
+    ["act-code-f","act-sup-f"].forEach(id=>{ const e=document.getElementById(id); if(e) e.value=""; });
     loadActivationList();
   };
 
@@ -44414,6 +44436,9 @@
     const q    = String((document.getElementById("act-q")||{}).value || "").trim().toLowerCase();
     const from = String((document.getElementById("act-from")||{}).value || "").replace(/\D/g,"");
     const to   = String((document.getElementById("act-to")||{}).value || "").replace(/\D/g,"");
+    const mon  = String((document.getElementById("act-month")||{}).value || "").replace(/\D/g,"");
+    const codeF= String((document.getElementById("act-code-f")||{}).value || "").trim();
+    const supF = String((document.getElementById("act-sup-f")||{}).value || "");
 
     let rows = items.filter(it=>{
       if(it.deleted === true) return false;
@@ -44421,9 +44446,24 @@
       const d = String(it.activateDate||"").replace(/\D/g,"");
       if(from && (!d || d < from)) return false;
       if(to && (!d || d > to)) return false;
+      // 지원금 귀속월 — 여러 달이 쉼표로 들어 있을 수 있습니다.
+      if(mon){
+        const ms = String(it.supportMonth||"").split(",").map(function(x){ return x.trim(); });
+        if(ms.indexOf(mon) < 0) return false;
+      }
+      if(codeF && String(it.activationCode||"") !== codeF) return false;
+      if(supF){
+        const dv = Number(it.distSupport)||0, cv = Number(it.clawback)||0;
+        if(supF === "none" && (dv || cv)) return false;
+        if(supF === "pay"  && !(dv > 0 && cv === 0)) return false;
+        if(supF === "claw" && !(cv > 0)) return false;
+        if(supF === "over" && !(cv > dv)) return false;
+      }
       if(q){
         const hay = [it.serialNumber, it.systemModel, it.petName, it.carrier,
-                     it.systemColor, it.manufacturerColor].map(v=> String(v||"").toLowerCase()).join(" ");
+                     it.systemColor, it.manufacturerColor,
+                     it.subNumber, it.activationCode, it.supportMonth]
+          .map(v=> String(v||"").toLowerCase()).join(" ");
         if(hay.indexOf(q) < 0) return false;
       }
       return true;
@@ -44461,41 +44501,27 @@
       return;
     }
     const canDo = hasPerm(currentUserPerms, "bulkEdit") || hasPerm(currentUserPerms, "menuInvWork");
-    let h = '<div style="overflow-x:auto;"><table class="data-table resv-dest-fit" style="width:auto;"><thead><tr>'
+    const onKeysA = listActCols();
+    const colsA = ACT_COLS.filter(function(c){ return onKeysA.includes(c.key); });
+    const denseA = listActDensity();
+    const dclsA = (denseA === "tiny") ? "vc-tiny" : (denseA === "tight" ? "vc-tight" : "");
+    let h = '<div class="'+dclsA+'" style="overflow-x:auto;"><table class="data-table resv-dest-fit"><thead><tr>'
       + '<th class="no-print"><input type="checkbox" id="act-check-all" onclick="toggleActAll(this.checked)"></th>'
-      + '<th>일련번호</th><th>전산모델명</th><th>색상</th><th>통신사</th><th>개통일</th><th>가입번호</th><th>개통코드</th>'
-      + '<th class="ta-right">출고가</th><th class="ta-right">공시지원금</th>'
-      + '<th class="ta-right">유통폰지원금</th><th class="ta-right">환수</th><th class="ta-right">최종</th>'
-      + '<th>귀속월</th><th>위치</th>'
+      + colsA.map(function(c){
+          return '<th'+(c.right?' class="ta-right"':'')+'>' + comboEsc(c.label) + '</th>'; }).join("")
       + '</tr></thead><tbody>';
     pageItems.forEach(it=>{
-      const sub = Number(it.subsidyAmount)||0;
-      const dist = Number(it.distSupport)||0, claw = Number(it.clawback)||0;
-      const over = claw > dist;
       const btns = (canDo ? '<button class="btn small secondary" style="width:auto;" data-act-sub="'+it.id+'">공시지원금</button>' : '')
         + '<button class="btn small secondary" style="width:auto;margin-left:4px;" data-act-suplog="'+it.id+'" data-act-sn="'+comboEsc(it.serialNumber||"")+'">지원금 내역</button>'
         + (canDo ? '<button class="btn small danger" style="width:auto;margin-left:4px;" data-act-cancel="'+it.id+'">개통 취소</button>' : '')
         + '<button class="btn small secondary" style="width:auto;margin-left:4px;" data-act-hist="'+comboEsc(it.serialNumber||"")+'" data-act-model="'+comboEsc(it.systemModel||it.baseModel||"")+'">이력</button>';
       h += '<tr class="rbd-clickable" data-row-act="act|'+it.id+'">'
         + '<td class="no-print"><input type="checkbox" class="act-cb" value="'+it.id+'" data-act-sn="'+comboEsc(it.serialNumber||"")+'" onclick="event.stopPropagation();"></td>'
-        + '<td><b>'+comboEsc(it.serialNumber||"-")+'</b></td>'
-        + '<td>'+comboEsc(it.systemModel||"-")+'</td>'
-        + '<td>'+comboEsc(it.systemColor||it.manufacturerColor||"-")+'</td>'
-        + '<td>'+comboEsc(it.carrier||"-")+'</td>'
-        + '<td>'+comboEsc(it.activateDate||"-")+'</td>'
-        + '<td>'+comboEsc(it.subNumber||"-")+'</td>'
-        + '<td>'+comboEsc(it.activationCode||"-")+'</td>'
-        + '<td class="ta-right">'+(Number(it.listPrice)||0).toLocaleString()+'</td>'
-        + '<td class="ta-right"'+(sub ? '' : ' style="color:var(--danger);"')+'>'+(sub ? sub.toLocaleString() : "미입력")+'</td>'
-        + '<td class="ta-right">'+(dist ? dist.toLocaleString() : '<span style="color:var(--gray);">-</span>')+'</td>'
-        + '<td class="ta-right"'+(claw ? ' style="color:var(--danger);"' : '')+'>'+(claw ? claw.toLocaleString() : '<span style="color:var(--gray);">-</span>')+'</td>'
-        + '<td class="ta-right"'+(over ? ' style="color:var(--danger);font-weight:700;"' : '')+'>'
-          +((dist||claw) ? (dist-claw).toLocaleString() + (over ? " ★" : "") : '<span style="color:var(--gray);">-</span>')+'</td>'
-        + '<td style="font-size:11.5px;">'+comboEsc(it.supportMonth||"-")+'</td>'
-        + '<td>'+comboEsc(it.location||"-")+'</td>'
+        + colsA.map(function(c){
+            return '<td'+(c.right ? ' class="ta-right"' : '')+'>' + c.get(it) + '</td>'; }).join("")
         + '</tr>'
         + '<tr class="row-actions" data-row-actions="act|'+it.id+'" style="display:none;">'
-        + '<td colspan="15" style="background:#fafafa;padding:6px 8px;text-align:left;">' + btns + '</td></tr>';
+        + '<td colspan="'+(colsA.length+1)+'" style="background:#fafafa;padding:6px 8px;text-align:left;">' + btns + '</td></tr>';
     });
     h += '</tbody></table></div>';
     listEl.innerHTML = h;
@@ -45376,6 +45402,83 @@
     if(itemId || serial) openSupLog(itemId, serial, "");
     try{ if(typeof loadActivationList === "function") loadActivationList(true); }catch(e){}
     try{ if(typeof loadSupportList === "function") loadSupportList(); }catch(e){}
+  };
+
+  //  개통 목록의 열입니다. 늘어나면 여기에만 더하면 됩니다.
+  const ACT_COLS = [
+    { key:"serial",   label:"일련번호",   html:true, get:it=> '<b>'+comboEsc(it.serialNumber||"-")+'</b>', raw:it=> it.serialNumber||"" },
+    { key:"model",    label:"전산모델명", get:it=> comboEsc(it.systemModel||"-"), raw:it=> it.systemModel||"" },
+    { key:"color",    label:"색상",       get:it=> comboEsc(it.systemColor||it.manufacturerColor||"-"), raw:it=> it.systemColor||it.manufacturerColor||"" },
+    { key:"carrier",  label:"통신사",     get:it=> comboEsc(it.carrier||"-"), raw:it=> it.carrier||"" },
+    { key:"actDate",  label:"개통일",     get:it=> comboEsc(it.activateDate||"-"), raw:it=> it.activateDate||"" },
+    { key:"subNo",    label:"가입번호",   get:it=> comboEsc(it.subNumber||"-"), raw:it=> it.subNumber||"" },
+    { key:"actCode",  label:"개통코드",   get:it=> comboEsc(it.activationCode||"-"), raw:it=> it.activationCode||"" },
+    { key:"listPrice",label:"출고가", right:true, get:it=> (Number(it.listPrice)||0).toLocaleString(), raw:it=> Number(it.listPrice)||0 },
+    { key:"subsidy",  label:"공시지원금", right:true, html:true,
+      get:it=>{ const v = Number(it.subsidyAmount)||0;
+        return v ? v.toLocaleString() : '<span style="color:var(--danger);">미입력</span>'; },
+      raw:it=> Number(it.subsidyAmount)||"" },
+    { key:"dist",     label:"유통폰지원금", right:true, html:true,
+      get:it=>{ const v = Number(it.distSupport)||0;
+        return v ? v.toLocaleString() : '<span style="color:var(--gray);">-</span>'; },
+      raw:it=> Number(it.distSupport)||"" },
+    { key:"claw",     label:"환수", right:true, html:true,
+      get:it=>{ const v = Number(it.clawback)||0;
+        return v ? '<span style="color:var(--danger);">'+v.toLocaleString()+'</span>'
+                 : '<span style="color:var(--gray);">-</span>'; },
+      raw:it=> Number(it.clawback)||"" },
+    { key:"final",    label:"최종", right:true, html:true,
+      get:it=>{ const d = Number(it.distSupport)||0, c = Number(it.clawback)||0;
+        if(!d && !c) return '<span style="color:var(--gray);">-</span>';
+        const over = c > d;
+        return '<span'+(over?' style="color:var(--danger);font-weight:700;"':'')+'>'
+          + (d-c).toLocaleString() + (over ? ' ★' : '') + '</span>'; },
+      raw:it=>{ const d = Number(it.distSupport)||0, c = Number(it.clawback)||0;
+        return (d||c) ? (d-c) : ""; } },
+    { key:"supMonth", label:"귀속월",     get:it=> comboEsc(it.supportMonth||"-"), raw:it=> it.supportMonth||"" },
+    { key:"location", label:"위치",       get:it=> comboEsc(it.location||"-"), raw:it=> it.location||"" }
+  ];
+  const ACT_COLS_DEFAULT = ACT_COLS.map(function(c){ return c.key; });
+  function listActCols(){
+    try{ const v = localStorage.getItem("actCols"); if(v) return JSON.parse(v); }catch(e){}
+    return ACT_COLS_DEFAULT.slice();
+  }
+  function listActDensity(){
+    try{ return localStorage.getItem("actDensity") || "normal"; }catch(e){ return "normal"; }
+  }
+  window.toggleActPicker = function(){
+    const el = document.getElementById("act-col-picker");
+    if(!el) return;
+    if(el.style.display !== "none"){ el.style.display = "none"; return; }
+    const on = listActCols(), d = listActDensity();
+    el.innerHTML = '<div style="font-size:12.5px;font-weight:700;margin-bottom:6px;">보고 싶은 열을 고르세요</div>'
+      + '<div style="display:flex;flex-wrap:wrap;gap:10px 16px;font-size:12.5px;">'
+      + ACT_COLS.map(function(c){
+          return '<label style="display:flex;align-items:center;gap:4px;white-space:nowrap;">'
+            + '<input type="checkbox" class="act-col-cb" value="'+c.key+'"'+(on.includes(c.key)?' checked':'')+'>'
+            + comboEsc(c.label)+'</label>'; }).join("")
+      + '</div>'
+      + '<div style="border-top:1px solid var(--line);margin-top:10px;padding-top:8px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:12.5px;">'
+      + '<span>줄 간격</span>'
+      + [['normal','보통'],['tight','좁게'],['tiny','아주 좁게']].map(function(x){
+          return '<label style="display:flex;align-items:center;gap:4px;"><input type="radio" name="act-density" value="'+x[0]+'"'
+            + (d===x[0]?' checked':'')+'>'+x[1]+'</label>'; }).join("")
+      + '<button class="btn small" style="width:auto;margin-left:auto;" onclick="applyActCols()">적용</button>'
+      + '<button class="btn small secondary" style="width:auto;" onclick="resetActCols()">기본값</button>'
+      + '</div>';
+    el.style.display = "block";
+  };
+  window.applyActCols = function(){
+    const on = Array.from(document.querySelectorAll(".act-col-cb:checked")).map(function(c){ return c.value; });
+    const d = (document.querySelector('input[name="act-density"]:checked')||{}).value || "normal";
+    try{ localStorage.setItem("actCols", JSON.stringify(on)); localStorage.setItem("actDensity", d); }catch(e){}
+    document.getElementById("act-col-picker").style.display = "none";
+    loadActivationList(true);
+  };
+  window.resetActCols = function(){
+    try{ localStorage.removeItem("actCols"); localStorage.removeItem("actDensity"); }catch(e){}
+    document.getElementById("act-col-picker").style.display = "none";
+    loadActivationList(true);
   };
 
   window.toggleActAll = function(on){
@@ -46993,6 +47096,7 @@
     if(tabId==="tab-activation" && typeof loadActivationList === "function"){
       loadActivationList();
       try{ loadSupportList(); }catch(e){}
+      try{ loadActCodesIntoSelects(); }catch(e){}
     }
     if(tabId==="tab-site" && typeof renderHiddenList === "function") renderHiddenList();
     if(tabId==="tab-site" && typeof renderCacheTargets === "function") renderCacheTargets();
