@@ -400,7 +400,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-06 v1079</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-06 v1086</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -2981,6 +2981,7 @@
           <div style="font-size:12px;color:var(--gray);margin-bottom:6px;">체크하면 보이고, <b>☰ 를 끌어서</b> 순서를 바꿉니다. 위에 있는 열이 표에서도 왼쪽입니다.</div>
           <div id="view-panel-checks" style="max-height:340px;overflow-y:auto;"></div>
           <button class="btn small" style="width:auto;margin-top:6px;" onclick="saveViewSettings()">이 설정 저장 (내 계정에 유지)</button>
+          <button class="btn small secondary" style="width:auto;margin-top:6px;margin-left:6px;" onclick="resetViewOrder()" title="새로 생긴 열과 바뀐 순서를 그대로 가져옵니다">기본 순서로 되돌리기</button>
         </div>
 
         <div style="overflow-x:auto;">
@@ -4633,7 +4634,7 @@
           + d.toLocaleString() + '</a>';
       },
       getRaw:it=>it.distSupport!=null?Number(it.distSupport):"" },
-    { key:"clawback", label:"환수", html:true,
+    { key:"clawback", label:"유통폰지원금 환수", html:true,
       // 금액을 누르면 언제 얼마씩 환수됐는지 내역이 열립니다.
       get:it=>{
         const c = Number(it.clawback)||0;
@@ -4673,6 +4674,9 @@
     // 판매요청이 걸려 있는지 한눈에 보여줍니다. 없으면 돈을 못 받습니다.
     { key:"saleReqState", label:"판매요청",
       get:it=>{
+        //  포피플 자체개통은 판매요청이 없는 것이 정상입니다.
+        if(String(it.status||"") === "개통" && String(it.destination||"") === "포피플")
+          return "자체개통";
         const sold = String(it.status||"").indexOf("판매") >= 0
                   || String(it.status||"").indexOf("개통") >= 0 || !!it.destination;
         if(it.saleRequestId) return '<span style="color:#2e7d32;font-weight:700;">있음</span>';
@@ -8884,6 +8888,22 @@
     }
   };
   // 보기 설정에 저장된 순서를 그대로 씁니다. (저장된 목록에 없는 열은 뒤에 붙입니다)
+  //  보기 설정을 기본 순서로 되돌립니다. 새로 생긴 열도 함께 들어옵니다.
+  window.resetViewOrder = async function(){
+    if(!confirm("열 순서와 보이는 열을 기본값으로 되돌립니다.\n\n"
+      + "새로 생긴 열도 함께 들어옵니다.\n\n진행할까요?")) return;
+    currentViewSettings = DEFAULT_VIEW_SETTINGS.slice();
+    try{
+      await setDoc(doc(db,"userSettings", currentUser.username),
+        { viewSettings: currentViewSettings, viewKnownKeys: INV_COLUMNS.map(function(c){ return c.key; }) },
+        { merge:true });
+    }catch(e){}
+    logAction("보기 설정 되돌리기", currentViewSettings.length + "개 열");
+    const p = document.getElementById("view-panel");
+    if(p) p.style.display = "none";
+    loadInventoryList();
+  };
+
   function invViewCols(){
     const byKey = {}; INV_COLUMNS.forEach(c=> byKey[c.key] = c);
     const out = [];
@@ -9981,7 +10001,9 @@
   //  할인 계산 기준을 바꾸면 모든 줄의 선할인·타할인 금액을 다시 냅니다.
   //   %는 그대로 두고 금액만 기준에 맞춰 바꿉니다. 입고가·판매가도 함께 맞춥니다.
   window.onBeBaseChange = function(){
-    const base = String((document.getElementById("be-base")||{}).value || "unit");
+    const base = String((document.getElementById("be-base")||{}).value || "");
+    if(!base) return;                 // 비워두시면 아무것도 안 바꿉니다
+    const buyBase = base;
     const trs = [...document.querySelectorAll("#be-lines-body tr")];
     // 도착된 줄은 금액이 잠겨 있습니다. 그 줄도 함께 고칠지 먼저 여쭙습니다.
     const lockedTrs = trs.filter(function(tr){
@@ -10003,7 +10025,7 @@
       const num = (cls)=>{ const el = tr.querySelector(cls);
         return (el && el.value !== "") ? Number(el.value) : null; };
       const pPct = num(".be-prepct"), oPct = num(".be-otherpct");
-      if(pPct == null && oPct == null) return;
+      //  % 가 없어도 기준은 바뀌어야 하므로 이 줄도 저장 대상에 넣습니다.
       if(pPct != null) set(".be-preamt", amtOnBaseVat(pPct, L, base));
       if(oPct != null) set(".be-otheramt", amtOnBaseVat(oPct, L, base));
       // 입고가·판매가를 다시 냅니다.
@@ -10011,7 +10033,7 @@
       set(".be-purchase", buyFromDiscounts(L, pre, oth, buyBase));
       const cb = tr.querySelector(".be-samebuy");
       if(cb && cb.checked) set(".be-saleprice", L - pre - oth);
-      if(isLocked) tr.dataset.forceSave = "1";   // 저장 때 이 줄도 넣습니다
+      tr.dataset.forceSave = "1";   // 잠긴 줄도 저장 때 넣습니다
       n++;
     });
     const el = document.getElementById("be-msg");
@@ -10797,6 +10819,15 @@
     if(!carrier){ alert("통신사를 선택해주세요.\n\n품목 줄에 통신사를 따로 넣지 않으면 여기서 고른 통신사로 저장됩니다."); return; }
     const lineRows = Array.from(document.querySelectorAll("#order-lines-body tr"));
     if(lineRows.length===0){ alert("품목을 1개 이상 추가해주세요."); return; }
+    //  매입할인 기준을 반드시 고르셔야 합니다. 나중에 금액이 어긋나지 않게 막습니다.
+    if(!String((document.getElementById("order-base-select")||{}).value||"")){
+      alert("매입할인 기준을 골라주세요.\n\n"
+        + "  대당    — 한 대씩 계산 후 반올림\n"
+        + "  합계    — 주문 전체 합계에 한 번\n"
+        + "  공급가  — 삼성전자 여신(DPS) 방식\n\n"
+        + "이 기준으로 선할인·타할인 금액을 계산합니다.");
+      return;
+    }
 
     const lines = [];
     for(const tr of lineRows){
@@ -10902,7 +10933,8 @@
     }
     // 화면에서 고르신 할인 계산 기준 그대로 저장합니다.
     //  (업체정보는 화면에 처음 넣어주는 값일 뿐, 바꾸셨으면 바꾼 값이 우선입니다)
-    const orderBaseSel = String((document.getElementById("order-base-select")||{}).value||"") || "unit";
+    //  고르신 값만 씁니다. 안 고르시면 비워둡니다.
+    const orderBaseSel = String((document.getElementById("order-base-select")||{}).value||"");
     const orderSameBuy = !!(document.getElementById("order-samebuy-input")||{}).checked;
     // 여신 차감액 — 이 주문의 「할인 계산 기준」을 따릅니다.
     const creditUse = creditFromLines(source, lines, orderBaseSel);
@@ -10919,13 +10951,17 @@
     }
 
 
-    // 판매할인 기준은 판매처 업체정보를 따릅니다.
-    let orderSaleBaseSel = "unit";
+    //  판매할인 기준 — 판매처를 정하신 경우에만 그 업체 설정을 씁니다.
+    //   판매처가 없으면 비워둡니다. 판매하실 때 정해집니다.
+    let orderSaleBaseSel = "";
     try{
-      const cS = (companiesCache||[]).find(function(x){
-        return String(x.name||"").trim() === String(lines[0] && lines[0].destination || "").trim(); });
-      const bs = String((cS && cS.discountBase) || "");
-      orderSaleBaseSel = (bs === "supply" || bs === "total") ? bs : "unit";
+      const dst = String((lines[0] && lines[0].destination) || "").trim();
+      if(dst){
+        const cS = (companiesCache||[]).find(function(x){
+          return String(x.name||"").trim() === dst; });
+        const bs = String((cS && cS.saleDiscountBase) || "");
+        if(bs === "supply" || bs === "total" || bs === "unit") orderSaleBaseSel = bs;
+      }
     }catch(e){}
     const orderRefs = [];
     for(const l of lines){
@@ -10945,8 +10981,8 @@
         otherDiscountAmt: l.otherDiscountAmt, otherDiscountPct: l.otherDiscountPct,
         salePrice: l.salePrice, saleDiscountAmt: l.saleDiscountAmt, saleDiscountPct: l.saleDiscountPct,
         // 할인 계산 기준을 줄에 함께 남깁니다. 도착 등록 때 재고로 그대로 옮겨집니다.
-        discountBase: (l.discountBase || orderBaseSel || "unit"),
-        saleDiscountBase: (l.saleDiscountBase || l.saleBase || orderSaleBaseSel || "unit"),
+        discountBase: (l.discountBase || orderBaseSel || null),
+        saleDiscountBase: (l.saleDiscountBase || l.saleBase || orderSaleBaseSel || null),
         salePriceFollowsBuy: (l.salePriceFollowsBuy === true),
         orderDate, status: "주문중",
         fromReservationId: l.fromReservationId || null,   // 구매 예약에서 넘어온 줄이면 예약과 이어둡니다
@@ -27159,10 +27195,10 @@
       h += '<div class="stack-row"><label>입금예정일 <span class="info-tip" title="이 날짜까지 입금해야 합니다. 비워두셔도 됩니다.">ⓘ</span></label><input type="text" id="be-date3" maxlength="8" inputmode="numeric" value="'+comboEsc(b.payDueDate||"")+'"></div>';
       // 할인 계산 기준 — 이 주문의 선할인·타할인을 어디에 걸지 정합니다.
       {
-        const curBase = String(b.discountBase || "")
-          || (function(){ try{ return itemDiscountBase({ source: b.source||"" }) || "unit"; }catch(e){ return "unit"; } })();
+        //  이 주문에 저장된 값만 씁니다. 없으면 비워둡니다.
+        const curBase = String(b.discountBase || "");
         h += '<div class="stack-row"><label>매입할인 기준 <span class="info-tip" title="선할인%·타할인%를 어디에 곱할지 정합니다. 바꾸신 뒤 [모든 줄에 적용] 을 눌러주세요.">ⓘ</span></label>'
-          + '<select id="be-base"><option value="">비어 있음 (안 바꿈)</option>'
+          + '<select id="be-base" onchange="onBeBaseChange()"><option value=""'+(curBase?'':' selected')+'>비어 있음 (안 바꿈)</option>'
           + '<option value="unit"'   + (curBase==="unit"?' selected':'')   + '>대당 (출고가에 걸기)</option>'
           + '<option value="total"'  + (curBase==="total"?' selected':'')  + '>합계 (출고가 합계에 한 번)</option>'
           + '<option value="supply"' + (curBase==="supply"?' selected':'') + '>공급가 기준 (삼성전자 방식)</option>'
@@ -27916,25 +27952,25 @@
           }
         }
         // 할인 계산 기준도 줄에 함께 남깁니다. (도착 등록 때 재고로 옮겨집니다)
-        { // 화면에서 고르신 기준을 그대로 씁니다.
+        { // 화면에서 고르신 기준만 씁니다. 비워두시면 그 줄은 안 건드립니다.
+          //  업체정보 값을 함부로 끌어오지 않습니다.
           const chosen = String((document.getElementById("be-base")||{}).value || "");
           if(chosen) p.discountBase = chosen;
-          else{
-            const bs = String(party||"").trim() || String(b.source||"").trim();
-            try{ p.discountBase = itemDiscountBase({ source: bs }) || "unit"; }catch(e){}
-          }
           //  「입고동일」 줄은 매입 조건을 그대로 쓰므로 판매할인 기준도 매입 기준을 따릅니다.
           const cbSb = tr.querySelector(".be-samebuy");
           if(cbSb && cbSb.checked){
-            p.saleDiscountBase = p.discountBase || "unit";
+            if(p.discountBase) p.saleDiscountBase = p.discountBase;
           }else{
+            //  판매처를 정하신 줄에만 판매할인 기준을 넣습니다.
             const dsv = (p.destination !== undefined) ? p.destination : (src.destination||"");
-            try{
-              const cS = (companiesCache||[]).find(function(x){
-                return String(x.name||"").trim() === String(dsv||"").trim(); });
-              const sb = String((cS && cS.discountBase) || "");
-              p.saleDiscountBase = (sb === "supply" || sb === "total") ? sb : "unit";
-            }catch(e){}
+            if(String(dsv||"").trim()){
+              try{
+                const cS = (companiesCache||[]).find(function(x){
+                  return String(x.name||"").trim() === String(dsv||"").trim(); });
+                const sb = String((cS && cS.saleDiscountBase) || "");
+                if(sb === "supply" || sb === "total" || sb === "unit") p.saleDiscountBase = sb;
+              }catch(e){}
+            }
           }
         }
         // 「입고동일」 로 넣으셨으면 그 표시를 함께 저장합니다.
@@ -27965,6 +28001,9 @@
           const pr0 = String(ce0.value).split("|");
           p0.manufacturerColor = pr0[0]||""; p0.systemColor = pr0[1]||""; p0.sku = pr0[2]||"";
         }
+        //  할인 기준을 고르셨으면 잠긴 줄에도 함께 넣습니다. (금액은 안 건드립니다)
+        { const chosen0 = String((document.getElementById("be-base")||{}).value || "");
+          if(chosen0 && kind === "order") p0.discountBase = chosen0; }
         if(Object.keys(p0).length) perLine[lid] = p0;
         newTotal += ((kind === "order" ? (Number(src.purchasePrice)||0) : (Number(src.salePrice)||0)) * (Number(src.quantity)||0));
       }
@@ -28053,16 +28092,15 @@
     const srColorFix = [];   // 색상을 바꾼 줄 — 판매요청에도 옮깁니다      // 새로 더한 품목 줄 수 (아래 안내에서 씁니다)
     {
       // 금액·모델을 고친 줄만 대상입니다.
+      //  금액·모델·할인 기준을 만진 줄이면 재고에도 함께 넣습니다.
+      //   칸을 «비우신» 것도 바꾼 것이므로 «있는지»로 봅니다. (값이 null 이어도 대상)
       const priceChanged = Object.keys(perLine).filter(lid=>{
         const p = perLine[lid] || {};
-        return p.listPrice != null || p.purchasePrice != null || p.systemModel != null
-            || p.systemColor != null
-            || p.salePrice != null || p.saleDiscountAmt != null
-            //  할인 기준·할인 금액·%를 고쳐도 재고에 함께 갑니다.
-            || p.discountBase != null || p.saleDiscountBase != null
-            || p.preDiscountAmt != null || p.preDiscountPct != null
-            || p.otherDiscountAmt != null || p.otherDiscountPct != null
-            || p.saleDiscountPct != null;
+        return ["listPrice","purchasePrice","systemModel","systemColor",
+                "salePrice","saleDiscountAmt","saleDiscountPct",
+                "discountBase","saleDiscountBase",
+                "preDiscountAmt","preDiscountPct",
+                "otherDiscountAmt","otherDiscountPct"].some(function(k){ return (k in p); });
       });
       if(priceChanged.length){
         priceChanged.forEach(lid=>{
@@ -28142,10 +28180,10 @@
       // 재고의 금액을 같이 맞춥니다. (고른 경우에만)
       //  수익을 다시 계산하려면 지금 재고 값이 필요해서 먼저 읽어옵니다.
       let invItemsForFix = null;
+      const linkRowsBE = [];      // 아래 두 블록에서 함께 씁니다
       if(fixItems && itemTargets.length){
         invItemsForFix = {};
-        const linkRowsBE = [];
-    try{
+        try{
           for(const t of itemTargets){
             const sn = await withTimeout(getDoc(doc(db,"inventoryItems", t.iid)), 10000, "재고 읽기");
             if(sn.exists()) invItemsForFix[t.iid] = sn.data();
@@ -28168,12 +28206,13 @@
               patch.manufacturerColor = t.p.manufacturerColor || "";
               if(t.p.sku != null) patch.sku = t.p.sku;
             }
-            if(t.p.listPrice != null) patch.listPrice = t.p.listPrice;
-            if(t.p.purchasePrice != null) patch.purchasePrice = t.p.purchasePrice;
+            //  넣으신 값을 그대로 옮깁니다. 비우신 칸은 재고에서도 비웁니다.
+            if("listPrice"     in t.p) patch.listPrice     = t.p.listPrice;
+            if("purchasePrice" in t.p) patch.purchasePrice = t.p.purchasePrice;
             // 판매 금액 — 판매요청에서 고친 값을 재고에도 옮깁니다.
-            if(t.p.salePrice != null) patch.salePrice = t.p.salePrice;
-            if(t.p.saleDiscountAmt != null) patch.saleDiscountAmt = t.p.saleDiscountAmt;
-            if(t.p.saleDiscountPct != null) patch.saleDiscount = t.p.saleDiscountPct;
+            if("salePrice"      in t.p) patch.salePrice      = t.p.salePrice;
+            if("saleDiscountAmt" in t.p) patch.saleDiscountAmt = t.p.saleDiscountAmt;
+            if("saleDiscountPct" in t.p) patch.saleDiscount    = t.p.saleDiscountPct;
             // 할인 계산 기준도 재고로 옮깁니다. 재고 목록·판매 계산이 같은 기준으로 돕니다.
             if(t.p.discountBase) patch.discountBase = t.p.discountBase;
             if(t.p.saleDiscountBase) patch.saleDiscountBase = t.p.saleDiscountBase;
@@ -28186,10 +28225,12 @@
                 if(buy != null){ patch.salePrice = buy; patch.saleDiscountAmt = null; patch.saleDiscount = null; }
               }
             }
-            if(t.p.preDiscountAmt != null){ patch.purchaseDiscountAmt = t.p.preDiscountAmt; }
-            if(t.p.preDiscountPct != null){ patch.purchaseDiscount = t.p.preDiscountPct; }
-            if(t.p.otherDiscountAmt != null) patch.otherDiscountAmt = t.p.otherDiscountAmt;
-            if(t.p.otherDiscountPct != null) patch.otherDiscountPct = t.p.otherDiscountPct;
+            //  주문에 넣으신 값을 그대로 옮깁니다. 비우신 칸은 재고에서도 비웁니다.
+            //   (예전에는 null 이면 건너뛰어 옛 값이 남았습니다)
+            if("preDiscountAmt"   in t.p){ patch.purchaseDiscountAmt = t.p.preDiscountAmt; }
+            if("preDiscountPct"   in t.p){ patch.purchaseDiscount    = t.p.preDiscountPct; }
+            if("otherDiscountAmt" in t.p){ patch.otherDiscountAmt    = t.p.otherDiscountAmt; }
+            if("otherDiscountPct" in t.p){ patch.otherDiscountPct    = t.p.otherDiscountPct; }
             // 수익 = 판매가 − 입고가
             {
               const it0 = (invItemsForFix && invItemsForFix[t.iid]) || {};
@@ -34544,6 +34585,89 @@
     try{ if(typeof loadInventoryList === "function") loadInventoryList(); }catch(e){}
   };
 
+  let selfActCache = [];
+
+  //  개통인데 자체개통 정보가 빠진 재고를 보여주고 맞춥니다.
+  window.showSelfActList = function(){
+    const rows = selfActCache || [];
+    if(rows.length === 0){ alert("어긋난 건이 없습니다."); return; }
+    const head = document.getElementById("suplog-head");
+    const body = document.getElementById("suplog-body");
+    head.innerHTML = '<b>개통인데 자체개통 정보가 빠진 재고</b> — ' + rows.length + '대'
+      + '<br><span style="color:var(--gray);">판매처 «포피플» · 판매가 «출고가» 로 맞춥니다. '
+      + '판매할인은 0 이 됩니다.</span>';
+    body.innerHTML =
+      '<div style="margin-bottom:8px;"><button class="btn small" style="width:auto;" onclick="fixSelfActAll()">전부 맞추기 ('+rows.length+'대)</button></div>'
+      + '<div style="overflow-x:auto;max-height:420px;overflow-y:auto;border:1px solid var(--line);">'
+      + '<table class="data-table resv-dest-fit"><thead><tr>'
+      + '<th>일련번호</th><th>전산모델명</th><th>개통일</th>'
+      + '<th>지금 판매처</th><th class="ta-right">지금 판매가</th>'
+      + '<th>바꿀 판매처</th><th class="ta-right">바꿀 판매가</th>'
+      + '<th class="ta-right no-print">관리</th></tr></thead><tbody>'
+      + rows.map(function(r, ix){
+          return '<tr><td><b>'+comboEsc(r.sn)+'</b></td>'
+            + '<td>'+comboEsc(r.model)+'</td>'
+            + '<td>'+comboEsc(r.actDate||"-")+'</td>'
+            + '<td'+(r.dest !== "포피플" ? ' style="color:var(--danger);"' : '')+'>'+comboEsc(r.dest||"(빈칸)")+'</td>'
+            + '<td class="ta-right"'+(r.sale !== r.L ? ' style="color:var(--danger);"' : '')+'>'
+              +(r.sale ? r.sale.toLocaleString() : "-")+'</td>'
+            + '<td style="color:#2e7d32;">포피플</td>'
+            + '<td class="ta-right" style="color:#2e7d32;">'+r.L.toLocaleString()+'</td>'
+            + '<td class="ta-right no-print"><button class="btn small" style="width:auto;" '
+              + 'data-fixself="'+ix+'">맞추기</button></td></tr>';
+        }).join("")
+      + '</tbody></table></div>';
+    body.querySelectorAll("[data-fixself]").forEach(function(b){
+      b.onclick = ()=> fixSelfActOne(Number(b.dataset.fixself));
+    });
+    document.getElementById("suplog-overlay").style.display = "flex";
+  };
+
+  async function selfActPatch(r){
+    await updateDoc(doc(db,"inventoryItems", r.id), {
+      destination: "포피플",
+      outDate: r.actDate || "",
+      salePrice: r.L || null,
+      saleDiscountAmt: 0, saleDiscount: 0,
+      saleDiscountBase: null
+    });
+    await logItem(r.id, r.sn, "edited",
+      "자체개통 정보 맞춤 · 판매처 포피플 · 판매가 " + (r.L||0).toLocaleString(), {});
+  }
+
+  window.fixSelfActOne = async function(ix){
+    const r = (selfActCache||[])[ix];
+    if(!r) return;
+    try{ await selfActPatch(r); }catch(e){ alert("맞추지 못했습니다."); return; }
+    logAction("자체개통 정보 맞춤", r.sn);
+    selfActCache = (selfActCache||[]).filter(function(x,i){ return i !== ix; });
+    clearCache("inventory"); clearDashCache();
+    try{ if(typeof loadInventoryList === "function") loadInventoryList(); }catch(e){}
+    if(selfActCache.length) showSelfActList();
+    else{ closeSupLog(); alert("전부 맞췄습니다."); }
+  };
+
+  window.fixSelfActAll = async function(){
+    const rows = (selfActCache||[]).slice();
+    if(rows.length === 0) return;
+    if(!confirm(rows.length + "대를 자체개통으로 맞춥니다.\n\n"
+      + "  판매처  → 포피플\n"
+      + "  판매일  → 개통일\n"
+      + "  판매가  → 출고가\n"
+      + "  판매할인 → 0\n"
+      + "  판매할인 기준 → 비움\n\n진행할까요?")) return;
+    let n = 0;
+    try{
+      for(const r of rows){ await selfActPatch(r); n++; }
+    }catch(e){ alert("맞추다 멈췄습니다."); }
+    logAction("자체개통 정보 일괄 맞춤", n + "대");
+    selfActCache = [];
+    closeSupLog();
+    alert(n + "대를 맞췄습니다.");
+    clearCache("inventory"); clearDashCache();
+    try{ if(typeof loadInventoryList === "function") loadInventoryList(); }catch(e){}
+  };
+
   let rebuyPairCache = [];
 
   //  같은 모델·일련번호인데 안 이어진 재고를 보여주고 바로 이어줍니다.
@@ -35212,6 +35336,35 @@
                 + "1차와 2차를 이어두면 목록에서 구분되고 이력이 이어집니다. "
                 + "금액·날짜는 그대로 두고 이어둔 표시만 넣습니다.",
               fix:"showRebuyPairList()", fixLabel:"확인·잇기" });
+          }
+        }
+        // 개통했는데 자체개통 정보가 빠진 재고
+        //  포피플 자체개통이면 판매처 포피플 · 판매가 출고가 여야 합니다.
+        {
+          const selfRows = [];
+          try{
+            Object.keys(items).forEach(function(id){
+              const it = items[id];
+              if(it.deleted === true) return;
+              if(String(it.status||"") !== "개통") return;
+              const L = Number(it.listPrice)||0;
+              const needDest = String(it.destination||"") !== "포피플";
+              const needSale = L > 0 && Number(it.salePrice||0) !== L;
+              const needBase = !!it.saleDiscountBase && !String(it.destination||"");
+              if(needDest || needSale || needBase){
+                selfRows.push({ id, sn: it.serialNumber||"", model: it.systemModel||"",
+                  dest: it.destination||"", L, sale: Number(it.salePrice)||0,
+                  actDate: it.activateDate||"",
+                  sbase: it.saleDiscountBase||"" });
+              }
+            });
+          }catch(e){}
+          selfActCache = selfRows;
+          if(selfRows.length){
+            issues.push({ n:"개통인데 자체개통 정보가 빠짐", cnt: selfRows.length, unit:"",
+              why:"포피플 자체개통은 판매처가 «포피플», 판매가가 «출고가» 여야 합니다. "
+                + "판매처가 비었거나 판매가가 출고가와 다른 건입니다.",
+              fix:"showSelfActList()", fixLabel:"확인·맞추기" });
           }
         }
         // 지원금이 「개통 안 된 재고」에 붙어 있는 건
@@ -46928,7 +47081,7 @@
       get:it=>{ const v = Number(it.distSupport)||0;
         return v ? v.toLocaleString() : '<span style="color:var(--gray);">-</span>'; },
       raw:it=> Number(it.distSupport)||"" },
-    { key:"claw",     label:"환수 합계", right:true, html:true,
+    { key:"claw",     label:"유통폰지원금 환수", right:true, html:true,
       get:it=>{ const v = Number(it.clawback)||0;
         return v ? '<span style="color:var(--danger);">'+v.toLocaleString()+'</span>'
                  : '<span style="color:var(--gray);">-</span>'; },
