@@ -400,7 +400,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-06 v1174</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-06 v1175</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -3167,7 +3167,7 @@
     <div id="suplog-overlay" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.55);z-index:1100;align-items:center;justify-content:center;">
       <div style="background:#fff;border:2px solid var(--navy);max-width:780px;width:96%;max-height:90vh;overflow-y:auto;padding:22px;position:relative;">
         <button onclick="closeSupLog()" style="position:absolute;top:12px;right:12px;background:none;border:1px solid var(--navy);width:26px;height:26px;cursor:pointer;font-size:13px;">✕</button>
-        <h3 style="margin-top:0;margin-bottom:4px;">지원금 내역</h3>
+        <h3 id="suplog-title" style="margin-top:0;margin-bottom:4px;">지원금 내역</h3>
         <div id="suplog-head" style="font-size:12.5px;margin-bottom:10px;"></div>
         <div id="suplog-body"></div>
       </div>
@@ -10937,6 +10937,7 @@ const firebaseConfig = {
       }), 12000, "주문 등록");
 
       const orderRef = await addDoc(collection(db,"orders"), {
+        lineNo: 1,   // 넣은 순서를 남깁니다
         batchId: batchRef.id, source, orderDate, expectedArrivalDate: expected,
         modelId: m.id, baseModel: m.baseModel||"",
         capacity: m.capacity||"", systemModel: m.systemModel||"", petName: m.petName||"",
@@ -13982,7 +13983,7 @@ const firebaseConfig = {
         + '<th style="width:34px;"><input type="checkbox" id="amtfix-all" checked></th>'
         + '<th>주문일</th><th>입고처</th><th>기준</th><th>결제</th>'
         + '<th class="ta-right">입고가 지금</th><th class="ta-right">입고가 바뀔값</th><th class="ta-right">차이</th>'
-        + '<th class="ta-right">여신 지금</th><th class="ta-right">여신 바뀔값</th><th class="ta-right">차이</th>'
+        + '<th class="ta-right">여신 현재</th><th class="ta-right">여신 바뀔값</th><th class="ta-right">차이</th>'
         + '</tr></thead><tbody>';
       amtFixRows.forEach((r,i)=>{
         const co = (companiesCache||[]).find(x=> String(x.name||"").trim() === String(r.b.source||"").trim());
@@ -17991,7 +17992,8 @@ const firebaseConfig = {
       // 저장하면 각 주문이 얼마가 되는지 미리 보여줍니다.
       {
         const total = Number((document.getElementById("col-amount")||{}).value) || 0;
-        const shares = picked.map(x=> x.listSum || x.credit || 0);
+        //  저장할 때와 «같은 기준» 으로 나눕니다. (여신차감액 비율)
+        const shares = picked.map(x=> x.credit || x.listSum || 0);
         const parts = splitByShare(total, shares);
         box.querySelectorAll(".col-ord-new").forEach(td=> td.innerHTML = '<span style="color:var(--gray);">-</span>');
         picked.forEach((x,i)=>{
@@ -18354,6 +18356,67 @@ const firebaseConfig = {
     const el = document.getElementById("colinv-list");
     if(el) el.style.display = (el.style.display === "none") ? "" : "none";
   };
+  //  한 세금계산서로 실행한 B2B 대출을 보여줍니다. 자료를 고치지 않습니다.
+  window.showCollateralLoans = async function(colId){
+    if(!colId) return;
+    const head = document.getElementById("suplog-head");
+    const body = document.getElementById("suplog-body");
+    if(!head || !body){ alert("화면을 찾지 못했습니다."); return; }
+    setSupLogTitle("이 계산서로 실행한 B2B 대출");
+    head.innerHTML = '<b>불러오는 중...</b>';
+    body.innerHTML = "";
+    document.getElementById("suplog-overlay").style.display = "flex";
+    let col = null, loans = [];
+    try{
+      const cs = await getDoc(doc(db,"b2bCollaterals", colId));
+      if(cs.exists()) col = { id: cs.id, ...cs.data() };
+      const lq = await getDocs(query(collection(db,"b2bLoans"), where("collateralId","==", colId)));
+      lq.forEach(function(d){ const v = d.data(); if(v.deleted !== true) loans.push({ id:d.id, ...v }); });
+      loans.sort(function(a,b){ return String(a.startDate||"").localeCompare(String(b.startDate||"")); });
+    }catch(e){
+      head.innerHTML = '<b style="color:var(--danger);">불러오지 못했습니다.</b>';
+      return;
+    }
+    const f = function(n){ return (Number(n)||0).toLocaleString(); };
+    const amt = Number(col && col.amount)||0;
+    const used = loans.reduce(function(n,L){ return n + (Number(L.principal)||0); }, 0);
+    head.innerHTML = '<b>' + comboEsc((col && col.company)||"-") + ' · '
+      + comboEsc((col && col.month)||"-") + ' 계산서</b>'
+      + '  <span style="color:var(--gray);">발행 ' + comboEsc((col && col.issueDate)||"-") + '</span>'
+      + '<br>발행금액 <b>' + f(amt) + '</b>'
+      + ' · 대출에 쓴 금액 <b style="color:var(--danger);">' + f(used) + '</b>'
+      + ' · 안 쓴 금액 <b style="color:#2e7d32;">' + f(amt - used) + '</b>'
+      + ((col && col.expired) ? '  <span style="color:var(--gray);font-weight:700;">기한종료</span>' : '');
+    if(loans.length === 0){
+      body.innerHTML = '<div class="list-empty">이 계산서로 실행한 대출이 없습니다.</div>';
+      return;
+    }
+    body.innerHTML =
+      '<div style="overflow-x:auto;max-height:360px;overflow-y:auto;">'
+      + '<table class="data-table" style="width:auto;"><thead><tr>'
+      + '<th>대출명</th><th>은행</th><th>대상</th><th>실행일</th><th>만기일</th>'
+      + '<th class="ta-right">원금</th><th class="ta-right">상환</th><th class="ta-right">잔액</th>'
+      + '<th>상태</th></tr></thead><tbody>'
+      + loans.map(function(L){
+          const pr = Number(L.principal)||0;
+          const rp = Number(L.repaidPrincipal)||0;
+          const st = String(L.status || ((rp >= pr && pr > 0) ? "상환완료" : (rp > 0 ? "일부상환" : "진행중")));
+          return '<tr><td>' + comboEsc(L.name || L.memo || "-") + '</td>'
+            + '<td>' + comboEsc(L.bank||"-") + '</td>'
+            + '<td>' + comboEsc(L.partner || "-") + '</td>'
+            + '<td>' + comboEsc(L.startDate||"-") + '</td>'
+            + '<td>' + comboEsc(L.dueDate||"-") + '</td>'
+            + '<td class="ta-right">' + f(pr) + '</td>'
+            + '<td class="ta-right">' + f(rp) + '</td>'
+            + '<td class="ta-right" style="font-weight:700;">' + f(pr - rp) + '</td>'
+            + '<td>' + st + '</td></tr>';
+        }).join("")
+      + '<tr style="background:#fff;font-weight:700;border-top:2px solid var(--navy);">'
+      + '<td colspan="5">합계 (' + loans.length + '건)</td>'
+      + '<td class="ta-right">' + f(used) + '</td><td colspan="3"></td></tr>'
+      + '</tbody></table></div>';
+  };
+
   function renderCollateralInvoiceList(cols, usedBy){
     const el = document.getElementById("colinv-list");
     if(!el) return;
@@ -18369,8 +18432,11 @@ const firebaseConfig = {
       const dead = !!c.expired;
       tAmt += amt; tUsed += used;
       if(dead) tDead += Math.max(0, left); else tLeft += left;
-      return '<tr' + (dead ? ' style="background:#f3f4f8;color:var(--gray);"' : '') + '>'
-        + '<td>' + comboEsc(c.issueDate||"-") + '</td>'
+      //  줄을 누르면 그 계산서로 실행한 B2B 대출을 보여줍니다.
+      return '<tr class="colinv-row" data-colid="' + comboEsc(c.id) + '"'
+        + ' style="cursor:pointer;' + (dead ? 'background:#f3f4f8;color:var(--gray);' : '') + '"'
+        + ' title="눌러서 이 계산서로 실행한 B2B 대출 보기">'
+        + '<td>' + comboEsc(c.issueDate||"-") + '</td>' 
         + '<td>' + comboEsc(c.month||"-") + '</td>'
         + '<td>' + comboEsc(c.company||"-") + '</td>'
         + '<td>' + comboEsc(c.invoiceNo||"-") + '</td>'
@@ -18395,7 +18461,12 @@ const firebaseConfig = {
       + '<td class="ta-right" style="color:#2e7d32;">' + tLeft.toLocaleString() + '</td>'
       + '<td colspan="2" style="font-weight:400;color:var(--gray);font-size:11.5px;">'
       + (tDead ? '기한종료로 못 쓰게 된 금액 ' + tDead.toLocaleString() : '') + '</td></tr>'
-      + '</tbody></table></div>';
+      + '</tbody></table></div>'
+      + '<div style="font-size:11.5px;color:var(--gray);margin-top:6px;">'
+      + '줄을 누르면 그 계산서로 실행한 <b>B2B 대출</b>을 보실 수 있습니다.</div>';
+    el.querySelectorAll(".colinv-row").forEach(function(tr){
+      tr.onclick = function(){ showCollateralLoans(tr.dataset.colid); };
+    });
     addDownloadBtn("dl-colinv", "colinv-list", "세금계산서발행목록");
   }
 
@@ -29182,11 +29253,16 @@ window.showDepositUses = async function(id){
         });
         await withTimeout(bt.commit(), 15000, "품목 저장");
       }
+      //  새로 더하는 줄에도 «줄번호» 를 매깁니다. 기존 줄 뒤에 차례로 붙습니다.
+      let maxNo = 0;
+      oldLines.forEach(function(l){ const n = Number(l.lineNo)||0; if(n > maxNo) maxNo = n; });
       for(const l of newLines){
         const p = perLine[l.id] || {};
         if(!p.systemModel && !l.systemModel) continue;      // 모델을 안 고른 줄은 건너뜁니다
         msg("품목을 더하는 중... (" + (addedLines+1) + "/" + newLines.length + ")", false);
+        maxNo++;
         const row = {
+          lineNo: maxNo,
           batchId: id,
           orderDate: batchPatch.orderDate || b.orderDate || "",
           source: batchPatch.source || b.source || "",
@@ -31842,9 +31918,12 @@ window.showDepositUses = async function(id){
         (byKey[k] = byKey[k] || []).push(x);
       });
       const orderIdOf = {};
+      let rbNo = 0;
       for(const k of Object.keys(byKey)){
         const g = byKey[k], f = g[0];
+        rbNo++;
         const ref = await addDoc(collection(db,"orders"), {
+          lineNo: rbNo,   // 넣은 순서를 남깁니다
           batchId: batchRef.id, orderDate, source, carrier: f.it.carrier || "",
           systemModel: f.it.systemModel||"", baseModel: f.it.baseModel||"",
           petName: f.it.petName||"", capacity: f.it.capacity||"",
@@ -33604,8 +33683,14 @@ window.showDepositUses = async function(id){
         await bt.commit();
       }
     }catch(e){ alert("맞추지 못했습니다.\n" + ((e&&e.message)?e.message:String(e))); return; }
+    //  주문을 고쳤으니 이어진 재고·판매요청까지 함께 맞춥니다. (한 갈래로 통일)
+    try{
+      const bset = new Set();
+      picked.forEach(function(r){ if(r.o && r.o.batchId) bset.add(r.o.batchId); });
+      for(const bid of bset){ try{ await syncAfterOrderLines(bid, null); }catch(e){} }
+    }catch(e){}
     logAction("주문 출고가를 모델 값으로 맞춤", picked.length + "개 품목");
-    alert(picked.length + "개를 맞췄습니다.");
+    alert(picked.length + "개를 맞췄습니다.\n이어진 재고·판매요청도 함께 맞췄습니다.");
     clearCache("orders"); clearDashCache();
     document.getElementById("datacheck-detail").innerHTML = "";
     runDataCheck();
@@ -34877,9 +34962,15 @@ window.showDepositUses = async function(id){
         n++;
       }
     }catch(e){ alert("맞추지 못했습니다.\n" + ((e&&e.message)?e.message:String(e))); return; }
+    //  주문이 바뀌었으니 묶음 합계·여신차감액·판매요청까지 함께 맞춥니다.
+    try{
+      const bset = new Set();
+      invOrderDiffCache.forEach(function(r){ if(r.batchId) bset.add(r.batchId); });
+      for(const bid of bset){ try{ await syncAfterOrderLines(bid, null); }catch(e){} }
+    }catch(e){}
     logAction("데이터 점검 — 주문 품목을 재고에 맞춤", n + "건");
     clearCache("orders"); clearCache("loan"); clearDashCache();
-    alert("주문 품목 " + n + "건을 맞췄습니다.");
+    alert("주문 품목 " + n + "건을 맞췄습니다.\n이어진 곳도 함께 맞췄습니다.");
     invOrderDiffCache = []; runDataCheck();
   };
 
@@ -35063,6 +35154,16 @@ window.showDepositUses = async function(id){
       }
     }catch(e){ alert("맞추지 못했습니다.\n" + ((e&&e.message)?e.message:String(e))); return; }
 
+    //  재고를 고쳤으니 이어진 주문 품목까지 함께 맞춥니다. (한 갈래로 통일)
+    try{
+      const linkRows = sameBuyDiffCache.map(function(r){
+        const b = r.it || {};
+        return { id: r.id, before: b,
+                 after: { ...b, salePrice: r.wantPrice,
+                          saleDiscountAmt: r.wantAmt, saleDiscount: r.wantPct } };
+      });
+      await withTimeout(syncItemLinks(linkRows), 60000, "연동");
+    }catch(e){}
     try{ await logItemsEach(ihRows, "price", {}); }catch(e){}
     logAction("데이터 점검 — 입고동일 판매 금액 맞춤", n1 + "대"
       + (n2 ? " / 판매요청 " + n2 + "건" : "")
@@ -35958,6 +36059,7 @@ let ghostBankCache = [];
 
   //  환수가 지급보다 많은 건을 표로 보여줍니다. 누르면 그 단말기 내역이 열립니다.
   window.showSupOverList = function(){
+    setSupLogTitle("지원금이 공시지원금보다 많음");
     const rows = supOverCache || [];
     if(rows.length === 0){ alert("어긋난 건이 없습니다."); return; }
     const head = document.getElementById("suplog-head");
@@ -35993,6 +36095,7 @@ let ghostBankCache = [];
   let histRestoreCache = [];
   //  이력에 남은 «그때 맞춘 값» 으로 재고를 되돌립니다.
   window.showHistRestoreList = function(){
+    setSupLogTitle("이력의 값으로 되돌리기");
     const rows = histRestoreCache || [];
     if(rows.length === 0){ alert("되돌릴 것이 없습니다."); return; }
     const head = document.getElementById("suplog-head");
@@ -36089,6 +36192,7 @@ let ghostBankCache = [];
 
   //  입고동일인데 판매 값이 매입과 다른 품목을 보여주고, 매입 값으로 맞춥니다.
   window.showSameBuyDiffList2 = function(){
+    setSupLogTitle("입고동일 판매 값 맞추기");
     const rows = sbSaleDiffCache || [];
     if(rows.length === 0){ alert("다른 품목이 없습니다."); return; }
     const head = document.getElementById("suplog-head");
@@ -36177,6 +36281,7 @@ let ghostBankCache = [];
 
   //  개통이 아닌데 자체개통 흔적이 남은 재고를 보여주고, 그 칸만 비웁니다.
   window.showActLeftoverList = function(){
+    setSupLogTitle("자체개통 흔적 지우기");
     const rows = actLeftoverCache || [];
     if(rows.length === 0){ alert("남은 것이 없습니다."); return; }
     const head = document.getElementById("suplog-head");
@@ -36247,6 +36352,7 @@ let ghostBankCache = [];
 
   //  주문 묶음 숫자가 품목과 다른 건을 보여주고, 저장된 품목 기준으로 맞춥니다.
   window.showBatchSumDiffList = function(){
+    setSupLogTitle("주문 묶음 숫자 맞추기");
     const rows = batchSumDiffCache || [];
     if(rows.length === 0){ alert("다른 주문이 없습니다."); return; }
     const head = document.getElementById("suplog-head");
@@ -36262,8 +36368,8 @@ let ghostBankCache = [];
       + '<div style="overflow-x:auto;max-height:360px;overflow-y:auto;">'
       + '<table class="data-table" style="width:auto;"><thead><tr>'
       + '<th>주문일</th><th>입고처</th><th class="ta-right">수량</th>'
-      + '<th class="ta-right">주문금액 지금</th><th class="ta-right">→ 바뀔 값</th>'
-      + '<th class="ta-right">여신 지금</th><th class="ta-right">→ 바뀔 값</th><th></th>'
+      + '<th class="ta-right">주문금액 현재</th><th class="ta-right">→ 바뀔 값</th>'
+      + '<th class="ta-right">여신 현재</th><th class="ta-right">→ 바뀔 값</th><th></th>'
       + '</tr></thead><tbody>'
       + rows.map(function(r, ix){
           return '<tr><td>' + comboEsc(r.date) + '</td>'
@@ -36344,6 +36450,7 @@ let ghostBankCache = [];
   //  주문과 재고가 다른 건을 표로 보여주고, 주문 기준으로 맞춥니다.
   //   맞추는 일은 syncAfterOrderLines 하나가 합니다. (품목 수정·주문 수정과 같은 함수)
   window.showOrderAmtDiffList = function(){
+    setSupLogTitle("주문 기준으로 재고 맞추기");
     const rows = orderAmtDiffCache || [];
     if(rows.length === 0){ alert("주문과 재고가 다른 건이 없습니다."); return; }
     const head = document.getElementById("suplog-head");
@@ -37496,7 +37603,7 @@ let ghostBankCache = [];
             ["입고가",  Number(it.purchasePrice)||0,       Number(o.purchasePrice)||0]
           ].filter(([k,a,b])=> a !== b);
           if(pairs.length === 0) return;
-          rows.push({ id, it, orderId: it.orderId, o, pairs });
+          rows.push({ id, it, orderId: it.orderId, o, pairs, batchId: o.batchId || "" });
         });
         invOrderDiffCache = rows;
         // (뺐습니다) 「재고와 주문 품목의 매입 금액이 다름」 — 등록·연동으로 자동 맞춰집니다.
@@ -43289,6 +43396,8 @@ let ghostBankCache = [];
           const restIds = all.filter(x=> !idSet.has(x));
           const ref = await addDoc(collection(db,"orders"), {
             ...o, ...patch,
+            //  떼어낸 줄은 원래 줄 «바로 뒤» 에 옵니다.
+            lineNo: (Number(o.lineNo)||0) ? Number(o.lineNo) + 0.5 : null,
             quantity: mine.length,
             fulfilledCount: Math.min(Number(o.fulfilledCount)||0, mine.length),
             arrivedCount: Math.min(Number(o.arrivedCount)||mine.length, mine.length),
@@ -47909,14 +48018,9 @@ let ghostBankCache = [];
           }catch(e){}
         }
       }
-      // 주문 묶음의 합계도 다시 냅니다.
-      try{
-        const lq = await getDocs(query(collection(db,"orders"), where("batchId","==", rebaseBatchId)));
-        let tot = 0;
-        lq.forEach(function(d){ const v=d.data();
-          if(v.status !== "취소") tot += (Number(v.purchasePrice)||0) * (Number(v.quantity)||0); });
-        await updateDoc(doc(db,"orderBatches", rebaseBatchId), { depositRequired: Math.round(tot) });
-      }catch(e){}
+      //  주문·재고를 고쳤으니 이어진 곳을 «같은 함수» 로 한 번에 맞춥니다.
+      //   묶음 합계 · 여신차감액 · 여신 원장 · 판매요청 (한 갈래로 통일)
+      try{ await syncAfterOrderLines(rebaseBatchId, null); }catch(e){}
     }catch(e){
       resEl.innerHTML = '<span style="color:var(--danger);">저장 중 오류: ' + comboEsc((e&&e.message)?e.message:String(e)) + '</span>';
       return;
@@ -48947,8 +49051,14 @@ let ghostBankCache = [];
   };
 
   // 한 대의 지원금 내역을 보여줍니다.
+  //  이 팝업은 화면 여러 개가 함께 씁니다. 열 때마다 제목을 맞춰줍니다.
+  window.setSupLogTitle = function(t){
+    const el = document.getElementById("suplog-title");
+    if(el) el.textContent = String(t || "지원금 내역");
+  };
   window.closeSupLog = function(){ document.getElementById("suplog-overlay").style.display = "none"; };
   window.openSupLog = async function(itemId, serial, label){
+    setSupLogTitle("지원금 내역");
     const head = document.getElementById("suplog-head");
     const body = document.getElementById("suplog-body");
     head.innerHTML = '<b>' + comboEsc(serial||"-") + '</b> ' + comboEsc(label||"");
