@@ -400,7 +400,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-06 v1175</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-06 v1176</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -18857,7 +18857,11 @@ const firebaseConfig = {
         cols:arr, col:c0, colAmt: sumCols(arr), used: sumUsed(arr),
         colAmtAll: sumColsAll(arr), usedAll: sumUsedAll(arr) });
     });
-    rows.forEach(r=>{ r.left = r.colAmt - r.used; });
+    rows.forEach(r=>{
+      r.left = r.colAmt - r.used;                      // 더 빌릴 수 있는 금액 (기한종료 제외)
+      //  기한이 끝나 «못 쓰지만» 얼마가 남았는지는 보여드립니다.
+      r.leftAll = (r.colAmtAll||0) - (r.usedAll||0);   // 발행금액 − 실제 대출액
+    });
     rows.sort((a,b)=> String(b.month||"").localeCompare(String(a.month||""))
                    || String(a.company||"").localeCompare(String(b.company||"")));
 
@@ -18951,8 +18955,17 @@ const firebaseConfig = {
                     : '')
               : '<span style="color:var(--gray);">-</span>') + '</td>' 
         + '<td class="ta-right">'+(r.usedAll ? r.usedAll.toLocaleString() : "-")+'</td>'
-        + '<td class="ta-right" style="color:'+(r.left > 0 ? "#2e7d32" : "var(--gray)")+';font-weight:700;">'
-          + (r.col ? r.left.toLocaleString() : "-") + '</td>'
+        + (function(){
+            if(!r.col) return '<td class="ta-right">-</td>';
+            //  기한종료면 «못 쓰는 금액» 이라 회색 취소선으로 보여드립니다.
+            const dead = (r.leftAll||0) > 0 && (r.left||0) <= 0;
+            if(dead) return '<td class="ta-right" style="color:var(--gray);font-weight:700;"'
+              + ' title="기한이 끝나 쓸 수 없는 금액입니다">'
+              + '<span style="text-decoration:line-through;">' + (r.leftAll||0).toLocaleString() + '</span>'
+              + ' <span style="font-size:10.5px;font-weight:400;">못 씀</span></td>';
+            return '<td class="ta-right" style="color:'+(r.left > 0 ? "#2e7d32" : "var(--gray)")+';font-weight:700;">'
+              + (r.left||0).toLocaleString() + '</td>';
+          })()
         + (canDo ? '<td class="ta-right" style="white-space:nowrap;">'
             + (r.col
                 ? '<button class="btn small secondary" style="width:auto;" data-col-sheet="'+comboEsc(r.month)+'|'+comboEsc(r.company)+'">계산서별 작업</button>'
