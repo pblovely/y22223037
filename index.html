@@ -400,7 +400,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-06 v1173</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-06 v1174</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -35989,100 +35989,8 @@ let ghostBankCache = [];
 
   let orderBaseDiffCache = [];
   let orderAmtDiffCache = [];
-  let selfActBaseCache = [];
   let batchSumDiffCache = [];
   let histRestoreCache = [];
-  let invSameBuyCache = [];
-
-  //  재고가 입고동일인데 판매 값이 매입과 다른 건을 보여주고, 재고만 맞춥니다.
-  window.showInvSameBuyList = function(){
-    const rows = invSameBuyCache || [];
-    if(rows.length === 0){ alert("다른 재고가 없습니다."); return; }
-    const head = document.getElementById("suplog-head");
-    const body = document.getElementById("suplog-body");
-    if(!head || !body){ alert("화면을 찾지 못했습니다."); return; }
-    const f = function(n){ return (n == null || n === "") ? "(빈칸)" : (Number(n)||0).toLocaleString(); };
-    head.innerHTML = '<b>재고가 입고동일인데 판매 값이 매입과 다름</b> — ' + rows.length + '대'
-      + '<br><span style="color:var(--gray);">판매가 = 입고가 · 판매할인% = 선할인% + 타할인% · 기준은 매입 기준.<br>'
-      + '재고를 고치고 이어진 <b>주문 품목 · 판매요청</b>도 함께 맞춥니다.</span>';
-    body.innerHTML =
-      '<div style="margin-bottom:8px;"><button class="btn small" style="width:auto;" onclick="fixInvSameBuyAll()">'
-      + '전부 맞추기 (' + rows.length + '대)</button></div>'
-      + '<div style="overflow-x:auto;max-height:380px;overflow-y:auto;">'
-      + '<table class="data-table" style="width:auto;"><thead><tr>'
-      + '<th>일련번호</th><th>전산모델명</th><th>판매처</th><th>다른 항목</th>'
-      + '<th class="ta-right">판매가 지금</th><th class="ta-right">→ 바뀔 값</th>'
-      + '<th class="ta-right">판매할인 지금</th><th class="ta-right">→ 바뀔 값</th>'
-      + '<th>기준 지금</th><th>→ 바뀔 값</th></tr></thead><tbody>'
-      + rows.slice(0,300).map(function(r){
-          return '<tr><td><b>' + comboEsc(r.sn||"-") + '</b></td>'
-            + '<td>' + comboEsc(r.model||"-") + '</td>'
-            + '<td>' + comboEsc(r.dest||"-") + '</td>'
-            + '<td style="color:var(--danger);">' + comboEsc(r.what) + '</td>'
-            + '<td class="ta-right">' + f(r.curSale) + '</td>'
-            + '<td class="ta-right" style="color:#2e7d32;font-weight:700;">' + f(r.wantSale) + '</td>'
-            + '<td class="ta-right">' + f(r.curAmt) + '</td>'
-            + '<td class="ta-right" style="color:#2e7d32;">' + f(r.wantAmt) + '</td>'
-            + '<td style="color:var(--gray);">' + comboEsc(r.curBase) + '</td>'
-            + '<td style="color:#2e7d32;font-weight:700;">' + comboEsc(r.wantBaseName) + '</td></tr>';
-        }).join("")
-      + '</tbody></table></div>'
-      + (rows.length > 300 ? '<div style="font-size:11.5px;color:var(--gray);margin-top:6px;">'
-          + '위에 300대까지만 보여드립니다. [전부 맞추기] 는 ' + rows.length + '대 모두 처리합니다.</div>' : '');
-    document.getElementById("suplog-overlay").style.display = "flex";
-  };
-
-  window.fixInvSameBuyAll = async function(){
-    const rows = invSameBuyCache || [];
-    if(rows.length === 0){ alert("맞출 재고가 없습니다."); return; }
-    if(!hasPerm(currentUserPerms, "paymentProcess")){ alert("권한이 없습니다."); return; }
-    if(!confirm("재고 " + rows.length + "대의 판매 값을 매입과 같게 맞춥니다.\n\n"
-      + "맞추는 것\n  판매가 · 판매할인 · 판매할인% · 판매할인 기준\n"
-      + "함께 맞추는 것\n  이어진 주문 품목 · 판매요청\n"
-      + "건드리지 않는 것\n  출고가 · 입고가 · 매입할인 · 타할인\n\n진행할까요?")) return;
-    const head = document.getElementById("suplog-head");
-    let done = 0;
-    try{
-      for(let i=0; i<rows.length; i+=300){
-        if(head) head.innerHTML = '<b>맞추는 중...</b> ' + Math.min(i+300, rows.length) + ' / ' + rows.length;
-        const bt = writeBatch(db);
-        rows.slice(i, i+300).forEach(function(r){
-          const p = { salePrice: r.wantSale };
-          if(r.wantAmt  != null) p.saleDiscountAmt  = r.wantAmt;
-          if(r.wantPct  != null) p.saleDiscount     = r.wantPct;
-          if(r.wantBase)         p.saleDiscountBase = r.wantBase;
-          p.profit = 0;
-          bt.update(doc(db,"inventoryItems", r.id), p);
-        });
-        await withTimeout(bt.commit(), 20000, "판매 값 맞추기");
-        done += Math.min(300, rows.length - i);
-      }
-      //  재고를 고쳤으니 이어진 주문 품목 · 판매요청도 함께 맞춥니다.
-      if(head) head.innerHTML = '<b>이어진 주문 · 판매요청을 맞추는 중...</b>';
-      const linkRows = rows.map(function(r){
-        const b = r.before || {};
-        const a = { ...b, salePrice: r.wantSale };
-        if(r.wantAmt  != null) a.saleDiscountAmt  = r.wantAmt;
-        if(r.wantPct  != null) a.saleDiscount     = r.wantPct;
-        if(r.wantBase)         a.saleDiscountBase = r.wantBase;
-        return { id: r.id, before: b, after: a };
-      });
-      try{ await withTimeout(syncItemLinks(linkRows), 60000, "연동"); }catch(e){}
-    }catch(e){
-      alert("맞추다 멈췄습니다. " + done + "대까지 처리했습니다.\n"
-        + ((e && e.message) ? e.message : String(e)));
-      return;
-    }
-    logAction("재고 입고동일 판매 값 맞추기", done + "대 · 주문·판매요청 함께 맞춤");
-    clearCache("inventory"); clearDashCache();
-    invSameBuyCache = [];
-    if(head) head.innerHTML = '<b style="color:#2e7d32;">끝났습니다 — ' + done + '대를 맞췄습니다.</b>'
-      + '<br><span style="color:var(--gray);">창을 닫고 <b>[다시 점검]</b> 을 눌러 확인해주세요.</span>';
-    alert(done + "대를 맞췄습니다.\n이어진 주문 품목 · 판매요청도 함께 맞췄습니다."
-      + "\n\n창을 닫고 [다시 점검] 을 눌러주세요.");
-  };
-
-
   //  이력에 남은 «그때 맞춘 값» 으로 재고를 되돌립니다.
   window.showHistRestoreList = function(){
     const rows = histRestoreCache || [];
@@ -36431,64 +36339,6 @@ let ghostBankCache = [];
   };
 
 
-  //  자체개통인데 판매할인 기준이 비어 있는 재고를 보여주고, 출고가(개당) 으로 채웁니다.
-  window.showSelfActBaseList = function(){
-    const rows = selfActBaseCache || [];
-    if(rows.length === 0){ alert("채울 재고가 없습니다."); return; }
-    const head = document.getElementById("suplog-head");
-    const body = document.getElementById("suplog-body");
-    if(!head || !body){ alert("화면을 찾지 못했습니다."); return; }
-    head.innerHTML = '<b>자체개통인데 판매할인 기준이 안 채워짐</b> — ' + rows.length + '대'
-      + '<br><span style="color:var(--gray);">포피플 자체개통은 <b>출고가(개당)</b> 하나로 정해져 있습니다. '
-      + '금액·판매가·수익은 건드리지 않고 기준 칸만 채웁니다.</span>';
-    body.innerHTML =
-      '<div style="margin-bottom:8px;"><button class="btn small" style="width:auto;" onclick="fixSelfActBaseAll()">'
-      + '전부 맞추기 (' + rows.length + '대)</button></div>'
-      + '<div style="overflow-x:auto;max-height:360px;overflow-y:auto;">'
-      + '<table class="data-table" style="width:auto;"><thead><tr>'
-      + '<th>개통일</th><th>전산모델명</th><th>일련번호</th><th>지금</th><th>바뀔 값</th>'
-      + '</tr></thead><tbody>'
-      + rows.slice(0,300).map(function(r){
-          return '<tr><td>' + comboEsc(r.date||"-") + '</td>'
-            + '<td>' + comboEsc(r.model||"-") + '</td>'
-            + '<td><b>' + comboEsc(r.sn||"-") + '</b></td>'
-            + '<td style="color:var(--gray);">' + comboEsc(r.cur) + '</td>'
-            + '<td style="color:#2e7d32;font-weight:700;">출고가(개당)</td></tr>';
-        }).join("")
-      + '</tbody></table></div>'
-      + (rows.length > 300 ? '<div style="font-size:11.5px;color:var(--gray);margin-top:6px;">'
-          + '위에 300대까지만 보여드립니다. [전부 맞추기] 는 ' + rows.length + '대 모두 처리합니다.</div>' : '');
-    document.getElementById("suplog-overlay").style.display = "flex";   // 창을 엽니다
-  };
-
-  window.fixSelfActBaseAll = async function(){
-    const rows = selfActBaseCache || [];
-    if(rows.length === 0){ alert("채울 재고가 없습니다."); return; }
-    if(!hasPerm(currentUserPerms, "paymentProcess")){ alert("권한이 없습니다."); return; }
-    if(!confirm("포피플 자체개통 " + rows.length + "대의 판매할인 기준을\n"
-      + "«출고가(개당)» 으로 채웁니다.\n\n"
-      + "· 판매가 · 판매할인 · 입고가 · 수익은 바뀌지 않습니다\n"
-      + "· 기준 칸 하나만 채웁니다\n\n진행할까요?")) return;
-    let done = 0;
-    try{
-      for(let i=0; i<rows.length; i+=300){
-        const bt = writeBatch(db);
-        rows.slice(i, i+300).forEach(function(r){
-          bt.update(doc(db,"inventoryItems", r.id), { saleDiscountBase: "unit" });
-        });
-        await withTimeout(bt.commit(), 20000, "판매할인 기준 저장");
-        done += Math.min(300, rows.length - i);
-      }
-    }catch(e){
-      alert("맞추다 멈췄습니다. " + done + "대까지 저장했습니다.\n"
-        + ((e && e.message) ? e.message : String(e)));
-      return;
-    }
-    logAction("자체개통 판매할인 기준 채움", done + "대 / 출고가(개당)");
-    clearCache("inventory"); clearDashCache();
-    selfActBaseCache = [];
-    alert(done + "대를 출고가(개당) 으로 채웠습니다.\n\n[다시 점검] 을 눌러 확인해주세요.");
-  };
 
 
   //  주문과 재고가 다른 건을 표로 보여주고, 주문 기준으로 맞춥니다.
@@ -36959,7 +36809,8 @@ let ghostBankCache = [];
               if(V(o.salePrice)       !== V(sb.salePrice))       diff.push("판매가");
               if(V(o.saleDiscountAmt) !== V(sb.saleDiscountAmt)) diff.push("판매할인");
               if(V(o.saleDiscountPct) !== V(sb.saleDiscountPct)) diff.push("판매할인%");
-              if(sb.saleDiscountBase && String(o.saleDiscountBase||"") !== sb.saleDiscountBase) diff.push("판매할인 기준");
+              //  판매할인 기준은 보지 않습니다. 입고동일이면 매입 기준을 따르므로
+              //   저장값이 달라도 화면·계산은 매입 기준으로 돕니다.
               if(diff.length === 0) return;
               kRows.push({ id:d.id, batchId:o.batchId,
                 date: (bt && bt.orderDate) || o.orderDate || "-",
@@ -36979,50 +36830,6 @@ let ghostBankCache = [];
                 + "[전부 맞추기] 를 누르면 매입 값으로 맞추고, 그 주문의 재고·판매요청까지 함께 맞춥니다. "
                 + "출고가·입고가·매입할인은 건드리지 않습니다.",
               fix:"showSameBuyDiffList2()", fixLabel:"확인하기" });
-          }
-        }
-        // ── 재고가 「입고동일」 인데 판매 값이 매입과 안 맞는 건 ──
-        //  주문을 거치지 않고 «재고만» 봅니다. 주문 연결이 없어도 잡힙니다.
-        {
-          const iRows = [];
-          try{
-            const V = function(x){ return (x == null || x === "") ? "" : String(Number(x)); };
-            Object.keys(items).forEach(function(id){
-              const it = items[id];
-              if(it.deleted === true) return;
-              if(it.salePriceFollowsBuy !== true) return;
-              const sb = sameBuySale({
-                listPrice: it.listPrice, purchasePrice: it.purchasePrice,
-                preDiscountPct: it.purchaseDiscount, otherDiscountPct: it.otherDiscountPct,
-                discountBase: it.discountBase
-              });
-              if(!sb) return;
-              const diff = [];
-              if(V(it.salePrice)       !== V(sb.salePrice))       diff.push("판매가");
-              if(V(it.saleDiscountAmt) !== V(sb.saleDiscountAmt)) diff.push("판매할인");
-              if(V(it.saleDiscount)    !== V(sb.saleDiscountPct)) diff.push("판매할인%");
-              if(sb.saleDiscountBase && String(it.saleDiscountBase||"") !== sb.saleDiscountBase) diff.push("판매할인 기준");
-              if(diff.length === 0) return;
-              const nm = function(b){ return b === "supply" ? "공급가(삼전)" : b === "total" ? "출고가(합계)"
-                                           : b === "flat" ? "출고가(정액)" : b === "unit" ? "출고가(개당)" : "(빈칸)"; };
-              iRows.push({ id, sn: it.serialNumber||"", model: it.systemModel||"",
-                dest: it.destination||"", what: diff.join(" · "),
-                curSale: it.salePrice, wantSale: sb.salePrice,
-                curAmt: it.saleDiscountAmt, wantAmt: sb.saleDiscountAmt,
-                curPct: it.saleDiscount,   wantPct: sb.saleDiscountPct,
-                curBase: nm(String(it.saleDiscountBase||"")), wantBase: sb.saleDiscountBase,
-                wantBaseName: nm(sb.saleDiscountBase),
-                before: it });        // 연동에 씁니다 (재고 → 주문 · 판매요청)
-            });
-            iRows.sort(function(a,b){ return String(a.sn).localeCompare(String(b.sn)); });
-          }catch(e){}
-          if(iRows.length){
-            invSameBuyCache = iRows;
-            issues.push({ n:"재고가 입고동일인데 판매 값이 매입과 다름", cnt: iRows.length, unit:"대",
-              why:"재고를 직접 봅니다. 주문과 이어져 있지 않아도 잡힙니다. "
-                + "판매가 = 입고가 · 판매할인% = 선할인% + 타할인% · 기준은 매입 기준. "
-                + "[전부 맞추기] 를 누르면 재고를 고치고, 이어진 주문 품목 · 판매요청도 함께 맞춥니다.",
-              fix:"showInvSameBuyList()", fixLabel:"확인하기" });
           }
         }
         // ── 단말 이력에 남은 «그때 맞추신 값» 과 지금 재고가 다른 건 ──
@@ -37166,35 +36973,6 @@ let ghostBankCache = [];
                 + "[전부 지우기] 를 누르면 개통 등록으로 들어갔던 칸만 비웁니다. "
                 + "출고가·입고가·매입할인은 건드리지 않습니다.",
               fix:"showActLeftoverList()", fixLabel:"확인하기" });
-          }
-        }
-        // ── 포피플 자체개통인데 판매할인 기준이 안 채워진 재고 ──
-        //  자체개통은 «출고가(개당)» 하나로 정해져 있습니다.
-        //  값을 가려내지 않습니다. 정해진 값을 그대로 넣습니다.
-        {
-          const sRows = [];
-          try{
-            Object.keys(items).forEach(function(id){
-              const it = items[id];
-              if(it.deleted === true) return;
-              if(String(it.status||"") !== "개통") return;
-              if(String(it.destination||"") !== "포피플") return;
-              if(String(it.saleDiscountBase||"") === "unit") return;
-              sRows.push({ id,
-                sn:    it.serialNumber || "",
-                model: it.systemModel || it.baseModel || "",
-                date:  it.activateDate || it.outDate || "",
-                cur:   String(it.saleDiscountBase||"") || "(비어 있음)" });
-            });
-            sRows.sort(function(a,b){ return String(b.date).localeCompare(String(a.date)); });
-          }catch(e){}
-          if(sRows.length){
-            selfActBaseCache = sRows;
-            issues.push({ n:"자체개통인데 판매할인 기준이 안 채워짐", cnt: sRows.length, unit:"대",
-              why:"포피플 자체개통은 판매할인 기준이 «출고가(개당)» 하나로 정해져 있습니다. "
-                + "예전에는 이 값을 비워둔 채 저장해서 칸이 비어 있습니다. "
-                + "[전부 맞추기] 를 누르면 출고가(개당) 으로 채웁니다. 금액은 건드리지 않습니다.",
-              fix:"showSelfActBaseList()", fixLabel:"확인하기" });
           }
         }
         // ── 주문과 재고의 금액·할인이 다른 건 ──
