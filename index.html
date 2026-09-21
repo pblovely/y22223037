@@ -400,7 +400,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-06 v1180</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-06 v1184</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -4458,8 +4458,17 @@ const firebaseConfig = {
     }
 
     // ③ 묶음 합계 (입금필요)
-    const total = live.reduce(function(n,l){
-      return n + (Number(l.purchasePrice)||0) * (Number(l.quantity)||0); }, 0);
+    //  주문 등록 화면과 «똑같은 식» 을 씁니다. (costFromLines = DPS 방식 − 타할인)
+    //   입고가×수량 으로 세면 부가세 반올림 때문에 등록 금액과 어긋납니다.
+    let total = 0;
+    try{
+      const bs0 = await getDoc(doc(db,"orderBatches", batchId));
+      const b0 = bs0.exists() ? bs0.data() : {};
+      total = Number(costFromLines(b0.source, live, b0.discountBase)) || 0;
+    }catch(e){
+      total = live.reduce(function(n,l){
+        return n + (Number(l.purchasePrice)||0) * (Number(l.quantity)||0); }, 0);
+    }
     out.total = total;
     try{ await updateDoc(doc(db,"orderBatches", batchId), { depositRequired: total }); }catch(e){}
 
@@ -4498,8 +4507,17 @@ const firebaseConfig = {
     if(!batchId) return out;
     const snap = await getDocs(query(collection(db,"orders"), where("batchId","==", batchId)));
     const live = []; snap.forEach(function(d){ const o = d.data(); if(o.status !== "취소") live.push(o); });
-    const total = live.reduce(function(n,l){
-      return n + (Number(l.purchasePrice)||0) * (Number(l.quantity)||0); }, 0);
+    //  주문 등록 화면과 «똑같은 식» 을 씁니다. (costFromLines = DPS 방식 − 타할인)
+    let total = 0;
+    let b0 = {};
+    try{
+      const bs0 = await getDoc(doc(db,"orderBatches", batchId));
+      if(bs0.exists()) b0 = bs0.data();
+      total = Number(costFromLines(b0.source, live, b0.discountBase)) || 0;
+    }catch(e){
+      total = live.reduce(function(n,l){
+        return n + (Number(l.purchasePrice)||0) * (Number(l.quantity)||0); }, 0);
+    }
     out.total = total;
     try{ await updateDoc(doc(db,"orderBatches", batchId), { depositRequired: total }); }catch(e){}
     try{
@@ -5127,7 +5145,7 @@ const firebaseConfig = {
     { key:"distSupport", label:"유통폰지원금", html:true,
       get:it=>{
         const d = Number(it.distSupport)||0;
-        if(!d) return moneyCell(it.distSupport);
+        if(!d) return moneyCell(actDist(it));
         return '<a href="#" style="color:var(--navy);text-decoration:underline;" '
           + 'onclick="event.preventDefault();event.stopPropagation();openSupLog(\''+it.id+'\',\''
           + comboEsc(it.serialNumber||"") + '\',\'' + comboEsc(it.systemModel||"") + '\');">'
@@ -8941,6 +8959,16 @@ const firebaseConfig = {
     return isFinite(n) ? n : "";
   }
   window.moneyCell = moneyCell;
+
+  //  개통된 단말기는 지원금이 없으면 «0원으로 마감» 입니다.
+  //   기록이 아직 없어도 0 으로 봅니다. (빈칸은 «넣어야 하는 것» 을 뜻하므로)
+  //   개통이 아닌 재고는 원래 값을 그대로 둡니다.
+  function actDist(it){
+    if(!it) return null;
+    if(it.distSupport != null && it.distSupport !== "") return it.distSupport;
+    return (String(it.status||"") === "개통") ? 0 : null;
+  }
+  window.actDist = actDist;
 
   //  「입고동일」 한 줄의 판매 값을 냅니다. 여기 한 곳에서만 계산합니다.
   //    판매가      = 입고가
@@ -12783,10 +12811,21 @@ const firebaseConfig = {
       '<button class="btn small secondary" style="width:auto;" data-detail="'+r.id+'">상세</button>' +
       (!r.cancelled ? '<button class="btn small secondary" style="width:auto;" data-edit-batch="'+r.id+'">수정</button>' : '') +
         (!r.cancelled ? '<button class="btn small secondary" style="width:auto;" title="매입할인 기준을 바꾸고 금액을 다시 냅니다. 이어진 재고에도 함께 들어갑니다." data-rebase="'+r.id+'">할인 기준</button>' : '') +
+      //  버튼은 «늘 보이게» 두고, 할 수 없을 때는 «흐리게» 보여줍니다.
+      //   왜 못 누르는지 마우스를 올리면 나옵니다.
       (!r.cancelled
-        ? ((r.lines||[]).reduce(function(n,o){ return n + (Number(o.fulfilledCount)||0); }, 0) > 0
-            ? '<button class="btn small danger" style="width:auto;" title="도착을 되돌립니다. 재고와 판매요청이 지워지고 주문은 진행중으로 돌아갑니다." data-cancel-arrival="'+r.id+'">도착 취소</button>'
-            : '<button class="btn small danger" style="width:auto;" title="주문을 취소합니다." data-cancel-batch="'+r.id+'">주문 취소</button>')
+        ? (function(){
+            const arr = (r.lines||[]).reduce(function(n,o){ return n + (Number(o.fulfilledCount)||0); }, 0);
+            const dis = 'style="width:auto;opacity:0.4;cursor:not-allowed;" disabled';
+            if(arr > 0){
+              return '<button class="btn small danger" style="width:auto;" title="도착을 되돌립니다. 재고와 판매요청이 지워지고 주문은 진행중으로 돌아갑니다." data-cancel-arrival="'+r.id+'">도착 취소</button>'
+                + '<button class="btn small danger" ' + dis
+                + ' title="도착 등록이 ' + arr + '대 남아 있어 주문을 취소할 수 없습니다.&#10;먼저 [도착 취소] 를 눌러 도착을 되돌려주세요.">주문 취소</button>';
+            }
+            return '<button class="btn small danger" ' + dis
+              + ' title="도착 등록이 없어 되돌릴 것이 없습니다.">도착 취소</button>'
+              + '<button class="btn small danger" style="width:auto;" title="주문을 취소합니다." data-cancel-batch="'+r.id+'">주문 취소</button>';
+          })()
         : '') +
       (r.b.paymentRequestId && !r.cancelled
         ? '<button class="btn small secondary" style="width:auto;" title="이 주문이 묶인 출금요청을 취소합니다" data-cancel-pr-order="'+comboEsc(r.b.paymentRequestId)+'">출금취소</button>' : '') +
@@ -14225,8 +14264,13 @@ const firebaseConfig = {
         + '</tr></thead><tbody>';
       rows.forEach(r=>{
         const sold = r.it.status === "판매";
+        //  판매까지 끝난 재고는 «체크를 막습니다.» 되돌리면 판매 기록이 사라집니다.
+        //   먼저 판매를 취소하신 뒤에 도착을 되돌려주세요.
         h += '<tr' + (sold ? ' style="background:#fff8e1;"' : '') + '>'
-          + '<td><input type="checkbox" class="arrcancel-ck" value="' + r.id + '"></td>'
+          + '<td><input type="checkbox" class="arrcancel-ck" value="' + r.id + '"'
+            + (sold ? ' disabled title="판매까지 끝난 재고라 여기서 되돌릴 수 없습니다.&#10;먼저 판매를 취소해주세요."'
+                    + ' style="opacity:0.4;cursor:not-allowed;"' : '')
+            + '></td>' 
           + '<td><b>' + comboEsc(r.it.serialNumber || "-") + '</b></td>'
           + '<td>' + comboEsc(docModelLabel(r.it)) + '</td>'
           + '<td>' + comboEsc(r.it.systemColor || r.it.manufacturerColor || "-") + '</td>'
@@ -14237,10 +14281,13 @@ const firebaseConfig = {
       h += '</tbody></table></div>';
       listEl.innerHTML = h;
       const all = document.getElementById("arrcancel-all");
-      if(all) all.onchange = ()=> listEl.querySelectorAll(".arrcancel-ck").forEach(c=> c.checked = all.checked);
+      //  「전체」 를 눌러도 막힌 줄은 안 켜집니다.
+      if(all) all.onchange = ()=> listEl.querySelectorAll(".arrcancel-ck")
+        .forEach(c=>{ if(!c.disabled) c.checked = all.checked; });
     }
     document.getElementById("arrcancel-msg").innerHTML =
-      '<span style="color:var(--gray);">노란 줄은 <b>판매까지 끝난 재고</b>입니다. 되돌리면 판매 기록도 함께 사라지니 확인해주세요.</span>';
+      '<span style="color:var(--gray);">노란 줄은 <b>판매까지 끝난 재고</b>라 고를 수 없습니다.<br>'
+      + '되돌리시려면 <b>판매를 먼저 취소</b>한 뒤 다시 와주세요.</span>';
     document.getElementById("arrcancel-overlay").style.display = "flex";
   };
 
@@ -25492,6 +25539,15 @@ window.showDepositUses = async function(id){
     const snap = await getDoc(doc(db,"reservations", id));
     if(!snap.exists()){ alert("이미 삭제된 예약입니다."); return; }
     const r = { id, ...snap.data() };
+    //  구매 예약은 «주문» 으로 처리합니다. 배정 창은 판매요청을 만들기 때문에 막습니다.
+    //   여기서 저장하면 삼성전자스타에 «판다» 는 판매요청이 잘못 만들어집니다.
+    if(r.kind === "buy"){
+      alert("구매 예약입니다.\n\n"
+        + "  배정은 [선택 주문으로] 로 주문을 넣고,\n"
+        + "  그 주문이 도착하면 자동으로 올라갑니다.\n\n"
+        + "여기서 배정하면 판매요청이 잘못 만들어져 막아두었습니다.");
+      return;
+    }
     currentResvAlloc = r;
 
     const ordered = Number(r.orderedQty)||0;
@@ -37145,8 +37201,8 @@ let ghostBankCache = [];
               if(!b || b.status === "취소") return;
               const lines = linesBy[bid] || [];
               if(lines.length === 0) return;
-              const sum = lines.reduce(function(n,l){
-                return n + (Number(l.purchasePrice)||0) * (Number(l.quantity)||0); }, 0);
+              //  주문 등록 화면과 «똑같은 식» 으로 셉니다. (costFromLines)
+              const sum = Number(costFromLines(b.source, lines, b.discountBase)) || 0;
               const curSum = Number(b.depositRequired)||0;
               const isCredit = (b.paymentMethod === "b2b_credit");
               let want = null, curCredit = null;
@@ -38717,12 +38773,32 @@ let ghostBankCache = [];
         '<td>'+comboEsc(docModelLabel(r))+'</td>' +
         '<td>'+comboEsc(r.systemColor || r.manufacturerColor || "-")+'</td>' +
         '<td class="ta-right">'+ordered+'</td>' +
-        '<td class="ta-right"><span style="cursor:pointer;color:var(--navy);text-decoration:underline;font-weight:700;" title="클릭하면 배정 창이 열립니다. 배정 내역도 함께 볼 수 있습니다." data-resv-alloc="'+r.id+'">'+allocated+'</span></td>' +
-        '<td class="ta-right">'+(remain>0
-            ? (allocated>0
-                ? '<b>'+remain+'</b> <span style="color:#b8860b;font-size:10px;">일부</span>'
-                : remain)
-            : '<span style="color:#2e7d32;font-weight:700;">완료</span>')+'</td>' +
+                //  구매 예약은 배정 창을 못 씁니다. (판매요청이 잘못 만들어지므로)
+        //   숫자는 그대로 보여주되 «흐리게» 두고, 왜 못 누르는지 알려드립니다.
+        (r.kind === "buy"
+          ? '<td class="ta-right"><span style="color:var(--gray);opacity:0.55;cursor:not-allowed;font-weight:700;"'
+            + ' title="구매 예약은 여기서 배정할 수 없습니다.&#10;[선택 주문으로] 로 주문을 넣고, 그 주문이 도착하면 자동으로 올라갑니다.">'
+            + allocated + '</span></td>'
+          : '<td class="ta-right"><span style="cursor:pointer;color:var(--navy);text-decoration:underline;font-weight:700;" title="클릭하면 배정 창이 열립니다. 배정 내역도 함께 볼 수 있습니다." data-resv-alloc="'+r.id+'">'+allocated+'</span></td>') +
+        //  잔여 칸 — 구매 예약은 «주문완료» 단계를 함께 보여줍니다.
+        //    진행      주문도 아직 안 넣음
+        //    주문완료   주문에 넣었지만 아직 도착 전
+        //    일부       일부만 도착
+        //    완료      전량 도착
+        (function(){
+          if(remain <= 0) return '<td class="ta-right"><span style="color:#2e7d32;font-weight:700;">완료</span></td>';
+          if(allocated > 0)
+            return '<td class="ta-right"><b>'+remain+'</b> <span style="color:#b8860b;font-size:10px;">일부</span></td>';
+          const inOrder = (r.kind === "buy")
+            ? Number((window.resvInOrderMap||{})[r.id]||0) : 0;
+          if(inOrder >= ordered && ordered > 0)
+            return '<td class="ta-right"><b>'+remain+'</b> '
+              + '<span style="color:#1565c0;font-size:10px;font-weight:700;">주문완료</span></td>';
+          if(inOrder > 0)
+            return '<td class="ta-right"><b>'+remain+'</b> '
+              + '<span style="color:#1565c0;font-size:10px;">주문 '+inOrder+'</span></td>';
+          return '<td class="ta-right">'+remain+'</td>';
+        })() +
         '<td class="ta-right">'+fmt(r.listPrice)+'</td>' +
         // 매입(구매) 예약의 할인·입고가 — 판매 예약이면 「-」 로 둡니다.
         (function(){
@@ -38865,8 +38941,13 @@ let ghostBankCache = [];
 
   // 예약의 배정 수량은 저장값을 믿지 않고 판매요청에서 그때그때 셉니다.
   // 이렇게 하면 숫자가 어긋날 일이 없습니다.
+  //  예약별 «주문에 넣은 수량» — 도착 전 「주문완료」 표기에 씁니다.
+  let resvInOrderMap = {};
+  window.resvInOrderMap = resvInOrderMap;
+
   async function fetchAllocatedByResv(){
     const map = {};
+    const inOrderMap = {};
     // ① 판매 예약 — 이 예약에서 나온 판매요청 수량
     try{
       const snap = await getDocs(collection(db,"saleRequests"));
@@ -38892,11 +38973,16 @@ let ghostBankCache = [];
         const o = d.data();
         if(o.status === "취소") return;
         if(cancelledBatches.has(o.batchId)) return;
+        //  주문에 «넣은» 수량 — 도착 전에도 「주문완료」 로 보여드리려고 따로 셉니다.
+        inOrderMap[o.fromReservationId] =
+          (inOrderMap[o.fromReservationId]||0) + (Number(o.quantity)||0);
         const arrived = Number(o.fulfilledCount)||0;    // 도착 수량
         if(arrived <= 0) return;
         map[o.fromReservationId] = (map[o.fromReservationId]||0) + arrived;
       });
     }catch(e){}
+    resvInOrderMap = inOrderMap;
+    window.resvInOrderMap = inOrderMap;
     return map;
   }
 
@@ -49322,18 +49408,19 @@ let ghostBankCache = [];
         return linked ? "이어짐" : "못 찾음"; } },
     //  ── 합계 열 (같은 단말기면 줄마다 같은 값) ──
     //  개통된 건은 0원도 «넣으신 값» 입니다. 0 으로 보여줍니다.
+    //  개통된 건은 지원금이 없으면 «0원으로 마감» 입니다. 0 으로 보여줍니다.
     { key:"dist",     label:"지급 합계", right:true, html:true,
-      get:it=> moneyCell(it.distSupport),
-      raw:it=> moneyRaw(it.distSupport) },
+      get:it=> moneyCell(actDist(it)),
+      raw:it=> moneyRaw(actDist(it)) },
     { key:"claw",     label:"유통폰지원금 환수", right:true, html:true,
       get:it=> moneyCell(it.clawback, { danger:true }),
       raw:it=> moneyRaw(it.clawback) },
     { key:"final",    label:"최종", right:true, html:true,
-      get:it=>{ const d = Number(it.distSupport)||0, c = Number(it.clawback)||0;
+      get:it=>{ const d = Number(actDist(it))||0, c = Number(it.clawback)||0;
         if(!d && !c){
-          //  둘 다 «미입력» 이면 빈칸, 하나라도 0 으로 넣으셨으면 «-»
-          const any = (it.distSupport != null && it.distSupport !== "")
-                   || (it.clawback    != null && it.clawback    !== "");
+          //  개통된 건이거나 0 으로 넣으신 건은 «0», 아무것도 없으면 빈칸
+          const any = (actDist(it) != null && actDist(it) !== "")
+                   || (it.clawback != null && it.clawback !== "");
           return any ? '<span style="color:var(--gray);">0</span>' : "";
         }
         const over = c > d;
