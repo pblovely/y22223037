@@ -400,7 +400,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-06 v1211</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-06 v1214</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -4295,6 +4295,25 @@ const firebaseConfig = {
   //  판매를 취소하면 «판매로 들어간 값»을 전부 되돌립니다.
   //   판매처 · 출고일 · 판매가 · 판매할인 · 판매할인% · 판매할인 기준 · 수익 · 판매요청 연결
   //   취소하는 곳이 여러 군데라 여기 한 곳만 씁니다. 따로 만들지 마세요.
+  //  판매할 때 쓸 «판매할인 기준» 을 정합니다. 한 곳에서만 정합니다.
+  //    ① 재고에 이미 적힌 판매할인 기준
+  //    ② 매입할인 기준 (같은 조건으로 넘길 때가 대부분입니다)
+  //    ③ 판매처의 업체정보 기준
+  //   기준이 비면 출고가로 계산되어, 취소하고 다시 팔 때 금액이 달라졌습니다.
+  function saleBaseFor(it, dest){
+    const ok = function(b){ return b === "unit" || b === "total" || b === "supply" || b === "flat"; };
+    if(it && ok(String(it.saleDiscountBase||""))) return String(it.saleDiscountBase);
+    if(it && ok(String(it.discountBase||"")))     return String(it.discountBase);
+    try{
+      const c = (companiesCache||[]).find(function(x){
+        return String(x.name||"").trim() === String(dest||"").trim(); });
+      if(c && ok(String(c.saleDiscountBase||""))) return String(c.saleDiscountBase);
+      if(c && ok(String(c.discountBase||"")))     return String(c.discountBase);
+    }catch(e){}
+    return null;
+  }
+  window.saleBaseFor = saleBaseFor;
+
   const SALE_CANCEL_PATCH = {
     status: "보유중", outDate: "", destination: "",
     salePrice: null, saleDiscountAmt: null, saleDiscount: null, saleDiscountBase: null,
@@ -11924,15 +11943,20 @@ const firebaseConfig = {
     // 출고가로도 정리하실 수 있게 넣습니다. (모델 등록의 출고가 × 수량)
     { key:"listAmount",  label:"출고가 금액", get:r=> { const v = saleListAmount(r); return v ? v.toLocaleString() : "-"; },
       num:true, sort:r=> saleListAmount(r) },
+    //  판매금액이 «없으면» 할인을 내지 않습니다. 빈칸으로 둡니다.
+    //   전에는 판매금액 0 을 그대로 써서 할인 100% 로 보였습니다.
     { key:"listDiff",    label:"할인금액", get:r=> {
         const v = saleListAmount(r); if(!v) return "-";
-        const d = v - (Number(r.b.depositRequired)||0);
+        const p = Number(r.b.depositRequired)||0;
+        if(!(p > 0)) return '<span style="color:var(--gray);">-</span>';
+        const d = v - p;
         return d ? '<span style="color:var(--danger);">' + d.toLocaleString() + '</span>' : "0";
       }, num:true, sort:r=> saleListAmount(r) - (Number(r.b.depositRequired)||0) },
     { key:"listPct",     label:"할인%", get:r=> {
         const v = saleListAmount(r); if(!v) return "-";
-        const d = v - (Number(r.b.depositRequired)||0);
-        return ((d / v) * 100).toFixed(2) + "%";
+        const p = Number(r.b.depositRequired)||0;
+        if(!(p > 0)) return '<span style="color:var(--gray);">-</span>';
+        return (((v - p) / v) * 100).toFixed(2) + "%";
       }, num:true, sort:r=> { const v = saleListAmount(r); return v ? (v - (Number(r.b.depositRequired)||0)) / v : 0; } },
     { key:"payState",    label:"입금",    get:r=> r.b.depositReceived ? '<span style="color:#2e7d32;font-weight:700;">완료</span>'
         : (r.b.depositRequestId ? '<span style="color:#b8860b;font-weight:700;">확인중</span>' : '<span style="color:var(--danger);">필요</span>') },
@@ -13192,7 +13216,7 @@ const firebaseConfig = {
 
   // 주문 품목을 모델 등록 기준으로 최신화합니다.
   //  · 펫네임·모델명·기가수·전산모델명을 모델의 현재 값으로 맞춤
-  //  · 출고가를 채우고 선할인·타할인%·판매할인을 역산 (입고가·판매가는 그대로)
+  //  · 출고가만 채웁니다. 할인은 역산하지 않습니다. (금액은 그대로)
   window.syncOrderPrices = async function(silent){
     await fetchModelsCache();
     const snap = await getDocs(collection(db,"orders"));
@@ -13224,21 +13248,10 @@ const firebaseConfig = {
         const buy = Number(o.purchasePrice)||0;
         const other = Number(o.otherDiscountAmt)||0;
         const sale = Number(o.salePrice)||0;
-        if(buy){
-          const pre = L - buy - other;
-          patch.preDiscountAmt = pre;
-          patch.purchaseDiscountAmt = pre;
-          patch.preDiscountPct = Number(((pre/L)*100).toFixed(2));
-          patch.purchaseDiscount = patch.preDiscountPct;
-          changes.push("선할인");
-        }
-        if(other) patch.otherDiscountPct = Number(((other/L)*100).toFixed(2));
-        if(sale){
-          const sa = L - sale;
-          patch.saleDiscountAmt = sa;
-          patch.saleDiscountPct = Number(((sa/L)*100).toFixed(2));
-          changes.push("판매할인");
-        }
+        //  할인을 «역산해서 써넣지 않습니다.»
+        //   전에는 출고가−입고가, 출고가−판매가 로 만들어 저장했습니다.
+        //   그 값이 실제 조건과 달라 화면 숫자가 어긋났습니다.
+        //   금액이 비어 있으면 데이터 점검에서 확인하고 직접 넣어주세요.
       }
       if(Object.keys(patch).length > 0) plan.push({ id:o.id, o, m, patch, changes:[...new Set(changes)] });
     });
@@ -15804,6 +15817,8 @@ const firebaseConfig = {
             bt.update(doc(db,"inventoryItems", x.item.id), {
               status:"판매", outDate, destination: r.destination,
               salePrice: price, saleRequestId: srRef.id,
+            //  판매할인 기준을 함께 적습니다. (비면 출고가로 계산되어 금액이 달라집니다)
+            saleDiscountBase: saleBaseFor(it, dest),
               profit: (price && x.item.purchasePrice) ? (price - Number(x.item.purchasePrice)) : null
             });
           });
@@ -26248,6 +26263,7 @@ window.showDepositUses = async function(id){
             status: "판매",
             destination: b.destination || "",
             salePrice: (l.salePrice != null) ? Number(l.salePrice) : null,
+          saleDiscountBase: saleBaseFor(it0, l.destination || b.destination),
             saleDiscountAmt: (l.saleDiscountAmt != null) ? Number(l.saleDiscountAmt) : null,
             saleDiscount: (l.saleDiscountPct != null) ? Number(l.saleDiscountPct) : null,
             outDate: l.outDate || b.requestDate || todayStr(),
@@ -34334,6 +34350,8 @@ window.showDepositUses = async function(id){
       salePrice: r.salePrice,
       saleDiscountAmt: r.saleDiscountAmt,
       saleDiscount: r.saleDiscountPct,
+      //  판매할인 기준을 함께 적습니다. 비면 출고가로 계산되어 금액이 달라집니다.
+      saleDiscountBase: saleBaseFor(r.it || null, r.dest),
       outDate: r.outDate || "",
       saleRequestId: r.srId
     });
@@ -39962,14 +39980,17 @@ let ghostBankCache = [];
             + '<td class="ta-right" style="font-weight:700;">'+money(inAmt)+'</td>'
             + '<td class="ta-right">'+(listAmt?listAmt.toLocaleString():dash)+'</td>';
         })() +
-        // 판매할인 · 판매할인% — 저장된 값이 있으면 그대로, 없으면 출고가와 견줘 냅니다.
+        //  판매할인 · 판매할인% — 저장된 값만 씁니다. 역산하지 않습니다.
+        //   「입고동일」 은 매입 조건을 그대로 쓰는 것이라 역산이 아닙니다.
         (function(){
           const L = Number(r.listPrice)||0;
           const dash = '<span style="color:var(--gray);">-</span>';
           let amt = (r.saleDiscountAmt != null && r.saleDiscountAmt !== "") ? Number(r.saleDiscountAmt) : null;
           let pct = (r.saleDiscountPct != null && r.saleDiscountPct !== "") ? Number(r.saleDiscountPct) : null;
-          if(amt == null && L > 0 && sale != null) amt = L - sale;
-          if(pct == null && L > 0 && amt != null) pct = Number(((amt / L) * 100).toFixed(2));
+          if(pct == null && r.salePriceFollowsBuy === true){
+            const pp = Number(r.preDiscountPct)||0, op = Number(r.otherDiscountPct)||0;
+            if(pp + op > 0) pct = Number((pp + op).toFixed(2));
+          }
           const tag = (r.salePriceFollowsBuy === true)
             ? ' <span style="color:var(--navy);font-size:10px;">입고동일</span>' : '';
           return '<td class="ta-right">'+(amt ? Math.round(amt).toLocaleString() : dash)+tag+'</td>'
@@ -40258,8 +40279,8 @@ let ghostBankCache = [];
         // 삼성전자는 공급가(VAT 뺀 금액)에 할인율을 곱합니다. 같은 칸에 함께 보여드립니다.
       card("할인%", (discPctAll==null ? "" : discPctAll.toFixed(2)+"%"), null,
            "(출고가−판매가) ÷ 출고가<br><span style=\"color:#2e7d32;font-weight:700;\">삼성전자기준 "
-           + (discPctAll==null ? "-" : (discPctAll*1.1).toFixed(2)+"%") + "</span>", "discpct") +
-        card("예상 차액", (sumSaleAmt - sumListAmt).toLocaleString(), (sumSaleAmt-sumListAmt)>=0 ? "#2e7d32" : "var(--danger)", "판매가 − 출고가", "diff");
+           + (cmpListAmt ? (((cmpListAmt - cmpSaleAmt) / 1.1) / Math.round(cmpListAmt / 1.1) * 100).toFixed(2) + "%" : "-") + "</span>", "discpct") +
+        card("예상 차액", (cmpSaleAmt - cmpListAmt).toLocaleString(), (cmpSaleAmt-cmpListAmt)>=0 ? "#2e7d32" : "var(--danger)", "판매가 − 출고가", "diff");
       applyCustomTabLabels();
     }
 
@@ -40381,7 +40402,10 @@ let ghostBankCache = [];
 
     // 삼성전자는 공급가(VAT 뺀 금액)에 할인율을 곱합니다. 그 기준으로 환산한 줄입니다.
     const sPctRow = ()=>{
-      const calc = c => (c.listAmt && c.saleAmt > 0) ? ((c.listAmt - c.saleAmt) / (c.listAmt/1.1) * 100) : null;
+      //  삼성 기준 — 깎인 금액도 «부가세를 빼고» 공급가로 나눕니다.
+      //   전에는 금액은 그대로 두고 분모만 1.1 로 나눠 값이 부풀었습니다.
+      const calc = c => (c.listAmt && c.saleAmt > 0)
+        ? (((c.listAmt - c.saleAmt) / 1.1) / Math.round(c.listAmt / 1.1) * 100) : null;
       let h = '<tr style="background:#fff;"><td style="font-weight:700;color:#2e7d32;">삼성전자기준 할인% '
         + '<span style="color:var(--gray);font-weight:400;font-size:11px;">(출고가−판매가) ÷ 공급가</span></td>';
       const gv = calc({ listAmt:grandListAmt, saleAmt:grandSaleAmt });
@@ -51991,6 +52015,8 @@ window.toggleActAll = function(on){
             const dBase = (baseSel === "supply") ? (Number(salePrice)/1.1) : Number(salePrice);
             patch.saleDiscountAmt = discAmt;
             patch.saleDiscount = dBase ? Number(((discAmt / dBase) * 100).toFixed(2)) : null;
+            //  판매할인 기준을 함께 적습니다. 비면 출고가로 계산되어 금액이 달라집니다.
+            patch.saleDiscountBase = baseSel || saleBaseFor(it, dest);
           }
           const net = Number(salePrice) - discAmt;
           if(it.purchasePrice) patch.profit = net - Number(it.purchasePrice);
@@ -52371,15 +52397,10 @@ window.toggleActAll = function(on){
       const salePriceNum = salePrice ? Number(salePrice) : null;
       const profit = (salePriceNum && purchasePriceNum) ? (salePriceNum - purchasePriceNum) : null;
 
-      // 할인율이 비어있는데 가격이 있으면 출고가 기준으로 자동 역산
-      let purchaseDiscountNum = purchaseDiscount ? Number(Number(purchaseDiscount).toFixed(2)) : null;
-      if(purchaseDiscountNum===null && purchasePriceNum && listPriceNum){
-        purchaseDiscountNum = Number(((1 - purchasePriceNum/listPriceNum) * 100).toFixed(2));
-      }
-      let saleDiscountNum = saleDiscount ? Number(Number(saleDiscount).toFixed(2)) : null;
-      if(saleDiscountNum===null && salePriceNum && listPriceNum){
-        saleDiscountNum = Number(((1 - salePriceNum/listPriceNum) * 100).toFixed(2));
-      }
+      //  할인율을 «역산하지 않습니다.» 넣으신 값만 씁니다.
+      //   전에는 출고가와 가격으로 만들어 저장해, 실제 조건과 어긋났습니다.
+      const purchaseDiscountNum = purchaseDiscount ? Number(Number(purchaseDiscount).toFixed(2)) : null;
+      const saleDiscountNum     = saleDiscount     ? Number(Number(saleDiscount).toFixed(2))     : null;
 
       // 할인율만 있으면 금액도 함께 계산해서 저장 (예전에는 율만 저장되어 금액칸이 비었음)
       let purchaseDiscountAmtNum = null;
