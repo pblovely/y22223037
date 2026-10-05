@@ -400,7 +400,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-06 v1231</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-06 v1233</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -4322,7 +4322,10 @@ const firebaseConfig = {
   const MONEY_KEYS = ["listPrice","purchasePrice","salePrice",
     "preDiscountAmt","preDiscountPct","otherDiscountAmt","otherDiscountPct",
     "purchaseDiscountAmt","purchaseDiscount","saleDiscountAmt","saleDiscount",
-    "saleDiscountPct","depositRequired","totalAmount","profit"];
+    "saleDiscountPct","depositRequired","totalAmount","profit",
+    //  더블스토리지·지원금도 금액입니다. 빠져 있어 빈 값이 그대로 들어갔습니다.
+    "dsAmount","subsidyAmount","distSupport","clawback","supportFinal",
+    "totalCost","creditUsed","receivedAmount","paidAmount","otherAmount","amount"];
   function keepMoney(patch, allowClear){
     if(!patch || typeof patch !== "object") return patch;
     const clear = {};
@@ -32261,8 +32264,18 @@ window.showDepositUses = async function(id){
     const tRecv = rows.filter(function(r){ return r.recv; }).reduce(function(n,r){ return n + r.amt; }, 0);
     const own = rows.filter(function(r){ return r.dest === "포피플"; });
     const ownAmt = own.reduce(function(n,r){ return n + r.amt; }, 0);
-    head.innerHTML = '<b>더블스토리지 정산</b> — 대상 ' + rows.length + '대 · 합계 ' + f(tAmt)
-      + '<br><span style="color:var(--gray);">받음 ' + f(tRecv) + ' · 미수 ' + f(tAmt - tRecv)
+    //  받을 것과 줄 것을 나눠서 보여줍니다. 한 숫자로 합치면 뜻이 섞입니다.
+    const tPay    = rows.reduce(function(n,r){ return n + ((r.dest && r.dest !== "포피플") ? r.amt : 0); }, 0);
+    const tPaid   = rows.filter(function(r){ return r.pay; })
+                        .reduce(function(n,r){ return n + ((r.dest && r.dest !== "포피플") ? r.amt : 0); }, 0);
+    head.innerHTML = '<b>더블스토리지 정산</b> — 대상 ' + rows.length + '대'
+      + '<br><span style="color:#1565c0;">받을 것 ' + f(tAmt)
+      + ' <span style="color:var(--gray);font-weight:400;">(받음 ' + f(tRecv)
+      + ' · 미수 ' + f(tAmt - tRecv) + ')</span></span>'
+      + '<br><span style="color:var(--danger);">줄 것 ' + f(tPay)
+      + ' <span style="color:var(--gray);font-weight:400;">(지급 ' + f(tPaid)
+      + ' · 미지급 ' + f(tPay - tPaid) + ')</span></span>'
+      + '<br><span style="color:var(--gray);">차액 (받을 것 − 줄 것) <b>' + f(tAmt - tPay) + '</b>'
       + '  ·  포피플 자체개통 ' + own.length + '대 ' + f(ownAmt) + '</span>';
 
     //  업체 한 줄에 «받을 것» 과 «줄 것» 을 함께 보여줍니다.
@@ -32292,8 +32305,9 @@ window.showDepositUses = async function(id){
             const so = cell(sell[k], "out");
             const self = (k === "포피플");
             const fixed = (buy[k] && buy[k].fixed) || (sell[k] && sell[k].fixed);
-            //  합계 — 그 업체의 받을 금액 + 줄 금액
-            const sumAmt = ((buy[k] && buy[k].amt)||0) + ((sell[k] && sell[k].amt)||0);
+            //  합계 — 받을 것은 «+», 줄 것은 «−» 입니다.
+            //   전에는 그냥 더해서, 주고받는 업체는 합계가 부풀었습니다.
+            const sumAmt = ((buy[k] && buy[k].amt)||0) - ((sell[k] && sell[k].amt)||0);
             const both = (buy[k] && buy[k].n > 0) && (sell[k] && sell[k].n > 0);
             return '<tr><td><b>' + comboEsc(k) + '</b>'
               + (self ? ' <span style="color:#2e7d32;font-size:10.5px;">자체개통</span>' : '')
@@ -32307,7 +32321,8 @@ window.showDepositUses = async function(id){
               + '<td class="ta-right">' + so.amt + '</td>'
               + '<td class="ta-right" style="color:#2e7d32;">' + so.done + '</td>'
               + '<td class="ta-right" style="color:' + (so.leftNum > 0 ? 'var(--danger)' : 'var(--gray)') + ';">' + so.left + '</td>'
-              + '<td class="ta-right" style="font-weight:700;">'
+              + '<td class="ta-right" style="font-weight:700;color:'
+                + (sumAmt > 0 ? '#1565c0' : (sumAmt < 0 ? 'var(--danger)' : 'var(--gray)')) + ';">'
                 + (sumAmt ? f(sumAmt) : dash) + '</td></tr>';
           }).join("")
         + '</tbody></table>';
@@ -32345,8 +32360,10 @@ window.showDepositUses = async function(id){
       + '</div>' 
       + '<div style="overflow-x:auto;">' + tbl() + '</div>'
       + '<div class="desc" style="font-size:11.5px;color:var(--gray);margin-top:6px;">'
-      + '합계는 그 업체의 <b>받을 금액 + 줄 금액</b> 입니다. '
-      + '「주고받음」 이 붙은 업체는 양쪽에 모두 있습니다.</div>'  
+      + '합계는 <b>받을 금액 − 줄 금액</b> 입니다. '
+      + '<span style="color:#1565c0;">파란색은 받을 것이 많음</span>, '
+      + '<span style="color:var(--danger);">빨간색은 줄 것이 많음</span> 입니다. '
+      + '「주고받음」 이 붙은 업체는 양쪽에 모두 있습니다.</div>'   
       + '<div style="font-weight:700;margin:12px 0 4px;">건별 목록</div>'
       + '<div style="overflow-x:auto;max-height:300px;overflow-y:auto;">'
       + '<table class="data-table" style="width:auto;"><thead><tr>'
@@ -32554,7 +32571,10 @@ window.showDepositUses = async function(id){
         }
       }
       if(!it){ miss.push(w.model + " " + w.raw); return; }
-      const amt = (w.amt != null) ? w.amt : dsPriceOf(prices, it);
+      //  금액을 정하는 순서 — 붙여넣은 값 → 모델 등록 단가 → «이미 넣어둔 값»
+      //   전에는 셋 다 없으면 null 로 덮어써, 이미 넣어둔 금액이 지워졌습니다.
+      let amt = (w.amt != null) ? w.amt : dsPriceOf(prices, it);
+      if(amt == null && it.dsAmount != null && it.dsAmount !== "") amt = Number(it.dsAmount);
       dsRows.push({ id: it.id, it, sn: it.serialNumber||w.raw,
         model: it.systemModel || it.baseModel || "",
         src: it.source || "", dest: it.destination || "",
@@ -32613,7 +32633,10 @@ window.showDepositUses = async function(id){
     el.querySelectorAll(".ds-amt").forEach(function(inp){
       inp.oninput = function(){
         const i = Number(inp.dataset.i);
-        if(dsRows[i]) dsRows[i].amount = numOrNull(inp.value);
+        if(!dsRows[i]) return;
+        dsRows[i].amount  = numOrNull(inp.value);
+        //  손으로 비우신 것은 «일부러 비운 것» 입니다. 그때만 지웁니다.
+        dsRows[i].cleared = (String(inp.value||"").trim() === "");
       };
     });
   };
@@ -32634,7 +32657,9 @@ window.showDepositUses = async function(id){
         dsRows.slice(i, i+300).forEach(function(r){
           //  금액 하나만 적습니다.
           //    금액 있음 → 대상   ·   0 → 대상 아님   ·   빈칸 → 확인 안 함
-          bt.update(doc(db,"inventoryItems", r.id), { dsAmount: r.amount });
+          //  표에서 «일부러 비우신» 것만 비웁니다. 그 밖에는 금액을 지키는 거름망을 거칩니다.
+          bt.update(doc(db,"inventoryItems", r.id),
+            (r.cleared === true) ? { dsAmount: null } : keepMoney({ dsAmount: r.amount }));
         });
         await withTimeout(bt.commit(), 20000, "더블스토리지 넣기");
         done += Math.min(300, dsRows.length - i);
