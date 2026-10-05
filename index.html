@@ -400,7 +400,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-06 v1216</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-06 v1218</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -7698,6 +7698,10 @@ const firebaseConfig = {
         id: x.id, before: x.it,
         after: { ...x.it, listPrice: x.to, ...computeLinkedPatch(x.it, "listPrice", x.to) } })));
     }catch(e){}
+    //  바뀐 값을 이력에 남깁니다.
+    try{ await logMoneyChange("출고가 맞추기", plan.map(function(x){
+      return { id:x.id, serialNumber:(x.it&&x.it.serialNumber)||"", systemModel:(x.it&&x.it.systemModel)||"",
+               before:{ listPrice:x.from }, after:{ listPrice:x.to } }; })); }catch(e){}
     logAction("재고 출고가 일괄 맞춤", plan.length + "건 (모델 기준)" + syncLinksText(linkOutL));
     alert(plan.length + "건의 출고가를 모델 기준으로 맞췄습니다."
       + (noModel.length ? "\n\n모델을 못 찾은 " + noModel.length + "건은 전산모델명을 확인해주세요." : "")
@@ -33384,6 +33388,41 @@ window.showDepositUses = async function(id){
     });
     const val = (b,a,k)=> (a[k] !== undefined) ? a[k] : (b ? b[k] : null);
 
+    //  바뀐 금액을 «단말 이력» 에 남깁니다. 되돌릴 근거가 됩니다.
+    //   전에는 아무 기록 없이 바뀌어, 무엇이 언제 어떤 값에서 바뀌었는지 알 수 없었습니다.
+    const LOG_KEYS = [
+      ["listPrice","출고가"], ["purchasePrice","입고가"], ["salePrice","판매가"],
+      ["purchaseDiscountAmt","선할인"], ["purchaseDiscount","선할인%"],
+      ["otherDiscountAmt","타할인"], ["otherDiscountPct","타할인%"],
+      ["saleDiscountAmt","판매할인"], ["saleDiscount","판매할인%"],
+      ["discountBase","매입할인 기준"], ["saleDiscountBase","판매할인 기준"],
+      ["destination","판매처"]
+    ];
+    const histRows = [];
+    const money = function(v){
+      if(v == null || v === "") return "없음";
+      const n = Number(v);
+      return isFinite(n) ? n.toLocaleString() : String(v);
+    };
+    (rows||[]).forEach(function(r){
+      const b = r.before || {}, a = r.after || {};
+      const parts = [];
+      LOG_KEYS.forEach(function(kv){
+        const k = kv[0];
+        if(a[k] === undefined) return;
+        const x = (b[k] == null || b[k] === "") ? null : b[k];
+        const y = (a[k] == null || a[k] === "") ? null : a[k];
+        if(String(x) === String(y)) return;
+        parts.push(kv[1] + " " + money(x) + " → " + money(y));
+      });
+      if(parts.length === 0) return;
+      histRows.push({ id: r.id,
+        serialNumber: String(b.serialNumber || (r.after && r.after.serialNumber) || ""),
+        systemModel:  String(b.systemModel  || (r.after && r.after.systemModel)  || ""),
+        detail: "연동으로 바뀜 · " + parts.join(" · ") });
+    });
+    if(histRows.length){ try{ await logItemsEach(histRows, "price", {}); }catch(e){} }
+
     const seenOrder = new Set(), seenBatch = new Set(), seenCredit = new Set();
     for(const r of rows){
       const b = r.before || {}, a = r.after || {};
@@ -33546,6 +33585,43 @@ window.showDepositUses = async function(id){
 
   // 건마다 내용이 다른 이력을 남깁니다. (일괄 변경처럼 「전 → 후」가 대마다 다를 때)
   //  일자는 언제나 작업한 날로 둡니다 — 내용에 적힌 날짜 숫자에 정렬이 끌려가지 않게 합니다.
+  //  금액이 바뀐 것을 «무엇에서 무엇으로» 한 줄로 남깁니다.
+  //   되돌릴 근거가 됩니다. 금액을 고치는 곳은 모두 이걸 부릅니다.
+  async function logMoneyChange(label, list){
+    //  list = [{ id, serialNumber, systemModel, before, after }]
+    const KEYS = [
+      ["listPrice","출고가"], ["purchasePrice","입고가"], ["salePrice","판매가"],
+      ["purchaseDiscountAmt","선할인"], ["purchaseDiscount","선할인%"],
+      ["otherDiscountAmt","타할인"], ["otherDiscountPct","타할인%"],
+      ["saleDiscountAmt","판매할인"], ["saleDiscount","판매할인%"],
+      ["discountBase","매입할인 기준"], ["saleDiscountBase","판매할인 기준"],
+      ["destination","판매처"]
+    ];
+    const money = function(v){
+      if(v == null || v === "") return "없음";
+      const n = Number(v);
+      return isFinite(n) ? n.toLocaleString() : String(v);
+    };
+    const rows2 = [];
+    (list||[]).forEach(function(x){
+      const b = x.before || {}, a2 = x.after || {};
+      const parts = [];
+      KEYS.forEach(function(kv){
+        if(a2[kv[0]] === undefined) return;
+        const o = (b[kv[0]] == null || b[kv[0]] === "") ? null : b[kv[0]];
+        const n2 = (a2[kv[0]] == null || a2[kv[0]] === "") ? null : a2[kv[0]];
+        if(String(o) === String(n2)) return;
+        parts.push(kv[1] + " " + money(o) + " → " + money(n2));
+      });
+      if(parts.length === 0) return;
+      rows2.push({ id:x.id, serialNumber:String(x.serialNumber||""),
+        systemModel:String(x.systemModel||""),
+        detail: label + " · " + parts.join(" · ") });
+    });
+    if(rows2.length){ try{ await logItemsEach(rows2, "price", {}); }catch(e){} }
+  }
+  window.logMoneyChange = logMoneyChange;
+
   async function logItemsEach(rows, type, extra){
     if(!rows || rows.length === 0) return;
     try{
@@ -37330,6 +37406,91 @@ let ghostBankCache = [];
   let batchSumDiffCache = [];
   let srAmtDiffCache = [];
   let srMixCache = [];
+  let noSalePriceCache = [];
+
+  //  나간 재고인데 판매가가 빈 것을 보여주고, 채울 수 있는 것만 채웁니다.
+  window.showNoSalePriceList = function(){
+    const rows = noSalePriceCache || [];
+    if(rows.length === 0){ alert("빈 것이 없습니다."); return; }
+    const head = document.getElementById("suplog-head");
+    const body = document.getElementById("suplog-body");
+    setSupLogTitle("판매가가 비어 있는 재고");
+    const f = function(n){ return (n == null) ? "-" : (Number(n)||0).toLocaleString(); };
+    const canFix = rows.filter(function(r){ return r.want != null; });
+    const manual = rows.filter(function(r){ return r.want == null; });
+    head.innerHTML = '<b>판매·개통인데 판매가가 비어 있음</b> — ' + rows.length + '대'
+      + '<br><span style="color:var(--gray);">'
+      + '채울 수 있는 것 <b style="color:#2e7d32;">' + canFix.length + '대</b>'
+      + ' · 직접 넣으셔야 하는 것 <b style="color:var(--danger);">' + manual.length + '대</b><br>'
+      + '입고동일이면 입고가로, 주문에 판매가가 있으면 그 값으로 채웁니다.</span>';
+    body.innerHTML =
+      (canFix.length ? '<div style="margin-bottom:8px;"><button class="btn small" style="width:auto;" onclick="fixNoSalePriceAll()">'
+        + '채울 수 있는 것 전부 채우기 (' + canFix.length + '대)</button></div>' : '')
+      + '<div style="overflow-x:auto;max-height:380px;overflow-y:auto;">'
+      + '<table class="data-table" style="width:auto;"><thead><tr>'
+      + '<th>판매일</th><th>일련번호</th><th>전산모델명</th><th>판매처</th><th>상태</th>'
+      + '<th class="ta-right">출고가</th><th class="ta-right">입고가</th>'
+      + '<th class="ta-right">→ 채울 판매가</th><th>근거</th></tr></thead><tbody>'
+      + rows.slice(0,400).map(function(r){
+          return '<tr' + (r.want == null ? ' style="background:#fdecea;"' : '') + '>'
+            + '<td>' + comboEsc(r.out||"-") + '</td>'
+            + '<td><b>' + comboEsc(r.sn||"-") + '</b></td>'
+            + '<td>' + comboEsc(r.model||"-") + '</td>'
+            + '<td>' + comboEsc(r.dest||"-") + '</td>'
+            + '<td>' + comboEsc(r.st) + '</td>'
+            + '<td class="ta-right">' + f(r.listPrice) + '</td>'
+            + '<td class="ta-right">' + f(r.buy) + '</td>'
+            + '<td class="ta-right" style="color:#2e7d32;font-weight:700;">' + f(r.want) + '</td>'
+            + '<td style="font-size:11.5px;color:' + (r.want == null ? 'var(--danger)' : 'var(--gray)') + ';">'
+              + (r.want == null ? '직접 넣어주세요' : comboEsc(r.how)) + '</td></tr>';
+        }).join("")
+      + '</tbody></table></div>'
+      + (rows.length > 400 ? '<div style="font-size:11.5px;color:var(--gray);margin-top:6px;">'
+          + '위에 400대까지만 보여드립니다. [전부 채우기] 는 모두 처리합니다.</div>' : '');
+    document.getElementById("suplog-overlay").style.display = "flex";
+  };
+
+  window.fixNoSalePriceAll = async function(){
+    const rows = (noSalePriceCache||[]).filter(function(r){ return r.want != null; });
+    if(rows.length === 0){ alert("채울 수 있는 것이 없습니다."); return; }
+    if(!hasPerm(currentUserPerms, "paymentProcess")){ alert("권한이 없습니다."); return; }
+    if(!confirm("재고 " + rows.length + "대의 판매가를 채웁니다.\n\n"
+      + "  입고동일        → 입고가\n"
+      + "  주문에 값이 있음  → 그 값\n\n"
+      + "  건드리지 않는 것   출고가 · 입고가 · 매입할인\n\n"
+      + "채운 뒤 «판매요청 금액» 점검도 돌려주세요.\n\n진행할까요?")) return;
+    const head = document.getElementById("suplog-head");
+    let done = 0;
+    try{
+      for(let i=0; i<rows.length; i+=300){
+        if(head) head.innerHTML = '<b>채우는 중...</b> ' + Math.min(i+300, rows.length) + ' / ' + rows.length;
+        const bt = writeBatch(db);
+        rows.slice(i, i+300).forEach(function(r){
+          const p = { salePrice: Number(r.want) };
+          if(r.listPrice > 0) p.saleDiscountAmt = r.listPrice - Number(r.want);
+          if(r.buy != null) p.profit = Number(r.want) - r.buy;
+          bt.update(doc(db,"inventoryItems", r.id), p);
+        });
+        await withTimeout(bt.commit(), 20000, "판매가 채우기");
+        done += Math.min(300, rows.length - i);
+      }
+      try{ await logMoneyChange("판매가 채우기", rows.map(function(r){
+        return { id:r.id, serialNumber:r.sn, systemModel:r.model,
+                 before:{ salePrice:null }, after:{ salePrice:Number(r.want) } }; })); }catch(e){}
+    }catch(e){
+      alert("채우다 멈췄습니다. " + done + "대까지 처리했습니다.\n"
+        + ((e && e.message) ? e.message : String(e)));
+      return;
+    }
+    logAction("판매가 채우기", done + "대");
+    clearCache("inventory"); clearCache("sales"); clearDashCache();
+    noSalePriceCache = [];
+    if(head) head.innerHTML = '<b style="color:#2e7d32;">끝났습니다 — ' + done + '대를 채웠습니다.</b>'
+      + '<br><span style="color:var(--gray);">창을 닫고 <b>[다시 점검]</b> 을 누른 뒤<br>'
+      + '«한 판매요청 안에서 판매가가 다름» → «판매요청 금액» 순서로 처리해주세요.</span>';
+    alert(done + "대를 채웠습니다.\n\n다시 점검을 눌러 다음 항목으로 가주세요.");
+  };
+
 
   //  한 판매요청 안에서 재고 판매가가 섞인 건을 보여주고, 가장 많은 값으로 맞춥니다.
   window.showSrMixList = function(){
@@ -38507,6 +38668,51 @@ let ghostBankCache = [];
                 + "[전부 0원으로 넣기] 를 누르면 «지급 0원 · 개통 등록» 기록을 만듭니다. "
                 + "금액은 0원만 넣습니다. 없는 금액을 만들지 않습니다.",
               fix:"showZeroPayList()", fixLabel:"확인하기" });
+          }
+        }
+        // ── 판매·개통인데 판매가가 비어 있는 재고 ──
+        //  가장 먼저 봐야 할 항목입니다. 뿌리가 비면 판매요청·입금요청이 전부 어긋납니다.
+        {
+          const npRows = [];
+          try{
+            //  주문 품목을 번호로 담아둡니다. (재고에 없으면 주문 값으로 채우려고)
+            const ordById = {};
+            (await getDocs(collection(db,"orders"))).forEach(function(d){
+              const v = d.data();
+              if(v.status !== "취소") ordById[d.id] = v;
+            });
+            Object.keys(items).forEach(function(id){
+              const it = items[id];
+              if(it.deleted === true) return;
+              const st = String(it.status||"");
+              if(st !== "판매" && st !== "개통") return;          // 나간 재고만 봅니다
+              if(it.salePrice != null && it.salePrice !== "") return;
+              //  채울 수 있는 값을 찾습니다. 없으면 직접 넣으셔야 합니다.
+              let want = null, how = "";
+              if(it.salePriceFollowsBuy === true && Number(it.purchasePrice) > 0){
+                want = Number(it.purchasePrice); how = "입고동일 → 입고가";
+              }else if(it.orderId){
+                const o = ordById[it.orderId] || null;
+                if(o && o.salePrice != null && o.salePrice !== ""){
+                  want = Number(o.salePrice); how = "주문에 적힌 판매가";
+                }
+              }
+              npRows.push({ id, sn: it.serialNumber||"", model: it.systemModel||"",
+                dest: it.destination||"", st, out: it.outDate||"",
+                listPrice: Number(it.listPrice)||0,
+                buy: (it.purchasePrice == null || it.purchasePrice === "") ? null : Number(it.purchasePrice),
+                want, how });
+            });
+            npRows.sort(function(a,b){ return String(b.out).localeCompare(String(a.out)); });
+          }catch(e){}
+          if(npRows.length){
+            noSalePriceCache = npRows;
+            const canFix = npRows.filter(function(r){ return r.want != null; }).length;
+            issues.push({ n:"판매·개통인데 판매가가 비어 있음", cnt: npRows.length, unit:"대",
+              why:"나간 재고인데 판매가가 없습니다. 이것부터 채우셔야 판매요청·입금요청이 맞습니다. "
+                + "입고동일이거나 주문에 판매가가 있으면 그 값으로 채울 수 있습니다. ("
+                + canFix + "대) 나머지는 직접 넣으셔야 합니다.",
+              fix:"showNoSalePriceList()", fixLabel:"확인하기" });
           }
         }
         // ── 한 판매요청 안에서 재고 판매가가 서로 다른 건 ──
@@ -49684,6 +49890,16 @@ let ghostBankCache = [];
         };
         await updateDoc(doc(db,"orders", r.id), patch);
         doneL++;
+        //  바뀐 값을 이력에 남깁니다.
+        try{ await logMoneyChange("할인 기준 다시 잡기", (r.itemIds||[]).map(function(iid){
+          const it0 = (typeof invById === "object" && invById) ? invById[iid] : null;
+          return { id:iid, serialNumber:(it0&&it0.serialNumber)||"", systemModel:(it0&&it0.systemModel)||"",
+                   before:{ discountBase:r.base, purchasePrice:r.curBuy,
+                            purchaseDiscountAmt:r.curPreAmt, purchaseDiscount:r.curPrePct },
+                   after:{ discountBase:want, purchasePrice:buy,
+                           purchaseDiscountAmt:Math.round(Number(r.nPreAmt)||0),
+                           purchaseDiscount:(r.nPrePct===""||r.nPrePct==null)?null:Number(r.nPrePct) } };
+        })); }catch(e){}
         // 이어진 재고에도 같은 값을 넣습니다.
         for(const iid of (r.itemIds||[])){
           try{
