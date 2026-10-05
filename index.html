@@ -400,7 +400,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-06 v1226</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-06 v1227</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -4314,6 +4314,35 @@ const firebaseConfig = {
   }
   window.saleBaseFor = saleBaseFor;
 
+  //  «빈 값으로 덮어쓰기» 를 막는 공통 거름망입니다.
+  //   금액 칸에 null·빈칸이 들어오면 그 칸을 통째로 빼버립니다.
+  //   → 그 칸은 바뀌지 않고 원래 값이 그대로 남습니다.
+  //   0 은 통과시킵니다. 0 은 «0원으로 확인함» 이라는 뜻이라 지우면 안 됩니다.
+  //   일부러 비우실 때는 두 번째 인자에 그 칸 이름을 적어주세요.
+  const MONEY_KEYS = ["listPrice","purchasePrice","salePrice",
+    "preDiscountAmt","preDiscountPct","otherDiscountAmt","otherDiscountPct",
+    "purchaseDiscountAmt","purchaseDiscount","saleDiscountAmt","saleDiscount",
+    "saleDiscountPct","depositRequired","totalAmount","profit"];
+  function keepMoney(patch, allowClear){
+    if(!patch || typeof patch !== "object") return patch;
+    const clear = {};
+    (allowClear||[]).forEach(function(k){ clear[k] = 1; });
+    const out = {};
+    Object.keys(patch).forEach(function(k){
+      const v = patch[k];
+      if(MONEY_KEYS.indexOf(k) >= 0 && !clear[k]){
+        if(v === null || v === undefined || v === "") return;   // 빈 값이면 그 칸을 빼서 원래 값을 지킵니다
+        const n = Number(v);
+        if(!isFinite(n)) return;
+        out[k] = n;
+        return;
+      }
+      out[k] = v;
+    });
+    return out;
+  }
+  window.keepMoney = keepMoney;
+
   const SALE_CANCEL_PATCH = {
     status: "보유중", outDate: "", destination: "",
     salePrice: null, saleDiscountAmt: null, saleDiscount: null, saleDiscountBase: null,
@@ -4515,7 +4544,7 @@ const firebaseConfig = {
         return n + (Number(l.purchasePrice)||0) * (Number(l.quantity)||0); }, 0);
     }
     out.total = total;
-    try{ await updateDoc(doc(db,"orderBatches", batchId), { depositRequired: total }); }catch(e){}
+    try{ await updateDoc(doc(db,"orderBatches", batchId), keepMoney({ depositRequired: total })); }catch(e){}
 
     // ④ 여신차감액 + 여신 원장
     try{
@@ -4564,7 +4593,7 @@ const firebaseConfig = {
         return n + (Number(l.purchasePrice)||0) * (Number(l.quantity)||0); }, 0);
     }
     out.total = total;
-    try{ await updateDoc(doc(db,"orderBatches", batchId), { depositRequired: total }); }catch(e){}
+    try{ await updateDoc(doc(db,"orderBatches", batchId), keepMoney({ depositRequired: total })); }catch(e){}
     try{
       const bs = await getDoc(doc(db,"orderBatches", batchId));
       if(bs.exists()){
@@ -7683,7 +7712,7 @@ const firebaseConfig = {
         plan.slice(i, i+300).forEach(x=>{
           const patch = { listPrice: x.to };
           Object.assign(patch, computeLinkedPatch(x.it, "listPrice", x.to));
-          batch.update(doc(db,"inventoryItems", x.id), patch);
+          batch.update(doc(db,"inventoryItems", x.id), keepMoney(patch));
         });
         await batch.commit();
       }
@@ -7994,7 +8023,7 @@ const firebaseConfig = {
             };
             for(let i=0; i<ids.length; i+=400){
               const batch = writeBatch(db);
-              ids.slice(i, i+400).forEach(id=> batch.update(doc(db,"inventoryItems", id), patch));
+              ids.slice(i, i+400).forEach(id=> batch.update(doc(db,"inventoryItems", id), keepMoney(patch)));
               await batch.commit();
             }
             logAction("모델 수정 재고반영", (newFields.systemModel||"-") + " → 재고 " + ids.length + "건");
@@ -14203,7 +14232,7 @@ const firebaseConfig = {
         picked.slice(i, i+300).forEach(r=>{
           const patch = { depositRequired: r.wantCost };
           if(r.isCredit) patch.creditUsed = r.wantCredit;
-          bt.update(doc(db,"orderBatches", r.batchId), patch);
+          bt.update(doc(db,"orderBatches", r.batchId), keepMoney(patch));
         });
         await bt.commit();
       }
@@ -14593,7 +14622,7 @@ const firebaseConfig = {
           if(o.saleDiscountPct != null) patch.saleDiscount = o.saleDiscountPct;
           if(it.purchasePrice) patch.profit = sale - Number(it.purchasePrice);
         }
-        batch.update(doc(db,"inventoryItems", id), patch);
+        batch.update(doc(db,"inventoryItems", id), keepMoney(patch));
       });
       await batch.commit();
 
@@ -14757,7 +14786,7 @@ const firebaseConfig = {
     let itemFixed = 0;
     try{
       msg("저장 중...", false);
-      await withTimeout(updateDoc(doc(db,"orders", id), patch), 12000, "품목 수정");
+      await withTimeout(updateDoc(doc(db,"orders", id), keepMoney(patch)), 12000, "품목 수정");
 
       // ── 이어진 곳을 전부 맞춥니다 ──
       //  재고 · 판매요청 · 묶음 합계 · 여신차감액 · 여신 원장
@@ -15818,13 +15847,13 @@ const firebaseConfig = {
         for(let i=0; i<list.length; i+=300){
           const bt = writeBatch(db);
           list.slice(i, i+300).forEach(x=>{
-            bt.update(doc(db,"inventoryItems", x.item.id), {
+            bt.update(doc(db,"inventoryItems", x.item.id), keepMoney({
               status:"판매", outDate, destination: r.destination,
               salePrice: price, saleRequestId: srRef.id,
             //  판매할인 기준을 함께 적습니다. (비면 출고가로 계산되어 금액이 달라집니다)
             saleDiscountBase: saleBaseFor(it, dest),
               profit: (price && x.item.purchasePrice) ? (price - Number(x.item.purchasePrice)) : null
-            });
+            }));
           });
           await bt.commit();
         }
@@ -16639,7 +16668,7 @@ const firebaseConfig = {
       linkedItemIds: [...(o.linkedItemIds||[]), ...newItemIds],
       status: (newFulfilled >= o.quantity) ? "도착완료" : "부분도착"
     };
-    batch.update(doc(db,"orders", currentArrivalOrderId), orderPatch);
+    batch.update(doc(db,"orders", currentArrivalOrderId), keepMoney(orderPatch));
 
     await batch.commit();
 
@@ -16705,7 +16734,7 @@ const firebaseConfig = {
     };
     if(qty && newFulfilled >= qty) patch.status = "도착완료";
     else patch.status = "부분도착";
-    await updateDoc(doc(db,"orders", orderId), patch);
+    await updateDoc(doc(db,"orders", orderId), keepMoney(patch));
     loadOrderList();
   }
 
@@ -26263,7 +26292,7 @@ window.showDepositUses = async function(id){
       for(const l of lines){
         const mine = (l.matchedItemIds||[]).filter(id=> okSet.has(id));
         for(const id of mine){
-          await updateDoc(doc(db,"inventoryItems", id), {
+          await updateDoc(doc(db,"inventoryItems", id), keepMoney({
             status: "판매",
             destination: b.destination || "",
             salePrice: (l.salePrice != null) ? Number(l.salePrice) : null,
@@ -26272,7 +26301,7 @@ window.showDepositUses = async function(id){
             saleDiscount: (l.saleDiscountPct != null) ? Number(l.saleDiscountPct) : null,
             outDate: l.outDate || b.requestDate || todayStr(),
             saleRequestId: l.id
-          });
+          }));
           const it = okItems.find(x=> x.id === id);
           await logItem(id, it ? it.serial : "", "status",
             "판매 취소를 되돌려 <판매>로 복구 · " + (b.destination||"-"), {});
@@ -26434,9 +26463,9 @@ window.showDepositUses = async function(id){
         const meta = { status:"취소", cancelReason: reason,
                        cancelledAt: serverTimestamp(), cancelledBy: currentUser.name };
         if(r.isLegacy){
-          await updateDoc(doc(db,"saleRequests", r.id), meta);
+          await updateDoc(doc(db,"saleRequests", r.id), keepMoney(meta));
         }else{
-          await updateDoc(doc(db,"saleRequestBatches", r.id), meta);
+          await updateDoc(doc(db,"saleRequestBatches", r.id), keepMoney(meta));
           for(const l of (r.lines||[])){ await updateDoc(doc(db,"saleRequests", l.id), { status:"취소" }); }
         }
       }else{
@@ -26911,7 +26940,7 @@ window.showDepositUses = async function(id){
             salePrice, saleRequestId: srRef.id
           };
           if(it.purchasePrice) patch.profit = salePrice - Number(it.purchasePrice);
-          batch.update(doc(db,"inventoryItems", id), patch);
+          batch.update(doc(db,"inventoryItems", id), keepMoney(patch));
         });
         batch.update(doc(db,"saleRequests", srRef.id), {
           fulfilledCount: matchedDocs.length,
@@ -29632,7 +29661,7 @@ window.showDepositUses = async function(id){
               if(sp && bp) patch.profit = sp - bp;
             }
             if(Object.keys(patch).length){
-              bt.update(doc(db,"inventoryItems", t.iid), patch);
+              bt.update(doc(db,"inventoryItems", t.iid), keepMoney(patch));
               linkRowsBE.push({ id: t.iid,
                 before: (invItemsForFix && invItemsForFix[t.iid]) || {},
                 after: { ...((invItemsForFix && invItemsForFix[t.iid]) || {}), ...patch } });
@@ -31811,7 +31840,7 @@ window.showDepositUses = async function(id){
           const p = {};
           if(isIn){ p.dsRecvId = setId; p.dsRecvDate = waitIn ? null : date; }
           else    { p.dsPayId  = setId; p.dsPayDate  = date; }
-          bt.update(doc(db,"inventoryItems", r.id), p);
+          bt.update(doc(db,"inventoryItems", r.id), keepMoney(p));
           if(isIn){ r.recvId = setId; r.recv = waitIn ? "" : date; }
           else    { r.payId = setId; r.pay = date; }
         });
@@ -32080,7 +32109,7 @@ window.showDepositUses = async function(id){
           const p = {};
           if(isIn) p.dsRecvDate = wait ? null : (v.date || null);
           else     p.dsPayDate  = v.date || null;
-          bt.update(doc(db,"inventoryItems", id), p);
+          bt.update(doc(db,"inventoryItems", id), keepMoney(p));
         });
         await withTimeout(bt.commit(), 20000, "정산일 맞추기");
       }
@@ -32124,7 +32153,7 @@ window.showDepositUses = async function(id){
           const p = {};
           if(isIn){ p.dsRecvId = null; p.dsRecvDate = null; }
           else    { p.dsPayId  = null; p.dsPayDate  = null; }
-          bt.update(doc(db,"inventoryItems", id), p);
+          bt.update(doc(db,"inventoryItems", id), keepMoney(p));
         });
         await withTimeout(bt.commit(), 20000, "정산 취소");
       }
@@ -32365,7 +32394,7 @@ window.showDepositUses = async function(id){
         picked.slice(i, i+300).forEach(function(r){
           const p = {};
           p[(which === "recv") ? "dsRecvDate" : "dsPayDate"] = d || null;
-          bt.update(doc(db,"inventoryItems", r.id), p);
+          bt.update(doc(db,"inventoryItems", r.id), keepMoney(p));
           if(which === "recv") r.recv = d; else r.pay = d;
         });
         await withTimeout(bt.commit(), 20000, label + " 넣기");
@@ -33447,7 +33476,7 @@ window.showDepositUses = async function(id){
               putO[kv[0]] = n2;
             });
             if(Object.keys(putO).length){
-              await updateDoc(doc(db,"orders", b.orderId), putO);
+              await updateDoc(doc(db,"orders", b.orderId), keepMoney(putO));
               out.order++;
             }
           }
@@ -33490,9 +33519,9 @@ window.showDepositUses = async function(id){
             const base2 = String(v.discountBase||"") || "unit";
             const pre2 = L2 - buy2;
             const pct2 = itemPctVal(pre2, L2, base2);
-            await updateDoc(doc(db,"inventoryItems", dd.id), {
+            await updateDoc(doc(db,"inventoryItems", dd.id), keepMoney({
               listPrice: L2, purchaseDiscountAmt: Math.round(pre2),
-              purchaseDiscount: pct2, purchasePrice: buy2 });
+              purchaseDiscount: pct2, purchasePrice: buy2 }));
             out.rebuy = (out.rebuy||0) + 1;
           }
         }catch(e){}
@@ -33533,11 +33562,11 @@ window.showDepositUses = async function(id){
             if(paid){ out.blocked++; }
             else{
               const sp = val(b,a,"salePrice");
-              await updateDoc(doc(db,"saleRequests", b.saleRequestId), {
+              await updateDoc(doc(db,"saleRequests", b.saleRequestId), keepMoney({
                 salePrice:       sp != null ? Number(sp) : null,
                 saleDiscountAmt: val(b,a,"saleDiscountAmt") != null ? Number(val(b,a,"saleDiscountAmt")) : null,
                 saleDiscountPct: val(b,a,"saleDiscount")    != null ? Number(val(b,a,"saleDiscount"))    : null,
-                ...(val(b,a,"destination") ? { destination: val(b,a,"destination") } : {}) });
+                ...(val(b,a,"destination") ? { destination: val(b,a,"destination") } : {}) }));
               out.sale++;
               // 묶음 합계 — 입금요청 금액이 되므로 다시 셉니다.
               if(bId && !seenBatch.has(bId)){
@@ -33557,8 +33586,8 @@ window.showDepositUses = async function(id){
                 //  판매가가 하나라도 비어 있으면 요청금액을 다시 쓰지 않습니다.
                 //   전에는 빈 값을 0 으로 세어 요청금액이 0 이 되고 할인이 100% 로 보였습니다.
                 if(noPrice === 0){
-                  await updateDoc(doc(db,"saleRequestBatches", bId), {
-                    depositRequired: Math.round(sum), lineCount: cnt });
+                  await updateDoc(doc(db,"saleRequestBatches", bId), keepMoney({
+                    depositRequired: Math.round(sum), lineCount: cnt }));
                   out.batch++;
                 }else{
                   await updateDoc(doc(db,"saleRequestBatches", bId), { lineCount: cnt });
@@ -33948,7 +33977,7 @@ window.showDepositUses = async function(id){
       const memo = prompt("변경 사유 (선택)", "") || "";
       const patch = { salePrice: nv };
       if(it.purchasePrice) patch.profit = nv - Number(it.purchasePrice);
-      await updateDoc(doc(db,"inventoryItems", itemId), patch);
+      await updateDoc(doc(db,"inventoryItems", itemId), keepMoney(patch));
       await logItem(itemId, serial, "price", "판매가 " + cur.toLocaleString() + " → " + nv.toLocaleString() + (memo ? " · " + memo : ""), { systemModel: it.systemModel||"" });
       logAction("판매가 변경", serial + " : " + cur.toLocaleString() + " → " + nv.toLocaleString());
       alert("바꿨습니다."); openItemHistory(serial, String(it.systemModel||it.baseModel||"")); clearDashCache(); clearCache("inventory");
@@ -34441,7 +34470,7 @@ window.showDepositUses = async function(id){
 
   // 판매요청의 값을 재고에 그대로 넣어 맞춥니다.
   async function applyMismatchFix(r){
-    await updateDoc(doc(db,"inventoryItems", r.itemId), {
+    await updateDoc(doc(db,"inventoryItems", r.itemId), keepMoney({
       status: "판매",
       destination: r.dest === "-" ? "" : r.dest,
       salePrice: r.salePrice,
@@ -34451,7 +34480,7 @@ window.showDepositUses = async function(id){
       saleDiscountBase: saleBaseFor(r.it || null, r.dest),
       outDate: r.outDate || "",
       saleRequestId: r.srId
-    });
+    }));
     await logItem(r.itemId, r.serial, "status",
       "데이터 점검에서 판매요청에 맞춤 · " + (r.dest||"-")
       + (r.salePrice != null ? " · 판매가 " + Number(r.salePrice).toLocaleString() : ""), {});
@@ -34775,7 +34804,7 @@ window.showDepositUses = async function(id){
             p.manufacturerColor = x.want.color.manufacturerColor || "";
             if(x.want.color.sku != null) p.sku = x.want.color.sku || "";
           }
-          if(Object.keys(p).length) bt.update(doc(db,"inventoryItems", x.id), p);
+          if(Object.keys(p).length) bt.update(doc(db,"inventoryItems", x.id), keepMoney(p));
         });
         await bt.commit();
       }
@@ -35002,7 +35031,7 @@ window.showDepositUses = async function(id){
           if(othPct != null && othPct > 0){ oth = Math.round(L * othPct / 100); p.otherDiscountAmt = oth; }
           else if(oth) p.otherDiscountPct = Number(((oth/L)*100).toFixed(2));
           p.purchasePrice = buyFromDiscounts(L, pre, oth, String(r.o.discountBase||""));
-          bt.update(doc(db,"orders", r.oid), p);
+          bt.update(doc(db,"orders", r.oid), keepMoney(p));
         });
         await bt.commit();
       }
@@ -35245,7 +35274,7 @@ window.showDepositUses = async function(id){
           // 그 이름의 모델이 등록돼 있으면 모델번호도 이어둡니다.
           const m = (modelsCache||[]).find(x=> modelDupKey(x.systemModel||"") === modelDupKey(r.want));
           if(m) p.modelId = m.id;
-          bt.update(doc(db,"inventoryItems", r.id), p);
+          bt.update(doc(db,"inventoryItems", r.id), keepMoney(p));
         });
         await bt.commit();
       }
@@ -35747,7 +35776,7 @@ window.showDepositUses = async function(id){
               parts.push("타할인% " + v); }
             parts.push("매입 " + lab);
           }
-          bt.update(doc(db,"inventoryItems", r.id), patch);
+          bt.update(doc(db,"inventoryItems", r.id), keepMoney(patch));
           ihRows.push({ id:r.id, serialNumber:it.serialNumber||"", systemModel:it.systemModel||"",
             detail: "할인 기준을 「" + lab + "」으로 두고 %를 채움 · " + parts.join(" · ") + " (금액은 그대로)" });
           n++;
@@ -35782,7 +35811,7 @@ window.showDepositUses = async function(id){
           const patch = {};
           if(r.buyWant)  patch.discountBase = r.buyWant;
           if(r.saleWant) patch.saleDiscountBase = r.saleWant;
-          bt.update(doc(db,"inventoryItems", r.id), patch);
+          bt.update(doc(db,"inventoryItems", r.id), keepMoney(patch));
           const lab = v => (v === "supply") ? "공급가(삼전)" : "출고가(개당)";
           ihRows.push({ id:r.id, serialNumber:r.it.serialNumber||"", systemModel:r.it.systemModel||"",
             detail: "할인 기준을 실제 금액에서 찾아 채움"
@@ -35847,7 +35876,7 @@ window.showDepositUses = async function(id){
             const n = (d.id === srId) ? rest.length : (Number(v.quantity)||(v.matchedItemIds||[]).length);
             tot += (Number(v.salePrice)||0) * n; cnt++;
           });
-          await updateDoc(doc(db,"saleRequestBatches", sr.batchId), { depositRequired: tot, lineCount: cnt });
+          await updateDoc(doc(db,"saleRequestBatches", sr.batchId), keepMoney({ depositRequired: tot, lineCount: cnt }));
         }catch(e){}
       }
       // 뺀 재고를 앞의 판매요청으로 되돌립니다.
@@ -36139,7 +36168,7 @@ window.showDepositUses = async function(id){
         const patch = { status: "판매" };
         if(!x.it.destination && x.sr.destination) patch.destination = x.sr.destination;
         if(!x.it.outDate && x.sr.requestDate) patch.outDate = x.sr.requestDate;
-        await updateDoc(doc(db,"inventoryItems", x.iid), patch);
+        await updateDoc(doc(db,"inventoryItems", x.iid), keepMoney(patch));
         ih.push({ id:x.iid, serialNumber:x.it.serialNumber||"", systemModel:x.it.systemModel||"",
           detail:"상태 " + (x.it.status||"-") + " → 판매 (같은 판매요청의 다른 건에 맞춤 · "
                  + (x.sr.destination||"-") + " " + (x.sr.requestDate||"") + ")" });
@@ -36291,7 +36320,7 @@ window.showDepositUses = async function(id){
           putO2[kv[0]] = n3;
         });
         if(Object.keys(putO2).length){
-          await updateDoc(doc(db,"orders", r.orderId), putO2);
+          await updateDoc(doc(db,"orders", r.orderId), keepMoney(putO2));
           n++;
         }
       }
@@ -36344,11 +36373,11 @@ window.showDepositUses = async function(id){
     let n = 0;
     try{
       for(const r of rows){
-        await updateDoc(doc(db,"saleRequests", r.srId), {
+        await updateDoc(doc(db,"saleRequests", r.srId), keepMoney({
           salePrice: numOrNull(Number(r.it.salePrice)),
           saleDiscountAmt: numOrNull(Number(r.it.saleDiscountAmt)),
           saleDiscountPct: Number(r.it.saleDiscount)||null,
-          ...(r.it.destination ? { destination: r.it.destination } : {}) });
+          ...(r.it.destination ? { destination: r.it.destination } : {}) }));
         n++;
       }
     }catch(e){ alert("맞추지 못했습니다.\n" + ((e&&e.message)?e.message:String(e))); return; }
@@ -36399,7 +36428,7 @@ window.showDepositUses = async function(id){
     let n = 0;
     try{
       for(const r of rows){
-        await updateDoc(doc(db,"saleRequestBatches", r.id), { depositRequired: r.want });
+        await updateDoc(doc(db,"saleRequestBatches", r.id), keepMoney({ depositRequired: r.want }));
         n++;
       }
     }catch(e){ alert("맞추지 못했습니다.\n" + ((e&&e.message)?e.message:String(e))); return; }
@@ -36472,17 +36501,17 @@ window.showDepositUses = async function(id){
     const ihRows = [];
     try{
       for(const r of sameBuyDiffCache){
-        await updateDoc(doc(db,"inventoryItems", r.id), {
+        await updateDoc(doc(db,"inventoryItems", r.id), keepMoney({
           salePrice: r.wantPrice, saleDiscountAmt: r.wantAmt,
-          saleDiscount: r.wantPct, profit: 0 });
+          saleDiscount: r.wantPct, profit: 0 }));
         ihRows.push({ id:r.id, serialNumber:r.it.serialNumber||"", systemModel:r.it.systemModel||"",
           detail: "입고동일 — 판매 금액을 매입 조건에 맞춤 · 판매할인 "
             + (Number(r.curAmt)||0).toLocaleString() + " → " + (Number(r.wantAmt)||0).toLocaleString()
             + " · 판매할인% " + (r.curPct == null ? "-" : r.curPct) + " → " + (r.wantPct == null ? "-" : r.wantPct) });
         n1++;
         if(r.it.saleRequestId){
-          await updateDoc(doc(db,"saleRequests", r.it.saleRequestId), {
-            salePrice: r.wantPrice, saleDiscountAmt: r.wantAmt, saleDiscountPct: r.wantPct });
+          await updateDoc(doc(db,"saleRequests", r.it.saleRequestId), keepMoney({
+            salePrice: r.wantPrice, saleDiscountAmt: r.wantAmt, saleDiscountPct: r.wantPct }));
           n2++;
         }
       }
@@ -36747,7 +36776,7 @@ window.showDepositUses = async function(id){
           patch.salePrice = r.wantBuy; patch.saleDiscountAmt = sb.amt;
           patch.saleDiscount = sb.pct; patch.profit = 0;
         }
-        await updateDoc(doc(db,"inventoryItems", r.id), patch);
+        await updateDoc(doc(db,"inventoryItems", r.id), keepMoney(patch));
         ihRows.push({ id:r.id, serialNumber: it.serialNumber||"", systemModel: it.systemModel||"",
           detail: "할인 금액을 업체 기준(" + r.base + ")으로 맞춤 · 입고가 "
             + r.curBuy.toLocaleString() + " → " + r.wantBuy.toLocaleString()
@@ -36757,13 +36786,13 @@ window.showDepositUses = async function(id){
           const sb2 = saleFromBuy({ ...it, purchaseDiscountAmt:r.wantPre,
             otherDiscountAmt:r.wantOther, purchasePrice:r.wantBuy });
           await updateDoc(doc(db,"saleRequests", it.saleRequestId),
-            { salePrice: r.wantBuy, saleDiscountAmt: sb2.amt, saleDiscountPct: sb2.pct });
+            keepMoney({ salePrice: r.wantBuy, saleDiscountAmt: sb2.amt, saleDiscountPct: sb2.pct }));
           n2++;
         }
         if(it.orderId && !seenOrder.has(it.orderId)){
           seenOrder.add(it.orderId);
-          await updateDoc(doc(db,"orders", it.orderId), {
-            preDiscountAmt: r.wantPre, otherDiscountAmt: r.wantOther, purchasePrice: r.wantBuy });
+          await updateDoc(doc(db,"orders", it.orderId), keepMoney({
+            preDiscountAmt: r.wantPre, otherDiscountAmt: r.wantOther, purchasePrice: r.wantBuy }));
           n3++;
         }
       }
@@ -37139,13 +37168,13 @@ let ghostBankCache = [];
   };
 
   async function selfActPatch(r){
-    await updateDoc(doc(db,"inventoryItems", r.id), {
+    await updateDoc(doc(db,"inventoryItems", r.id), keepMoney({
       destination: "포피플",
       outDate: r.actDate || "",
       salePrice: numOrNull(r.L),
       saleDiscountAmt: 0, saleDiscount: 0,
       saleDiscountBase: "unit"      // 자체개통은 출고가(개당) 기준입니다
-    });
+    }));
     await logItem(r.id, r.sn, "edited",
       "자체개통 정보 맞춤 · 판매처 포피플 · 판매가 " + (r.L||0).toLocaleString(), {});
   }
@@ -37598,7 +37627,7 @@ let ghostBankCache = [];
           if(r.wBuy != null) p.purchasePrice = r.wBuy;
           if(r.wPre != null) p.purchaseDiscountAmt = r.wPre;
           if(r.wPct != null) p.purchaseDiscount = r.wPct;
-          bt.update(doc(db,"inventoryItems", r.id), p);
+          bt.update(doc(db,"inventoryItems", r.id), keepMoney(p));
         });
         await withTimeout(bt.commit(), 20000, "매입 금액 채우기");
         done += Math.min(300, rows.length - i);
@@ -37699,7 +37728,7 @@ let ghostBankCache = [];
           const p = { salePrice: Number(r.want) };
           if(r.listPrice > 0) p.saleDiscountAmt = r.listPrice - Number(r.want);
           if(r.buy != null) p.profit = Number(r.want) - r.buy;
-          bt.update(doc(db,"inventoryItems", r.id), p);
+          bt.update(doc(db,"inventoryItems", r.id), keepMoney(p));
         });
         await withTimeout(bt.commit(), 20000, "판매가 채우기");
         done += Math.min(300, rows.length - i);
@@ -37779,7 +37808,7 @@ let ghostBankCache = [];
             const p = { salePrice: Number(r.want) };
             if(L > 0) p.saleDiscountAmt = L - Number(r.want);
             if(it.purchasePrice != null) p.profit = Number(r.want) - Number(it.purchasePrice);
-            bt.update(doc(db,"inventoryItems", id), p);
+            bt.update(doc(db,"inventoryItems", id), keepMoney(p));
           });
           await withTimeout(bt.commit(), 20000, "판매가 맞추기");
           done += Math.min(300, r.ids.length - i);
@@ -37851,7 +37880,7 @@ let ghostBankCache = [];
         if(head) head.innerHTML = '<b>맞추는 중...</b> ' + Math.min(i+300, rows.length) + ' / ' + rows.length;
         const bt = writeBatch(db);
         rows.slice(i, i+300).forEach(function(r){
-          bt.update(doc(db,"saleRequestBatches", r.id), { depositRequired: r.want });
+          bt.update(doc(db,"saleRequestBatches", r.id), keepMoney({ depositRequired: r.want }));
         });
         await withTimeout(bt.commit(), 20000, "판매요청 금액 맞추기");
         done += Math.min(300, rows.length - i);
@@ -37871,7 +37900,7 @@ let ghostBankCache = [];
             if(bs.exists()) total += Number(bs.data().depositRequired)||0;
           }
           if(Math.round(total) !== (Number(v.totalAmount)||0)){
-            await updateDoc(doc(db,"saleDepositRequests", rid), { totalAmount: Math.round(total) });
+            await updateDoc(doc(db,"saleDepositRequests", rid), keepMoney({ totalAmount: Math.round(total) }));
             dep++;
           }
         }catch(e){}
@@ -38044,7 +38073,7 @@ let ghostBankCache = [];
                     if(sb.saleDiscountAmt != null) p.saleDiscountAmt = sb.saleDiscountAmt;
                     p.profit = 0; }
           }
-          bt.update(doc(db,"inventoryItems", r.id), p);
+          bt.update(doc(db,"inventoryItems", r.id), keepMoney(p));
         });
         await withTimeout(bt.commit(), 20000, "되돌리기");
         done += Math.min(300, picked.length - i);
@@ -38129,7 +38158,7 @@ let ghostBankCache = [];
             saleDiscountPct: r.wantPct
           };
           if(r.wantBase) patch.saleDiscountBase = r.wantBase;
-          bt.update(doc(db,"orders", r.id), patch);
+          bt.update(doc(db,"orders", r.id), keepMoney(patch));
           if(r.batchId) batches.add(r.batchId);
         });
         await withTimeout(bt.commit(), 20000, "판매 값 맞추기");
@@ -41813,9 +41842,9 @@ let ghostBankCache = [];
         const meta = { status:"취소", cancelReason:String(reason).trim(),
           cancelledAt: serverTimestamp(), cancelledBy: currentUser.name };
         if(r.isLegacy){
-          await updateDoc(doc(db,"saleRequests", r.id), meta);
+          await updateDoc(doc(db,"saleRequests", r.id), keepMoney(meta));
         }else{
-          await updateDoc(doc(db,"saleRequestBatches", r.id), meta);
+          await updateDoc(doc(db,"saleRequestBatches", r.id), keepMoney(meta));
           for(const l of r.lines){ await updateDoc(doc(db,"saleRequests", l.id), { status:"취소" }); }
         }
         // 매칭돼 있던 재고를 보유중으로 되돌릴지 물어봅니다.
@@ -42021,12 +42050,12 @@ let ghostBankCache = [];
       patch.salePrice = s.salePrice;
       if(it.purchasePrice) patch.profit = s.salePrice - it.purchasePrice;
     }
-    await updateDoc(doc(db,"inventoryItems", itemDoc.id), patch);
+    await updateDoc(doc(db,"inventoryItems", itemDoc.id), keepMoney(patch));
 
     const newFulfilled = (s.fulfilledCount||0) + 1;
     const srPatch = { fulfilledCount:newFulfilled, matchedItemIds:[...(s.matchedItemIds||[]), itemDoc.id] };
     srPatch.status = (newFulfilled >= s.quantity) ? "매칭완료" : "부분매칭";
-    await updateDoc(doc(db,"saleRequests", currentSaleReqId), srPatch);
+    await updateDoc(doc(db,"saleRequests", currentSaleReqId), keepMoney(srPatch));
 
     logAction("판매요청 재고매칭", (s.destination||"-")+" / 일련번호 "+serial);
     closeSaleReqMatchModal();
@@ -42159,7 +42188,7 @@ let ghostBankCache = [];
     }
     if(saleDiscountAmt) patch.saleDiscountAmt = Number(saleDiscountAmt);
     if(saleDiscountPct) patch.saleDiscount = Number(saleDiscountPct);
-    await updateDoc(doc(db,"inventoryItems", itemDoc.id), patch);
+    await updateDoc(doc(db,"inventoryItems", itemDoc.id), keepMoney(patch));
 
     // 판매요청도 함께 만듭니다. 그래야 판매 관리에 뜨고 입금요청을 만들 수 있습니다.
     //  판매가가 없으면 받을 금액이 정해지지 않아 만들지 않습니다.
@@ -44633,7 +44662,7 @@ let ghostBankCache = [];
           const sale = (p.salePrice !== undefined) ? p.salePrice : it.salePrice;
           const buy  = (p.purchasePrice !== undefined) ? p.purchasePrice : it.purchasePrice;
           if(sale && buy) p.profit = Number(sale) - Number(buy);
-          batch.update(doc(db,"inventoryItems", id), p);
+          batch.update(doc(db,"inventoryItems", id), keepMoney(p));
         });
         await batch.commit();
       }
@@ -44665,7 +44694,7 @@ let ghostBankCache = [];
             });
             for(let i=0; i<hit.length; i+=300){
               const bt = writeBatch(db);
-              hit.slice(i, i+300).forEach(rid=> bt.update(doc(db,"saleRequests", rid), sp));
+              hit.slice(i, i+300).forEach(rid=> bt.update(doc(db,"saleRequests", rid), keepMoney(sp)));
               await bt.commit();
             }
             srFixed = hit.length;
@@ -44837,8 +44866,8 @@ let ghostBankCache = [];
       const ihClub = [];
       try{
         for(const x of plan){
-          await updateDoc(doc(db,"inventoryItems", x.it.id), {
-            otherDiscountPct: x.pct, otherDiscountAmt: x.amt, purchasePrice: x.buy });
+          await updateDoc(doc(db,"inventoryItems", x.it.id), keepMoney({
+            otherDiscountPct: x.pct, otherDiscountAmt: x.amt, purchasePrice: x.buy }));
           ihClub.push({ id:x.it.id, serialNumber:x.it.serialNumber||"", systemModel:x.it.systemModel||"",
             detail: "클럽장려금 타할인 채움 · " + x.pct + "% (공급가 기준) · 타할인 "
               + x.amt.toLocaleString() + " · 입고가 "
@@ -44934,7 +44963,7 @@ let ghostBankCache = [];
             patch.saleDiscount    = sb.pct;
             patch.profit = 0;
           }
-          await updateDoc(doc(db,"inventoryItems", it.id), patch);
+          await updateDoc(doc(db,"inventoryItems", it.id), keepMoney(patch));
           ihBase.push({ id: it.id, serialNumber: it.serialNumber||"", systemModel: it.systemModel||"",
             detail: "매입할인 기준을 「" + baseLabel + "」으로 둠 · 입고가 "
               + (Number(it.purchasePrice)||0).toLocaleString() + " → " + c.buy.toLocaleString()
@@ -44944,13 +44973,13 @@ let ghostBankCache = [];
             const sb2 = saleFromBuy({ ...it, purchaseDiscountAmt:c.pre,
               otherDiscountAmt:c.other, purchasePrice:c.buy });
             await updateDoc(doc(db,"saleRequests", it.saleRequestId),
-              { salePrice: c.buy, saleDiscountAmt: sb2.amt, saleDiscountPct: sb2.pct });
+              keepMoney({ salePrice: c.buy, saleDiscountAmt: sb2.amt, saleDiscountPct: sb2.pct }));
             n2++;
           }
           if(it.orderId && !seenOrderB.has(it.orderId)){
             seenOrderB.add(it.orderId);
-            await updateDoc(doc(db,"orders", it.orderId), {
-              preDiscountAmt: c.pre, otherDiscountAmt: c.other, purchasePrice: c.buy });
+            await updateDoc(doc(db,"orders", it.orderId), keepMoney({
+              preDiscountAmt: c.pre, otherDiscountAmt: c.other, purchasePrice: c.buy }));
             n3++;
           }
         }
@@ -45029,7 +45058,7 @@ let ghostBankCache = [];
             patch.salePrice = buy; patch.saleDiscountAmt = sb.amt;
             patch.saleDiscount = sb.pct; patch.profit = 0;
           }
-          await updateDoc(doc(db,"inventoryItems", it.id), patch);
+          await updateDoc(doc(db,"inventoryItems", it.id), keepMoney(patch));
           ihRecalc.push({ id: it.id, serialNumber: it.serialNumber||"", systemModel: it.systemModel||"",
             detail: "할인 금액 다시 계산 · 입고가 "
               + ((Number(it.purchasePrice)||0) ? Number(it.purchasePrice).toLocaleString() : "(없음)")
@@ -45040,13 +45069,13 @@ let ghostBankCache = [];
             const sb2 = saleFromBuy({ ...it, purchaseDiscountAmt:np,
               otherDiscountAmt:no, purchasePrice:buy });
             await updateDoc(doc(db,"saleRequests", it.saleRequestId),
-              { salePrice: buy, saleDiscountAmt: sb2.amt, saleDiscountPct: sb2.pct });
+              keepMoney({ salePrice: buy, saleDiscountAmt: sb2.amt, saleDiscountPct: sb2.pct }));
             n2++;
           }
           if(it.orderId && !seenOrder.has(it.orderId)){
             seenOrder.add(it.orderId);
-            await updateDoc(doc(db,"orders", it.orderId), {
-              preDiscountAmt: np, otherDiscountAmt: no, purchasePrice: buy });
+            await updateDoc(doc(db,"orders", it.orderId), keepMoney({
+              preDiscountAmt: np, otherDiscountAmt: no, purchasePrice: buy }));
             n3++;
           }
         }
@@ -45255,7 +45284,7 @@ let ghostBankCache = [];
           }
           patch.profit = 0;                       // 매입가 그대로 넘기므로 수익 0
           patch.salePriceFollowsBuy = true;       // 앞으로 입고가가 바뀌면 판매가도 따라갑니다
-          await updateDoc(doc(db,"inventoryItems", it.id), patch);
+          await updateDoc(doc(db,"inventoryItems", it.id), keepMoney(patch));
           ihSame.push({ id: it.id, serialNumber: it.serialNumber||"", systemModel: it.systemModel||"",
             detail: (f ? "입고가를 업체 기준으로 바로잡고 " : "")
               + "판매가 = 입고가로 맞춤 · 판매가 "
@@ -45265,18 +45294,18 @@ let ghostBankCache = [];
                      + " → " + f.buy.toLocaleString() + ")" : "") });
           n1++;
           if(it.saleRequestId){
-            await updateDoc(doc(db,"saleRequests", it.saleRequestId), {
+            await updateDoc(doc(db,"saleRequests", it.saleRequestId), keepMoney({
               salePrice: buy,
               ...(L ? { saleDiscountAmt: L - buy } : {})   // 판매할인%는 그대로 둡니다
-            });
+            }));
             n2++;
           }
           // 입고가를 바로잡았으면 그 재고가 붙은 주문 품목도 맞춥니다.
           //  주문의 타할인은 클럽장려금 기준이라 어긋나면 안 됩니다.
           if(f && it.orderId && !seenOrderS.has(it.orderId)){
             seenOrderS.add(it.orderId);
-            await updateDoc(doc(db,"orders", it.orderId), {
-              preDiscountAmt: f.pre, otherDiscountAmt: f.other, purchasePrice: f.buy });
+            await updateDoc(doc(db,"orders", it.orderId), keepMoney({
+              preDiscountAmt: f.pre, otherDiscountAmt: f.other, purchasePrice: f.buy }));
             n3++;
           }
         }
@@ -45410,7 +45439,7 @@ let ghostBankCache = [];
           systemModel:  it ? (it.systemModel||"")  : "",
           detail: fieldDef.label + " " + bk + " → " + String(newVal)
             + (alsoTxt ? " (함께 " + alsoTxt + ")" : "") }); }
-      await updateDoc(doc(db,"inventoryItems", id), patch);
+      await updateDoc(doc(db,"inventoryItems", id), keepMoney(patch));
     }
     // 딸린 곳(주문 품목 · 여신 · 판매요청 · 묶음 합계)을 한 번에 맞춥니다.
     let linkOutB = {};
@@ -45456,7 +45485,7 @@ let ghostBankCache = [];
           const pre2 = (p2.preDiscountAmt != null) ? p2.preDiscountAmt : (Number(it.purchaseDiscountAmt)||0);
           const oth2 = (p2.otherDiscountAmt != null) ? p2.otherDiscountAmt : (Number(it.otherDiscountAmt)||0);
           if(L) p2.purchasePrice = buyFromDiscounts(L, pre2, oth2, String((p2.discountBase != null ? p2.discountBase : it.discountBase)||""));
-          await updateDoc(doc(db,"orders", it.orderId), p2);
+          await updateDoc(doc(db,"orders", it.orderId), keepMoney(p2));
           ordFixed++;
         }
       }catch(e){}
@@ -45471,11 +45500,11 @@ let ghostBankCache = [];
           if(!it || it.salePriceFollowsBuy !== true || !it.saleRequestId) continue;
           const linked2 = computeLinkedPatch(it, key, parsedVal);
           if(linked2.salePrice == null) continue;
-          await updateDoc(doc(db,"saleRequests", it.saleRequestId), {
+          await updateDoc(doc(db,"saleRequests", it.saleRequestId), keepMoney({
             salePrice: linked2.salePrice,
             ...(linked2.saleDiscountAmt != null ? { saleDiscountAmt: linked2.saleDiscountAmt } : {}),
             ...(linked2.saleDiscount != null ? { saleDiscount: linked2.saleDiscount } : {})
-          });
+          }));
           followFixed++;
         }
       }catch(e){}
@@ -45504,7 +45533,7 @@ let ghostBankCache = [];
             patch2.saleDiscountAmt = amt2;
             if(L) patch2.salePrice = L - amt2;
           }
-          await updateDoc(doc(db,"saleRequests", it.saleRequestId), patch2);
+          await updateDoc(doc(db,"saleRequests", it.saleRequestId), keepMoney(patch2));
           srFixed++;
         }
       }catch(e){}
@@ -45768,7 +45797,7 @@ let ghostBankCache = [];
           }
           split++;
         }else{
-          await updateDoc(doc(db,"orders", oid), patch);
+          await updateDoc(doc(db,"orders", oid), keepMoney(patch));
           whole++;
         }
       }
@@ -49277,7 +49306,7 @@ let ghostBankCache = [];
         // 자동 계산값을 먼저 넣고, 파일에 적은 값으로 덮어씁니다. (사람이 적은 값 우선)
         Object.keys(r.auto || {}).forEach(k=>{ patch[k] = r.auto[k]; });
         r.changes.forEach(c=>{ patch[c.key] = c.value; });
-        batch.update(doc(db,"inventoryItems", r.itemId), patch);
+        batch.update(doc(db,"inventoryItems", r.itemId), keepMoney(patch));
       });
       await batch.commit();
       updated += chunk.length;
@@ -50354,7 +50383,7 @@ let ghostBankCache = [];
           otherDiscountPct: (r.nOthPct === "" || r.nOthPct == null) ? null : Number(r.nOthPct),
           purchasePrice: buy
         };
-        await updateDoc(doc(db,"orders", r.id), patch);
+        await updateDoc(doc(db,"orders", r.id), keepMoney(patch));
         doneL++;
         //  바뀐 값을 이력에 남깁니다.
         try{ await logMoneyChange("할인 기준 다시 잡기", (r.itemIds||[]).map(function(iid){
@@ -50369,14 +50398,14 @@ let ghostBankCache = [];
         // 이어진 재고에도 같은 값을 넣습니다.
         for(const iid of (r.itemIds||[])){
           try{
-            await updateDoc(doc(db,"inventoryItems", iid), {
+            await updateDoc(doc(db,"inventoryItems", iid), keepMoney({
               discountBase: want,
               purchaseDiscountAmt: Math.round(Number(r.nPreAmt)||0),
               purchaseDiscount: (r.nPrePct === "" || r.nPrePct == null) ? null : Number(r.nPrePct),
               otherDiscountAmt: Math.round(Number(r.nOthAmt)||0),
               otherDiscountPct: (r.nOthPct === "" || r.nOthPct == null) ? null : Number(r.nOthPct),
               purchasePrice: buy
-            });
+            }));
             doneI++;
           }catch(e){}
         }
@@ -50550,7 +50579,7 @@ let ghostBankCache = [];
           if(r.team) p.activationTeam = r.team;
           if(r.by)   p.activationBy   = r.by;
           if(Object.keys(p).length === 0) return;
-          bt.update(doc(db,"inventoryItems", r.id), p);
+          bt.update(doc(db,"inventoryItems", r.id), keepMoney(p));
           done++;
         });
         await withTimeout(bt.commit(), 15000, "개통정보 저장");
@@ -52059,7 +52088,7 @@ let ghostBankCache = [];
       try{
         await updateDoc(doc(db,"activations", a.id), { itemId: it.id, linkState: "new" });
         const L = Number(it.listPrice)||0;
-        await updateDoc(doc(db,"inventoryItems", it.id), {
+        await updateDoc(doc(db,"inventoryItems", it.id), keepMoney({
           status: "개통",
           activateDate: a.activateDate || "",
           destination: "포피플", outDate: a.activateDate || "",
@@ -52071,7 +52100,7 @@ let ghostBankCache = [];
           ...(a.activationTeam ? { activationTeam: a.activationTeam } : {}),
           ...(a.activationBy   ? { activationBy: a.activationBy } : {}),
           ...(a.month          ? { supportMonth: a.month } : {})
-        });
+        }));
         try{
           const sq = await getDocs(query(collection(db,"supportLogs"),
             where("serialNumber","==", String(a.serialNumber||""))));
@@ -52453,7 +52482,7 @@ window.toggleActAll = function(on){
         toApply.slice(i, i+300).forEach(r=>{
           //  포피플 자체개통입니다. 판매처는 포피플, 판매가는 출고가입니다.
           const L = Number(r.listPrice)||0;
-          bt.update(doc(db,"inventoryItems", r.id), {
+          bt.update(doc(db,"inventoryItems", r.id), keepMoney({
             status:"개통", activateDate: (r.date || date),
             destination: "포피플", outDate: (r.date || date),
             ...(L ? { salePrice: L, saleDiscountAmt: 0, saleDiscount: 0,
@@ -52466,7 +52495,7 @@ window.toggleActAll = function(on){
             ...(r.code  ? { activationCode: r.code } : {}),
             ...(r.team  ? { activationTeam: r.team } : {}),
             ...(r.by    ? { activationBy: r.by } : {})
-          });
+          }));
         });
         await bt.commit();
       }
@@ -52988,7 +53017,7 @@ window.toggleActAll = function(on){
           if(it.purchasePrice) patch.profit = net - Number(it.purchasePrice);
         }
       }
-      await updateDoc(doc(db,"inventoryItems", itemDoc.id), patch);
+      await updateDoc(doc(db,"inventoryItems", itemDoc.id), keepMoney(patch));
       sold++;
       if(salePrice) madeLines.push({ id:itemDoc.id, it, salePrice:Number(salePrice),
         saleDiscountAmt: (patch.saleDiscountAmt != null) ? patch.saleDiscountAmt : null,
