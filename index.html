@@ -400,7 +400,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-06 v1215</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-06 v1216</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -37328,6 +37328,170 @@ let ghostBankCache = [];
   let orderBaseDiffCache = [];
   let orderAmtDiffCache = [];
   let batchSumDiffCache = [];
+  let srAmtDiffCache = [];
+  let srMixCache = [];
+
+  //  한 판매요청 안에서 재고 판매가가 섞인 건을 보여주고, 가장 많은 값으로 맞춥니다.
+  window.showSrMixList = function(){
+    const rows = srMixCache || [];
+    if(rows.length === 0){ alert("섞인 건이 없습니다."); return; }
+    const head = document.getElementById("suplog-head");
+    const body = document.getElementById("suplog-body");
+    setSupLogTitle("판매요청 안에서 판매가가 섞임");
+    const f = function(n){ return (n == null) ? "-" : (Number(n)||0).toLocaleString(); };
+    head.innerHTML = '<b>한 판매요청 안에서 재고 판매가가 다름</b> — ' + rows.length + '건'
+      + '<br><span style="color:var(--gray);">가장 많은 값으로 맞춥니다. 빈칸인 재고도 그 값으로 채웁니다.<br>'
+      + '출고가 · 입고가 · 매입할인은 건드리지 않습니다.</span>';
+    body.innerHTML =
+      '<div style="margin-bottom:8px;"><button class="btn small" style="width:auto;" onclick="fixSrMixAll()">'
+      + '전부 맞추기 (' + rows.length + '건)</button></div>'
+      + '<div style="overflow-x:auto;max-height:360px;overflow-y:auto;">'
+      + '<table class="data-table" style="width:auto;"><thead><tr>'
+      + '<th>판매처</th><th>전산모델명</th><th class="ta-right">대수</th>'
+      + '<th>섞인 값</th><th class="ta-right">→ 맞출 값</th></tr></thead><tbody>'
+      + rows.slice(0,300).map(function(r){
+          return '<tr><td><b>' + comboEsc(r.dest) + '</b></td>'
+            + '<td>' + comboEsc(r.model) + '</td>'
+            + '<td class="ta-right">' + r.n + '</td>'
+            + '<td style="color:var(--danger);font-size:11.5px;">' + comboEsc(r.detail) + '</td>'
+            + '<td class="ta-right" style="color:#2e7d32;font-weight:700;">' + f(r.want) + '</td></tr>';
+        }).join("")
+      + '</tbody></table></div>';
+    document.getElementById("suplog-overlay").style.display = "flex";
+  };
+
+  window.fixSrMixAll = async function(){
+    const rows = srMixCache || [];
+    if(rows.length === 0){ alert("맞출 건이 없습니다."); return; }
+    if(!hasPerm(currentUserPerms, "paymentProcess")){ alert("권한이 없습니다."); return; }
+    const cnt = rows.reduce(function(n,r){ return n + r.ids.length; }, 0);
+    if(!confirm("재고 " + cnt + "대의 판매가를 묶음마다 «가장 많은 값» 으로 맞춥니다.\n\n"
+      + "  맞추는 것   판매가 · 판매할인 금액\n"
+      + "  건드리지 않는 것   출고가 · 입고가 · 매입할인\n\n진행할까요?")) return;
+    const head = document.getElementById("suplog-head");
+    let done = 0;
+    try{
+      for(const r of rows){
+        if(!(Number(r.want) > 0)) continue;
+        for(let i=0; i<r.ids.length; i+=300){
+          const bt = writeBatch(db);
+          r.ids.slice(i, i+300).forEach(function(id){
+            const it = items[id] || {};
+            const L = Number(it.listPrice)||0;
+            const p = { salePrice: Number(r.want) };
+            if(L > 0) p.saleDiscountAmt = L - Number(r.want);
+            if(it.purchasePrice != null) p.profit = Number(r.want) - Number(it.purchasePrice);
+            bt.update(doc(db,"inventoryItems", id), p);
+          });
+          await withTimeout(bt.commit(), 20000, "판매가 맞추기");
+          done += Math.min(300, r.ids.length - i);
+        }
+      }
+    }catch(e){
+      alert("맞추다 멈췄습니다. " + done + "대까지 처리했습니다.\n"
+        + ((e && e.message) ? e.message : String(e)));
+      return;
+    }
+    logAction("판매요청 안 판매가 통일", done + "대 / " + rows.length + "건");
+    clearCache("inventory"); clearCache("sales"); clearDashCache();
+    srMixCache = [];
+    if(head) head.innerHTML = '<b style="color:#2e7d32;">끝났습니다 — ' + done + '대를 맞췄습니다.</b>'
+      + '<br><span style="color:var(--gray);">창을 닫고 <b>[다시 점검]</b> 을 눌러주세요.<br>'
+      + '그 다음 «판매요청 금액이 재고 판매가와 다름» 을 처리해주세요.</span>';
+    alert(done + "대를 맞췄습니다.\n\n다음으로 «판매요청 금액» 점검을 눌러주세요.");
+  };
+
+
+  //  판매요청 금액을 재고 판매가로 다시 세어 맞춥니다.
+  window.showSrAmtDiffList = function(){
+    const rows = srAmtDiffCache || [];
+    if(rows.length === 0){ alert("다른 건이 없습니다."); return; }
+    const head = document.getElementById("suplog-head");
+    const body = document.getElementById("suplog-body");
+    if(!head || !body){ alert("화면을 찾지 못했습니다."); return; }
+    setSupLogTitle("판매요청 금액 맞추기");
+    const f = function(n){ return (n == null) ? "-" : (Number(n)||0).toLocaleString(); };
+    const fixable = rows.filter(function(r){ return r.want != null; });
+    head.innerHTML = '<b>판매요청 금액이 재고 판매가와 다름</b> — ' + rows.length + '건'
+      + '<br><span style="color:var(--gray);">재고 판매가 합계로 다시 셉니다. 재고가 뿌리입니다.<br>'
+      + '판매가가 비어 있는 재고가 섞인 묶음은 <b>고치지 않습니다.</b> 먼저 재고 판매가를 채워주세요.<br>'
+      + '입금이 끝난 묶음은 목록에 없습니다.</span>';
+    body.innerHTML =
+      (fixable.length ? '<div style="margin-bottom:8px;"><button class="btn small" style="width:auto;" onclick="fixSrAmtDiffAll()">'
+        + '맞출 수 있는 것 전부 맞추기 (' + fixable.length + '건)</button></div>' : '')
+      + '<div style="overflow-x:auto;max-height:360px;overflow-y:auto;">'
+      + '<table class="data-table" style="width:auto;"><thead><tr>'
+      + '<th>요청일</th><th>판매처</th><th class="ta-right">줄</th>'
+      + '<th class="ta-right">지금 금액</th><th class="ta-right">→ 바뀔 금액</th><th>비고</th>'
+      + '</tr></thead><tbody>'
+      + rows.slice(0,300).map(function(r){
+          return '<tr' + (r.want == null ? ' style="background:#fffbe6;"' : '') + '>'
+            + '<td>' + comboEsc(r.date||"-") + '</td>'
+            + '<td><b>' + comboEsc(r.dest) + '</b></td>'
+            + '<td class="ta-right">' + r.n + '</td>'
+            + '<td class="ta-right">' + f(r.now) + '</td>'
+            + '<td class="ta-right" style="color:#2e7d32;font-weight:700;">' + f(r.want) + '</td>'
+            + '<td style="color:' + (r.want == null ? '#b8860b' : 'var(--gray)') + ';">'
+              + (r.want == null ? ('재고 판매가가 빈 것 ' + r.noPrice + '대 — 먼저 채워주세요') : '') + '</td></tr>';
+        }).join("")
+      + '</tbody></table></div>';
+    document.getElementById("suplog-overlay").style.display = "flex";
+  };
+
+  window.fixSrAmtDiffAll = async function(){
+    const rows = (srAmtDiffCache||[]).filter(function(r){ return r.want != null; });
+    if(rows.length === 0){ alert("맞출 수 있는 건이 없습니다."); return; }
+    if(!hasPerm(currentUserPerms, "paymentProcess")){ alert("권한이 없습니다."); return; }
+    if(!confirm("판매요청 " + rows.length + "건의 금액을 재고 판매가로 맞춥니다.\n\n"
+      + "  맞추는 것   판매요청 금액\n"
+      + "  건드리지 않는 것   재고 · 주문 · 입금이 끝난 묶음\n\n"
+      + "입금요청이 붙어 있으면 그 금액도 다시 셉니다.\n\n진행할까요?")) return;
+    const head = document.getElementById("suplog-head");
+    let done = 0, dep = 0;
+    try{
+      for(let i=0; i<rows.length; i+=300){
+        if(head) head.innerHTML = '<b>맞추는 중...</b> ' + Math.min(i+300, rows.length) + ' / ' + rows.length;
+        const bt = writeBatch(db);
+        rows.slice(i, i+300).forEach(function(r){
+          bt.update(doc(db,"saleRequestBatches", r.id), { depositRequired: r.want });
+        });
+        await withTimeout(bt.commit(), 20000, "판매요청 금액 맞추기");
+        done += Math.min(300, rows.length - i);
+      }
+      //  입금요청이 붙어 있으면 그 금액도 다시 셉니다. (입금 전인 것만)
+      const reqIds = [...new Set(rows.map(function(r){ return r.b && r.b.depositRequestId; }).filter(Boolean))];
+      for(const rid of reqIds){
+        try{
+          const rs = await getDoc(doc(db,"saleDepositRequests", rid));
+          if(!rs.exists()) continue;
+          const v = rs.data();
+          if((Number(v.receivedAmount)||0) > 0) continue;        // 이미 입금된 건은 건드리지 않습니다
+          let total = Number(v.otherAmount)||0;
+          for(const ref of (v.saleBatchRefs||[])){
+            const col = ref.isLegacy ? "saleRequests" : "saleRequestBatches";
+            const bs = await getDoc(doc(db, col, ref.id));
+            if(bs.exists()) total += Number(bs.data().depositRequired)||0;
+          }
+          if(Math.round(total) !== (Number(v.totalAmount)||0)){
+            await updateDoc(doc(db,"saleDepositRequests", rid), { totalAmount: Math.round(total) });
+            dep++;
+          }
+        }catch(e){}
+      }
+    }catch(e){
+      alert("맞추다 멈췄습니다. " + done + "건까지 처리했습니다.\n"
+        + ((e && e.message) ? e.message : String(e)));
+      return;
+    }
+    logAction("판매요청 금액 맞추기", done + "건" + (dep ? " · 입금요청 " + dep + "건" : ""));
+    clearCache("sales"); clearDashCache();
+    srAmtDiffCache = [];
+    if(head) head.innerHTML = '<b style="color:#2e7d32;">끝났습니다 — ' + done + '건을 맞췄습니다.</b>'
+      + (dep ? '<br>입금요청 ' + dep + '건도 다시 셌습니다.' : '')
+      + '<br><span style="color:var(--gray);">창을 닫고 <b>[다시 점검]</b> 을 눌러주세요.</span>';
+    alert(done + "건을 맞췄습니다." + (dep ? "\n입금요청 " + dep + "건도 다시 셌습니다." : ""));
+  };
+
   let zeroPayCache = [];
 
   //  개통인데 지원금 기록이 없는 건을 보여주고, 0원 지급 기록을 만듭니다.
@@ -38343,6 +38507,117 @@ let ghostBankCache = [];
                 + "[전부 0원으로 넣기] 를 누르면 «지급 0원 · 개통 등록» 기록을 만듭니다. "
                 + "금액은 0원만 넣습니다. 없는 금액을 만들지 않습니다.",
               fix:"showZeroPayList()", fixLabel:"확인하기" });
+          }
+        }
+        // ── 한 판매요청 안에서 재고 판매가가 서로 다른 건 ──
+        //  같은 조건으로 넘긴 묶음인데 대마다 값이 다르면 합계가 어긋납니다.
+        {
+          const mixRows = [];
+          try{
+            const bySr = {};
+            Object.keys(items).forEach(function(id){
+              const it = items[id];
+              if(it.deleted === true) return;
+              if(!it.saleRequestId) return;
+              (bySr[it.saleRequestId] = bySr[it.saleRequestId] || []).push({ id, it });
+            });
+            Object.keys(bySr).forEach(function(srId){
+              const list = bySr[srId];
+              if(list.length < 2) return;
+              const vals = {};
+              let blank = 0;
+              list.forEach(function(x){
+                const v = x.it.salePrice;
+                if(v == null || v === ""){ blank++; return; }
+                const k = String(Number(v));
+                vals[k] = (vals[k]||0) + 1;
+              });
+              const keys = Object.keys(vals);
+              if(keys.length <= 1 && blank === 0) return;
+              //  가장 많은 값을 «맞는 값» 으로 봅니다.
+              let best = null, bestN = -1;
+              keys.forEach(function(k){ if(vals[k] > bestN){ best = Number(k); bestN = vals[k]; } });
+              mixRows.push({ srId, n:list.length, blank,
+                kinds: keys.length,
+                detail: keys.map(function(k){ return Number(k).toLocaleString() + " × " + vals[k] + "대"; }).join(" · ")
+                        + (blank ? "  ·  빈칸 " + blank + "대" : ""),
+                want: best, ids: list.map(function(x){ return x.id; }),
+                dest: (list[0].it.destination || "-"),
+                model: (list[0].it.systemModel || "-") });
+            });
+          }catch(e){}
+          if(mixRows.length){
+            srMixCache = mixRows;
+            issues.push({ n:"한 판매요청 안에서 재고 판매가가 다름", cnt: mixRows.length, unit:"건",
+              why:"같은 묶음으로 넘긴 재고인데 대마다 판매가가 다릅니다. "
+                + "가장 많은 값으로 맞출 수 있습니다. [확인하기] 에서 어떤 값들이 섞였는지 보실 수 있습니다.",
+              fix:"showSrMixList()", fixLabel:"확인하기" });
+          }
+        }
+        // ── 판매요청 금액이 재고 판매가와 다른 건 ──
+        //  재고가 뿌리입니다. 재고 판매가로 다시 세어 요청금액을 맞춥니다.
+        //  판매가가 비어 있는 재고가 섞인 묶음은 «고치지 않고» 알려만 드립니다.
+        {
+          const srRows = [];
+          try{
+            const srbAll = {};
+            (await getDocs(collection(db,"saleRequestBatches"))).forEach(function(d){
+              srbAll[d.id] = d.data();
+            });
+            const byBatch = {};
+            (await getDocs(collection(db,"saleRequests"))).forEach(function(d){
+              const v = d.data();
+              if(v.status === "취소") return;
+              if(!v.batchId) return;
+              (byBatch[v.batchId] = byBatch[v.batchId] || []).push({ id:d.id, ...v });
+            });
+            Object.keys(byBatch).forEach(function(bid){
+              const b = srbAll[bid];
+              if(!b || b.status === "취소") return;
+              if(b.depositReceived === true) return;          // 입금 끝난 건은 건드리지 않습니다
+              const lines = byBatch[bid];
+              let want = 0, noPrice = 0, diffLine = 0;
+              lines.forEach(function(l){
+                const q = Number(l.quantity)||1;
+                //  이어진 재고의 판매가를 봅니다. 재고가 뿌리입니다.
+                const ids = l.matchedItemIds || [];
+                let sum = 0, got = 0;
+                ids.forEach(function(iid){
+                  const it = items[iid];
+                  if(!it || it.deleted === true) return;
+                  if(it.salePrice == null || it.salePrice === ""){ noPrice++; return; }
+                  sum += Number(it.salePrice)||0; got++;
+                });
+                if(got === 0){
+                  //  매칭이 없으면 판매요청에 적힌 값을 그대로 씁니다.
+                  if(l.salePrice == null || l.salePrice === "") noPrice++;
+                  else want += (Number(l.salePrice)||0) * q;
+                  return;
+                }
+                want += sum;
+                if(l.salePrice != null && got === 1 && Number(l.salePrice) !== sum) diffLine++;
+              });
+              const now = Number(b.depositRequired)||0;
+              if(noPrice > 0 || Math.round(want) === now) {
+                if(noPrice > 0) srRows.push({ id:bid, b, dest:b.destination||"-",
+                  date:b.requestDate||"", n:lines.length, now, want:null, noPrice });
+                return;
+              }
+              srRows.push({ id:bid, b, dest:b.destination||"-", date:b.requestDate||"",
+                n:lines.length, now, want: Math.round(want), noPrice:0 });
+            });
+            srRows.sort(function(a,b2){ return String(b2.date).localeCompare(String(a.date)); });
+          }catch(e){}
+          if(srRows.length){
+            srAmtDiffCache = srRows;
+            const fixable = srRows.filter(function(r){ return r.want != null; }).length;
+            issues.push({ n:"판매요청 금액이 재고 판매가와 다름", cnt: srRows.length, unit:"건",
+              why:"판매요청에 적힌 금액이 이어진 재고의 판매가 합계와 다릅니다. "
+                + "[확인하기] 에서 지금 금액과 바뀔 금액을 보시고 맞추실 수 있습니다. "
+                + "판매가가 비어 있는 재고가 섞인 묶음은 고치지 않고 표시만 합니다. "
+                + "입금이 끝난 묶음은 아예 빼두었습니다."
+                + (fixable ? "" : " 지금은 맞출 수 있는 건이 없습니다."),
+              fix:"showSrAmtDiffList()", fixLabel:"확인하기" });
           }
         }
         // ── 주문 묶음의 합계·여신차감액이 품목과 다른 건 ──
