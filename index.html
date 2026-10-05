@@ -400,7 +400,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-06 v1209</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-06 v1211</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -4827,44 +4827,28 @@ const firebaseConfig = {
   // ---------- 할인 금액 ↔ 율 역산 (한쪽만 저장된 예전 데이터도 둘 다 보이게) ----------
   // 저장된 값이 있으면 그대로, 없으면 출고가·입고가·판매가에서 역산합니다.
   // 둘 다 낼 수 없으면 null(화면에서는 "-", 엑셀에서는 빈칸)
+  //  저장된 값만 씁니다. 역산하지 않습니다.
+  //   없으면 빈칸으로 둡니다. 모르는 것을 만들어내지 않습니다.
   function preDiscountAmtOf(it){
-    if(it.purchaseDiscountAmt != null) return Number(it.purchaseDiscountAmt);
-    const list = Number(it.listPrice) || 0;
-    if(!list) return null;
-    const other = Number(it.otherDiscountAmt) || 0;
-    if(it.purchasePrice != null) return list - Number(it.purchasePrice) - other;   // 입고가로 역산 (가장 정확)
-    if(it.purchaseDiscount != null) return Math.round(list * Number(it.purchaseDiscount)/100);
+    if(it && it.purchaseDiscountAmt != null && it.purchaseDiscountAmt !== "") return Number(it.purchaseDiscountAmt);
     return null;
   }
   function preDiscountPctOf(it){
-    if(it.purchaseDiscount != null) return Number(it.purchaseDiscount);
-    const list = Number(it.listPrice) || 0;
-    const amt = preDiscountAmtOf(it);
-    if(!list || amt === null) return null;
-    return Number(((amt/list)*100).toFixed(2));
+    if(it && it.purchaseDiscount != null && it.purchaseDiscount !== "") return Number(it.purchaseDiscount);
+    return null;
   }
   function saleDiscountAmtOf(it){
-    if(it.saleDiscountAmt != null) return Number(it.saleDiscountAmt);
-    const list = Number(it.listPrice) || 0;
-    if(!list) return null;
-    if(it.salePrice != null) return list - Number(it.salePrice);
-    if(it.saleDiscount != null) return Math.round(list * Number(it.saleDiscount)/100);
+    if(it && it.saleDiscountAmt != null && it.saleDiscountAmt !== "") return Number(it.saleDiscountAmt);
     return null;
   }
   function saleDiscountPctOf(it){
-    if(it.saleDiscount != null) return Number(it.saleDiscount);
-    // 「입고동일」 이면 판매할인% = 선할인% + 타할인% 입니다.
+    if(it && it.saleDiscount != null && it.saleDiscount !== "") return Number(it.saleDiscount);
+    //  「입고동일」 은 매입 조건을 그대로 쓰는 것이라 역산이 아닙니다.
     if(it && it.salePriceFollowsBuy === true){
       const pp = Number(it.purchaseDiscount)||0, op = Number(it.otherDiscountPct)||0;
       if(pp + op > 0) return Number((pp + op).toFixed(2));
     }
-    const list = Number(it.listPrice) || 0;
-    const amt = saleDiscountAmtOf(it);
-    if(!list || amt === null) return null;
-    // 판매할인 기준으로 냅니다. (출고가로 나누면 공급가 기준에서 어긋납니다)
-    const base = String(it.saleDiscountBase || it.discountBase || "") || "unit";
-    const v = pctOnBase(amt, list, base);
-    return (v === "" || v == null) ? null : Number(v);
+    return null;
   }
   function totalInDiscountOf(it){
     const pre = preDiscountAmtOf(it);
@@ -27511,7 +27495,9 @@ window.showDepositUses = async function(id){
             otherDiscountAmt: oth * (Number(d.orderedQty)||1),
             otherDiscountPct: (tOthP != null) ? tOthP : (amtBase ? Number((oth/amtBase*100).toFixed(2)) : null),
             salePrice: buy, saleDiscountAmt: L - buy,
-            saleDiscountPct: L ? Number((((L - buy)/L)*100).toFixed(2)) : null,
+        //  판매할인% — 매입 조건을 그대로 씁니다. 역산하지 않습니다.
+        //   (전에는 출고가로 나눠 매입 % 와 어긋났습니다)
+        saleDiscountPct: ((tPreP != null ? tPreP : 0) + (tOthP != null ? tOthP : 0)) || null,
             salePriceFollowsBuy: true, saleDiscountBase: tBase };
         });
       }
@@ -39721,9 +39707,9 @@ let ghostBankCache = [];
     (okItems).forEach((it,i)=>{
       const lp = (it.listPrice!=null) ? Number(it.listPrice) : null;
       const price = (it.salePrice!=null) ? Number(it.salePrice) : null;
-      // 저장된 할인이 없으면 출고가와 단가로 역산합니다.
-      const dAmt = (it.discountAmt!=null) ? Number(it.discountAmt) : ((lp!=null && price!=null) ? (lp-price) : null);
-      const dPct = (it.discountPct!=null) ? Number(it.discountPct) : ((lp && dAmt!=null) ? Number((dAmt/lp*100).toFixed(2)) : null);
+      //  저장된 값만 씁니다. 역산하지 않습니다. 없으면 빈칸입니다.
+      const dAmt = (it.discountAmt!=null && it.discountAmt!=="") ? Number(it.discountAmt) : null;
+      const dPct = (it.discountPct!=null && it.discountPct!=="") ? Number(it.discountPct) : null;
       h += '<tr><td style="color:var(--gray);">'+(i+1)+'</td>' +
         '<td>'+comboEsc(docModelLabel(it))+'</td>' +
         '<td>'+comboEsc(it.color||"-")+'</td>' +
@@ -39744,8 +39730,8 @@ let ghostBankCache = [];
       unItems.forEach((it, j)=>{
         const lp = (it.listPrice!=null) ? Number(it.listPrice) : null;
         const price = (it.salePrice!=null) ? Number(it.salePrice) : null;
-        const dAmt = (it.discountAmt!=null) ? Number(it.discountAmt) : ((lp!=null && price!=null) ? (lp-price) : null);
-        const dPct = (it.discountPct!=null) ? Number(it.discountPct) : ((lp && dAmt!=null) ? Number((dAmt/lp*100).toFixed(2)) : null);
+        const dAmt = (it.discountAmt!=null && it.discountAmt!=="") ? Number(it.discountAmt) : null;
+        const dPct = (it.discountPct!=null && it.discountPct!=="") ? Number(it.discountPct) : null;
         h += '<tr><td style="color:var(--gray);">'+(okItems.length + j + 1)+'</td>' +
           '<td>'+comboEsc(docModelLabel(it))+'</td>' +
           '<td style="color:var(--gray);">미배정</td>' +
