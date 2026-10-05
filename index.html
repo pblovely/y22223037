@@ -400,7 +400,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-06 v1221</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-06 v1222</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -37591,7 +37591,7 @@ let ghostBankCache = [];
   };
 
 
-  //  한 판매요청 안에서 재고 판매가가 섞인 건을 보여주고, 가장 많은 값으로 맞춥니다.
+  //  한 판매요청 안에서 재고 판매가가 섞인 건을 보여주고, «판매요청에 적힌 값» 으로 맞춥니다.
   window.showSrMixList = function(){
     const rows = srMixCache || [];
     if(rows.length === 0){ alert("섞인 건이 없습니다."); return; }
@@ -37600,21 +37600,26 @@ let ghostBankCache = [];
     setSupLogTitle("판매요청 안에서 판매가가 섞임");
     const f = function(n){ return (n == null) ? "-" : (Number(n)||0).toLocaleString(); };
     head.innerHTML = '<b>한 판매요청 안에서 재고 판매가가 다름</b> — ' + rows.length + '건'
-      + '<br><span style="color:var(--gray);">가장 많은 값으로 맞춥니다. 빈칸인 재고도 그 값으로 채웁니다.<br>'
+      + '<br><span style="color:var(--gray);">«판매요청에 적힌 판매가» 로 맞춥니다. 추측하지 않습니다.<br>'
+      + '판매요청에 값이 없는 건은 고치지 않고 목록에만 보여드립니다.<br>'
       + '출고가 · 입고가 · 매입할인은 건드리지 않습니다.</span>';
     body.innerHTML =
-      '<div style="margin-bottom:8px;"><button class="btn small" style="width:auto;" onclick="fixSrMixAll()">'
-      + '전부 맞추기 (' + rows.length + '건)</button></div>'
+      (function(){
+        const ok = rows.filter(function(r){ return r.want != null; }).length;
+        return ok ? '<div style="margin-bottom:8px;"><button class="btn small" style="width:auto;" onclick="fixSrMixAll()">'
+          + '맞출 수 있는 것 전부 맞추기 (' + ok + '건)</button></div>' : '';
+      })()
       + '<div style="overflow-x:auto;max-height:360px;overflow-y:auto;">'
       + '<table class="data-table" style="width:auto;"><thead><tr>'
       + '<th>판매처</th><th>전산모델명</th><th class="ta-right">대수</th>'
-      + '<th>섞인 값</th><th class="ta-right">→ 맞출 값</th></tr></thead><tbody>'
+      + '<th>섞인 값</th><th class="ta-right">→ 판매요청에 적힌 값</th></tr></thead><tbody>' 
       + rows.slice(0,300).map(function(r){
           return '<tr><td><b>' + comboEsc(r.dest) + '</b></td>'
             + '<td>' + comboEsc(r.model) + '</td>'
             + '<td class="ta-right">' + r.n + '</td>'
             + '<td style="color:var(--danger);font-size:11.5px;">' + comboEsc(r.detail) + '</td>'
-            + '<td class="ta-right" style="color:#2e7d32;font-weight:700;">' + f(r.want) + '</td></tr>';
+            + '<td class="ta-right" style="color:' + (r.want == null ? 'var(--danger)' : '#2e7d32') + ';font-weight:700;">'
+              + (r.want == null ? '판매요청에 값 없음' : f(r.want)) + '</td></tr>';
         }).join("")
       + '</tbody></table></div>';
     document.getElementById("suplog-overlay").style.display = "flex";
@@ -37624,14 +37629,16 @@ let ghostBankCache = [];
     const rows = srMixCache || [];
     if(rows.length === 0){ alert("맞출 건이 없습니다."); return; }
     if(!hasPerm(currentUserPerms, "paymentProcess")){ alert("권한이 없습니다."); return; }
-    const cnt = rows.reduce(function(n,r){ return n + r.ids.length; }, 0);
-    if(!confirm("재고 " + cnt + "대의 판매가를 묶음마다 «가장 많은 값» 으로 맞춥니다.\n\n"
+    const use = rows.filter(function(r){ return r.want != null; });
+    if(use.length === 0){ alert("판매요청에 적힌 값이 없어 맞출 수 있는 건이 없습니다."); return; }
+    const cnt = use.reduce(function(n,r){ return n + r.ids.length; }, 0);
+    if(!confirm("재고 " + cnt + "대의 판매가를 «판매요청에 적힌 값» 으로 맞춥니다.\n\n"
       + "  맞추는 것   판매가 · 판매할인 금액\n"
       + "  건드리지 않는 것   출고가 · 입고가 · 매입할인\n\n진행할까요?")) return;
     const head = document.getElementById("suplog-head");
     let done = 0;
     try{
-      for(const r of rows){
+      for(const r of use){
         if(!(Number(r.want) > 0)) continue;
         for(let i=0; i<r.ids.length; i+=300){
           const bt = writeBatch(db);
@@ -38899,36 +38906,6 @@ let ghostBankCache = [];
               if(want == null && histSale[id]){
                 want = histSale[id].val; how = "단말 이력에 남은 판매가";
               }
-              //  주문 연결이 끊겼으면 «판매처 + 모델» 로 예약을 찾아봅니다.
-              if(want == null && it.destination){
-                const dk = String(it.destination).trim();
-                const mk = modelDupKey(String(it.systemModel||""));
-                const hit = Object.keys(resvById).map(function(k){ return resvById[k]; })
-                  .filter(function(rv){
-                    return String(rv.destination||"").trim() === dk
-                        && modelDupKey(String(rv.systemModel||"")) === mk
-                        && rv.salePrice != null && rv.salePrice !== "";
-                  });
-                if(hit.length){
-                  const cnt3 = {};
-                  hit.forEach(function(rv){ const k=String(Number(rv.salePrice)); cnt3[k]=(cnt3[k]||0)+1; });
-                  let best3=null, bn3=-1;
-                  Object.keys(cnt3).forEach(function(k){ if(cnt3[k]>bn3){ best3=Number(k); bn3=cnt3[k]; } });
-                  if(best3 != null){ want = best3; how = "같은 판매처·모델의 예약"; }
-                }
-              }
-              //  마지막 — 같은 판매요청에 묶인 다른 재고의 판매가
-              if(want == null && sr){
-                const sibs = (sr.matchedItemIds||[]).map(function(x){ return items[x]; })
-                  .filter(function(x){ return x && x.salePrice != null && x.salePrice !== ""; });
-                if(sibs.length){
-                  const cnt2 = {};
-                  sibs.forEach(function(x){ const k=String(Number(x.salePrice)); cnt2[k]=(cnt2[k]||0)+1; });
-                  let best=null, bn=-1;
-                  Object.keys(cnt2).forEach(function(k){ if(cnt2[k]>bn){ best=Number(k); bn=cnt2[k]; } });
-                  if(best != null){ want = best; how = "같은 판매요청의 다른 재고"; }
-                }
-              }
               npRows.push({ id, sn: it.serialNumber||"", model: it.systemModel||"",
                 dest: it.destination||"", st, out: it.outDate||"",
                 listPrice: Number(it.listPrice)||0,
@@ -38952,6 +38929,12 @@ let ghostBankCache = [];
         {
           const mixRows = [];
           try{
+            //  판매요청에 적힌 판매가를 기준으로 씁니다.
+            const srListById = {};
+            (await getDocs(collection(db,"saleRequests"))).forEach(function(d){
+              const v = d.data();
+              if(v.status !== "취소") srListById[d.id] = v;
+            });
             const bySr = {};
             Object.keys(items).forEach(function(id){
               const it = items[id];
@@ -38972,9 +38955,13 @@ let ghostBankCache = [];
               });
               const keys = Object.keys(vals);
               if(keys.length <= 1 && blank === 0) return;
-              //  가장 많은 값을 «맞는 값» 으로 봅니다.
-              let best = null, bestN = -1;
-              keys.forEach(function(k){ if(vals[k] > bestN){ best = Number(k); bestN = vals[k]; } });
+              //  «판매요청에 적힌 판매가» 를 맞는 값으로 씁니다. 추측하지 않습니다.
+              //   판매요청에 값이 없으면 고칠 값을 정하지 않고 목록에만 보여드립니다.
+              let best = null;
+              try{
+                const sr0 = srListById ? srListById[srId] : null;
+                if(sr0 && sr0.salePrice != null && sr0.salePrice !== "") best = Number(sr0.salePrice);
+              }catch(e){}
               mixRows.push({ srId, n:list.length, blank,
                 kinds: keys.length,
                 detail: keys.map(function(k){ return Number(k).toLocaleString() + " × " + vals[k] + "대"; }).join(" · ")
@@ -38988,7 +38975,7 @@ let ghostBankCache = [];
             srMixCache = mixRows;
             issues.push({ n:"한 판매요청 안에서 재고 판매가가 다름", cnt: mixRows.length, unit:"건",
               why:"같은 묶음으로 넘긴 재고인데 대마다 판매가가 다릅니다. "
-                + "가장 많은 값으로 맞출 수 있습니다. [확인하기] 에서 어떤 값들이 섞였는지 보실 수 있습니다.",
+                + "«판매요청에 적힌 판매가» 로 맞춥니다. 추측하지 않습니다. 판매요청에 값이 없는 건은 고치지 않고 목록에만 보여드립니다.",
               fix:"showSrMixList()", fixLabel:"확인하기" });
           }
         }
