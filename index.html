@@ -400,7 +400,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-06 v1224</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-06 v1226</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -33432,12 +33432,24 @@ window.showDepositUses = async function(id){
         try{
           if(!seenOrder.has(b.orderId)){
             seenOrder.add(b.orderId);
-            await updateDoc(doc(db,"orders", b.orderId), {
-              listPrice:        Number(val(b,a,"listPrice"))||0,
-              preDiscountAmt:   Number(val(b,a,"purchaseDiscountAmt"))||0,
-              otherDiscountAmt: Number(val(b,a,"otherDiscountAmt"))||0,
-              purchasePrice:    Number(val(b,a,"purchasePrice"))||0 });
-            out.order++;
+            //  빈 값을 «0» 으로 적지 않습니다. 비어 있으면 주문을 건드리지 않습니다.
+            //   전에는 || 0 때문에, 재고가 비면 주문까지 0 으로 덮어써
+            //   되살릴 근거가 사라졌습니다.
+            const putO = {};
+            [["listPrice","listPrice"],
+             ["preDiscountAmt","purchaseDiscountAmt"],
+             ["otherDiscountAmt","otherDiscountAmt"],
+             ["purchasePrice","purchasePrice"]].forEach(function(kv){
+              const v2 = val(b,a,kv[1]);
+              if(v2 == null || v2 === "") return;        // 비어 있으면 그대로 둡니다
+              const n2 = Number(v2);
+              if(!isFinite(n2)) return;
+              putO[kv[0]] = n2;
+            });
+            if(Object.keys(putO).length){
+              await updateDoc(doc(db,"orders", b.orderId), putO);
+              out.order++;
+            }
           }
           // 여신 차감액 — 담보 계산서에 묶인 주문은 계산서에 맞춰둔 것이라 건드리지 않습니다.
           const od = await getDoc(doc(db,"orders", b.orderId));
@@ -36266,12 +36278,22 @@ window.showDepositUses = async function(id){
       for(const r of invOrderDiffCache){
         if(seen.has(r.orderId)) continue;
         seen.add(r.orderId);
-        await updateDoc(doc(db,"orders", r.orderId), {
-          listPrice:        Number(r.it.listPrice)||0,
-          preDiscountAmt:   Number(r.it.purchaseDiscountAmt)||0,
-          otherDiscountAmt: Number(r.it.otherDiscountAmt)||0,
-          purchasePrice:    Number(r.it.purchasePrice)||0 });
-        n++;
+        //  빈 값을 «0» 으로 적지 않습니다. 비어 있으면 주문을 건드리지 않습니다.
+        const putO2 = {};
+        [["listPrice","listPrice"],
+         ["preDiscountAmt","purchaseDiscountAmt"],
+         ["otherDiscountAmt","otherDiscountAmt"],
+         ["purchasePrice","purchasePrice"]].forEach(function(kv){
+          const v3 = r.it ? r.it[kv[1]] : null;
+          if(v3 == null || v3 === "") return;
+          const n3 = Number(v3);
+          if(!isFinite(n3)) return;
+          putO2[kv[0]] = n3;
+        });
+        if(Object.keys(putO2).length){
+          await updateDoc(doc(db,"orders", r.orderId), putO2);
+          n++;
+        }
       }
     }catch(e){ alert("맞추지 못했습니다.\n" + ((e&&e.message)?e.message:String(e))); return; }
     //  주문이 바뀌었으니 묶음 합계·여신차감액·판매요청까지 함께 맞춥니다.
@@ -37408,6 +37430,96 @@ let ghostBankCache = [];
   let srMixCache = [];
   let noSalePriceCache = [];
   let noBuyPriceCache = [];
+  let noLinkOrderCache = [];
+
+  //  주문에 안 이어진 재고를 보여주고, 하나로 좁혀지는 것만 이어줍니다.
+  window.showNoLinkOrderList = function(){
+    const rows = noLinkOrderCache || [];
+    if(rows.length === 0){ alert("안 이어진 재고가 없습니다."); return; }
+    const head = document.getElementById("suplog-head");
+    const body = document.getElementById("suplog-body");
+    setSupLogTitle("주문에 안 이어진 재고");
+    const f = function(n){ return (n == null) ? "-" : (Number(n)||0).toLocaleString(); };
+    const can = rows.filter(function(r){ return r.pick; });
+    const byWhy = {};
+    rows.filter(function(r){ return !r.pick; })
+        .forEach(function(r){ byWhy[r.why] = (byWhy[r.why]||0) + 1; });
+    head.innerHTML = '<b>재고가 주문에 안 이어짐</b> — ' + rows.length + '대'
+      + '<br><span style="color:var(--gray);">'
+      + '이을 수 있는 것 <b style="color:#2e7d32;">' + can.length + '대</b>'
+      + ' · 가릴 수 없는 것 <b style="color:var(--danger);">' + (rows.length - can.length) + '대</b></span>'
+      + (Object.keys(byWhy).length
+          ? '<br><span style="color:var(--danger);font-size:11.5px;">'
+            + Object.keys(byWhy).sort(function(a,b){ return byWhy[b]-byWhy[a]; })
+                .map(function(k){ return comboEsc(k) + ' ' + byWhy[k] + '대'; }).join('  ·  ')
+            + '</span>' : '')
+      + '<br><span style="color:var(--gray);font-size:11.5px;">'
+      + '잇기만 합니다. 금액은 건드리지 않습니다. 이은 뒤 «입고가·선할인이 비어 있음» 을 다시 돌려주세요.</span>';
+    body.innerHTML =
+      (can.length ? '<div style="margin-bottom:8px;"><button class="btn small" style="width:auto;" onclick="fixNoLinkOrderAll()">'
+        + '하나로 좁혀지는 것 전부 잇기 (' + can.length + '대)</button></div>' : '')
+      + '<div style="overflow-x:auto;max-height:380px;overflow-y:auto;">'
+      + '<table class="data-table" style="width:auto;"><thead><tr>'
+      + '<th>입고일</th><th>일련번호</th><th>전산모델명</th><th>입고처</th><th>상태</th>'
+      + '<th class="ta-right">입고가</th><th>→ 이을 주문</th></tr></thead><tbody>'
+      + rows.slice(0,400).map(function(r){
+          return '<tr' + (r.pick ? '' : ' style="background:#fdecea;"') + '>'
+            + '<td>' + comboEsc(r.inDate||"-") + '</td>'
+            + '<td><b>' + comboEsc(r.sn||"-") + '</b></td>'
+            + '<td>' + comboEsc(r.model||"-") + '</td>'
+            + '<td>' + comboEsc(r.src) + '</td>'
+            + '<td>' + comboEsc(r.status) + '</td>'
+            + '<td class="ta-right">' + f(r.buy) + '</td>'
+            + '<td style="font-size:11.5px;color:' + (r.pick ? '#2e7d32' : 'var(--danger)') + ';">'
+              + (r.pick
+                  ? (comboEsc(String(r.pick.orderDate||"")) + ' · ' + comboEsc(String(r.pick.systemModel||""))
+                     + ' · 입고가 ' + f(r.pick.purchasePrice))
+                  : comboEsc(r.why)) + '</td></tr>';
+        }).join("")
+      + '</tbody></table></div>';
+    document.getElementById("suplog-overlay").style.display = "flex";
+  };
+
+  window.fixNoLinkOrderAll = async function(){
+    const rows = (noLinkOrderCache||[]).filter(function(r){ return r.pick; });
+    if(rows.length === 0){ alert("이을 수 있는 것이 없습니다."); return; }
+    if(!hasPerm(currentUserPerms, "paymentProcess")){ alert("권한이 없습니다."); return; }
+    if(!confirm("재고 " + rows.length + "대를 주문에 다시 잇습니다.\n\n"
+      + "  잇는 것   재고 ↔ 주문 품목 연결\n"
+      + "  건드리지 않는 것   금액 · 날짜 · 상태\n\n"
+      + "이은 뒤 «입고가·선할인이 비어 있음» 점검을 다시 돌려주세요.\n\n진행할까요?")) return;
+    const head = document.getElementById("suplog-head");
+    let done = 0;
+    try{
+      for(let i=0; i<rows.length; i+=300){
+        if(head) head.innerHTML = '<b>잇는 중...</b> ' + Math.min(i+300, rows.length) + ' / ' + rows.length;
+        const bt = writeBatch(db);
+        rows.slice(i, i+300).forEach(function(r){
+          bt.update(doc(db,"inventoryItems", r.id), {
+            orderId: r.pick.id,
+            orderBatchId: r.pick.batchId || ""
+          });
+        });
+        await withTimeout(bt.commit(), 20000, "주문 잇기");
+        done += Math.min(300, rows.length - i);
+      }
+      try{ await logItemsEach(rows.map(function(r){
+        return { id:r.id, serialNumber:r.sn, systemModel:r.model,
+                 detail: "주문에 다시 이음 · " + String(r.pick.orderDate||"") }; }), "status", {}); }catch(e){}
+    }catch(e){
+      alert("잇다 멈췄습니다. " + done + "대까지 처리했습니다.\n"
+        + ((e && e.message) ? e.message : String(e)));
+      return;
+    }
+    logAction("재고를 주문에 다시 이음", done + "대");
+    clearCache("inventory"); clearCache("orders"); clearDashCache();
+    noLinkOrderCache = [];
+    if(head) head.innerHTML = '<b style="color:#2e7d32;">끝났습니다 — ' + done + '대를 이었습니다.</b>'
+      + '<br><span style="color:var(--gray);">창을 닫고 <b>[다시 점검]</b> 을 누른 뒤<br>'
+      + '«입고가·선할인이 비어 있음» 을 다시 봐주세요.</span>';
+    alert(done + "대를 이었습니다.\n\n다시 점검을 눌러 «입고가·선할인» 항목을 봐주세요.");
+  };
+
 
   //  입고가·선할인이 빈 재고를 보여주고, 주문·예약에 남은 값으로 채웁니다.
   window.showNoBuyPriceList = function(){
@@ -38793,6 +38905,66 @@ let ghostBankCache = [];
                 + "[전부 0원으로 넣기] 를 누르면 «지급 0원 · 개통 등록» 기록을 만듭니다. "
                 + "금액은 0원만 넣습니다. 없는 금액을 만들지 않습니다.",
               fix:"showZeroPayList()", fixLabel:"확인하기" });
+          }
+        }
+        // ── 주문에 안 이어진 재고 (일련번호·모델로 다시 이을 수 있는 것) ──
+        //  연결이 끊기면 입고가·선할인을 주문에서 가져올 수 없습니다. 먼저 이어야 합니다.
+        {
+          const nlRows = [];
+          try{
+            //  주문 품목을 «모델 + 입고처» 로 모읍니다.
+            const obAll = {};
+            (await getDocs(collection(db,"orderBatches"))).forEach(function(d){
+              const v = d.data();
+              if(v.status !== "취소") obAll[d.id] = v;
+            });
+            const ordList = [];
+            (await getDocs(collection(db,"orders"))).forEach(function(d){
+              const v = d.data();
+              if(v.status === "취소") return;
+              ordList.push({ id:d.id, ...v });
+            });
+            //  재고가 이미 몇 대씩 붙어 있는지 셉니다.
+            const usedByOrder = {};
+            Object.keys(items).forEach(function(iid){
+              const x = items[iid];
+              if(x.deleted === true) return;
+              if(x.orderId) usedByOrder[x.orderId] = (usedByOrder[x.orderId]||0) + 1;
+            });
+            Object.keys(items).forEach(function(id){
+              const it = items[id];
+              if(it.deleted === true) return;
+              if(it.orderId) return;                       // 이미 이어져 있음
+              const mk = modelDupKey(String(it.systemModel||""));
+              if(!mk) return;
+              const src = String(it.source||"").trim();
+              //  같은 «모델 + 입고처» 이고 아직 자리가 남은 주문 품목을 찾습니다.
+              const cand = ordList.filter(function(o){
+                if(modelDupKey(String(o.systemModel||"")) !== mk) return false;
+                const b = o.batchId ? obAll[o.batchId] : null;
+                const osrc = String((b && b.source) || o.source || "").trim();
+                if(src && osrc && osrc !== src) return false;
+                const q = Number(o.quantity)||0;
+                return (usedByOrder[o.id]||0) < q;         // 자리가 남은 것만
+              });
+              nlRows.push({ id, sn: it.serialNumber||"", model: it.systemModel||"",
+                src: src || "-", inDate: it.inDate||"", status: it.status||"",
+                buy: (it.purchasePrice == null || it.purchasePrice === "") ? null : Number(it.purchasePrice),
+                candN: cand.length,
+                pick: (cand.length === 1) ? cand[0] : null,
+                why: (cand.length === 0) ? "맞는 주문 품목이 없음"
+                   : (cand.length > 1 ? ("주문 품목이 " + cand.length + "개 — 어느 것인지 가릴 수 없음") : "") });
+            });
+            nlRows.sort(function(a,b){ return String(b.inDate).localeCompare(String(a.inDate)); });
+          }catch(e){}
+          if(nlRows.length){
+            noLinkOrderCache = nlRows;
+            const canLink = nlRows.filter(function(r){ return r.pick; }).length;
+            issues.push({ n:"재고가 주문에 안 이어짐", cnt: nlRows.length, unit:"대",
+              why:"재고와 주문이 끊겨 있습니다. 끊겨 있으면 입고가·선할인을 주문에서 가져올 수 없습니다. "
+                + "같은 모델·입고처의 주문 품목이 «하나뿐» 일 때만 이을 수 있습니다. (" + canLink + "대) "
+                + "여럿이면 어느 것인지 가릴 수 없어 잇지 않습니다.",
+              fix:"showNoLinkOrderList()", fixLabel:"확인하기" });
           }
         }
         // ── 입고가·선할인이 비어 있는 재고 (매입 쪽) ──
