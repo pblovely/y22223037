@@ -400,7 +400,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-06 v1218</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-06 v1220</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -37418,11 +37418,19 @@ let ghostBankCache = [];
     const f = function(n){ return (n == null) ? "-" : (Number(n)||0).toLocaleString(); };
     const canFix = rows.filter(function(r){ return r.want != null; });
     const manual = rows.filter(function(r){ return r.want == null; });
+    //  어떤 근거로 몇 대를 채우는지 보여드립니다.
+    const byHow = {};
+    canFix.forEach(function(r){ byHow[r.how] = (byHow[r.how]||0) + 1; });
     head.innerHTML = '<b>판매·개통인데 판매가가 비어 있음</b> — ' + rows.length + '대'
       + '<br><span style="color:var(--gray);">'
       + '채울 수 있는 것 <b style="color:#2e7d32;">' + canFix.length + '대</b>'
-      + ' · 직접 넣으셔야 하는 것 <b style="color:var(--danger);">' + manual.length + '대</b><br>'
-      + '입고동일이면 입고가로, 주문에 판매가가 있으면 그 값으로 채웁니다.</span>';
+      + ' · 직접 넣으셔야 하는 것 <b style="color:var(--danger);">' + manual.length + '대</b></span>'
+      + (Object.keys(byHow).length
+          ? '<br><span style="color:var(--gray);font-size:11.5px;">'
+            + Object.keys(byHow).sort(function(a,b){ return byHow[b]-byHow[a]; })
+                .map(function(k){ return comboEsc(k) + ' ' + byHow[k] + '대'; }).join('  ·  ')
+            + '</span>'
+          : '');
     body.innerHTML =
       (canFix.length ? '<div style="margin-bottom:8px;"><button class="btn small" style="width:auto;" onclick="fixNoSalePriceAll()">'
         + '채울 수 있는 것 전부 채우기 (' + canFix.length + '대)</button></div>' : '')
@@ -38675,12 +38683,43 @@ let ghostBankCache = [];
         {
           const npRows = [];
           try{
-            //  주문 품목을 번호로 담아둡니다. (재고에 없으면 주문 값으로 채우려고)
+            //  채울 값을 찾을 곳을 모두 모읍니다. 남아 있는 곳이 여러 군데입니다.
             const ordById = {};
             (await getDocs(collection(db,"orders"))).forEach(function(d){
               const v = d.data();
               if(v.status !== "취소") ordById[d.id] = v;
             });
+            //  ① 판매요청에 적힌 판매가 — 재고가 지워져도 요청에는 남아 있습니다.
+            const srById = {}, srByItem = {};
+            (await getDocs(collection(db,"saleRequests"))).forEach(function(d){
+              const v = d.data();
+              if(v.status === "취소") return;
+              srById[d.id] = v;
+              (v.matchedItemIds||[]).forEach(function(iid){ srByItem[iid] = v; });
+            });
+            //  ② 예약에 적힌 판매가 — 예약은 안 지워졌습니다.
+            //   재고 → 주문 → 예약 으로 거슬러 올라가 찾습니다.
+            const resvById = {};
+            (await getDocs(collection(db,"reservations"))).forEach(function(d){
+              const v = d.data();
+              if(v.status === "취소") return;
+              resvById[d.id] = v;
+            });
+            //  ③ 단말 이력에 남은 판매 기록
+            const histSale = {};
+            try{
+              (await getDocs(query(collection(db,"itemHistory"), where("type","==","price")))).forEach(function(d){
+                const v = d.data();
+                const id = String(v.itemId||"");
+                if(!id) return;
+                const m = /판매가\s*([0-9,]+)\s*→\s*([0-9,]+)/.exec(String(v.detail||""));
+                if(!m) return;
+                const t = (v.at && v.at.seconds) || 0;
+                const val = Number(String(m[1]).replace(/,/g,""))||0;   // 바뀌기 «전» 값
+                if(!val) return;
+                if(!histSale[id] || t > histSale[id].t) histSale[id] = { t, val };
+              });
+            }catch(e){}
             Object.keys(items).forEach(function(id){
               const it = items[id];
               if(it.deleted === true) return;
@@ -38689,12 +38728,63 @@ let ghostBankCache = [];
               if(it.salePrice != null && it.salePrice !== "") return;
               //  채울 수 있는 값을 찾습니다. 없으면 직접 넣으셔야 합니다.
               let want = null, how = "";
-              if(it.salePriceFollowsBuy === true && Number(it.purchasePrice) > 0){
+              //  남아 있는 곳을 차례로 봅니다. 확실한 것부터입니다.
+              const sr = (it.saleRequestId && srById[it.saleRequestId]) || srByItem[id] || null;
+              if(sr && sr.salePrice != null && sr.salePrice !== ""){
+                want = Number(sr.salePrice); how = "판매요청에 적힌 판매가";
+              }
+              if(want == null && it.salePriceFollowsBuy === true && Number(it.purchasePrice) > 0){
                 want = Number(it.purchasePrice); how = "입고동일 → 입고가";
-              }else if(it.orderId){
+              }
+              if(want == null && it.orderId){
                 const o = ordById[it.orderId] || null;
                 if(o && o.salePrice != null && o.salePrice !== ""){
                   want = Number(o.salePrice); how = "주문에 적힌 판매가";
+                }
+              }
+              //  예약에 적힌 판매가 — 주문을 거쳐 예약으로 올라갑니다.
+              if(want == null && it.orderId){
+                const o2 = ordById[it.orderId] || null;
+                const rv = (o2 && o2.fromReservationId) ? resvById[o2.fromReservationId] : null;
+                if(rv){
+                  if(rv.salePrice != null && rv.salePrice !== ""){
+                    want = Number(rv.salePrice); how = "예약에 적힌 판매가";
+                  }else if(rv.salePriceFollowsBuy === true && Number(it.purchasePrice) > 0){
+                    want = Number(it.purchasePrice); how = "예약이 입고동일 → 입고가";
+                  }
+                }
+              }
+              if(want == null && histSale[id]){
+                want = histSale[id].val; how = "단말 이력에 남은 판매가";
+              }
+              //  주문 연결이 끊겼으면 «판매처 + 모델» 로 예약을 찾아봅니다.
+              if(want == null && it.destination){
+                const dk = String(it.destination).trim();
+                const mk = modelDupKey(String(it.systemModel||""));
+                const hit = Object.keys(resvById).map(function(k){ return resvById[k]; })
+                  .filter(function(rv){
+                    return String(rv.destination||"").trim() === dk
+                        && modelDupKey(String(rv.systemModel||"")) === mk
+                        && rv.salePrice != null && rv.salePrice !== "";
+                  });
+                if(hit.length){
+                  const cnt3 = {};
+                  hit.forEach(function(rv){ const k=String(Number(rv.salePrice)); cnt3[k]=(cnt3[k]||0)+1; });
+                  let best3=null, bn3=-1;
+                  Object.keys(cnt3).forEach(function(k){ if(cnt3[k]>bn3){ best3=Number(k); bn3=cnt3[k]; } });
+                  if(best3 != null){ want = best3; how = "같은 판매처·모델의 예약"; }
+                }
+              }
+              //  마지막 — 같은 판매요청에 묶인 다른 재고의 판매가
+              if(want == null && sr){
+                const sibs = (sr.matchedItemIds||[]).map(function(x){ return items[x]; })
+                  .filter(function(x){ return x && x.salePrice != null && x.salePrice !== ""; });
+                if(sibs.length){
+                  const cnt2 = {};
+                  sibs.forEach(function(x){ const k=String(Number(x.salePrice)); cnt2[k]=(cnt2[k]||0)+1; });
+                  let best=null, bn=-1;
+                  Object.keys(cnt2).forEach(function(k){ if(cnt2[k]>bn){ best=Number(k); bn=cnt2[k]; } });
+                  if(best != null){ want = best; how = "같은 판매요청의 다른 재고"; }
                 }
               }
               npRows.push({ id, sn: it.serialNumber||"", model: it.systemModel||"",
