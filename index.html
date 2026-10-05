@@ -400,7 +400,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-06 v1190</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-06 v1194</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -1612,6 +1612,7 @@
               <th>기가수</th>
               <th>삼성모델명</th>
               <th class="ta-right">출고가</th>
+                <th class="ta-right">더블스토리지</th>
               <th>닉네임</th>
               <th>색상</th>
               <th class="ta-right">연결</th>
@@ -4101,23 +4102,24 @@
 
     <!-- 되사오기(재매입) 팝업 -->
     <!-- 더블스토리지 -->
-  <div id="ds-overlay" class="modal-overlay" style="display:none;">
-    <div class="modal-box" style="max-width:1000px;">
+  <div id="ds-overlay" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.55);z-index:1120;align-items:center;justify-content:center;">
+      <div style="background:#fff;border:2px solid var(--navy);max-width:1000px;width:96%;max-height:92vh;overflow-y:auto;padding:22px;position:relative;">
       <button onclick="closeDoubleStorage()" style="position:absolute;top:12px;right:12px;background:none;border:1px solid var(--navy);width:26px;height:26px;cursor:pointer;font-size:13px;">✕</button>
       <h3 style="margin-top:0;margin-bottom:4px;">더블스토리지</h3>
       <div style="font-size:12.5px;color:var(--gray);margin-bottom:10px;line-height:1.7;">
-        삼성에서 받은 <b>대상 목록</b>을 붙여 넣으면 일련번호로 찾아 표시합니다.
+        삼성에서 받은 <b>대상 목록</b>을 붙여 넣으면 <b>모델명 + 일련번호</b>로 찾아 표시합니다.
+        일련번호는 모델마다 따로 붙어 번호만 같은 다른 단말기가 있으므로 모델명이 꼭 있어야 합니다.
         목록에 없는 단말기는 대상이 되지 않습니다.<br>
-        금액은 <b>기초설정 → 더블스토리지 단가</b>의 모델별 단가에서 옵니다.
+        금액은 <b>기초설정 → 모델 등록</b>의 「더블스토리지」 칸에서 옵니다.
+        비어 있으면 아래 표에서 직접 넣으시면 됩니다.
       </div>
       <textarea id="ds-paste" style="width:100%;height:110px;font-size:12.5px;"
-        placeholder="일련번호를 줄마다 붙여넣으세요. (일련번호만 있어도 됩니다)&#10;1038307&#10;1038308&#10;또는  1038307  SM-F971N512  253000"></textarea>
+        placeholder="모델명과 일련번호를 줄마다 붙여넣으세요.&#10;SM-F971N512　1038307&#10;SM-F971N512　1038308&#10;금액이 다르면 뒤에 적으세요 →  SM-F766N512　1038309　180000"></textarea>
       <div class="stack-row" style="margin-top:8px;">
         <label>귀속월</label>
         <input type="text" id="ds-month" maxlength="6" inputmode="numeric" placeholder="예: 202608" style="width:120px;">
         <button class="btn small" style="width:auto;margin-left:8px;" onclick="analyzeDoubleStorage()">찾기</button>
         <button class="btn small secondary" style="width:auto;" onclick="openDsSettle()" title="대상으로 넣은 건을 입고처·판매처별로 모아 봅니다. 받은날·준날도 여기서 넣습니다.">정산 보기</button>
-        <button class="btn small secondary" style="width:auto;" onclick="openDsPrices()" title="모델별 단가를 정합니다.">모델별 단가</button>
         <button class="btn small secondary" style="width:auto;" onclick="closeDoubleStorage()">닫기</button>
       </div>
       <div id="ds-result" style="margin-top:12px;"></div>
@@ -7766,6 +7768,11 @@ const firebaseConfig = {
         '<td>'+(m.capacity||"-")+'</td>' +
         '<td'+(missingSkuCount>0&&colors.length===1?' style="color:var(--danger);"':'')+'>'+firstSkuLabel+'</td>' +
         '<td class="ta-right">'+priceInc+'</td>' +
+        //  더블스토리지 금액 — 여기서 바로 넣고 고칩니다. (모델마다 다릅니다)
+        '<td class="ta-right"><input type="number" class="md-ds" data-mid="'+m.id+'"'
+          + ' value="'+(m.dsAmount != null ? m.dsAmount : "")+'"'
+          + ' placeholder="미입력" title="더블스토리지 대상으로 넣을 때 이 금액이 자동으로 붙습니다."'
+          + ' style="width:95px;text-align:right;font-size:11.5px;padding:3px 4px;"></td>' +
         '<td>'+(m.nickname||"-")+'</td>' +
         '<td>' +
           '<button class="btn small secondary" style="width:auto;" data-open-color="'+m.id+'">색상 ('+colors.length+')'+(missingSkuCount>0?' <span style="color:var(--danger);">!</span>':'')+'</button>' +
@@ -7793,6 +7800,24 @@ const firebaseConfig = {
         if(c1) c1.innerHTML = rowNum + ' <span style="font-size:10.5px;color:var(--navy);font-weight:700;">방금</span>';
       }
       bodyEl.appendChild(tr);
+
+      //  더블스토리지 금액 — 칸을 벗어나면 저장합니다.
+      {
+        const dsInp = tr.querySelector('.md-ds');
+        if(dsInp) dsInp.onchange = async function(){
+          const v = String(dsInp.value||"").trim();
+          const n = v === "" ? null : (Number(v)||0);
+          try{
+            await updateDoc(doc(db,"inventoryModels", m.id), { dsAmount: n });
+            m.dsAmount = n;
+            dsInp.style.background = "#f3faf3";
+            logAction("더블스토리지 금액", docModelLabel(m) + " / " + (n == null ? "지움" : n.toLocaleString()));
+            try{ await fetchModelsCache(true); }catch(e){}
+          }catch(e){
+            alert("저장하지 못했습니다.\n" + ((e && e.message) ? e.message : String(e)));
+          }
+        };
+      }
 
       if(m.needsReview){
         tr.querySelector('[data-review-model]').onchange = async (ev)=>{
@@ -9000,6 +9025,19 @@ const firebaseConfig = {
   }
   window.moneyCell = moneyCell;
 
+  //  칸에 넣으신 값을 저장 값으로 바꿉니다.
+  //    빈칸 → null (미입력)   ·   0 → 0 (0 으로 확인함)
+  //   전에는 0 을 «없음» 으로 보아 미입력과 섞였습니다.
+  function numOrNull(v, digits){
+    if(v === null || v === undefined) return null;
+    const t = String(v).trim();
+    if(t === "") return null;
+    const n = Number(t);
+    if(!isFinite(n)) return null;
+    return (digits != null) ? Number(n.toFixed(digits)) : n;
+  }
+  window.numOrNull = numOrNull;
+
   //  개통된 단말기는 지원금이 없으면 «0원으로 마감» 입니다.
   //   기록이 아직 없어도 0 으로 봅니다. (빈칸은 «넣어야 하는 것» 을 뜻하므로)
   //   개통이 아닌 재고는 원래 값을 그대로 둡니다.
@@ -9731,18 +9769,19 @@ const firebaseConfig = {
       modelId: m.id || null,        // 모델 연결 — 이름을 바꿔도 안 끊깁니다
       baseModel:m.baseModel, capacity:m.capacity, systemModel:m.systemModel,
       petName: m.petName || "", manufacturerColor, systemColor, sku, carrier, source, manufacturer, location, destination:dest,
-      listPrice: listPrice?Number(listPrice):null,
-      purchasePrice: purchasePrice?Number(purchasePrice):null,
-      purchaseDiscount: purchaseDiscount?Number(Number(purchaseDiscount).toFixed(2)):null,
-      purchaseDiscountAmt: purchaseDiscountAmt?Number(purchaseDiscountAmt):null,
-      otherDiscountAmt: otherDiscountAmt?Number(otherDiscountAmt):null,
-      otherDiscountPct: otherDiscountPct?Number(otherDiscountPct):null,
-      salePrice: salePrice?Number(salePrice):null,
-      saleDiscount: saleDiscount?Number(Number(saleDiscount).toFixed(2)):null,
-      saleDiscountAmt: saleDiscountAmt?Number(saleDiscountAmt):null,
-      subsidyAmount: subsidyAmount?Number(subsidyAmount):null,
+      //  «0» 과 «빈칸» 은 다릅니다. 0 은 0 으로, 안 넣은 것만 비웁니다.
+      listPrice: numOrNull(listPrice),
+      purchasePrice: numOrNull(purchasePrice),
+      purchaseDiscount: numOrNull(purchaseDiscount, 2),
+      purchaseDiscountAmt: numOrNull(purchaseDiscountAmt),
+      otherDiscountAmt: numOrNull(otherDiscountAmt),
+      otherDiscountPct: numOrNull(otherDiscountPct),
+      salePrice: numOrNull(salePrice),
+      saleDiscount: numOrNull(saleDiscount, 2),
+      saleDiscountAmt: numOrNull(saleDiscountAmt),
+      subsidyAmount: numOrNull(subsidyAmount),
       subsidyStatus: subsidyStatus||null,
-      clawbackAmount: clawbackAmount?Number(clawbackAmount):null,
+      clawbackAmount: numOrNull(clawbackAmount),
       subsidyAccrualMonth: subsidyAccrualMonth||null,
       note1: document.getElementById("item-note1-input").value.trim(),
       note2: document.getElementById("item-note2-input").value.trim(),
@@ -11016,12 +11055,12 @@ const firebaseConfig = {
         sku: c ? (c.sku||"") : "",
         carrier,
         quantity: qty, fulfilledCount: 0, linkedItemIds: [],
-        listPrice: L || null, purchasePrice: buy || null,
+        listPrice: numOrNull(L), purchasePrice: numOrNull(buy),
         preDiscountAmt: document.getElementById("os-preamt").value ? osNum("os-preamt") : null,
         preDiscountPct: document.getElementById("os-prepct").value ? Number(osNum("os-prepct").toFixed(2)) : null,
         otherDiscountAmt: document.getElementById("os-otheramt").value ? osNum("os-otheramt") : null,
         otherDiscountPct: document.getElementById("os-otherpct").value ? Number(osNum("os-otherpct").toFixed(2)) : null,
-        destination: dest, salePrice: sale || null,
+        destination: dest, salePrice: numOrNull(sale),
         // 할인 계산 기준 — 입고처·판매처 업체정보를 따릅니다. 도착 등록 때 재고로 옮겨집니다.
         discountBase: String((document.getElementById("os-base")||{}).value||"") || "unit",
         saleDiscountBase: (function(){ try{
@@ -14634,7 +14673,7 @@ const firebaseConfig = {
     const L = oleNum("ole-listprice");
     const patch = {
       quantity: qty,
-      listPrice: L || null,
+      listPrice: numOrNull(L),
       preDiscountAmt: document.getElementById("ole-preamt").value ? oleNum("ole-preamt") : null,
       preDiscountPct: document.getElementById("ole-prepct").value ? Number(oleNum("ole-prepct").toFixed(2)) : null,
       otherDiscountAmt: document.getElementById("ole-otheramt").value ? oleNum("ole-otheramt") : null,
@@ -15563,7 +15602,7 @@ const firebaseConfig = {
           salePrice: price,
           saleDiscountAmt: r.saleDiscountAmt!=null ? r.saleDiscountAmt : null,
           saleDiscountPct: r.saleDiscountPct!=null ? r.saleDiscountPct : null,
-          listPrice: r.listPrice || null,
+          listPrice: numOrNull(r.listPrice),
           requestDate: date, status:"대기중", fromReservationId: r.id,
           createdBy: currentUser.name, createdByUsername: currentUser.username, createdAt: serverTimestamp()
         });
@@ -16130,11 +16169,11 @@ const firebaseConfig = {
               }catch(e){ return ""; } })(),
               location: location||"",
               destination: sell ? (o.destination||"") : (o.destination||""),
-              listPrice:o.listPrice||null, purchasePrice:o.purchasePrice||null,
-              salePrice: o.salePrice||null,
-              purchaseDiscountAmt:o.preDiscountAmt||null, purchaseDiscount:o.preDiscountPct||null,
-              otherDiscountAmt:o.otherDiscountAmt||null, otherDiscountPct:o.otherDiscountPct||null,
-              saleDiscountAmt:o.saleDiscountAmt||null, saleDiscount:o.saleDiscountPct||null,
+              listPrice: numOrNull(o.listPrice), purchasePrice: numOrNull(o.purchasePrice),
+              salePrice: numOrNull(o.salePrice),
+              purchaseDiscountAmt: numOrNull(o.preDiscountAmt), purchaseDiscount: numOrNull(o.preDiscountPct),
+              otherDiscountAmt: numOrNull(o.otherDiscountAmt), otherDiscountPct: numOrNull(o.otherDiscountPct),
+              saleDiscountAmt: numOrNull(o.saleDiscountAmt), saleDiscount: numOrNull(o.saleDiscountPct),
               // 할인 계산 기준 — 주문에 저장된 값을 먼저 쓰고, 없으면 업체 기준을 씁니다.
               discountBase: (o.discountBase || arrBuyBase),
               //  판매를 안 했으면 판매할인 기준을 비워둡니다. 판매하실 때 정해집니다.
@@ -16501,10 +16540,10 @@ const firebaseConfig = {
         baseModel:freshModel.baseModel, capacity:freshModel.capacity, systemModel:freshModel.systemModel,
         petName:freshModel.petName||"", manufacturerColor:c.manufacturerColor||"", systemColor:c.systemColor||"", sku:c.sku||"",
         carrier:o.carrier||"", source:o.source||"", manufacturer:"", location: arrLocation, destination:o.destination||"",
-        listPrice:o.listPrice||null, purchasePrice:o.purchasePrice||null, salePrice:o.salePrice||null,
-        purchaseDiscountAmt:o.preDiscountAmt||null, purchaseDiscount:o.preDiscountPct||null,
-        otherDiscountAmt:o.otherDiscountAmt||null, otherDiscountPct:o.otherDiscountPct||null,
-        saleDiscountAmt:o.saleDiscountAmt||null, saleDiscount:o.saleDiscountPct||null,
+        listPrice: numOrNull(o.listPrice), purchasePrice: numOrNull(o.purchasePrice), salePrice: numOrNull(o.salePrice),
+        purchaseDiscountAmt: numOrNull(o.preDiscountAmt), purchaseDiscount: numOrNull(o.preDiscountPct),
+        otherDiscountAmt: numOrNull(o.otherDiscountAmt), otherDiscountPct: numOrNull(o.otherDiscountPct),
+        saleDiscountAmt: numOrNull(o.saleDiscountAmt), saleDiscount: numOrNull(o.saleDiscountPct),
         // 할인 계산 기준을 업체 기준으로 함께 넣습니다. (나중에 채우실 필요가 없게)
         // 할인 계산 기준 — 주문에 저장된 값을 먼저 쓰고, 없으면 업체 기준을 씁니다.
         discountBase: (o.discountBase || arrBuyBase2),
@@ -25504,8 +25543,8 @@ window.showDepositUses = async function(id){
       systemModel: m.systemModel||"", petName:m.petName||"",
       kind: resvKind, carrier: resvCarrier,
       listPrice: listPriceVal,
-      saleDiscountAmt: saleDiscAmtRaw ? Number(saleDiscAmtRaw) : null,
-      saleDiscountPct: saleDiscPctRaw ? Number(Number(saleDiscPctRaw).toFixed(2)) : null,
+      saleDiscountAmt: numOrNull(saleDiscAmtRaw),
+      saleDiscountPct: numOrNull(saleDiscPctRaw, 2),
       // 매입(구매) 예약의 할인 — 배정해서 주문으로 넘길 때 그대로 쓰입니다.
       preDiscountAmt:   resvDiscAmt("pre",   listPriceVal, orderedQty),
       preDiscountPct:   resvNum("resv-prediscountpct-input", 2),
@@ -26756,7 +26795,7 @@ window.showDepositUses = async function(id){
         salePrice,
         saleDiscountAmt: (r.saleDiscountAmt != null ? r.saleDiscountAmt : null),
         saleDiscountPct: (r.saleDiscountPct != null ? r.saleDiscountPct : null),
-        listPrice: r.listPrice || null,
+        listPrice: numOrNull(r.listPrice),
         requestDate, status: "대기중",
         fromReservationId: r.id,
         createdBy: currentUser.name, createdByUsername: currentUser.username, createdAt: serverTimestamp()
@@ -27103,7 +27142,7 @@ window.showDepositUses = async function(id){
     return { ok:true, rowLabel, data:{
       modelId: model.id, baseModel: model.baseModel||"",
       capacity: model.capacity||"", systemModel: model.systemModel||"", petName: model.petName||"",
-      listPrice: model.priceIncVat || null,
+      listPrice: numOrNull(model.priceIncVat),
       manufacturerColor: colorObj ? (colorObj.manufacturerColor||"") : "",
       systemColor: colorObj ? (colorObj.systemColor||"") : "",
       sku: colorObj ? (colorObj.sku||"") : "",
@@ -27885,7 +27924,7 @@ window.showDepositUses = async function(id){
         systemModel: r.systemModel||"", baseModel: r.baseModel||"", capacity: r.capacity||"",
         petName: r.petName||"", color: r.systemColor || r.manufacturerColor || "",
         carrier: r.carrier||"",
-        qty, listPrice: Number(r.listPrice)||null, salePrice: sale,
+        qty, listPrice: numOrNull(Number(r.listPrice)), salePrice: sale,
         discountAmt: (r.saleDiscountAmt!=null ? Number(r.saleDiscountAmt) : null),
         discountPct: (r.saleDiscountPct!=null ? Number(r.saleDiscountPct) : null),
         amount: sale ? sale*qty : 0
@@ -30304,7 +30343,7 @@ window.showDepositUses = async function(id){
             sku: r.colorObj ? (r.colorObj.sku||"") : "",
             carrier: r.carrier||"",
             quantity: r.qty, fulfilledCount: 0, linkedItemIds: [],
-            listPrice: m.priceIncVat || null, purchasePrice: null,
+            listPrice: numOrNull(m.priceIncVat), purchasePrice: null,
             destination: "", salePrice: null,
             status: "주문중",
             createdBy: currentUser.name, createdByUsername: currentUser.username, createdAt: serverTimestamp()
@@ -30577,7 +30616,7 @@ window.showDepositUses = async function(id){
           manufacturerColor: f.manufacturerColor||"", systemColor: f.systemColor||"", sku: f.sku||"",
           carrier: f.carrier||"",
           quantity: g.length, fulfilledCount: g.length, matchedItemIds: g.map(x=>x.id),
-          salePrice: Number(f.salePrice)||null,
+          salePrice: numOrNull(Number(f.salePrice)),
           saleDiscountAmt: f.saleDiscountAmt!=null ? f.saleDiscountAmt : null,
           saleDiscountPct: f.saleDiscount!=null ? f.saleDiscount : null,
           requestDate: date, status: "매칭완료",
@@ -31785,75 +31824,6 @@ window.showDepositUses = async function(id){
     openDsSettle();
   };
 
-  // ===== 더블스토리지 모델별 단가 =====
-  //  단말기마다 금액이 달라 모델별로 둡니다. 기간을 비우면 계속 씁니다.
-  window.openDsPrices = async function(){
-    const head = document.getElementById("suplog-head");
-    const body = document.getElementById("suplog-body");
-    if(!head || !body){ alert("화면을 찾지 못했습니다."); return; }
-    setSupLogTitle("더블스토리지 모델별 단가");
-    head.innerHTML = '<b>더블스토리지 모델별 단가</b>'
-      + '<br><span style="color:var(--gray);">전산모델명으로 찾습니다. 기간을 비우면 계속 적용됩니다.<br>'
-      + '대상으로 넣을 때 이 단가가 자동으로 붙습니다.</span>';
-    const rows = [];
-    try{
-      const snap = await getDocs(collection(db,"dsPrices"));
-      snap.forEach(function(d){ rows.push({ id:d.id, ...d.data() }); });
-      rows.sort(function(a,b){ return String(a.systemModel||"").localeCompare(String(b.systemModel||"")); });
-    }catch(e){}
-    const f = function(n){ return (Number(n)||0).toLocaleString(); };
-    body.innerHTML =
-      '<div style="margin-bottom:10px;display:flex;gap:6px;flex-wrap:wrap;align-items:center;">'
-      + '<input type="text" id="dsp-model" placeholder="전산모델명 (예: SM-F971N512)" style="width:220px;">'
-      + '<input type="number" id="dsp-amt" placeholder="단가" style="width:120px;">'
-      + '<input type="text" id="dsp-from" maxlength="8" placeholder="시작일 (선택)" style="width:120px;">'
-      + '<input type="text" id="dsp-to" maxlength="8" placeholder="종료일 (선택)" style="width:120px;">'
-      + '<button class="btn small" style="width:auto;" onclick="addDsPrice()">추가</button>'
-      + '</div>'
-      + (rows.length === 0 ? '<div class="list-empty">등록한 단가가 없습니다.</div>'
-      : '<div style="overflow-x:auto;max-height:340px;overflow-y:auto;">'
-        + '<table class="data-table" style="width:auto;"><thead><tr>'
-        + '<th>전산모델명</th><th class="ta-right">단가</th><th>시작일</th><th>종료일</th><th></th>'
-        + '</tr></thead><tbody>'
-        + rows.map(function(r){
-            return '<tr><td><b>' + comboEsc(r.systemModel||"-") + '</b></td>'
-              + '<td class="ta-right">' + f(r.amount) + '</td>'
-              + '<td>' + comboEsc(r.fromDate||"-") + '</td>'
-              + '<td>' + comboEsc(r.toDate||"-") + '</td>'
-              + '<td><button class="btn small secondary" style="width:auto;" data-dsp-del="'
-                + comboEsc(r.id) + '">삭제</button></td></tr>';
-          }).join("")
-        + '</tbody></table></div>');
-    body.querySelectorAll("[data-dsp-del]").forEach(function(b){
-      b.onclick = async function(){
-        if(!confirm("이 단가를 지웁니다.")) return;
-        try{ await deleteDoc(doc(db,"dsPrices", b.dataset.dspDel)); }catch(e){}
-        dsPriceCache = null;
-        openDsPrices();
-      };
-    });
-    document.getElementById("suplog-overlay").style.display = "flex";
-  };
-
-  window.addDsPrice = async function(){
-    const m = String(document.getElementById("dsp-model").value||"").trim();
-    const a = Number(document.getElementById("dsp-amt").value)||0;
-    const f0 = String(document.getElementById("dsp-from").value||"").replace(/\D/g,"");
-    const t0 = String(document.getElementById("dsp-to").value||"").replace(/\D/g,"");
-    if(!m){ alert("전산모델명을 넣어주세요."); return; }
-    if(!(a > 0)){ alert("단가를 넣어주세요."); return; }
-    if((f0 && f0.length !== 8) || (t0 && t0.length !== 8)){ alert("날짜는 8자리로 넣어주세요."); return; }
-    try{
-      await addDoc(collection(db,"dsPrices"), {
-        systemModel: m, amount: a, fromDate: f0, toDate: t0,
-        createdBy: currentUser.name, createdAt: serverTimestamp()
-      });
-    }catch(e){ alert("저장하지 못했습니다.\n" + ((e && e.message) ? e.message : String(e))); return; }
-    logAction("더블스토리지 단가 추가", m + " / " + a.toLocaleString());
-    dsPriceCache = null;
-    openDsPrices();
-  };
-
   // ===== 더블스토리지 정산 — 입고 기준 / 판매 기준 =====
   //  재고에 들어간 대상 건을 모아 «받을 곳» · «줄 곳» 으로 집계합니다.
   //   자체개통(포피플)은 줄 곳이 없어 포피플 몫으로 모입니다.
@@ -32019,33 +31989,28 @@ window.showDepositUses = async function(id){
   // ===== 더블스토리지 =====
   //  삼성에서 받은 «대상 목록» 을 붙여 넣어 일련번호로 찾습니다.
   //   기간 안이라도 예약코드로 개통된 건만 인정되므로, 전체 일괄은 하지 않습니다.
-  //   금액은 모델별 단가(dsPrices)에서 가져옵니다. 없으면 직접 넣습니다.
+  //   금액은 «모델 등록» 의 더블스토리지 칸에서 가져옵니다. 없으면 직접 넣습니다.
   let dsRows = [];
   let dsPriceCache = null;
 
+  //  단가는 «모델 등록» 의 더블스토리지 금액을 씁니다. 한 곳에서만 관리합니다.
   async function fetchDsPrices(){
     if(dsPriceCache) return dsPriceCache;
     const map = {};
     try{
-      const snap = await getDocs(collection(db,"dsPrices"));
-      snap.forEach(function(d){
-        const v = d.data();
-        const k = modelDupKey(String(v.systemModel||""));
-        if(k) map[k] = { amount: Number(v.amount)||0, from: String(v.fromDate||""), to: String(v.toDate||"") };
+      await fetchModelsCache();
+      (modelsCache||[]).forEach(function(m){
+        const k = modelDupKey(String(m.systemModel||""));
+        if(k && m.dsAmount != null) map[k] = Number(m.dsAmount)||0;
       });
     }catch(e){}
     dsPriceCache = map;
     return map;
   }
-  //  모델별 단가 — 기간이 있으면 개통일(없으면 입고일)이 그 안에 들 때만 씁니다.
   function dsPriceOf(prices, it){
     const k = modelDupKey(String(it.systemModel||""));
-    const p = prices[k];
-    if(!p) return null;
-    const d = String(it.activateDate || it.inDate || "").replace(/\D/g,"");
-    if(p.from && d && d < p.from) return null;
-    if(p.to   && d && d > p.to)   return null;
-    return p.amount || null;
+    const v = prices[k];
+    return (v > 0) ? v : null;
   }
 
   window.openDoubleStorage = function(){
@@ -32063,38 +32028,62 @@ window.showDepositUses = async function(id){
     const el = document.getElementById("ds-result");
     const txt = String(document.getElementById("ds-paste").value||"");
     const month = String(document.getElementById("ds-month").value||"").replace(/\D/g,"");
-    //  줄마다 «일련번호» 를 읽습니다. 뒤에 금액이 있으면 그 금액을 씁니다.
-    const want = [];
+    //  줄마다 «모델명 + 일련번호» 를 읽습니다. 뒤에 금액이 있으면 그 금액을 씁니다.
+    //   일련번호는 모델마다 따로 붙어, 번호만 같은 다른 단말기가 있습니다.
+    //   그래서 모델명이 «반드시» 있어야 합니다.
+    const want = [], noModel = [];
     txt.split(/\r?\n/).forEach(function(line){
       const t = String(line||"").trim();
       if(!t) return;
       const parts = t.split(/\t+| {2,}|\s+/).filter(function(x){ return x; });
-      const sn = parts.find(function(x){ return /^[0-9A-Za-z-]{4,}$/.test(x) && /[0-9]/.test(x); });
+      //  모델명 — 영문 대문자와 숫자가 섞이고 «-» 가 들어간 것 (예: SM-F971N512)
+      const model = parts.find(function(x){ return /^[A-Za-z]{2,}-[A-Za-z0-9]{3,}$/.test(x); });
+      //  일련번호 — 모델명이 아닌 것 중 숫자가 들어간 4자리 이상
+      //  일련번호 — 모델명이 아니고, 금액(쉼표 있는 큰 수)도 아닌 것
+      const sn = parts.find(function(x){
+        if(x === model) return false;
+        if(!/^[0-9A-Za-z-]{4,}$/.test(x)) return false;
+        if(!/[0-9]/.test(x)) return false;
+        if(/,/.test(x)) return false;                       // 253,000 같은 금액
+        return true;
+      });
       if(!sn) return;
-      const amt = parts.slice(1).map(function(x){ return Number(String(x).replace(/,/g,"")); })
+      if(!model){ noModel.push(t.slice(0,40)); return; }
+      const amt = parts.filter(function(x){ return x !== model && x !== sn; })
+                       .map(function(x){ return Number(String(x).replace(/,/g,"")); })
                        .find(function(n){ return isFinite(n) && n >= 1000; });
-      want.push({ sn: normSerial(sn), raw: sn, amt: (amt != null ? amt : null) });
+      want.push({ sn: normSerial(sn), raw: sn, model: model,
+                  mKey: modelDupKey(model), amt: (amt != null ? amt : null) });
     });
-    if(want.length === 0){ el.innerHTML = '<div class="list-empty">읽을 일련번호가 없습니다.</div>'; return; }
+    if(want.length === 0 && noModel.length === 0){
+      el.innerHTML = '<div class="list-empty">읽을 줄이 없습니다.</div>'; return; }
+    if(want.length === 0){
+      el.innerHTML = '<div style="color:var(--danger);font-size:12.5px;line-height:1.8;">'
+        + '<b>모델명이 없습니다.</b><br>'
+        + '일련번호는 모델마다 따로 붙어, 번호만 같은 다른 단말기가 있습니다.<br>'
+        + '모델명을 함께 붙여넣어 주세요. &nbsp; 예) <code>SM-F971N512&nbsp;&nbsp;1038307</code></div>';
+      return; }
 
     el.innerHTML = '<div class="list-empty">재고에서 찾는 중...</div>';
     const prices = await fetchDsPrices();
-    const bySn = {};
+    //  «일련번호 + 모델» 로 찾습니다. 번호가 같아도 모델이 다르면 다른 단말기입니다.
+    const byKey = {};
     try{
       const snap = await readColCached("inventoryItems","inventory");
       snap.forEach(function(d){
         const v = d.data();
         if(v.deleted === true) return;
         const k = normSerial(String(v.serialNumber||""));
-        if(k) bySn[k] = { id: d.id, ...v };
+        if(!k) return;
+        byKey[k + "|" + modelDupKey(String(v.systemModel||""))] = { id: d.id, ...v };
       });
     }catch(e){}
 
     dsRows = [];
     const miss = [];
     want.forEach(function(w){
-      const it = bySn[w.sn];
-      if(!it){ miss.push(w.raw); return; }
+      const it = byKey[w.sn + "|" + w.mKey];
+      if(!it){ miss.push(w.model + " " + w.raw); return; }
       const amt = (w.amt != null) ? w.amt : dsPriceOf(prices, it);
       dsRows.push({ id: it.id, it, sn: it.serialNumber||w.raw,
         model: it.systemModel || it.baseModel || "",
@@ -32109,11 +32098,16 @@ window.showDepositUses = async function(id){
       '<div style="margin-bottom:8px;font-size:12.5px;">'
       + '찾은 것 <b>' + dsRows.length + '대</b>'
       + (miss.length ? '  ·  <span style="color:var(--danger);">못 찾은 것 ' + miss.length + '건</span>' : '')
+      + (noModel.length ? '  ·  <span style="color:var(--danger);">모델명 없는 줄 ' + noModel.length + '건</span>' : '')
       + (noPrice ? '  ·  <span style="color:#b8860b;">금액 없는 것 ' + noPrice + '대</span>' : '')
       + '</div>'
       + (miss.length ? '<div style="font-size:11.5px;color:var(--danger);margin-bottom:6px;">'
-          + '못 찾음 — ' + comboEsc(miss.slice(0,20).join(" · "))
+          + '못 찾음 (모델+일련번호가 재고에 없음) — ' + comboEsc(miss.slice(0,20).join(" · "))
           + (miss.length > 20 ? ' 외 ' + (miss.length-20) + '건' : '') + '</div>' : '')
+      + (noModel.length ? '<div style="font-size:11.5px;color:var(--danger);margin-bottom:6px;">'
+          + '모델명이 없어 건너뛴 줄 — ' + comboEsc(noModel.slice(0,10).join(" / "))
+          + (noModel.length > 10 ? ' 외 ' + (noModel.length-10) + '건' : '')
+          + '<br>일련번호는 모델마다 따로 붙습니다. 모델명을 함께 넣어주세요.</div>' : '')
       + (dsRows.length ? '<div style="margin-bottom:8px;">'
           + '<button class="btn small" style="width:auto;" onclick="applyDoubleStorage()">대상으로 넣기 ('
           + dsRows.length + '대)</button>'
@@ -33633,7 +33627,7 @@ window.showDepositUses = async function(id){
         if(!iSnap.exists()) continue;
         const it = iSnap.data();
         rows.push({ serialNumber: it.serialNumber||"", color: it.systemColor||it.manufacturerColor||"",
-          outDate: it.outDate||"", salePrice: it.salePrice||null, source:"(기록 이전)", matchedBy:"-", matchedAt:null });
+          outDate: it.outDate||"", salePrice: numOrNull(it.salePrice), source:"(기록 이전)", matchedBy:"-", matchedAt:null });
       }
       fromLog = false;
     }
@@ -35803,8 +35797,8 @@ window.showDepositUses = async function(id){
     try{
       for(const r of rows){
         await updateDoc(doc(db,"saleRequests", r.srId), {
-          salePrice:       Number(r.it.salePrice)||null,
-          saleDiscountAmt: Number(r.it.saleDiscountAmt)||null,
+          salePrice: numOrNull(Number(r.it.salePrice)),
+          saleDiscountAmt: numOrNull(Number(r.it.saleDiscountAmt)),
           saleDiscountPct: Number(r.it.saleDiscount)||null,
           ...(r.it.destination ? { destination: r.it.destination } : {}) });
         n++;
@@ -36600,7 +36594,7 @@ let ghostBankCache = [];
     await updateDoc(doc(db,"inventoryItems", r.id), {
       destination: "포피플",
       outDate: r.actDate || "",
-      salePrice: r.L || null,
+      salePrice: numOrNull(r.L),
       saleDiscountAmt: 0, saleDiscount: 0,
       saleDiscountBase: "unit"      // 자체개통은 출고가(개당) 기준입니다
     });
@@ -40783,9 +40777,9 @@ let ghostBankCache = [];
           carrier: it.carrier||"",
           quantity: 1, fulfilledCount: 1, matchedItemIds: [itemDoc.id],
           salePrice: Number(salePrice),
-          saleDiscountAmt: saleDiscountAmt ? Number(saleDiscountAmt) : null,
-          saleDiscountPct: saleDiscountPct ? Number(saleDiscountPct) : null,
-          listPrice: it.listPrice || null,
+          saleDiscountAmt: numOrNull(saleDiscountAmt),
+          saleDiscountPct: numOrNull(saleDiscountPct),
+          listPrice: numOrNull(it.listPrice),
           requestDate: outDate, status: "매칭완료",
           createdBy: currentUser.name, createdByUsername: currentUser.username, createdAt: serverTimestamp()
         });
@@ -48082,7 +48076,7 @@ let ghostBankCache = [];
         baseModel:m.baseModel, capacity:m.capacity, systemModel:m.systemModel,
         petName:m.petName||"", manufacturerColor:colorObj.manufacturerColor||"", systemColor:colorObj.systemColor||"", sku:colorObj.sku||"",
         carrier, source, manufacturer: m.manufacturer || "", location:"", destination:dest||"",
-        listPrice:m.priceIncVat||null, purchasePrice:m.priceExVat||null, salePrice:null,
+        listPrice: numOrNull(m.priceIncVat), purchasePrice: numOrNull(m.priceExVat), salePrice:null,
         kind: m.kind || "",                 // 모델의 구분을 그대로 씁니다
         // 할인 계산 기준을 업체 기준으로 함께 넣습니다.
         discountBase: (function(){ try{ return itemDiscountBase({ source }) || "unit"; }catch(e){ return "unit"; } })(),
@@ -48505,10 +48499,13 @@ let ghostBankCache = [];
     const v = prompt("공시지원금을 넣어주세요. (비우면 지웁니다)\n\n  " + (it.serialNumber||"-")
       + "\n  " + (it.systemModel||"-"), cur ? String(cur) : "");
     if(v === null) return;
-    const amt = Number(String(v).replace(/[^0-9]/g,"")) || 0;
-    if(amt === cur) return;
+    //  빈칸으로 두면 «미입력», 0 을 넣으면 «0원으로 확인» 입니다.
+    const raw = String(v).trim();
+    const amt = (raw === "") ? null : (Number(raw.replace(/[^0-9]/g,"")) || 0);
+    const old = (it.subsidyAmount == null || it.subsidyAmount === "") ? null : Number(it.subsidyAmount);
+    if(amt === old) return;
     try{
-      await updateDoc(doc(db,"inventoryItems", itemId), { subsidyAmount: amt || null });
+      await updateDoc(doc(db,"inventoryItems", itemId), { subsidyAmount: amt });
       await logItem(itemId, it.serialNumber||"", "price",
         "공시지원금 " + (cur ? cur.toLocaleString() : "없음") + " → " + (amt ? amt.toLocaleString() : "없음"),
         { systemModel: it.systemModel||"" });
@@ -49987,18 +49984,21 @@ let ghostBankCache = [];
     if(!itemId) return;
     try{
       const q = await getDocs(query(collection(db,"supportLogs"), where("itemId","==", itemId)));
-      let pay = 0, claw = 0;
+      let pay = 0, claw = 0, payN = 0, clawN = 0;
       const months = new Set();
       q.forEach(function(d){
         const v = d.data();
         const a = Number(v.amount)||0;
-        if(v.kind === "claw") claw += a; else pay += a;
+        if(v.kind === "claw"){ claw += a; clawN++; } else { pay += a; payN++; }
         if(v.month) months.add(String(v.month));
       });
       const ms = [...months].sort();
+      //  «0» 과 «빈칸» 은 다릅니다.
+      //    기록이 있으면 합계가 0 이어도 0 으로 적습니다. (0원으로 확인함)
+      //    기록이 하나도 없을 때만 비웁니다. (아직 안 넣음)
       await updateDoc(doc(db,"inventoryItems", itemId), {
-        distSupport: pay || null,
-        clawback:    claw || null,
+        distSupport: payN  ? pay  : null,
+        clawback:    clawN ? claw : null,
         supportMonth: ms.length ? ms.join(", ") : null
       });
     }catch(e){}
@@ -51601,7 +51601,7 @@ window.toggleActAll = function(on){
             manufacturerColor: x.it.manufacturerColor||"", systemColor: x.it.systemColor||"", sku: x.it.sku||"",
             carrier: x.it.carrier||"",
             quantity: 1, fulfilledCount: 1, matchedItemIds: [x.id],
-            salePrice: x.salePrice, listPrice: x.it.listPrice || null,
+            salePrice: x.salePrice, listPrice: numOrNull(x.it.listPrice),
             // 판매할인·%도 함께 담습니다. 안 담으면 재고와 판매요청이 어긋납니다.
             saleDiscountAmt: (x.saleDiscountAmt != null) ? Number(x.saleDiscountAmt) : null,
             saleDiscountPct: (x.saleDiscountPct != null) ? Number(x.saleDiscountPct) : null,
