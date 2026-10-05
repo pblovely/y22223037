@@ -400,7 +400,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-06 v1204</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-06 v1206</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -5068,6 +5068,7 @@ const firebaseConfig = {
   window.discountBaseLabel = discountBaseLabel;
 
   const INV_COLUMNS = [
+
     { key:"orderDate", label:"주문일", get:it=>it.orderDate||"-" },
     { key:"inDate", label:"입고일", get:it=>it.inDate||"-" },
     { key:"expectedSaleDate", label:"판매예정일", get:it=>it.expectedSaleDate||"-" },
@@ -5086,6 +5087,19 @@ const firebaseConfig = {
           || (x.systemModel && it.systemModel && modelDupKey(x.systemModel) === modelDupKey(it.systemModel)));
         return (m && m.kind) ? m.kind : "";
       } },
+    // 되사온 재고인지 표시합니다. 1차 판매처와 연동 여부도 함께 보입니다.
+    // 되사오기 — 2차는 「되사옴」, 1차는 「되사감」으로 양쪽에 표시합니다.
+    { key:"isRebuy", label:"되사오기",
+      get:it=> it.isRebuy
+          ? ("되사옴" + (it.rebuyFromDest ? " (" + it.rebuyFromDest + ")" : "")
+             + (it.buyPriceFollowsSale === true ? " · 판매값연동" : ""))
+        : (it.rebuyToItemId
+          ? ("되사감" + (it.rebuyBackAt ? " (" + it.rebuyBackAt + ")" : "")) : "-"),
+      getRaw:it=> it.isRebuy
+          ? ("되사옴" + (it.rebuyFromDest ? " (" + it.rebuyFromDest + ")" : "")
+             + (it.buyPriceFollowsSale === true ? " · 판매값연동" : ""))
+        : (it.rebuyToItemId
+          ? ("되사감" + (it.rebuyBackAt ? " (" + it.rebuyBackAt + ")" : "")) : "-") },
     { key:"source", label:"입고처", get:it=>it.source||"-" },
     // 재고에 제조사가 없으면 모델에서 가져와 보여줍니다. (예전에 등록된 재고 대비)
     { key:"manufacturer", label:"제조사",
@@ -5102,7 +5116,6 @@ const firebaseConfig = {
         return (m && m.manufacturer) ? m.manufacturer : "";
       } },
     { key:"carrier", label:"통신사", get:it=>it.carrier||"-" },
-    { key:"location", label:"위치", get:it=>it.location||"-" },
     { key:"petName", label:"펫네임", get:it=>it.petName||"-" },
     { key:"systemModel", label:"전산모델명", get:it=>it.systemModel||"-" },
     { key:"baseModel", label:"모델명", get:it=>it.baseModel||"-" },
@@ -5121,7 +5134,6 @@ const firebaseConfig = {
       html: true,
       getRaw: it=> it.serialNumber||"",
       link: it=> (it.entryType==="imei" && it.serialNumber) ? it.serialNumber : "" },
-    { key:"quantity", label:"수량", get:it=> it.entryType==="imei" ? "1" : (it.quantity != null ? String(it.quantity) : "-") },
     { key:"imei", label:"IMEI", get:it=>it.imei||"-" },
     { key:"listPrice", label:"출고가", get:it=>it.listPrice?Number(it.listPrice).toLocaleString():"-", getRaw:it=>it.listPrice!=null?Number(it.listPrice):"" },
     { key:"purchasePrice", label:"입고가", get:it=>it.purchasePrice?Number(it.purchasePrice).toLocaleString():"-", getRaw:it=>it.purchasePrice!=null?Number(it.purchasePrice):"" },
@@ -5147,6 +5159,40 @@ const firebaseConfig = {
     // 삼성전자는 공급가(VAT 뺀 금액)에 할인율을 곱합니다. 그 기준으로 환산한 값입니다.
     { key:"returnDate", label:"반품일", get:it=> it.returnDate || "-", getRaw:it=> it.returnDate || "-" },
     { key:"creditReturnDate", label:"여신복구일", get:it=> it.creditReturnDate || "-", getRaw:it=> it.creditReturnDate || "-" },
+    // 판매요청이 걸려 있는지 한눈에 보여줍니다. 없으면 돈을 못 받습니다.
+    { key:"saleReqState", label:"판매요청",
+      get:it=>{
+        //  포피플 자체개통은 판매요청이 없는 것이 정상입니다.
+        if(String(it.status||"") === "개통" && String(it.destination||"") === "포피플")
+          return "자체개통";
+        const sold = String(it.status||"").indexOf("판매") >= 0
+                  || String(it.status||"").indexOf("개통") >= 0 || !!it.destination;
+        if(it.saleRequestId) return '<span style="color:#2e7d32;font-weight:700;">있음</span>';
+        if(sold) return '<span style="color:var(--danger);font-weight:700;">없음</span>';
+        return "-";
+      },
+      getRaw:it=>{
+        const sold = String(it.status||"").indexOf("판매") >= 0
+                  || String(it.status||"").indexOf("개통") >= 0 || !!it.destination;
+        return it.saleRequestId ? "있음" : (sold ? "없음" : "-");
+      }, html:true },
+    { key:"destination", label:"판매처", get:it=>it.destination||"-" },
+    { key:"salePrice", label:"판매가", get:it=>it.salePrice?Number(it.salePrice).toLocaleString():"-", getRaw:it=>it.salePrice!=null?Number(it.salePrice):"" },
+    // 판매할인 기준 — 역산하지 않습니다. 정해진 규칙과 저장된 값만 씁니다.
+    { key:"saleDiscountBase", label:"판매할인 기준",
+      get:it=> saleBaseLabel(it), getRaw:it=> saleBaseLabel(it) },
+    { key:"saleDiscount", label:"판매할인%", get:it=> discPctFmt(saleDiscountPctOf(it)), getRaw:it=> discRaw(saleDiscountPctOf(it)) },
+    { key:"saleDiscountAmt", label:"판매할인", get:it=> discFmt(saleDiscountAmtOf(it)), getRaw:it=> discRaw(saleDiscountAmtOf(it)) },
+    { key:"salePriceFollowsBuy", label:"판매가 연동",
+      get:it=> it.salePriceFollowsBuy === true ? "입고동일" : "-",
+      isText:true,
+      getRaw:it=> it.salePriceFollowsBuy === true ? "입고동일" : "-" },
+    // ── 더블스토리지 — 판매 쪽 ──
+    { key:"dsAmount", label:"더블스토리지", html:true,
+      get:it=> moneyCell(it.dsAmount), getRaw:it=> moneyRaw(it.dsAmount) },
+    { key:"dsPayDate", label:"정산해준날",
+      get:it=> (Number(it.dsAmount) > 0) ? (it.dsPayDate || "") : "",
+      getRaw:it=> (Number(it.dsAmount) > 0) ? (it.dsPayDate || "") : "" },
     // 판매 쪽도 삼성 기준(공급가)으로 환산해 보여줍니다. 매입 할인율과 바로 견줄 수 있게요.
     //  삼성 기준 % — 깎인 «금액 그대로» 를 공급단가로 나눕니다.
     //   출고가 기준 %  =  금액 ÷ 출고가
@@ -5167,10 +5213,23 @@ const firebaseConfig = {
         const v = samsungPctOf(L, buy);
         return (v == null) ? "" : v;
       } },
-    { key:"salePriceFollowsBuy", label:"판매가 연동",
-      get:it=> it.salePriceFollowsBuy === true ? "입고동일" : "-",
-      isText:true,
-      getRaw:it=> it.salePriceFollowsBuy === true ? "입고동일" : "-" },
+    { key:"payState", label:"입금",
+      get:it=>{
+        const p = payStatusOf(it);
+        if(!p){
+          const sold = String(it.status||"").indexOf("판매") >= 0
+                    || String(it.status||"").indexOf("개통") >= 0 || !!it.destination;
+          return sold ? "판매요청 없음" : "-";
+        }
+        return p.label + (p.state === "part" ? " " + (p.received||0).toLocaleString() : "");
+      },
+      getRaw:it=>{ const p = payStatusOf(it); return p ? p.label : ((it.status==="판매"||it.status==="개통") ? "판매요청 없음" : ""); } },
+    { key:"payDate", label:"입금일",
+      get:it=>{ const p = payStatusOf(it); return (p && p.state === "done") ? (p.reqDate||"-") : "-"; },
+      getRaw:it=>{ const p = payStatusOf(it); return (p && p.state === "done") ? (p.reqDate||"") : ""; } },
+    { key:"taxState", label:"세금계산서",
+      get:it=>{ const p = payStatusOf(it); return p ? (p.taxDone ? "발행완료" : "미발행") : "-"; },
+      getRaw:it=>{ const p = payStatusOf(it); return p ? (p.taxDone ? "발행완료" : "미발행") : ""; } },
     { key:"activateDate", label:"개통일", get:it=>it.activateDate||"-" },
     { key:"subNumber", label:"가입번호", get:it=> it.subNumber || "-", getRaw:it=> it.subNumber || "" },
     { key:"activationCode", label:"개통코드", get:it=> it.activationCode || "-", getRaw:it=> it.activationCode || "" },
@@ -5178,6 +5237,7 @@ const firebaseConfig = {
     { key:"activationBy", label:"개통자", get:it=> it.activationBy || "-", getRaw:it=> it.activationBy || "" },
     { key:"subsidyAmount", label:"공시지원금", html:true,
       get:it=> moneyCell(it.subsidyAmount), getRaw:it=> moneyRaw(it.subsidyAmount) },
+    { key:"supportMonth", label:"지원금 귀속월", get:it=> it.supportMonth || "-", getRaw:it=> it.supportMonth || "" },
     { key:"distSupport", label:"유통폰지원금", html:true,
       get:it=>{
         const d = Number(it.distSupport)||0;
@@ -5215,76 +5275,19 @@ const firebaseConfig = {
         if(!d && !c) return "";
         return d - c;
       } },
-    { key:"supportMonth", label:"지원금 귀속월", get:it=> it.supportMonth || "-", getRaw:it=> it.supportMonth || "" },
-    { key:"destination", label:"판매처", get:it=>it.destination||"-" },
-    { key:"salePrice", label:"판매가", get:it=>it.salePrice?Number(it.salePrice).toLocaleString():"-", getRaw:it=>it.salePrice!=null?Number(it.salePrice):"" },
-    // 판매할인 기준 — 역산하지 않습니다. 정해진 규칙과 저장된 값만 씁니다.
-    { key:"saleDiscountBase", label:"판매할인 기준",
-      get:it=> saleBaseLabel(it), getRaw:it=> saleBaseLabel(it) },
-    { key:"saleDiscount", label:"판매할인%", get:it=> discPctFmt(saleDiscountPctOf(it)), getRaw:it=> discRaw(saleDiscountPctOf(it)) },
-    { key:"saleDiscountAmt", label:"판매할인", get:it=> discFmt(saleDiscountAmtOf(it)), getRaw:it=> discRaw(saleDiscountAmtOf(it)) },
-    // ── 더블스토리지 — 판매 쪽 ──
-    { key:"dsAmount", label:"더블스토리지", html:true,
-      get:it=> moneyCell(it.dsAmount), getRaw:it=> moneyRaw(it.dsAmount) },
-    { key:"dsPayDate", label:"정산해준날",
-      get:it=> (Number(it.dsAmount) > 0) ? (it.dsPayDate || "") : "",
-      getRaw:it=> (Number(it.dsAmount) > 0) ? (it.dsPayDate || "") : "" },
-    // 판매요청이 걸려 있는지 한눈에 보여줍니다. 없으면 돈을 못 받습니다.
-    { key:"saleReqState", label:"판매요청",
-      get:it=>{
-        //  포피플 자체개통은 판매요청이 없는 것이 정상입니다.
-        if(String(it.status||"") === "개통" && String(it.destination||"") === "포피플")
-          return "자체개통";
-        const sold = String(it.status||"").indexOf("판매") >= 0
-                  || String(it.status||"").indexOf("개통") >= 0 || !!it.destination;
-        if(it.saleRequestId) return '<span style="color:#2e7d32;font-weight:700;">있음</span>';
-        if(sold) return '<span style="color:var(--danger);font-weight:700;">없음</span>';
-        return "-";
-      },
-      getRaw:it=>{
-        const sold = String(it.status||"").indexOf("판매") >= 0
-                  || String(it.status||"").indexOf("개통") >= 0 || !!it.destination;
-        return it.saleRequestId ? "있음" : (sold ? "없음" : "-");
-      }, html:true },
-    { key:"payState", label:"입금",
-      get:it=>{
-        const p = payStatusOf(it);
-        if(!p){
-          const sold = String(it.status||"").indexOf("판매") >= 0
-                    || String(it.status||"").indexOf("개통") >= 0 || !!it.destination;
-          return sold ? "판매요청 없음" : "-";
-        }
-        return p.label + (p.state === "part" ? " " + (p.received||0).toLocaleString() : "");
-      },
-      getRaw:it=>{ const p = payStatusOf(it); return p ? p.label : ((it.status==="판매"||it.status==="개통") ? "판매요청 없음" : ""); } },
-    { key:"payDate", label:"입금일",
-      get:it=>{ const p = payStatusOf(it); return (p && p.state === "done") ? (p.reqDate||"-") : "-"; },
-      getRaw:it=>{ const p = payStatusOf(it); return (p && p.state === "done") ? (p.reqDate||"") : ""; } },
-    { key:"taxState", label:"세금계산서",
-      get:it=>{ const p = payStatusOf(it); return p ? (p.taxDone ? "발행완료" : "미발행") : "-"; },
-      getRaw:it=>{ const p = payStatusOf(it); return p ? (p.taxDone ? "발행완료" : "미발행") : ""; } },
-    // 되사온 재고인지 표시합니다. 1차 판매처와 연동 여부도 함께 보입니다.
-    // 되사오기 — 2차는 「되사옴」, 1차는 「되사감」으로 양쪽에 표시합니다.
-    { key:"isRebuy", label:"되사오기",
-      get:it=> it.isRebuy
-          ? ("되사옴" + (it.rebuyFromDest ? " (" + it.rebuyFromDest + ")" : "")
-             + (it.buyPriceFollowsSale === true ? " · 판매값연동" : ""))
-        : (it.rebuyToItemId
-          ? ("되사감" + (it.rebuyBackAt ? " (" + it.rebuyBackAt + ")" : "")) : "-"),
-      getRaw:it=> it.isRebuy
-          ? ("되사옴" + (it.rebuyFromDest ? " (" + it.rebuyFromDest + ")" : "")
-             + (it.buyPriceFollowsSale === true ? " · 판매값연동" : ""))
-        : (it.rebuyToItemId
-          ? ("되사감" + (it.rebuyBackAt ? " (" + it.rebuyBackAt + ")" : "")) : "-") },
-    { key:"note1", label:"비고1", get:it=>it.note1||"-", getRaw:it=>it.note1||"" },
-    { key:"note2", label:"비고2", get:it=>it.note2||"-", getRaw:it=>it.note2||"" },
     //  수익 = 판매가 − 입고가
     //   저장된 값이 있으면 그대로, 없으면 그 자리에서 계산해 보여줍니다.
     //   (자료를 고치지는 않습니다. 보여주기만 합니다)
     { key:"profit", label:"수익",
       get:it=>{ const v = profitOf(it); return (v != null) ? Number(v).toLocaleString() : "-"; },
-      getRaw:it=>{ const v = profitOf(it); return (v != null) ? Number(v) : ""; } }
-  ];
+      getRaw:it=>{ const v = profitOf(it); return (v != null) ? Number(v) : ""; } },
+{ key:"note1", label:"비고1", get:it=>it.note1||"-", getRaw:it=>it.note1||"" },
+    { key:"note2", label:"비고2", get:it=>it.note2||"-", getRaw:it=>it.note2||"" },
+    //  현재상태 — 전에는 보기 설정에 없고 맨 뒤에 고정으로 붙었습니다.
+    //   이제 다른 칸처럼 끄고 켜고 옮기실 수 있습니다.
+    { key:"status", label:"현재상태", get:it=> it.status || "-" },
+    { key:"location", label:"위치", get:it=>it.location||"-" },
+      ];
   function profitOf(it){
     if(!it) return null;
     if(it.profit != null && it.profit !== "") return Number(it.profit);
@@ -5392,6 +5395,8 @@ const firebaseConfig = {
         customTabFontSizes = currentSettings.tabFontSizes || {};
         customHiddenKeys = currentSettings.hiddenKeys || {};
         customTips = currentSettings.tips || {};
+        //  더블스토리지 정산에 «늘 보일» 업체 — 대상 건이 없어도 줄을 둡니다.
+        dsFixedParties = currentSettings.dsFixedParties || { in: [], out: [] };
         hiddenLabels = currentSettings.hiddenLabels || {};
         tipLabels = currentSettings.tipLabels || {};
         dashFontSize = currentSettings.dashFontSize || "medium";
@@ -5470,6 +5475,8 @@ const firebaseConfig = {
 
   // ---------- 버튼·제목·대시보드 카드 우클릭으로 이름/색상/글씨크기 수정 (전체 적용) ----------
   let customTabLabels = {};
+  //  더블스토리지 정산에 늘 보일 업체 — in: 받을 곳(입고처) · out: 줄 곳(판매처)
+  let dsFixedParties = { in: [], out: [] };
   let customTabColors = {};
   let customTabFontSizes = {};
   let customHiddenKeys = {};
@@ -31895,6 +31902,67 @@ window.showDepositUses = async function(id){
     dsSettleList();
   };
 
+  //  «늘 보일 업체» 를 고릅니다. 보기 설정과 같은 방식입니다.
+  //   대상 건이 없어도 줄이 남아, 보고용 표에서 빠지지 않습니다.
+  window.openDsFixedParties = async function(){
+    const head = document.getElementById("suplog-head");
+    const body = document.getElementById("suplog-body");
+    setSupLogTitle("더블스토리지 — 늘 보일 업체");
+    head.innerHTML = '<b>늘 보일 업체</b>'
+      + '<br><span style="color:var(--gray);">체크한 업체는 대상 건이 <b>0 건이어도</b> 표에 «-» 로 남습니다.<br>'
+      + '체크를 안 하셔도 건이 있으면 자동으로 나옵니다.</span>';
+    body.innerHTML = '<div class="list-empty">업체를 읽는 중...</div>';
+    document.getElementById("suplog-overlay").style.display = "flex";
+    let names = [];
+    try{
+      await fetchCompaniesCache();
+      names = (companiesCache||[]).map(function(c){ return String(c.name||"").trim(); })
+        .filter(function(x){ return x; }).sort();
+    }catch(e){}
+    if(names.indexOf("포피플") < 0) names.unshift("포피플");
+    const fin  = (dsFixedParties && dsFixedParties.in)  || [];
+    const fout = (dsFixedParties && dsFixedParties.out) || [];
+    const col = function(title, key, picked){
+      return '<div style="font-weight:700;margin:8px 0 4px;">' + title + '</div>'
+        + '<div style="max-height:280px;overflow-y:auto;border:1px solid var(--line);padding:6px;">'
+        + names.map(function(n){
+            return '<label style="display:block;padding:3px 2px;font-size:12.5px;cursor:pointer;">'
+              + '<input type="checkbox" class="dsfx-' + key + '" value="' + comboEsc(n) + '"'
+              + (picked.indexOf(n) >= 0 ? ' checked' : '') + '> ' + comboEsc(n) + '</label>';
+          }).join("")
+        + '</div>';
+    };
+    body.innerHTML =
+      '<div style="margin-bottom:8px;">'
+      + '<button class="btn small" style="width:auto;" onclick="saveDsFixedParties()">저장</button>'
+      + '<button class="btn small secondary" style="width:auto;margin-left:6px;" onclick="openDsSettle()">정산 화면으로</button>'
+      + '</div>'
+      + '<div style="display:flex;gap:14px;flex-wrap:wrap;">'
+      + '<div style="min-width:240px;">' + col("받을 곳 (입고처)", "in", fin) + '</div>'
+      + '<div style="min-width:240px;">' + col("줄 곳 (판매처)", "out", fout) + '</div>'
+      + '</div>';
+  };
+
+  window.saveDsFixedParties = async function(){
+    const body = document.getElementById("suplog-body");
+    const pick = function(key){
+      return Array.from(body.querySelectorAll(".dsfx-" + key + ":checked"))
+        .map(function(c){ return c.value; });
+    };
+    const next = { in: pick("in"), out: pick("out") };
+    try{
+      await setDoc(doc(db,"settings","general"), { dsFixedParties: next }, { merge:true });
+      dsFixedParties = next;
+      currentSettings.dsFixedParties = next;
+    }catch(e){
+      alert("저장하지 못했습니다.\n" + ((e && e.message) ? e.message : String(e))); return;
+    }
+    logAction("더블스토리지 늘 보일 업체",
+      "받을곳 " + next.in.length + "곳 · 줄곳 " + next.out.length + "곳");
+    alert("저장했습니다.");
+    openDsSettle();
+  };
+
   //  정산 묶음을 취소합니다. 원장·통장 줄과 재고 날짜가 함께 풀립니다.
   window.dsSettleCancel = async function(setId){
     if(!setId) return;
@@ -31982,14 +32050,21 @@ window.showDepositUses = async function(id){
     }
     //  받을 곳 (입고처) 기준
     const buy = {};
+    //  «늘 보일 업체» 를 먼저 깔아둡니다. 건이 없으면 0 으로 나옵니다.
+    ((dsFixedParties && dsFixedParties.in) || []).forEach(function(k){
+      if(k) buy[k] = { n:0, amt:0, recvN:0, recvAmt:0, fixed:true };
+    });
     rows.forEach(function(r){
       const k = r.src || "-";
       if(!buy[k]) buy[k] = { n:0, amt:0, recvN:0, recvAmt:0 };
       buy[k].n++; buy[k].amt += r.amt;
       if(r.recv){ buy[k].recvN++; buy[k].recvAmt += r.amt; }
     });
-    //  줄 곳 (판매처) 기준 — 포피플은 자체개통(우리 몫)
+    //  줄 곳 (판매처) 기준 — 포피플 자체개통도 그대로 들어갑니다
     const sell = {};
+    ((dsFixedParties && dsFixedParties.out) || []).forEach(function(k){
+      if(k) sell[k] = { n:0, amt:0, payN:0, payAmt:0, fixed:true };
+    });
     rows.forEach(function(r){
       const k = r.dest || "(판매 전)";
       if(!sell[k]) sell[k] = { n:0, amt:0, payN:0, payAmt:0 };
@@ -32014,13 +32089,16 @@ window.showDepositUses = async function(id){
             const g = obj[k];
             const doneAmt = (g.recvAmt != null ? g.recvAmt : g.payAmt) || 0;
             const self = (k === "포피플");
-            return '<tr><td><b>' + comboEsc(k) + '</b>'
-              + (self ? ' <span style="color:#2e7d32;font-size:10.5px;">자체개통</span>' : '') + '</td>'
-              + '<td class="ta-right">' + g.n + '</td>'
-              + '<td class="ta-right">' + f(g.amt) + '</td>'
-              + '<td class="ta-right" style="color:#2e7d32;">' + f(doneAmt) + '</td>'
+            const none = (g.n === 0);
+            const dash = '<span style="color:var(--gray);">-</span>';
+            return '<tr' + (none ? ' style="color:var(--gray);"' : '') + '><td><b>' + comboEsc(k) + '</b>'
+              + (self ? ' <span style="color:#2e7d32;font-size:10.5px;">자체개통</span>' : '')
+              + (g.fixed ? ' <span style="color:var(--gray);font-size:10.5px;">고정</span>' : '') + '</td>'
+              + '<td class="ta-right">' + (none ? dash : g.n) + '</td>'
+              + '<td class="ta-right">' + (none ? dash : f(g.amt)) + '</td>'
+              + '<td class="ta-right" style="color:#2e7d32;">' + (none ? dash : f(doneAmt)) + '</td>'
               + '<td class="ta-right" style="color:' + (g.amt - doneAmt > 0 ? 'var(--danger)' : 'var(--gray)') + ';">'
-              + f(g.amt - doneAmt) + '</td></tr>';
+              + (none ? dash : f(g.amt - doneAmt)) + '</td></tr>';
           }).join("")
         + '</tbody></table>';
     };
@@ -32029,6 +32107,7 @@ window.showDepositUses = async function(id){
       + '<button class="btn small" style="width:auto;" onclick="dsSettleRun(\'in\')" title="삼성·삼성에스엘 등 산 곳에서 받은 것을 기록합니다. 여신 또는 현금으로 들어갑니다.">정산 받음</button>'
       + '<button class="btn small" style="width:auto;margin-left:6px;" onclick="dsSettleRun(\'out\')" title="판매처에 준 것을 기록합니다. 포피플 자체개통분도 여기서 처리합니다.">정산 지급</button>'
       + '<button class="btn small secondary" style="width:auto;margin-left:6px;" onclick="dsSettleList()">정산 내역</button>'
+      + '<button class="btn small secondary" style="width:auto;margin-left:6px;" onclick="openDsFixedParties()" title="대상 건이 없어도 늘 보일 업체를 고릅니다. 보고용으로 줄을 남겨둘 때 씁니다.">보일 업체</button>' 
       + '<span style="font-size:11.5px;color:var(--gray);margin-left:8px;">'
       + '아래에서 체크한 건을 정산합니다. 한 번에 한 거래처만 됩니다.</span>'
       + '</div>' 
@@ -42683,14 +42762,15 @@ let ghostBankCache = [];
   // 재고 목록 컬럼 순서와 같게 배치했습니다.
   // 모델명·펫네임·색상·SKU·일련번호·수량은 일부러 제외했습니다 (아래 주석 참고).
   const BULK_EDIT_FIELDS = [
-    { key:"source", label:"입고처", type:"names", collection:"inboundSources" },
+{ key:"orderDate", label:"주문일", type:"text" },
+    { key:"inDate", label:"입고일", type:"text" },
+    { key:"expectedSaleDate", label:"판매예정일", type:"text" },
+    { key:"outDate", label:"판매일", type:"text" },
     { key:"kind", label:"구분", type:"select", collection:"itemKinds" },
+    
+    { key:"source", label:"입고처", type:"names", collection:"inboundSources" },
     { key:"manufacturer", label:"제조사", type:"select", collection:"manufacturers" },
-    { key:"__color", label:"색상 (제조사·전산 함께)", type:"color" },
     { key:"carrier", label:"통신사", type:"select", collection:"carriers" },
-    { key:"location", label:"위치", type:"select", collection:"locations" },
-    { key:"status", label:"현재상태", type:"select", collection:"statusOptions" },
-    { key:"destination", label:"판매처", type:"names", collection:"outboundDestinations" },
     { key:"imei", label:"IMEI", type:"text" },
     { key:"listPrice", label:"출고가", type:"number" },
     { key:"purchasePrice", label:"입고가", type:"number" },
@@ -42698,30 +42778,18 @@ let ghostBankCache = [];
     { key:"purchaseDiscount", label:"선할인%", type:"number" },
     { key:"otherDiscountAmt", label:"타할인", type:"number" },
     { key:"otherDiscountPct", label:"타할인%", type:"number" },
+    { key:"destination", label:"판매처", type:"names", collection:"outboundDestinations" },
     { key:"salePrice", label:"판매가", type:"number" },
-    { key:"saleDiscountAmt", label:"판매할인", type:"number" },
     { key:"saleDiscount", label:"판매할인%", type:"number" },
-    { key:"subsidyAmount", label:"공시지원금", type:"number" },
+    { key:"saleDiscountAmt", label:"판매할인", type:"number" },
+    { key:"activateDate", label:"개통일", type:"text" },
+{ key:"subsidyAmount", label:"공시지원금", type:"number" },
+    { key:"profit", label:"수익", type:"number" },
     { key:"note1", label:"비고1", type:"text", placeholder:"자유 입력" },
     { key:"note2", label:"비고2", type:"text", placeholder:"자유 입력" },
-    // 이 재고에서만 쓰는 할인 계산 기준입니다. 업체정보 값보다 먼저 적용됩니다.
-    //  기준을 고르면 선할인·타할인 금액과 입고가를 그 기준으로 다시 냅니다.
-    { key:"__baseFix", label:"매입할인 기준 (금액까지 다시 계산)", type:"basefix" },
-    // 클럽장려금 타할인 — 입고일이 속한 분기의 지급률로 채웁니다.
-    { key:"__clubRebate", label:"클럽장려금 타할인 채우기 (분기 지급률)", type:"club" },
-    { key:"profit", label:"수익", type:"number" },
-    // 매입가 그대로 넘길 때 씁니다. %로 계산하면 입고처마다 절사가 달라 1원씩 어긋납니다.
-    { key:"__salePriceFromBuy", label:"판매가 = 입고가로 맞추기", type:"same" },
-    // 삼성전자로 되돌려 보내는 반품. 재고를 「반품」으로 두고 여신을 되돌려 받습니다.
-    { key:"__returnToSamsung", label:"삼성 반품 (여신 환입)", type:"return" },
-    // 업체 기준이 바뀌었을 때 한 번 눌러 금액을 전부 다시 계산합니다. (%는 그대로)
-    { key:"__recalcAll", label:"할인 금액 전부 다시 계산", type:"recalc" },
-    { key:"orderDate", label:"주문일", type:"text" },
-    { key:"inDate", label:"입고일", type:"text" },
-    { key:"expectedSaleDate", label:"판매예정일", type:"text" },
-    { key:"outDate", label:"판매일", type:"text" },
-    { key:"activateDate", label:"개통일", type:"text" }
-  ];
+    { key:"status", label:"현재상태", type:"select", collection:"statusOptions" },
+    { key:"location", label:"위치", type:"select", collection:"locations" },
+      ];
   // 제외한 항목과 이유:
   //  - 펫네임/전산모델명/모델명/용량/제조사색상/전산색상/SKU: 모델 등록에서 관리하는 값.
   //    재고에서 개별 변경하면 모델 마스터와 어긋나 집계가 깨집니다.
@@ -47629,9 +47697,9 @@ let ghostBankCache = [];
     // 보기 설정에서 체크한 컬럼만 내려받습니다. (화면에 안 보이는 칸은 파일에도 안 넣습니다)
     const cols = invViewCols();
     if(cols.length === 0){ alert("보기 설정에서 컬럼을 하나 이상 선택해주세요."); return; }
-    // 현재상태는 보기 설정 항목이 아니라 항상 보이는 칸이라 그대로 넣습니다.
+    //  현재상태도 보기 설정 칸이 되었습니다. 따로 붙이지 않습니다.
     // 열 위치는 보기 설정에서 고른 항목 순서 그대로입니다. 앞에 칸을 끼워넣지 않습니다.
-    const headers = cols.map(c=>c.label).concat(["현재상태"]);
+    const headers = cols.map(c=>c.label);
     // 숫자 칸만 숫자로 넣습니다. (글자를 돌려주는 칸은 그대로 글자로)
     const numericColIndices = new Set();
     const sample = lastRenderedItems[0];
@@ -47642,7 +47710,6 @@ let ghostBankCache = [];
     });
     const rows = lastRenderedItems.map(it=>{
       const row = cols.map(c=> cellText(c.getRaw ? c.getRaw(it) : c.get(it)));
-      row.push(it.status||"-");
       return row;
     });
     const hiddenCnt = INV_COLUMNS.length - cols.length;
@@ -47657,38 +47724,39 @@ let ghostBankCache = [];
 
   // ---------- 재고 일괄수정 (다운로드 → 채워서 업로드) ----------
   const BULK_EDIT_DOWNLOAD_FIELDS = [
+{ header:"주문일", key:"orderDate", type:"text" },
+    { header:"입고일", key:"inDate", type:"text" },
+    { header:"판매예정일", key:"expectedSaleDate", type:"text" },
+    { header:"판매일", key:"outDate", type:"text" },
+    { header:"입고처", key:"source", type:"text" },
+    { header:"제조사", key:"manufacturer", type:"text" },
+    { header:"통신사", key:"carrier", type:"text" },
+    { header:"펫네임", key:"petName", type:"text", readonly:true },
+    
     // 참고용 — 어느 단말기인지 알아보기 위해 넣습니다. (readonly = 업로드해도 반영 안 함)
     { header:"전산모델명", key:"systemModel", type:"text", readonly:true },
     { header:"모델명", key:"baseModel", type:"text", readonly:true },
     { header:"기가수", key:"capacity", type:"text", readonly:true },
-    { header:"펫네임", key:"petName", type:"text", readonly:true },
     { header:"제조사색상", key:"manufacturerColor", type:"text" },
     { header:"전산색상", key:"systemColor", type:"text" },
     { header:"삼성모델명(SKU)", key:"sku", type:"text" },
-    { header:"입고처", key:"source", type:"text" },
-    { header:"제조사", key:"manufacturer", type:"text" },
-    { header:"통신사", key:"carrier", type:"text" },
-    { header:"위치", key:"location", type:"text" },
-    { header:"현재상태", key:"status", type:"text" },
-    { header:"판매처", key:"destination", type:"text" },
+    { header:"IMEI", key:"imei", type:"text" },
     { header:"출고가", key:"listPrice", type:"number" },
     { header:"입고가", key:"purchasePrice", type:"number" },
     { header:"선할인", key:"purchaseDiscountAmt", type:"number" },
     { header:"선할인%", key:"purchaseDiscount", type:"number" },
     { header:"타할인", key:"otherDiscountAmt", type:"number" },
     { header:"타할인%", key:"otherDiscountPct", type:"number" },
+    { header:"판매처", key:"destination", type:"text" },
     { header:"판매가", key:"salePrice", type:"number" },
-    { header:"판매할인", key:"saleDiscountAmt", type:"number" },
     { header:"판매할인%", key:"saleDiscount", type:"number" },
+    { header:"판매할인", key:"saleDiscountAmt", type:"number" },
     { header:"공시지원금", key:"subsidyAmount", type:"number" },
-          { header:"주문일", key:"orderDate", type:"text" },
-    { header:"입고일", key:"inDate", type:"text" },
-    { header:"판매예정일", key:"expectedSaleDate", type:"text" },
-    { header:"판매일", key:"outDate", type:"text" },
-    { header:"IMEI", key:"imei", type:"text" },
-    { header:"비고1", key:"note1", type:"text" },
-    { header:"비고2", key:"note2", type:"text" }
-  ];
+          { header:"비고1", key:"note1", type:"text" },
+    { header:"비고2", key:"note2", type:"text" },
+{ header:"현재상태", key:"status", type:"text" },
+    { header:"위치", key:"location", type:"text" },
+      ];
 
   window.downloadBulkEditExcel = async function(){
     if(!hasPerm(currentUserPerms, "bulkEdit")){ alert("이 기능을 사용할 권한이 없습니다. 관리자에게 요청해주세요."); return; }
