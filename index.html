@@ -400,7 +400,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-06 v1208</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-06 v1209</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -32241,7 +32241,7 @@ window.showDepositUses = async function(id){
         + '<tr><th rowspan="2" style="vertical-align:bottom;">업체명</th>'
         + '<th colspan="4" style="text-align:center;background:#eef4fb;">받을 것 (입고 기준)</th>'
         + '<th colspan="4" style="text-align:center;background:#fdf1f1;">줄 것 (판매 기준)</th>'
-        + '<th rowspan="2" style="vertical-align:bottom;" class="ta-right">차액</th></tr>'
+        + '<th rowspan="2" style="vertical-align:bottom;" class="ta-right">합계</th></tr>' 
         + '<tr>'
         + '<th class="ta-right">건수</th><th class="ta-right">금액</th>'
         + '<th class="ta-right">받음</th><th class="ta-right">미수</th>'
@@ -32253,8 +32253,8 @@ window.showDepositUses = async function(id){
             const so = cell(sell[k], "out");
             const self = (k === "포피플");
             const fixed = (buy[k] && buy[k].fixed) || (sell[k] && sell[k].fixed);
-            //  차액 — 받을 것에서 줄 것을 뺍니다. 상계하실 때 보시는 숫자입니다.
-            const diff = (bi.leftNum||0) - (so.leftNum||0);
+            //  합계 — 그 업체의 받을 금액 + 줄 금액
+            const sumAmt = ((buy[k] && buy[k].amt)||0) + ((sell[k] && sell[k].amt)||0);
             const both = (buy[k] && buy[k].n > 0) && (sell[k] && sell[k].n > 0);
             return '<tr><td><b>' + comboEsc(k) + '</b>'
               + (self ? ' <span style="color:#2e7d32;font-size:10.5px;">자체개통</span>' : '')
@@ -32268,9 +32268,8 @@ window.showDepositUses = async function(id){
               + '<td class="ta-right">' + so.amt + '</td>'
               + '<td class="ta-right" style="color:#2e7d32;">' + so.done + '</td>'
               + '<td class="ta-right" style="color:' + (so.leftNum > 0 ? 'var(--danger)' : 'var(--gray)') + ';">' + so.left + '</td>'
-              + '<td class="ta-right" style="font-weight:700;color:'
-                + (diff > 0 ? '#1565c0' : (diff < 0 ? 'var(--danger)' : 'var(--gray)')) + ';">'
-                + (both ? f(diff) : dash) + '</td></tr>';
+              + '<td class="ta-right" style="font-weight:700;">'
+                + (sumAmt ? f(sumAmt) : dash) + '</td></tr>';
           }).join("")
         + '</tbody></table>';
     };
@@ -32307,7 +32306,8 @@ window.showDepositUses = async function(id){
       + '</div>' 
       + '<div style="overflow-x:auto;">' + tbl() + '</div>'
       + '<div class="desc" style="font-size:11.5px;color:var(--gray);margin-top:6px;">'
-      + '차액은 <b>미수 − 미지급</b> 입니다. 주고받는 업체만 나옵니다. 상계하실 때 보시면 됩니다.</div>' 
+      + '합계는 그 업체의 <b>받을 금액 + 줄 금액</b> 입니다. '
+      + '「주고받음」 이 붙은 업체는 양쪽에 모두 있습니다.</div>'  
       + '<div style="font-weight:700;margin:12px 0 4px;">건별 목록</div>'
       + '<div style="overflow-x:auto;max-height:300px;overflow-y:auto;">'
       + '<table class="data-table" style="width:auto;"><thead><tr>'
