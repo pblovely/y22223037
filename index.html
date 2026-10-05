@@ -400,7 +400,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-06 v1222</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-06 v1224</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -37428,6 +37428,16 @@ let ghostBankCache = [];
           ? '<br><span style="color:var(--gray);font-size:11.5px;">'
             + Object.keys(byHow).map(function(k){ return comboEsc(k) + ' ' + byHow[k] + '대'; }).join('  ·  ')
             + '</span>' : '')
+      + (function(){
+          const byWhy = {};
+          rows.filter(function(r){ return r.wBuy == null && r.wPre == null && r.wPct == null; })
+              .forEach(function(r){ const k = r.why || "직접 넣어주세요"; byWhy[k] = (byWhy[k]||0)+1; });
+          const ks = Object.keys(byWhy);
+          return ks.length ? '<br><span style="color:var(--danger);font-size:11.5px;">못 채우는 이유 — '
+            + ks.sort(function(a,b){ return byWhy[b]-byWhy[a]; })
+                .map(function(k){ return comboEsc(k) + ' ' + byWhy[k] + '대'; }).join('  ·  ')
+            + '</span>' : '';
+        })()
       + '<br><span style="color:var(--gray);font-size:11.5px;">출고가 · 판매가 · 판매할인은 건드리지 않습니다.</span>';
     body.innerHTML =
       (canFix.length ? '<div style="margin-bottom:8px;"><button class="btn small" style="width:auto;" onclick="fixNoBuyPriceAll()">'
@@ -37450,7 +37460,7 @@ let ghostBankCache = [];
             + '<td class="ta-right" style="color:#2e7d32;">' + f(r.wPre) + '</td>'
             + '<td class="ta-right" style="color:#2e7d32;">' + (r.wPct == null ? "-" : r.wPct + "%") + '</td>'
             + '<td style="font-size:11.5px;color:' + (none ? 'var(--danger)' : 'var(--gray)') + ';">'
-              + (none ? '직접 넣어주세요' : comboEsc(r.how)) + '</td></tr>';
+              + (none ? comboEsc(r.why || "직접 넣어주세요") : comboEsc(r.how)) + '</td></tr>';
         }).join("")
       + '</tbody></table></div>';
     document.getElementById("suplog-overlay").style.display = "flex";
@@ -37521,7 +37531,16 @@ let ghostBankCache = [];
             + Object.keys(byHow).sort(function(a,b){ return byHow[b]-byHow[a]; })
                 .map(function(k){ return comboEsc(k) + ' ' + byHow[k] + '대'; }).join('  ·  ')
             + '</span>'
-          : '');
+          : '')
+      + (function(){
+          const byWhy = {};
+          manual.forEach(function(r){ const k = r.why || "직접 넣어주세요"; byWhy[k] = (byWhy[k]||0)+1; });
+          const ks = Object.keys(byWhy);
+          return ks.length ? '<br><span style="color:var(--danger);font-size:11.5px;">못 채우는 이유 — '
+            + ks.sort(function(a,b){ return byWhy[b]-byWhy[a]; })
+                .map(function(k){ return comboEsc(k) + ' ' + byWhy[k] + '대'; }).join('  ·  ')
+            + '</span>' : '';
+        })();
     body.innerHTML =
       (canFix.length ? '<div style="margin-bottom:8px;"><button class="btn small" style="width:auto;" onclick="fixNoSalePriceAll()">'
         + '채울 수 있는 것 전부 채우기 (' + canFix.length + '대)</button></div>' : '')
@@ -37541,7 +37560,7 @@ let ghostBankCache = [];
             + '<td class="ta-right">' + f(r.buy) + '</td>'
             + '<td class="ta-right" style="color:#2e7d32;font-weight:700;">' + f(r.want) + '</td>'
             + '<td style="font-size:11.5px;color:' + (r.want == null ? 'var(--danger)' : 'var(--gray)') + ';">'
-              + (r.want == null ? '직접 넣어주세요' : comboEsc(r.how)) + '</td></tr>';
+              + (r.want == null ? comboEsc(r.why || "직접 넣어주세요") : comboEsc(r.how)) + '</td></tr>';
         }).join("")
       + '</tbody></table></div>'
       + (rows.length > 400 ? '<div style="font-size:11.5px;color:var(--gray);margin-top:6px;">'
@@ -38786,6 +38805,21 @@ let ghostBankCache = [];
               const v = d.data();
               if(v.status !== "취소") ordById2[d.id] = v;
             });
+            //  단말 이력에 남은 «입고가» 를 찾습니다.
+            const histBuy = {};
+            try{
+              (await getDocs(query(collection(db,"itemHistory"), where("type","==","price")))).forEach(function(d){
+                const v = d.data();
+                const iid = String(v.itemId||"");
+                if(!iid) return;
+                const m = /입고가\s*([0-9,]+)\s*→\s*([0-9,]+|없음)/.exec(String(v.detail||""));
+                if(!m) return;
+                const t = (v.at && v.at.seconds) || 0;
+                const val = Number(String(m[1]).replace(/,/g,""))||0;
+                if(!val) return;
+                if(!histBuy[iid] || t > histBuy[iid].t) histBuy[iid] = { t, val };
+              });
+            }catch(e){}
             const resvById2 = {};
             (await getDocs(collection(db,"reservations"))).forEach(function(d){
               const v = d.data();
@@ -38805,16 +38839,28 @@ let ghostBankCache = [];
                 if(rv && rv[k2] != null && rv[k2] !== "") return { v:Number(rv[k2]), how:"예약" };
                 return null;
               };
-              const wBuy = noBuy ? pick("purchasePrice","purchasePrice") : null;
-              const wPre = noPre ? pick("preDiscountAmt","preDiscountAmt") : null;
-              const wPct = noPre ? pick("preDiscountPct","preDiscountPct") : null;
+              let wBuy = noBuy ? pick("purchasePrice","purchasePrice") : null;
+              let wPre = noPre ? pick("preDiscountAmt","preDiscountAmt") : null;
+              let wPct = noPre ? pick("preDiscountPct","preDiscountPct") : null;
+              //  단말 이력에 남은 입고가도 봅니다. (「입고가 A → B」 에서 A)
+              if(noBuy && !wBuy && histBuy[id]) wBuy = { v: histBuy[id].val, how:"단말 이력" };
+              //  왜 못 채우는지 적어둡니다. 그래야 다음에 무엇을 보실지 압니다.
+              let why = "";
+              if(!wBuy && !wPre && !wPct){
+                if(!it.orderId) why = "주문에 안 이어짐";
+                else if(!o)     why = "주문이 없어짐 (또는 취소)";
+                else if(!rv && (o.purchasePrice == null || o.purchasePrice === "")) why = "주문에도 비어 있음";
+                else            why = "주문·예약 모두 비어 있음";
+              }
               if(!wBuy && !wPre && !wPct && !noBuy && !noPre) return;
               nbRows.push({ id, sn: it.serialNumber||"", model: it.systemModel||"",
                 src: it.source||"", inDate: it.inDate||"",
                 listPrice: Number(it.listPrice)||0,
                 noBuy, noPre,
                 wBuy: wBuy ? wBuy.v : null, wPre: wPre ? wPre.v : null, wPct: wPct ? wPct.v : null,
-                how: (wBuy||wPre||wPct) ? ((wBuy||wPre||wPct).how + "에 적힌 값") : "" });
+                how: (wBuy||wPre||wPct) ? ((wBuy||wPre||wPct).how + "에 적힌 값") : "",
+                why: why,
+                hasOrder: !!it.orderId, hasBatch: !!it.orderBatchId });
             });
             nbRows.sort(function(a,b){ return String(b.inDate).localeCompare(String(a.inDate)); });
           }catch(e){}
@@ -38845,6 +38891,17 @@ let ghostBankCache = [];
               if(v.status === "취소") return;
               srById[d.id] = v;
               (v.matchedItemIds||[]).forEach(function(iid){ srByItem[iid] = v; });
+            });
+            //  판매요청 묶음 — 요청금액이 남아 있으면 그것도 근거가 됩니다.
+            const srbById = {}, srLinesByBatch = {};
+            (await getDocs(collection(db,"saleRequestBatches"))).forEach(function(d){
+              const v = d.data();
+              if(v.status !== "취소") srbById[d.id] = v;
+            });
+            Object.keys(srById).forEach(function(k){
+              const v = srById[k];
+              if(!v.batchId) return;
+              (srLinesByBatch[v.batchId] = srLinesByBatch[v.batchId] || []).push(v);
             });
             //  ② 예약에 적힌 판매가 — 예약은 안 지워졌습니다.
             //   재고 → 주문 → 예약 으로 거슬러 올라가 찾습니다.
@@ -38906,7 +38963,25 @@ let ghostBankCache = [];
               if(want == null && histSale[id]){
                 want = histSale[id].val; how = "단말 이력에 남은 판매가";
               }
-              npRows.push({ id, sn: it.serialNumber||"", model: it.systemModel||"",
+              //  판매요청 묶음에 적힌 요청금액 — 줄이 하나뿐이면 그 금액 ÷ 수량이 판매가입니다.
+              if(want == null && sr && sr.batchId && srbById[sr.batchId]){
+                const bb = srbById[sr.batchId];
+                const lns = srLinesByBatch[sr.batchId] || [];
+                const q = (lns.length === 1) ? (Number(lns[0].quantity)||0) : 0;
+                const tot = Number(bb.depositRequired)||0;
+                if(q > 0 && tot > 0 && tot % q === 0){
+                  want = tot / q; how = "판매요청 묶음 금액 ÷ 수량";
+                }
+              }
+              //  왜 못 채우는지 적어둡니다.
+              let why2 = "";
+              if(want == null){
+                if(!it.saleRequestId && !srByItem[id]) why2 = "판매요청에 안 이어짐";
+                else if(sr && (sr.salePrice == null || sr.salePrice === "")) why2 = "판매요청에도 비어 있음";
+                else if(!it.orderId) why2 = "주문에 안 이어짐";
+                else why2 = "어디에도 값이 없음";
+              }
+              npRows.push({ id, why: why2, sn: it.serialNumber||"", model: it.systemModel||"",
                 dest: it.destination||"", st, out: it.outDate||"",
                 listPrice: Number(it.listPrice)||0,
                 buy: (it.purchasePrice == null || it.purchasePrice === "") ? null : Number(it.purchasePrice),
