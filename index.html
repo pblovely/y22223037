@@ -400,7 +400,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-06 v1206</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-06 v1208</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -31664,11 +31664,56 @@ window.showDepositUses = async function(id){
   //  업체정보의 «여신 상대» 설정을 봅니다. 이름으로 추측하지 않습니다.
   async function dsDefaultMethod(partner){
     try{
-      await fetchCompaniesCache();
+      await fetchCompanies();
       const c = (companiesCache||[]).find(function(x){
         return String(x.name||"").trim() === String(partner||"").trim(); });
       return (c && c.isCreditTarget === true) ? "credit" : "cash";
     }catch(e){ return "cash"; }
+  }
+
+  //  정산 방법·날짜를 버튼으로 고르는 작은 창입니다.
+  function dsAskMethod(isIn, partner, qty, amount, skipped, defM){
+    return new Promise(function(resolve){
+      const ov = document.createElement("div");
+      ov.style.cssText = "position:fixed;top:0;left:0;width:100%;height:100%;"
+        + "background:rgba(0,0,0,0.55);z-index:1200;display:flex;align-items:center;justify-content:center;";
+      let m = defM === "credit" ? "credit" : "cash";
+      const box = document.createElement("div");
+      box.style.cssText = "background:#fff;border:2px solid var(--navy);padding:22px;max-width:420px;width:92%;";
+      const draw = function(){
+        box.innerHTML =
+          '<h3 style="margin-top:0;">' + (isIn ? "받은 정산" : "준 정산") + '</h3>'
+          + '<div class="desc" style="font-size:12.5px;color:var(--gray);line-height:1.8;margin-bottom:12px;">'
+          + '거래처 <b>' + comboEsc(partner) + '</b><br>'
+          + '대수 <b>' + qty + '대</b>' + (skipped ? ' <span style="color:var(--gray);">(이미 정산 ' + skipped + '건 제외)</span>' : '') + '<br>'
+          + '금액 <b>' + (Number(amount)||0).toLocaleString() + '</b></div>'
+          + '<div style="margin-bottom:10px;">'
+          + '<div style="font-weight:700;margin-bottom:6px;">받는 방법</div>'
+          + '<button class="btn small' + (m === "credit" ? '' : ' secondary') + '" style="width:auto;" data-m="credit">여신</button>'
+          + '<button class="btn small' + (m === "cash" ? '' : ' secondary') + '" style="width:auto;margin-left:6px;" data-m="cash">현금 (통장)</button>'
+          + '</div>'
+          + '<div class="stack-row"><label>정산일</label>'
+          + '<input type="text" id="dsask-date" maxlength="8" inputmode="numeric" value="' + todayStr() + '" style="width:140px;"></div>'
+          + '<div style="margin-top:14px;text-align:right;">'
+          + '<button class="btn small secondary" style="width:auto;" data-x="c">취소</button>'
+          + '<button class="btn small" style="width:auto;margin-left:6px;" data-x="o">진행</button>'
+          + '</div>';
+        box.querySelectorAll("[data-m]").forEach(function(b){
+          b.onclick = function(){ m = b.dataset.m; const d = box.querySelector("#dsask-date").value; draw();
+            box.querySelector("#dsask-date").value = d; };
+        });
+        box.querySelector('[data-x="c"]').onclick = function(){ ov.remove(); resolve(null); };
+        box.querySelector('[data-x="o"]').onclick = function(){
+          const d = String(box.querySelector("#dsask-date").value||"").replace(/\D/g,"");
+          if(d.length !== 8){ alert("정산일을 8자리로 넣어주세요. 예: 20260930"); return; }
+          ov.remove(); resolve({ method: m, date: d });
+        };
+      };
+      draw();
+      ov.appendChild(box);
+      ov.onclick = function(e){ if(e.target === ov){ ov.remove(); resolve(null); } };
+      document.body.appendChild(ov);
+    });
   }
 
   window.dsSettleRun = async function(direction){
@@ -31696,29 +31741,11 @@ window.showDepositUses = async function(id){
 
     //  여신인지 현금인지는 «업체정보의 여신 상대» 설정을 따릅니다. 이름으로 추측하지 않습니다.
     const defM = await dsDefaultMethod(partner);
-    const ask = prompt(
-      (isIn ? "받은 정산" : "준 정산") + "을 기록합니다.\n\n"
-      + "  거래처   " + partner + "\n"
-      + "  대수     " + rows.length + "대" + (done.length ? "  (이미 정산 " + done.length + "건은 뺐습니다)" : "") + "\n"
-      + "  금액     " + amount.toLocaleString() + "\n\n"
-      + "방법을 고르세요.\n"
-      + "  1 = 여신\n"
-      + "  2 = 현금 (통장 내역)\n",
-      defM === "credit" ? "1" : "2");
-    if(ask === null) return;
-    const method = (String(ask).trim() === "1") ? "credit" : "cash";
-
-    const dAsk = prompt("정산일을 넣어주세요. (예: 20260930)", todayStr());
-    if(dAsk === null) return;
-    const date = String(dAsk||"").replace(/\D/g,"");
-    if(date.length !== 8){ alert("날짜는 8자리로 넣어주세요."); return; }
-
-    if(!confirm((isIn ? "받은" : "준") + " 정산을 기록합니다.\n\n"
-      + "  거래처   " + partner + "\n"
-      + "  대수     " + rows.length + "대\n"
-      + "  금액     " + amount.toLocaleString() + "\n"
-      + "  방법     " + (method === "credit" ? "여신" : "현금(통장)") + "\n"
-      + "  정산일   " + date + "\n\n진행할까요?")) return;
+    //  방법과 날짜를 «버튼으로» 고릅니다. 숫자를 치지 않으셔도 됩니다.
+    const pick = await dsAskMethod(isIn, partner, rows.length, amount, done.length, defM);
+    if(!pick) return;
+    const method = pick.method;
+    const date = pick.date;
 
     let setId = null;
     try{
@@ -31837,7 +31864,9 @@ window.showDepositUses = async function(id){
               + '<td><b>' + comboEsc(r.partner||"-") + '</b></td>'
               + '<td class="ta-right">' + (Number(r.qty)||0) + '</td>'
               + '<td class="ta-right">' + f(r.amount) + '</td>'
-              + '<td>' + comboEsc(mName[r.method]||r.method||"-") + '</td>'
+              + '<td><button class="btn small secondary" style="width:auto;font-size:11px;" data-ds-m="'
+                + comboEsc(r.id) + '" title="여신 ↔ 현금을 바꿉니다. 돈 쪽도 함께 옮겨집니다.">'
+                + comboEsc(mName[r.method]||r.method||"-") + '</button></td>' 
               + '<td>' + comboEsc(r.month||"-") + '</td>'
               //  세금계산서 — 발행일·번호를 적어두면 여기서 바로 보입니다.
               + '<td>' + (r.taxDate
@@ -31857,6 +31886,9 @@ window.showDepositUses = async function(id){
     });
     body.querySelectorAll("[data-ds-tax]").forEach(function(b){
       b.onclick = function(){ dsSettleTax(b.dataset.dsTax); };
+    });
+    body.querySelectorAll("[data-ds-m]").forEach(function(b){
+      b.onclick = function(){ dsSettleChangeMethod(b.dataset.dsM); };
     });
     document.getElementById("suplog-overlay").style.display = "flex";
   };
@@ -31915,7 +31947,7 @@ window.showDepositUses = async function(id){
     document.getElementById("suplog-overlay").style.display = "flex";
     let names = [];
     try{
-      await fetchCompaniesCache();
+      await fetchCompanies();
       names = (companiesCache||[]).map(function(c){ return String(c.name||"").trim(); })
         .filter(function(x){ return x; }).sort();
     }catch(e){}
@@ -31961,6 +31993,101 @@ window.showDepositUses = async function(id){
       "받을곳 " + next.in.length + "곳 · 줄곳 " + next.out.length + "곳");
     alert("저장했습니다.");
     openDsSettle();
+  };
+
+  //  정산 방법을 바꿉니다. (여신 ↔ 현금)
+  //   옛 기록을 지우고 새 쪽에 다시 만듭니다. 재고의 정산일도 함께 맞춥니다.
+  window.dsSettleChangeMethod = async function(setId){
+    if(!setId) return;
+    if(!hasPerm(currentUserPerms, "paymentProcess")){ alert("권한이 없습니다."); return; }
+    let v = null;
+    try{ const sn = await getDoc(doc(db,"dsSettlements", setId)); if(sn.exists()) v = sn.data(); }catch(e){}
+    if(!v){ alert("이미 지워진 정산입니다."); return; }
+    const isIn = (v.direction === "in");
+    const cur = v.method;
+    const next = (cur === "credit") ? "cash" : "credit";
+    if(!isIn && next === "credit"){ alert("주는 정산은 여신으로 바꿀 수 없습니다."); return; }
+    //  이미 돈이 들어온 건은 못 바꿉니다. 먼저 매칭을 푸셔야 합니다.
+    if(v.depositRequestId){
+      try{
+        const rs = await getDoc(doc(db,"saleDepositRequests", v.depositRequestId));
+        if(rs.exists() && (Number(rs.data().receivedAmount)||0) > 0){
+          alert("이미 입금이 맞춰진 정산입니다.\n\n먼저 입출금에서 매칭을 푸신 뒤에 바꿔주세요.");
+          return;
+        }
+      }catch(e){}
+    }
+    if(!confirm("정산 방법을 바꿉니다.\n\n"
+      + "  거래처   " + (v.partner||"-") + "\n"
+      + "  금액     " + (Number(v.amount)||0).toLocaleString() + "\n"
+      + "  방법     " + (cur === "credit" ? "여신" : "현금") + "  →  " + (next === "credit" ? "여신" : "현금") + "\n\n"
+      + (cur === "credit" ? "  여신 충전이 지워지고 입금요청이 만들어집니다.\n" : "")
+      + (cur === "cash" ? "  입금요청이 취소되고 여신에 충전됩니다.\n" : "")
+      + "\n진행할까요?")) return;
+    try{
+      //  옛 쪽을 지웁니다.
+      if(v.ledgerId){ try{ await deleteDoc(doc(db,"b2bLedger", v.ledgerId)); }catch(e){} }
+      if(v.bankId){   try{ await deleteDoc(doc(db,"bankDeposits", v.bankId)); }catch(e){} }
+      if(v.depositRequestId){ try{ await cancelReqBoardItem("in", v.depositRequestId); }catch(e){} }
+      const patch = { method: next, ledgerId: null, bankId: null, depositRequestId: null };
+      //  새 쪽을 만듭니다.
+      if(next === "credit"){
+        const lg = await addDoc(collection(db,"b2bLedger"), {
+          date: v.date, category: "double_storage", amount: Number(v.amount)||0,
+          partner: v.partner, source: v.partner,
+          memo: "더블스토리지 정산: " + (v.partner||"-") + " " + (v.qty||0) + "대",
+          fromDsSettleId: setId,
+          createdBy: currentUser.name, createdByUsername: currentUser.username, createdAt: serverTimestamp()
+        });
+        patch.ledgerId = lg.id;
+      }else if(isIn){
+        const rq = await addDoc(collection(db,"saleDepositRequests"), {
+          saleBatchRefs: [], destinations: [v.partner],
+          otherAmount: Number(v.amount)||0, totalAmount: Number(v.amount)||0,
+          requestDate: v.date, firstSaleDate: "",
+          depositCompleted: false, depositCompleteDate: "",
+          receivedAmount: 0, receipts: [],
+          taxInvoiceIssued: false, taxInvoiceDate: "",
+          status: "요청중",
+          memo: "더블스토리지 정산: " + (v.partner||"-") + " " + (v.qty||0) + "대",
+          fromDsSettleId: setId,
+          createdBy: currentUser.name, createdByUsername: currentUser.username, createdAt: serverTimestamp()
+        });
+        patch.depositRequestId = rq.id;
+      }else{
+        const bk = await addDoc(collection(db,"bankDeposits"), {
+          kind: "out", date: v.date, amount: Number(v.amount)||0,
+          payer: v.partner, company: v.partner, account: "",
+          memo: "더블스토리지 정산: " + (v.partner||"-") + " " + (v.qty||0) + "대",
+          usedAmount: 0, uses: [], fromDsSettleId: setId,
+          createdBy: currentUser.name, createdByUsername: currentUser.username, createdAt: serverTimestamp()
+        });
+        patch.bankId = bk.id;
+      }
+      await updateDoc(doc(db,"dsSettlements", setId), patch);
+      //  재고의 정산일 — 여신이면 바로 넣고, 현금으로 받을 것은 비웁니다.
+      const ids = Array.isArray(v.itemIds) ? v.itemIds : [];
+      const wait = (isIn && next === "cash");
+      for(let i=0; i<ids.length; i+=300){
+        const bt = writeBatch(db);
+        ids.slice(i, i+300).forEach(function(id){
+          const p = {};
+          if(isIn) p.dsRecvDate = wait ? null : (v.date || null);
+          else     p.dsPayDate  = v.date || null;
+          bt.update(doc(db,"inventoryItems", id), p);
+        });
+        await withTimeout(bt.commit(), 20000, "정산일 맞추기");
+      }
+    }catch(e){
+      alert("바꾸다 멈췄습니다.\n" + ((e && e.message) ? e.message : String(e))
+        + "\n\n정산 내역에서 확인해주세요.");
+      return;
+    }
+    logAction("더블스토리지 정산 방법 바꿈",
+      (v.partner||"-") + " / " + (cur === "credit" ? "여신" : "현금") + " → " + (next === "credit" ? "여신" : "현금"));
+    clearCache("inventory"); clearCache("b2b"); clearDashCache();
+    alert("바꿨습니다.");
+    dsSettleList();
   };
 
   //  정산 묶음을 취소합니다. 원장·통장 줄과 재고 날짜가 함께 풀립니다.
@@ -32010,6 +32137,13 @@ window.showDepositUses = async function(id){
   //  재고에 들어간 대상 건을 모아 «받을 곳» · «줄 곳» 으로 집계합니다.
   //   자체개통(포피플)은 줄 곳이 없어 포피플 몫으로 모입니다.
   let dsSettleRows = [];
+  let dsFilterIn = "", dsFilterOut = "";    // 받을 곳 · 줄 곳 거르기
+
+  window.setDsFilter = function(which, v){
+    if(which === "in") dsFilterIn = v || "";
+    else               dsFilterOut = v || "";
+    renderDsSettle();
+  };
 
   window.openDsSettle = async function(){
     const head = document.getElementById("suplog-head");
@@ -32041,11 +32175,24 @@ window.showDepositUses = async function(id){
   function renderDsSettle(){
     const head = document.getElementById("suplog-head");
     const body = document.getElementById("suplog-body");
-    const rows = dsSettleRows || [];
+    //  받을 곳 · 줄 곳을 각각 거를 수 있습니다. 둘 다 「전체」 면 모두 봅니다.
+    const dsAll = dsSettleRows || [];
+    const rows = dsAll.filter(function(r){
+      if(dsFilterIn  && (r.src  || "-") !== dsFilterIn)  return false;
+      if(dsFilterOut && (r.dest || "")  !== dsFilterOut) return false;
+      return true;
+    });
     const f = function(n){ return (Number(n)||0).toLocaleString(); };
-    if(rows.length === 0){
+    if(dsAll.length === 0){
       head.innerHTML = '<b>더블스토리지 정산</b>';
       body.innerHTML = '<div class="list-empty">대상으로 넣은 재고가 없습니다.</div>';
+      return;
+    }
+    if(rows.length === 0){
+      head.innerHTML = '<b>더블스토리지 정산</b> — 거른 결과가 없습니다.';
+      body.innerHTML = '<div style="margin-bottom:8px;">'
+        + '<button class="btn small secondary" style="width:auto;" onclick="setDsFilter(\'in\',\'\');setDsFilter(\'out\',\'\')">거르기 지우기</button></div>'
+        + '<div class="list-empty">고르신 조건에 맞는 건이 없습니다.</div>';
       return;
     }
     //  받을 곳 (입고처) 기준
@@ -32079,31 +32226,78 @@ window.showDepositUses = async function(id){
       + '<br><span style="color:var(--gray);">받음 ' + f(tRecv) + ' · 미수 ' + f(tAmt - tRecv)
       + '  ·  포피플 자체개통 ' + own.length + '대 ' + f(ownAmt) + '</span>';
 
-    const tbl = function(title, obj, doneLabel, leftLabel){
-      return '<div style="font-weight:700;margin:10px 0 4px;">' + title + '</div>'
-        + '<table class="data-table" style="width:auto;"><thead><tr>'
-        + '<th>거래처</th><th class="ta-right">대수</th><th class="ta-right">금액</th>'
-        + '<th class="ta-right">' + doneLabel + '</th><th class="ta-right">' + leftLabel + '</th>'
+    //  업체 한 줄에 «받을 것» 과 «줄 것» 을 함께 보여줍니다.
+    //   더퓨처랩처럼 주고받는 곳은 한 줄에서 차액까지 보입니다.
+    const allKeys = [...new Set([...Object.keys(buy), ...Object.keys(sell)])].sort();
+    const dash = '<span style="color:var(--gray);">-</span>';
+    const cell = function(g, pick){
+      if(!g || g.n === 0) return { n:dash, amt:dash, done:dash, left:dash, leftNum:0 };
+      const done = (pick === "in" ? g.recvAmt : g.payAmt) || 0;
+      return { n:g.n, amt:f(g.amt), done:f(done),
+               left:f(g.amt - done), leftNum:(g.amt - done) };
+    };
+    const tbl = function(){
+      return '<table class="data-table" style="width:auto;"><thead>'
+        + '<tr><th rowspan="2" style="vertical-align:bottom;">업체명</th>'
+        + '<th colspan="4" style="text-align:center;background:#eef4fb;">받을 것 (입고 기준)</th>'
+        + '<th colspan="4" style="text-align:center;background:#fdf1f1;">줄 것 (판매 기준)</th>'
+        + '<th rowspan="2" style="vertical-align:bottom;" class="ta-right">차액</th></tr>'
+        + '<tr>'
+        + '<th class="ta-right">건수</th><th class="ta-right">금액</th>'
+        + '<th class="ta-right">받음</th><th class="ta-right">미수</th>'
+        + '<th class="ta-right">건수</th><th class="ta-right">금액</th>'
+        + '<th class="ta-right">지급</th><th class="ta-right">미지급</th>'
         + '</tr></thead><tbody>'
-        + Object.keys(obj).sort().map(function(k){
-            const g = obj[k];
-            const doneAmt = (g.recvAmt != null ? g.recvAmt : g.payAmt) || 0;
+        + allKeys.map(function(k){
+            const bi = cell(buy[k], "in");
+            const so = cell(sell[k], "out");
             const self = (k === "포피플");
-            const none = (g.n === 0);
-            const dash = '<span style="color:var(--gray);">-</span>';
-            return '<tr' + (none ? ' style="color:var(--gray);"' : '') + '><td><b>' + comboEsc(k) + '</b>'
+            const fixed = (buy[k] && buy[k].fixed) || (sell[k] && sell[k].fixed);
+            //  차액 — 받을 것에서 줄 것을 뺍니다. 상계하실 때 보시는 숫자입니다.
+            const diff = (bi.leftNum||0) - (so.leftNum||0);
+            const both = (buy[k] && buy[k].n > 0) && (sell[k] && sell[k].n > 0);
+            return '<tr><td><b>' + comboEsc(k) + '</b>'
               + (self ? ' <span style="color:#2e7d32;font-size:10.5px;">자체개통</span>' : '')
-              + (g.fixed ? ' <span style="color:var(--gray);font-size:10.5px;">고정</span>' : '') + '</td>'
-              + '<td class="ta-right">' + (none ? dash : g.n) + '</td>'
-              + '<td class="ta-right">' + (none ? dash : f(g.amt)) + '</td>'
-              + '<td class="ta-right" style="color:#2e7d32;">' + (none ? dash : f(doneAmt)) + '</td>'
-              + '<td class="ta-right" style="color:' + (g.amt - doneAmt > 0 ? 'var(--danger)' : 'var(--gray)') + ';">'
-              + (none ? dash : f(g.amt - doneAmt)) + '</td></tr>';
+              + (fixed ? ' <span style="color:var(--gray);font-size:10.5px;">고정</span>' : '')
+              + (both ? ' <span style="color:#6a1b9a;font-size:10.5px;">주고받음</span>' : '') + '</td>'
+              + '<td class="ta-right">' + bi.n + '</td>'
+              + '<td class="ta-right">' + bi.amt + '</td>'
+              + '<td class="ta-right" style="color:#2e7d32;">' + bi.done + '</td>'
+              + '<td class="ta-right" style="color:' + (bi.leftNum > 0 ? 'var(--danger)' : 'var(--gray)') + ';">' + bi.left + '</td>'
+              + '<td class="ta-right">' + so.n + '</td>'
+              + '<td class="ta-right">' + so.amt + '</td>'
+              + '<td class="ta-right" style="color:#2e7d32;">' + so.done + '</td>'
+              + '<td class="ta-right" style="color:' + (so.leftNum > 0 ? 'var(--danger)' : 'var(--gray)') + ';">' + so.left + '</td>'
+              + '<td class="ta-right" style="font-weight:700;color:'
+                + (diff > 0 ? '#1565c0' : (diff < 0 ? 'var(--danger)' : 'var(--gray)')) + ';">'
+                + (both ? f(diff) : dash) + '</td></tr>';
           }).join("")
         + '</tbody></table>';
     };
+
     body.innerHTML =
-      '<div style="margin-bottom:8px;">'
+      //  거르기 — 받을 곳 · 줄 곳
+      (function(){
+        const ins  = [...new Set(dsAll.map(function(r){ return r.src || "-"; }))].sort();
+        const outs = [...new Set(dsAll.map(function(r){ return r.dest || ""; }))].filter(function(x){ return x; }).sort();
+        const sel = function(label, which, list, cur){
+          return '<label style="font-size:12.5px;margin-right:4px;">' + label + '</label>'
+            + '<select onchange="setDsFilter(\'' + which + '\', this.value)" style="margin-right:12px;">'
+            + '<option value="">전체</option>'
+            + list.map(function(x){
+                return '<option value="' + comboEsc(x) + '"' + (cur === x ? ' selected' : '') + '>'
+                  + comboEsc(x) + '</option>'; }).join("")
+            + '</select>';
+        };
+        return '<div style="margin-bottom:8px;">'
+          + sel("받을 곳", "in", ins, dsFilterIn)
+          + sel("줄 곳", "out", outs, dsFilterOut)
+          + ((dsFilterIn || dsFilterOut)
+              ? '<span style="font-size:11.5px;color:var(--navy);">전체 ' + all.length + '대 중 '
+                + rows.length + '대</span>' : '')
+          + '</div>';
+      })()
+      + '<div style="margin-bottom:8px;">'
       + '<button class="btn small" style="width:auto;" onclick="dsSettleRun(\'in\')" title="삼성·삼성에스엘 등 산 곳에서 받은 것을 기록합니다. 여신 또는 현금으로 들어갑니다.">정산 받음</button>'
       + '<button class="btn small" style="width:auto;margin-left:6px;" onclick="dsSettleRun(\'out\')" title="판매처에 준 것을 기록합니다. 포피플 자체개통분도 여기서 처리합니다.">정산 지급</button>'
       + '<button class="btn small secondary" style="width:auto;margin-left:6px;" onclick="dsSettleList()">정산 내역</button>'
@@ -32111,8 +32305,9 @@ window.showDepositUses = async function(id){
       + '<span style="font-size:11.5px;color:var(--gray);margin-left:8px;">'
       + '아래에서 체크한 건을 정산합니다. 한 번에 한 거래처만 됩니다.</span>'
       + '</div>' 
-      + tbl("입고 기준 — 삼성에서 받을 것", buy, "받음", "미수")
-      + tbl("판매 기준 — 거래처에 줄 것", sell, "지급", "미지급")
+      + '<div style="overflow-x:auto;">' + tbl() + '</div>'
+      + '<div class="desc" style="font-size:11.5px;color:var(--gray);margin-top:6px;">'
+      + '차액은 <b>미수 − 미지급</b> 입니다. 주고받는 업체만 나옵니다. 상계하실 때 보시면 됩니다.</div>' 
       + '<div style="font-weight:700;margin:12px 0 4px;">건별 목록</div>'
       + '<div style="overflow-x:auto;max-height:300px;overflow-y:auto;">'
       + '<table class="data-table" style="width:auto;"><thead><tr>'
