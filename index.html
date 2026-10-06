@@ -400,7 +400,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-10-06 v1243</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-10-06 v1246</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -2005,6 +2005,7 @@
             <button class="btn small secondary" id="rbd-k-credit" style="width:auto;" onclick="setReqBoardKind('credit')">여신·선입금</button>
             <button class="btn small secondary" id="rbd-k-cb" style="width:auto;" onclick="setReqBoardKind('cb')">입출금 내역</button>
             <button class="btn small secondary" id="rbd-k-loan" style="width:auto;" onclick="setReqBoardKind('loan')">B2B 대출</button>
+            <button class="btn small secondary" id="rbd-k-ds" style="width:auto;" onclick="setReqBoardKind('ds')" title="더블스토리지 정산 묶음만 따로 봅니다. 받을 곳·줄 곳·세금계산서까지 한 화면에서 봅니다.">더블스토리지</button>
           </span>
           <label style="font-size:12px;margin-left:10px;white-space:nowrap;">
             <input type="checkbox" id="rbd-cb-open" onchange="toggleCbOpenOnly(this.checked)"> 안 쓴 것만 <span class="info-tip" title="「입출금 내역」 구분에서만 씁니다. 끄면 배분이 끝난 내역까지 다 보입니다.">ⓘ</span>
@@ -20810,7 +20811,7 @@ window.deleteReqBoardItem = async function(kind, reqId){
   };
   window.setReqBoardKind = function(k){
     reqBoardKind = k;
-    ["all","out","in","credit","cb","loan"].forEach(x=>{
+    ["all","out","in","credit","cb","loan","ds"].forEach(x=>{
       const b = document.getElementById("rbd-k-" + x);
       if(b) b.className = "btn small" + (x === k ? "" : " secondary");
     });
@@ -20825,11 +20826,110 @@ window.deleteReqBoardItem = async function(kind, reqId){
     loadReqBoard();
   };
 
+  // ===== 정산 관리 > 더블스토리지 탭 =====
+  //  더블스토리지 «정산 묶음» 을 한 화면에서 봅니다.
+  //   재고 목록에서 들어가지 않아도 여기서 바로 보고 고치실 수 있습니다.
+  //   보이는 값은 전부 dsSettlements 에 저장된 그대로입니다. 계산하지 않습니다.
+  async function renderDsBoard(listEl){
+    const f = function(v){ return (Number(v)||0).toLocaleString(); };
+    const rows = [];
+    try{
+      const snap = await getDocs(collection(db,"dsSettlements"));
+      snap.forEach(function(d){ rows.push({ id:d.id, ...d.data() }); });
+    }catch(e){
+      listEl.innerHTML = '<div class="list-empty">불러오지 못했습니다. ' + comboEsc(String(e && e.message || e)) + '</div>';
+      return;
+    }
+    rows.sort(function(a,b){ return String(b.date||"").localeCompare(String(a.date||"")); });
+
+    //  아직 정산하지 않은 대상 건도 함께 셉니다. (재고의 더블스토리지 금액)
+    let waitCnt = 0, waitRecv = 0, waitPay = 0;
+    try{
+      const inv = asSnap(await readColCached("inventory","inventoryItems"));
+      inv.forEach(function(d){
+        const v = d.data();
+        if(v.deleted === true) return;
+        if(!(Number(v.dsAmount) > 0)) return;
+        const amt = Number(v.dsAmount)||0;
+        if(!v.dsRecvId){ waitRecv += amt; waitCnt++; }
+        if(String(v.destination||"") !== "포피플" && !v.dsPayId) waitPay += amt;
+      });
+    }catch(e){}
+
+    const tIn  = rows.filter(function(r){ return r.direction === "in";  })
+                     .reduce(function(n,r){ return n + (Number(r.amount)||0); }, 0);
+    const tOut = rows.filter(function(r){ return r.direction === "out"; })
+                     .reduce(function(n,r){ return n + (Number(r.amount)||0); }, 0);
+    const noTax = rows.filter(function(r){ return !r.taxDate; }).length;
+
+    const card = function(label, val, color, note){
+      return '<div class="stat-card" style="flex:1;min-width:150px;border:1px solid var(--line);background:#fff;padding:9px 12px;">'
+        + '<div style="font-size:11.5px;color:var(--gray);margin-bottom:3px;">' + label + '</div>'
+        + '<div style="font-size:18px;font-weight:800;color:' + (color||'var(--navy)') + ';">' + val + '</div>'
+        + (note ? '<div style="font-size:10.5px;color:var(--gray);margin-top:2px;">' + note + '</div>' : '')
+        + '</div>';
+    };
+
+    listEl.innerHTML =
+      '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;">'
+      + card("받은 것", f(tIn),  "#1565c0", rows.filter(function(r){ return r.direction==="in"; }).length + "건")
+      + card("준 것",   f(tOut), "var(--danger)", rows.filter(function(r){ return r.direction==="out"; }).length + "건")
+      + card("차액", f(tIn - tOut), (tIn - tOut) >= 0 ? "#2e7d32" : "var(--danger)", "받은 것 − 준 것")
+      + card("아직 못 받은 것", f(waitRecv), waitRecv ? "#b8860b" : "var(--gray)", waitCnt + "대 · 정산 전")
+      + card("계산서 미발행", noTax + "건", noTax ? "var(--danger)" : "#2e7d32", "정산 " + rows.length + "건 중")
+      + '</div>'
+
+      + '<div style="margin-bottom:8px;">'
+      + '<button class="btn small" style="width:auto;" onclick="openDsSettle()"'
+      + ' title="재고에 넣은 더블스토리지 금액을 보고 정산을 만듭니다.">정산 화면 열기</button>'
+      + '<button class="btn small secondary" style="width:auto;margin-left:5px;" onclick="loadReqBoard()">새로 읽기</button>'
+      + '</div>'
+      + '<p class="desc" style="margin:0 0 8px 0;">더블스토리지 <b>정산 묶음</b> 목록입니다. '
+      + '방법을 눌러 <b>여신 ↔ 현금</b>을 바꾸고, 계산서 칸에서 <b>발행일·번호</b>를 넣을 수 있습니다. '
+      + '취소하면 여신·통장·입금요청과 재고의 정산일까지 함께 풀립니다.</p>'
+
+      + (rows.length === 0
+         ? '<div class="list-empty">기록한 정산이 없습니다.<br>'
+           + '<span style="color:var(--gray);">재고에 더블스토리지 금액을 넣고 <b>정산 화면 열기</b>에서 만드시면 여기 쌓입니다.</span></div>'
+         : '<div style="overflow-x:auto;"><table class="data-table" style="width:auto;"><thead><tr>'
+           + '<th>정산일</th><th>구분</th><th>거래처</th><th class="ta-right">대수</th>'
+           + '<th class="ta-right">금액</th><th>방법</th><th>세금계산서</th><th>작성</th><th></th>'
+           + '</tr></thead><tbody>'
+           + rows.map(function(r){
+               const isIn = (r.direction === "in");
+               return '<tr>'
+                 + '<td>' + comboEsc(r.date||"-") + '</td>'
+                 + '<td style="color:' + (isIn ? '#1565c0' : 'var(--danger)') + ';font-weight:700;">'
+                   + (isIn ? "받음" : "지급") + '</td>'
+                 + '<td><b>' + comboEsc(r.partner||"-") + '</b></td>'
+                 + '<td class="ta-right">' + (Number(r.qty)||0) + '</td>'
+                 + '<td class="ta-right">' + f(r.amount) + '</td>'
+                 + '<td><button class="btn small secondary" style="width:auto;font-size:11px;"'
+                   + ' title="여신 ↔ 현금을 바꿉니다. 돈 쪽도 함께 옮겨집니다."'
+                   + ' onclick="dsSettleChangeMethod(\'' + comboEsc(r.id) + '\')">'
+                   + comboEsc(settleLabel(r.method)) + '</button></td>'
+                 + '<td>' + (r.taxDate
+                     ? '<span style="color:#2e7d32;font-weight:700;"'
+                       + (r.taxNo ? ' title="계산서번호 ' + comboEsc(r.taxNo) + '"' : '') + '>'
+                       + comboEsc(r.taxDate) + '</span>'
+                       + ' <button class="btn small secondary" style="width:auto;font-size:11px;"'
+                       + ' onclick="dsSettleTax(\'' + comboEsc(r.id) + '\')">수정</button>'
+                     : '<button class="btn small secondary" style="width:auto;font-size:11px;color:#8a6d0b;"'
+                       + ' onclick="dsSettleTax(\'' + comboEsc(r.id) + '\')">미발행 — 등록</button>') + '</td>'
+                 + '<td style="font-size:11px;color:var(--gray);">' + comboEsc(r.createdBy||"-") + '</td>'
+                 + '<td><button class="btn small secondary" style="width:auto;"'
+                   + ' onclick="dsSettleCancel(\'' + comboEsc(r.id) + '\')">취소</button></td></tr>';
+             }).join("")
+           + '</tbody></table></div>');
+  }
+
   window.loadReqBoard = async function(){
     if(!hasPerm(currentUserPerms, "settlementSettings") && !hasPerm(currentUserPerms, "menuReqBoard")) return;   // 입출금리스트 전용
     const listEl = document.getElementById("reqboard-list");
     if(!listEl) return;
     listEl.innerHTML = '<div class="list-empty">불러오는 중...</div>';
+    //  더블스토리지는 «정산 묶음» 단위라 다른 요청과 모양이 달라 따로 그립니다.
+    if(reqBoardKind === "ds"){ await renderDsBoard(listEl); return; }
     const rstBtn = document.getElementById("rbd-reset-btn");
     if(rstBtn) rstBtn.style.display = hasPerm(currentUserPerms, "paymentProcess") ? "inline-block" : "none";
 
@@ -32212,6 +32312,17 @@ window.showDepositUses = async function(id){
   //  정산 묶음에 세금계산서 발행 내용을 적습니다.
   //   받는 정산은 «우리가 받는» 계산서, 주는 정산은 «우리가 끊는» 계산서입니다.
   //   금액은 정산 금액을 기본으로 두고, 다르면 고치실 수 있습니다.
+  //  더블스토리지를 고치고 나서 어디를 다시 그릴지 정합니다.
+  //   정산 관리의 더블스토리지 탭에서 눌렀으면 그 탭을, 아니면 정산 창을 다시 엽니다.
+  function dsAfterChange(backToSettle){
+    try{
+      if(typeof reqBoardKind !== "undefined" && reqBoardKind === "ds"
+         && document.getElementById("reqboard-list")
+         && typeof loadReqBoard === "function"){ loadReqBoard(); return; }
+    }catch(e){}
+    if(backToSettle) openDsSettle(); else dsSettleList();
+  }
+
   window.dsSettleTax = async function(setId){
     if(!setId) return;
     if(!hasPerm(currentUserPerms, "paymentProcess")){ alert("권한이 없습니다."); return; }
@@ -32247,7 +32358,7 @@ window.showDepositUses = async function(id){
     if(date && amt !== (Number(v.amount)||0))
       alert("저장했습니다.\n\n정산 금액 " + (Number(v.amount)||0).toLocaleString()
         + " 과 계산서 금액 " + amt.toLocaleString() + " 이 다릅니다.\n확인해주세요.");
-    dsSettleList();
+    dsAfterChange(false);
   };
 
   //  «늘 보일 업체» 를 고릅니다. 보기 설정과 같은 방식입니다.
@@ -32403,7 +32514,7 @@ window.showDepositUses = async function(id){
       (v.partner||"-") + " / " + settleLabel(cur) + " → " + settleLabel(next));
     clearCache("inventory"); clearCache("b2b"); clearDashCache();
     alert("바꿨습니다.");
-    dsSettleList();
+    dsAfterChange(false);
   };
 
   //  정산 묶음을 취소합니다. 원장·통장 줄과 재고 날짜가 함께 풀립니다.
@@ -32455,7 +32566,7 @@ window.showDepositUses = async function(id){
     logAction("더블스토리지 정산 취소", (v.partner||"-") + " / " + (v.qty||0) + "대");
     clearCache("inventory"); clearCache("b2b"); clearDashCache();
     alert("취소했습니다.");
-    openDsSettle();
+    dsAfterChange(true);
   };
 
   // ===== 더블스토리지 정산 — 입고 기준 / 판매 기준 =====
@@ -38105,6 +38216,9 @@ let ghostBankCache = [];
       '<div style="margin-bottom:8px;">'
       + (canFix.length ? '<button class="btn small" style="width:auto;" onclick="fixNoSalePriceAll()">'
           + '채울 수 있는 것 전부 채우기 (' + canFix.length + '대)</button> ' : '')
+      + '<button class="btn small" style="width:auto;" onclick="openSalePriceFill()"'
+      + ' title="같은 판매처 · 판매일 · 모델끼리 묶어서, 묶음마다 대당 판매가를 한 번만 넣습니다. 엑셀 붙여넣기도 됩니다.">'
+      + '묶음으로 채우기 (' + manual.length + '대)</button> '
       + '<button class="btn small secondary" style="width:auto;" onclick="copyNoSaleRaw()"'
       + ' title="재고 · 판매요청 · 묶음 · 예약에 실제로 들어 있는 값을 그대로 복사합니다.">'
       + '들어 있는 값 그대로 복사 (앞 20대)</button></div>'
@@ -38182,6 +38296,221 @@ let ghostBankCache = [];
       else fallback();
     }catch(e){ fallback(); }
   };
+
+  // ===== 판매가가 비어 있는 재고 — «묶음으로» 채우기 =====
+  //  256대를 하나씩 치지 않게, 같은 조건끼리 묶어서 한 번에 넣습니다.
+  //   묶는 기준 : 판매처 · 판매일 · 전산모델명 · 출고가
+  //   («같은 날 같은 곳에 같은 모델» 이면 판매가가 같다는 뜻이 아니라,
+  //    한 줄에 모아 «편기쁨님이 한 번만 치시게» 하는 것입니다.
+  //    값은 전부 직접 넣으십니다. 시스템이 만들어내지 않습니다.)
+  let salePriceFillGroups = [];
+  window.openSalePriceFill = function(){
+    const rows = (noSalePriceCache||[]).filter(function(r){ return r.want == null; });
+    if(rows.length === 0){ alert("직접 넣으셔야 하는 건이 없습니다."); return; }
+    const g = {};
+    rows.forEach(function(r){
+      const key = [String(r.dest||""), String(r.out||""), String(r.model||""),
+                   String(r.listPrice||"")].join("|");
+      if(!g[key]) g[key] = { dest:r.dest||"", out:r.out||"", model:r.model||"",
+                             listPrice:Number(r.listPrice)||0, ids:[], sns:[] };
+      g[key].ids.push(r.id);
+      g[key].sns.push(r.sn||"");
+    });
+    salePriceFillGroups = Object.keys(g).map(function(k){ return g[k]; });
+    //  대수가 많은 묶음부터 — 많이 줄어드는 것부터 하시게요.
+    salePriceFillGroups.sort(function(a,b){
+      if(b.ids.length !== a.ids.length) return b.ids.length - a.ids.length;
+      return String(a.dest).localeCompare(String(b.dest));
+    });
+    renderSalePriceFill();
+  };
+
+  function renderSalePriceFill(){
+    const head = document.getElementById("suplog-head");
+    const body = document.getElementById("suplog-body");
+    const G = salePriceFillGroups || [];
+    const n = G.reduce(function(x,r){ return x + r.ids.length; }, 0);
+    const f = function(v){ return (Number(v)||0).toLocaleString(); };
+    setSupLogTitle("판매가 묶음으로 채우기");
+    head.innerHTML = '<b>판매가 묶음으로 채우기</b> — ' + n + '대를 ' + G.length + '묶음으로 모았습니다'
+      + '<br><span style="color:var(--gray);font-size:11.5px;">'
+      + '같은 <b>판매처 · 판매일 · 모델 · 출고가</b> 끼리 모았습니다. '
+      + '묶음마다 <b>대당 판매가</b> 를 한 번만 넣으시면 그 묶음 전체에 들어갑니다.</span>'
+      + '<br><span style="color:var(--gray);font-size:11.5px;">'
+      + '값은 전부 직접 넣으십니다. 시스템이 만들어내지 않습니다. '
+      + '비워둔 묶음은 건드리지 않습니다.</span>';
+
+    body.innerHTML =
+      '<div style="border:1px solid var(--navy);background:#f4f7fb;padding:9px 11px;margin-bottom:10px;">'
+      + '<div style="font-weight:700;margin-bottom:3px;">엑셀에서 붙여넣기 '
+      + '<span class="info-tip" title="세금계산서나 거래명세서에서 일련번호와 판매가를 복사해 붙여넣으세요. 일련번호로 찾아 그 재고에만 넣습니다.">ⓘ</span></div>'
+      + '<p class="desc" style="margin:0 0 5px 0;">일련번호와 판매가를 한 줄에 하나씩. '
+      + '순서는 상관없고, 사이는 <b>탭·쉼표·빈칸</b> 아무거나 됩니다.</p>'
+      + '<textarea id="spf-paste" rows="4" placeholder="예)&#10;1219243  1887600&#10;1203702, 1887600&#10;1207705&#9;2467822"'
+      + ' style="width:100%;font-family:monospace;font-size:12.5px;padding:7px;border:1px solid var(--line);box-sizing:border-box;"></textarea>'
+      + '<div style="margin-top:5px;"><button class="btn small" style="width:auto;" onclick="spfPasteApply()">붙여넣은 대로 넣기</button>'
+      + '<span style="font-size:11.5px;color:var(--gray);margin-left:8px;">찾지 못한 일련번호는 그대로 알려드립니다.</span></div>'
+      + '<div id="spf-paste-msg" style="margin-top:6px;"></div></div>'
+
+      + '<div style="margin-bottom:7px;">'
+      + '<button class="btn small" style="width:auto;" onclick="spfApplyAll()">넣은 묶음 전부 반영</button>'
+      + '<button class="btn small secondary" style="width:auto;margin-left:5px;" onclick="showNoSalePriceList()">목록으로 돌아가기</button>'
+      + '</div>'
+      + '<div style="overflow-x:auto;max-height:420px;overflow-y:auto;">'
+      + '<table class="data-table" style="width:auto;"><thead><tr>'
+      + '<th>판매처</th><th>판매일</th><th>전산모델명</th>'
+      + '<th class="ta-right">출고가</th><th class="ta-right">대수</th>'
+      + '<th class="ta-right">대당 판매가</th><th class="ta-right">합계</th><th>일련번호</th>'
+      + '</tr></thead><tbody>'
+      + G.map(function(r, ix){
+          return '<tr>'
+            + '<td><b>' + comboEsc(r.dest || "(비어 있음)") + '</b></td>'
+            + '<td>' + comboEsc(r.out || "-") + '</td>'
+            + '<td>' + comboEsc(r.model || "-") + '</td>'
+            + '<td class="ta-right">' + (r.listPrice ? f(r.listPrice) : '<span style="color:var(--danger);">없음</span>') + '</td>'
+            + '<td class="ta-right"><b>' + r.ids.length + '</b></td>'
+            + '<td class="ta-right"><input type="number" class="spf-amt" data-ix="' + ix + '"'
+              + ' value="' + (r.unit != null ? r.unit : "") + '"'
+              + ' oninput="spfCalc(' + ix + ')"'
+              + ' style="width:110px;text-align:right;padding:4px;border:1px solid var(--line);font-size:12.5px;"></td>'
+            + '<td class="ta-right" id="spf-sum-' + ix + '" style="color:var(--gray);">'
+              + (r.unit != null ? f(r.unit * r.ids.length) : "-") + '</td>'
+            + '<td style="font-size:11px;color:var(--gray);">'
+              + comboEsc(r.sns.slice(0,3).join(" · "))
+              + (r.sns.length > 3 ? ' 외 ' + (r.sns.length - 3) : '') + '</td></tr>';
+        }).join("")
+      + '</tbody></table></div>';
+    document.getElementById("suplog-overlay").style.display = "flex";
+  }
+
+  //  대당 금액을 넣으면 합계를 바로 보여드립니다.
+  window.spfCalc = function(ix){
+    const G = salePriceFillGroups || [];
+    const r = G[ix]; if(!r) return;
+    const el = document.querySelector('.spf-amt[data-ix="' + ix + '"]');
+    const v = el ? String(el.value).trim() : "";
+    r.unit = (v === "") ? null : Number(v);
+    const out = document.getElementById("spf-sum-" + ix);
+    if(out) out.textContent = (r.unit == null || !isFinite(r.unit))
+      ? "-" : (r.unit * r.ids.length).toLocaleString();
+  };
+
+  //  엑셀에서 붙여넣은 «일련번호 + 판매가» 를 그 재고에만 넣습니다.
+  window.spfPasteApply = async function(){
+    const el = document.getElementById("spf-paste");
+    const msg = document.getElementById("spf-paste-msg");
+    const txt = el ? String(el.value||"") : "";
+    if(!txt.trim()){ alert("붙여넣은 내용이 없습니다."); return; }
+    //  일련번호 → 재고. 지금 목록에 있는 것만 찾습니다. (다른 재고는 건드리지 않습니다)
+    const bySn = {};
+    (noSalePriceCache||[]).forEach(function(r){
+      const k = String(r.sn||"").trim();
+      if(!k) return;
+      if(bySn[k] === undefined) bySn[k] = r;
+      else bySn[k] = null;                    // 같은 일련번호가 여럿이면 가릴 수 없습니다
+    });
+    const hit = [], miss = [], dup = [], bad = [];
+    txt.split(/\r?\n/).forEach(function(line){
+      let t = line.trim();
+      if(!t) return;
+      //  엑셀에서 온 천 단위 쉼표(1,887,600)를 «먼저» 없앱니다.
+      //   안 그러면 쉼표로 잘려 금액이 600 으로 읽힙니다.
+      let prev = "";
+      while(prev !== t){ prev = t; t = t.replace(/(\d),(\d{3})(?!\d)/g, "$1$2"); }
+      //  원 표시·공백을 없앱니다. 숫자와 일련번호만 남깁니다.
+      t = t.replace(/[₩원]/g, " ").trim();
+      //  마지막 숫자를 판매가로, 그 앞을 일련번호로 봅니다.
+      const parts = t.split(/[\t,;]+|\s{1,}/).map(function(x){ return x.trim(); }).filter(Boolean);
+      if(parts.length < 2){ bad.push(t); return; }
+      const amtRaw = parts[parts.length - 1].replace(/[^0-9.-]/g, "");
+      const sn = parts.slice(0, parts.length - 1).join(" ").trim();
+      const amt = Number(amtRaw);
+      if(!sn || amtRaw === "" || !isFinite(amt) || amt < 0){ bad.push(t); return; }
+      const r = bySn[sn];
+      if(r === undefined){ miss.push(sn); return; }
+      if(r === null){ dup.push(sn); return; }
+      hit.push({ r:r, amt:amt });
+    });
+    const warn = [];
+    if(miss.length) warn.push("목록에 없는 일련번호 " + miss.length + "개 — " + miss.slice(0,6).join(", ") + (miss.length>6?" 외":""));
+    if(dup.length)  warn.push("같은 일련번호가 여럿이라 가릴 수 없음 " + dup.length + "개 — " + dup.slice(0,6).join(", "));
+    if(bad.length)  warn.push("읽지 못한 줄 " + bad.length + "줄 — " + bad.slice(0,3).join(" / "));
+    if(msg) msg.innerHTML = (hit.length ? '<span style="color:#2e7d32;font-weight:700;">찾은 것 ' + hit.length + '대</span>' : '<span style="color:var(--danger);">찾은 것 없음</span>')
+      + (warn.length ? '<br><span style="color:var(--danger);font-size:11.5px;">' + comboEsc(warn.join(" · ")) + '</span>' : '');
+    if(hit.length === 0) return;
+    if(!confirm("붙여넣은 대로 판매가를 넣습니다.\n\n"
+      + "  넣을 것   " + hit.length + "대\n"
+      + (warn.length ? "  못 넣는 것\n    " + warn.join("\n    ") + "\n" : "")
+      + "\n적어주신 금액을 그대로 넣습니다. 계산하지 않습니다.\n"
+      + "바꾼 내용은 이력에 남아 되돌릴 수 있습니다.\n\n진행할까요?")) return;
+    await spfWrite(hit.map(function(h){ return { r:h.r, unit:h.amt }; }), "붙여넣은 판매가");
+  };
+
+  //  묶음 칸에 넣으신 대당 금액을 그 묶음 전체에 넣습니다.
+  window.spfApplyAll = async function(){
+    const G = (salePriceFillGroups||[]).filter(function(r){
+      return r.unit != null && isFinite(r.unit) && r.unit >= 0; });
+    if(G.length === 0){ alert("대당 판매가를 넣은 묶음이 없습니다."); return; }
+    const cnt = G.reduce(function(n,r){ return n + r.ids.length; }, 0);
+    const over = G.filter(function(r){ return r.listPrice > 0 && r.unit > r.listPrice; });
+    if(over.length && !confirm("판매가가 «출고가보다 큰» 묶음이 " + over.length + "개 있습니다.\n\n"
+      + over.slice(0,5).map(function(r){ return "  " + (r.dest||"-") + " " + (r.model||"-")
+          + "  출고가 " + r.listPrice.toLocaleString() + " → 판매가 " + r.unit.toLocaleString(); }).join("\n")
+      + "\n\n그대로 넣을까요?")) return;
+    if(!confirm("넣으신 대당 판매가를 반영합니다.\n\n"
+      + "  묶음 " + G.length + "개 · 재고 " + cnt + "대\n\n"
+      + G.slice(0,8).map(function(r){ return "  " + (r.dest||"-") + " " + (r.out||"-") + " "
+          + (r.model||"-") + "  " + r.ids.length + "대 × " + r.unit.toLocaleString(); }).join("\n")
+      + (G.length > 8 ? "\n  … 외 " + (G.length-8) + "묶음" : "")
+      + "\n\n적어주신 금액을 그대로 넣습니다. 계산하지 않습니다.\n"
+      + "바꾼 내용은 이력에 남아 되돌릴 수 있습니다.\n\n진행할까요?")) return;
+    const list = [];
+    G.forEach(function(g){
+      g.ids.forEach(function(id, i){
+        const r = (noSalePriceCache||[]).find(function(x){ return x.id === id; });
+        if(r) list.push({ r:r, unit:g.unit });
+      });
+    });
+    await spfWrite(list, "묶음으로 넣은 판매가");
+  };
+
+  //  실제로 씁니다. 판매가 · 판매할인 · 수익만 건드립니다.
+  //   출고가 · 입고가 · 매입할인은 그대로 둡니다.
+  async function spfWrite(list, why){
+    if(!hasPerm(currentUserPerms, "paymentProcess")){ alert("권한이 없습니다."); return; }
+    if(!list || list.length === 0) return;
+    const head = document.getElementById("suplog-head");
+    let done = 0;
+    try{
+      for(let i=0; i<list.length; i+=300){
+        if(head) head.innerHTML = '<b>넣는 중...</b> ' + Math.min(i+300, list.length) + ' / ' + list.length;
+        const bt = writeBatch(db);
+        list.slice(i, i+300).forEach(function(x){
+          const L = Number(x.r.listPrice)||0;
+          const p = { salePrice: Number(x.unit) };
+          //  출고가가 있어야 판매할인을 낼 수 있습니다. 없으면 할인은 건드리지 않습니다.
+          if(L > 0) p.saleDiscountAmt = L - Number(x.unit);
+          if(x.r.buy != null) p.profit = Number(x.unit) - Number(x.r.buy);
+          bt.update(doc(db,"inventoryItems", x.r.id), keepMoney(p));
+        });
+        await withTimeout(bt.commit(), 20000, "판매가 넣기");
+        done += Math.min(300, list.length - i);
+      }
+      try{ await logMoneyChange(why, list.map(function(x){
+        return { id:x.r.id, serialNumber:x.r.sn, systemModel:x.r.model,
+                 before:{ salePrice:null }, after:{ salePrice:Number(x.unit) } }; })); }catch(e){}
+    }catch(e){
+      alert("넣다 멈췄습니다. " + done + "대까지 처리했습니다.\n"
+        + ((e && e.message) ? e.message : String(e)));
+      return;
+    }
+    logAction(why, done + "대");
+    clearCache("inventory"); clearDashCache();
+    noSalePriceCache = []; salePriceFillGroups = [];
+    if(head) head.innerHTML = '<b style="color:#2e7d32;">끝났습니다 — ' + done + '대에 판매가를 넣었습니다.</b>'
+      + '<br><span style="color:var(--gray);">창을 닫고 <b>[다시 점검]</b> 을 눌러주세요.</span>';
+    alert(done + "대에 판매가를 넣었습니다.");
+  }
 
   window.fixNoSalePriceAll = async function(){
     const rows = (noSalePriceCache||[]).filter(function(r){ return r.want != null; });
