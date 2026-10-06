@@ -400,7 +400,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-10-06 v1246</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-10-06 v1247</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -448,6 +448,7 @@
           <button class="tab-btn" data-tab="tab-datacheck" data-label-key="tab-datacheck" id="tabbtn-datacheck" onclick="switchTab('tab-datacheck')" style="display:none;"><span class="tab-label-text">데이터 점검</span></button>
           <button class="tab-btn" data-tab="tab-ledger" data-label-key="tab-ledger" id="tabbtn-ledger" onclick="switchTab('tab-ledger')" style="display:none;"><span class="tab-label-text">거래처 정산</span></button>
           <button class="tab-btn" data-tab="tab-b2b" data-label-key="tab-b2b" id="tabbtn-b2b" onclick="switchTab('tab-b2b')" style="display:none;"><span class="tab-label-text">삼성여신</span></button>
+          <button class="tab-btn" data-tab="tab-ds" data-label-key="tab-ds" id="tabbtn-ds" onclick="switchTab('tab-ds')" style="display:none;"><span class="tab-label-text">더블스토리지</span></button>
           <button class="tab-btn" data-tab="tab-loan" data-label-key="tab-loan" id="tabbtn-loan" onclick="switchTab('tab-loan')" style="display:none;"><span class="tab-label-text">B2B 대출</span></button>
           <button class="tab-btn" data-tab="tab-accounts" data-label-key="tab-accounts" id="tabbtn-accounts" onclick="switchTab('tab-accounts')" style="display:none;"><span class="tab-label-text">계좌·카드</span></button>
           <button class="tab-btn" data-tab="tab-logs" data-label-key="tab-logs" id="tabbtn-logs" onclick="switchTab('tab-logs')" style="display:none;"><span class="tab-label-text">이력</span></button>
@@ -2005,7 +2006,6 @@
             <button class="btn small secondary" id="rbd-k-credit" style="width:auto;" onclick="setReqBoardKind('credit')">여신·선입금</button>
             <button class="btn small secondary" id="rbd-k-cb" style="width:auto;" onclick="setReqBoardKind('cb')">입출금 내역</button>
             <button class="btn small secondary" id="rbd-k-loan" style="width:auto;" onclick="setReqBoardKind('loan')">B2B 대출</button>
-            <button class="btn small secondary" id="rbd-k-ds" style="width:auto;" onclick="setReqBoardKind('ds')" title="더블스토리지 정산 묶음만 따로 봅니다. 받을 곳·줄 곳·세금계산서까지 한 화면에서 봅니다.">더블스토리지</button>
           </span>
           <label style="font-size:12px;margin-left:10px;white-space:nowrap;">
             <input type="checkbox" id="rbd-cb-open" onchange="toggleCbOpenOnly(this.checked)"> 안 쓴 것만 <span class="info-tip" title="「입출금 내역」 구분에서만 씁니다. 끄면 배분이 끝난 내역까지 다 보입니다.">ⓘ</span>
@@ -2812,6 +2812,23 @@
           <button class="btn small secondary" style="width:auto;" onclick="openAdjustFromBalance()">조정으로 맞추기</button>
           <button class="btn small secondary" style="width:auto;" onclick="closeB2BBalanceCheck()">닫기</button>
         </span>
+      </div>
+    </div>
+
+    <!-- ===== 정산: 더블스토리지 ===== -->
+    <div id="tab-ds" class="tab-panel">
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+          <h3 style="margin:0;">더블스토리지 <span class="info-tip" title="삼성 사전예약 프로모션으로 저장용량을 올려준 건입니다. 받을 곳(매입처)에서 받고, 타 대리점에 팔았으면 그쪽에 줍니다. 포피플 자체개통분은 줄 곳이 없습니다.">ⓘ</span></h3>
+          <span class="btn-row">
+            <button class="btn small" style="width:auto;" onclick="openDsSettle()" title="재고에 넣은 더블스토리지 금액을 보고 정산을 만듭니다.">정산 만들기</button>
+            <button class="btn small secondary" style="width:auto;" onclick="loadDsTab()">새로 읽기</button>
+          </span>
+        </div>
+        <p class="desc" style="margin-top:0;">더블스토리지 <b>정산 묶음</b> 목록입니다.
+          방법을 눌러 <b>여신 ↔ 현금</b>을 바꾸고, 계산서 칸에서 <b>발행일·번호</b>를 넣을 수 있습니다.
+          취소하면 여신·통장·입금요청과 재고의 정산일까지 함께 풀립니다.</p>
+        <div id="ds-tab-body"><div class="list-empty">불러오는 중...</div></div>
       </div>
     </div>
 
@@ -20811,7 +20828,7 @@ window.deleteReqBoardItem = async function(kind, reqId){
   };
   window.setReqBoardKind = function(k){
     reqBoardKind = k;
-    ["all","out","in","credit","cb","loan","ds"].forEach(x=>{
+    ["all","out","in","credit","cb","loan"].forEach(x=>{
       const b = document.getElementById("rbd-k-" + x);
       if(b) b.className = "btn small" + (x === k ? "" : " secondary");
     });
@@ -20826,11 +20843,14 @@ window.deleteReqBoardItem = async function(kind, reqId){
     loadReqBoard();
   };
 
-  // ===== 정산 관리 > 더블스토리지 탭 =====
-  //  더블스토리지 «정산 묶음» 을 한 화면에서 봅니다.
+  // ===== 정산 > 더블스토리지 =====
+  //  더블스토리지 «정산 묶음» 을 한 화면에서 봅니다. (왼쪽 메뉴 · 삼성여신 아래)
   //   재고 목록에서 들어가지 않아도 여기서 바로 보고 고치실 수 있습니다.
   //   보이는 값은 전부 dsSettlements 에 저장된 그대로입니다. 계산하지 않습니다.
-  async function renderDsBoard(listEl){
+  window.loadDsTab = async function(){
+    const listEl = document.getElementById("ds-tab-body");
+    if(!listEl) return;
+    listEl.innerHTML = '<div class="list-empty">불러오는 중...</div>';
     const f = function(v){ return (Number(v)||0).toLocaleString(); };
     const rows = [];
     try{
@@ -20879,18 +20899,9 @@ window.deleteReqBoardItem = async function(kind, reqId){
       + card("계산서 미발행", noTax + "건", noTax ? "var(--danger)" : "#2e7d32", "정산 " + rows.length + "건 중")
       + '</div>'
 
-      + '<div style="margin-bottom:8px;">'
-      + '<button class="btn small" style="width:auto;" onclick="openDsSettle()"'
-      + ' title="재고에 넣은 더블스토리지 금액을 보고 정산을 만듭니다.">정산 화면 열기</button>'
-      + '<button class="btn small secondary" style="width:auto;margin-left:5px;" onclick="loadReqBoard()">새로 읽기</button>'
-      + '</div>'
-      + '<p class="desc" style="margin:0 0 8px 0;">더블스토리지 <b>정산 묶음</b> 목록입니다. '
-      + '방법을 눌러 <b>여신 ↔ 현금</b>을 바꾸고, 계산서 칸에서 <b>발행일·번호</b>를 넣을 수 있습니다. '
-      + '취소하면 여신·통장·입금요청과 재고의 정산일까지 함께 풀립니다.</p>'
-
       + (rows.length === 0
          ? '<div class="list-empty">기록한 정산이 없습니다.<br>'
-           + '<span style="color:var(--gray);">재고에 더블스토리지 금액을 넣고 <b>정산 화면 열기</b>에서 만드시면 여기 쌓입니다.</span></div>'
+           + '<span style="color:var(--gray);">재고에 더블스토리지 금액을 넣고 <b>정산 만들기</b> 를 누르시면 여기 쌓입니다.</span></div>'
          : '<div style="overflow-x:auto;"><table class="data-table" style="width:auto;"><thead><tr>'
            + '<th>정산일</th><th>구분</th><th>거래처</th><th class="ta-right">대수</th>'
            + '<th class="ta-right">금액</th><th>방법</th><th>세금계산서</th><th>작성</th><th></th>'
@@ -20921,15 +20932,13 @@ window.deleteReqBoardItem = async function(kind, reqId){
                    + ' onclick="dsSettleCancel(\'' + comboEsc(r.id) + '\')">취소</button></td></tr>';
              }).join("")
            + '</tbody></table></div>');
-  }
+  };
 
   window.loadReqBoard = async function(){
     if(!hasPerm(currentUserPerms, "settlementSettings") && !hasPerm(currentUserPerms, "menuReqBoard")) return;   // 입출금리스트 전용
     const listEl = document.getElementById("reqboard-list");
     if(!listEl) return;
     listEl.innerHTML = '<div class="list-empty">불러오는 중...</div>';
-    //  더블스토리지는 «정산 묶음» 단위라 다른 요청과 모양이 달라 따로 그립니다.
-    if(reqBoardKind === "ds"){ await renderDsBoard(listEl); return; }
     const rstBtn = document.getElementById("rbd-reset-btn");
     if(rstBtn) rstBtn.style.display = hasPerm(currentUserPerms, "paymentProcess") ? "inline-block" : "none";
 
@@ -32313,12 +32322,12 @@ window.showDepositUses = async function(id){
   //   받는 정산은 «우리가 받는» 계산서, 주는 정산은 «우리가 끊는» 계산서입니다.
   //   금액은 정산 금액을 기본으로 두고, 다르면 고치실 수 있습니다.
   //  더블스토리지를 고치고 나서 어디를 다시 그릴지 정합니다.
-  //   정산 관리의 더블스토리지 탭에서 눌렀으면 그 탭을, 아니면 정산 창을 다시 엽니다.
+  //   정산 > 더블스토리지 화면에서 눌렀으면 그 화면을, 아니면 정산 창을 다시 엽니다.
   function dsAfterChange(backToSettle){
     try{
-      if(typeof reqBoardKind !== "undefined" && reqBoardKind === "ds"
-         && document.getElementById("reqboard-list")
-         && typeof loadReqBoard === "function"){ loadReqBoard(); return; }
+      const dsPanel = document.getElementById("tab-ds");
+      if(dsPanel && dsPanel.classList.contains("active")
+         && typeof loadDsTab === "function"){ loadDsTab(); return; }
     }catch(e){}
     if(backToSettle) openDsSettle(); else dsSettleList();
   }
@@ -54928,7 +54937,7 @@ window.toggleActAll = function(on){
     document.getElementById("signup-form").style.display="none";
     document.getElementById("login-form").style.display="block";
   };
-  const ADMIN_TAB_IDS = ["tab-site","tab-team","tab-users","tab-reqboard","tab-recon","tab-tax","tab-b2b","tab-loan","tab-accounts","tab-logs"];
+  const ADMIN_TAB_IDS = ["tab-site","tab-team","tab-users","tab-reqboard","tab-recon","tab-tax","tab-b2b","tab-ds","tab-loan","tab-accounts","tab-logs"];
   const INV_ADMIN_TAB_IDS = ["tab-inv-model","tab-inv-color","tab-inv-kind","tab-inv-manufacturer","tab-inv-location","tab-inv-status","tab-inv-carrier","tab-inv-actcode"];
 
   window.toggleAdminMenu = function(){
@@ -55016,6 +55025,7 @@ window.toggleActAll = function(on){
     if(tabId==="tab-tax"){ loadTaxList(); }
     if(tabId==="tab-recon"){ reconTaxCache = null; loadReconCorpMap().then(()=> loadReconList()); }
     if(tabId==="tab-b2b") loadB2BTab();
+    if(tabId==="tab-ds" && typeof loadDsTab === "function") loadDsTab();
     if(tabId==="tab-team") loadTeamList();
     if(tabId==="tab-users") loadUserAdminList();
     if(tabId==="tab-logs") loadLogs();
@@ -55252,6 +55262,7 @@ window.toggleActAll = function(on){
       setMenu("tabbtn-tax",      allReq || hasPerm(perms, "menuTax"));
       setMenu("tabbtn-recon",    allReq || hasPerm(perms, "menuRecon"));
       setMenu("tabbtn-b2b", showSettlement);
+      setMenu("tabbtn-ds", showSettlement);
       setMenu("tabbtn-loan", showSettlement);
       setMenu("tabbtn-accounts", showSettlement);
       setMenu("tabbtn-activation", showSaleReq || showSettlement || showAnyWorkMenu);
