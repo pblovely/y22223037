@@ -400,7 +400,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-10-06 v1250</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-10-06 v1251</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -32527,6 +32527,8 @@ window.showDepositUses = async function(id){
   window.setDsFilter = function(which, v){
     if(which === "in") dsFilterIn = v || "";
     else               dsFilterOut = v || "";
+    //  거르면 1쪽부터 보여드립니다. (3쪽을 보다가 거르면 빈 화면이 되던 것을 막습니다)
+    try{ getPageState("dsSettle").page = 1; }catch(e){}
     renderDsSettle();
   };
 
@@ -32688,35 +32690,45 @@ window.showDepositUses = async function(id){
         + '</tbody></table>';
     };
 
+    //  거르기 — 받을 곳 · 줄 곳.  «건별 목록 바로 위» 에 둡니다.
+    //   전에는 집계표 위에 있어서, 목록을 보다가 거르려면 위로 올라가야 했습니다.
+    const filterBar = (function(){
+      const ins  = [...new Set(dsAll.map(function(r){ return r.src || "-"; }))].sort();
+      const outs = [...new Set(dsAll.map(function(r){ return r.dest || ""; }))].filter(function(x){ return x; }).sort();
+      const sel = function(label, which, list, cur){
+        return '<label style="font-size:12.5px;margin-right:4px;">' + label + '</label>'
+          + '<select onchange="setDsFilter(\'' + which + '\', this.value)" style="margin-right:12px;">'
+          + '<option value="">전체</option>'
+          + list.map(function(x){
+              return '<option value="' + comboEsc(x) + '"' + (cur === x ? ' selected' : '') + '>'
+                + comboEsc(x) + '</option>'; }).join("")
+          + '</select>';
+      };
+      return '<div style="display:flex;align-items:center;flex-wrap:wrap;gap:4px;margin-bottom:6px;">'
+        + sel("받을 곳", "in", ins, dsFilterIn)
+        + sel("줄 곳", "out", outs, dsFilterOut)
+        //  ← 전에는 여기서 없는 변수(all)를 봐서, 거르는 순간 멈췄습니다.
+        + ((dsFilterIn || dsFilterOut)
+            ? '<span style="font-size:11.5px;color:var(--navy);">전체 ' + dsAll.length + '대 중 <b>'
+              + rows.length + '</b>대</span>'
+              + '<button class="btn small secondary" style="width:auto;margin-left:6px;"'
+              + ' onclick="setDsFilter(\'in\',\'\');setDsFilter(\'out\',\'\')">거르기 지우기</button>'
+            : '')
+        + '</div>';
+    })();
+    //  페이지 — 목록이 길면 나눠 봅니다. 고르신 쪽수는 기억합니다.
+    const pg = paginateSlice(rows, "dsSettle");
+    const pageRows = pg.pageItems;
+
     body.innerHTML =
-      //  거르기 — 받을 곳 · 줄 곳
-      (function(){
-        const ins  = [...new Set(dsAll.map(function(r){ return r.src || "-"; }))].sort();
-        const outs = [...new Set(dsAll.map(function(r){ return r.dest || ""; }))].filter(function(x){ return x; }).sort();
-        const sel = function(label, which, list, cur){
-          return '<label style="font-size:12.5px;margin-right:4px;">' + label + '</label>'
-            + '<select onchange="setDsFilter(\'' + which + '\', this.value)" style="margin-right:12px;">'
-            + '<option value="">전체</option>'
-            + list.map(function(x){
-                return '<option value="' + comboEsc(x) + '"' + (cur === x ? ' selected' : '') + '>'
-                  + comboEsc(x) + '</option>'; }).join("")
-            + '</select>';
-        };
-        return '<div style="margin-bottom:8px;">'
-          + sel("받을 곳", "in", ins, dsFilterIn)
-          + sel("줄 곳", "out", outs, dsFilterOut)
-          + ((dsFilterIn || dsFilterOut)
-              ? '<span style="font-size:11.5px;color:var(--navy);">전체 ' + all.length + '대 중 '
-                + rows.length + '대</span>' : '')
-          + '</div>';
-      })()
-      + '<div style="margin-bottom:8px;">'
+      '<div style="margin-bottom:8px;">'
       + '<button class="btn small" style="width:auto;" onclick="dsSettleRun(\'in\')" title="삼성·삼성에스엘 등 산 곳에서 받은 것을 기록합니다. 여신 또는 현금으로 들어갑니다.">정산 받음</button>'
       + '<button class="btn small" style="width:auto;margin-left:6px;" onclick="dsSettleRun(\'out\')" title="판매처에 준 것을 기록합니다. 포피플 자체개통분도 여기서 처리합니다.">정산 지급</button>'
       + '<button class="btn small secondary" style="width:auto;margin-left:6px;" onclick="dsSettleList()">정산 내역</button>'
       + '<button class="btn small secondary" style="width:auto;margin-left:6px;" onclick="openDsFixedParties()" title="대상 건이 없어도 늘 보일 업체를 고릅니다. 보고용으로 줄을 남겨둘 때 씁니다.">보일 업체</button>' 
       + '<span style="font-size:11.5px;color:var(--gray);margin-left:8px;">'
-      + '아래에서 체크한 건을 정산합니다. 한 번에 한 거래처만 됩니다.</span>'
+      + '아래에서 체크한 건을 정산합니다. 한 번에 한 거래처만 됩니다. '
+      + '<b>쪽을 넘기면 체크가 풀립니다</b> — 한 쪽씩 정산해주세요.</span>'
       + '</div>' 
       + '<div style="overflow-x:auto;">' + tbl() + '</div>'
       + '<div class="desc" style="font-size:11.5px;color:var(--gray);margin-top:6px;">'
@@ -32725,13 +32737,18 @@ window.showDepositUses = async function(id){
       + '<span style="color:var(--danger);">빨간색은 줄 것이 많음</span> 입니다. '
       + '「주고받음」 이 붙은 업체는 양쪽에 모두 있습니다.</div>'   
       + '<div style="font-weight:700;margin:12px 0 4px;">건별 목록</div>'
-      + '<div style="overflow-x:auto;max-height:300px;overflow-y:auto;">'
+      //  목록 바로 위 — 거르기 · 전체 체크 · 페이지
+      + filterBar
+      + '<div id="ds-page-bar" style="margin-bottom:6px;"></div>'
+      + '<div style="overflow-x:auto;max-height:420px;overflow-y:auto;">'
       + '<table class="data-table" style="width:auto;"><thead><tr>'
       + '<th style="width:30px;"><input type="checkbox" id="ds-all"></th>'
       + '<th>일련번호</th><th>전산모델명</th><th>받을곳</th><th>받은날</th>'
       + '<th>줄곳</th><th>준날</th><th class="ta-right">금액</th><th>계산서</th>'
       + '</tr></thead><tbody>'
-      + rows.map(function(r, ix){
+      + pageRows.map(function(r, i2){
+          //  체크 번호는 «거른 뒤 전체 목록» 의 자리입니다. 쪽을 넘겨도 맞습니다.
+          const ix = pg.startIndex + i2;
           //  이미 정산된 건은 «두 번 들어가지 않게» 체크를 막습니다.
           const lock = (r.recvId && (r.dest === "포피플" || r.payId));
           return '<tr' + (lock ? ' style="background:#f6f7fb;"' : '') + '>'
@@ -32761,10 +32778,14 @@ window.showDepositUses = async function(id){
               })() + '</td></tr>';
         }).join("")
       + '</tbody></table></div>';
-    const all = document.getElementById("ds-all");
-    if(all) all.onchange = function(){
-      body.querySelectorAll(".ds-ck").forEach(function(c){ if(!c.disabled) c.checked = all.checked; });
+    //  맨 위 체크 — 지금 쪽에서 «고를 수 있는» 것만 한 번에 켜고 끕니다.
+    const allCk = document.getElementById("ds-all");
+    if(allCk) allCk.onchange = function(){
+      body.querySelectorAll(".ds-ck").forEach(function(c){ if(!c.disabled) c.checked = allCk.checked; });
     };
+    //  페이지 — 쪽수·한 쪽 건수를 고릅니다. 다른 목록과 같은 방식입니다.
+    { const bar = document.getElementById("ds-page-bar");
+      if(bar){ bar.innerHTML = ""; bar.appendChild(renderPaginationBar("dsSettle", rows.length, renderDsSettle)); } }
   }
 
   window.dsSetDate = async function(which){
