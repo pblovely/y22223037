@@ -400,7 +400,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-10-06 v1248</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-10-06 v1250</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -2821,13 +2821,13 @@
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
           <h3 style="margin:0;">더블스토리지 <span class="info-tip" title="삼성 사전예약 프로모션으로 저장용량을 올려준 건입니다. 받을 곳(매입처)에서 받고, 타 대리점에 팔았으면 그쪽에 줍니다. 포피플 자체개통분은 줄 곳이 없습니다.">ⓘ</span></h3>
           <span class="btn-row">
-            <button class="btn small" style="width:auto;" onclick="openDsSettle()" title="재고에 넣은 더블스토리지 금액을 보고 정산을 만듭니다.">정산 만들기</button>
+            <button class="btn small secondary" style="width:auto;" onclick="openDoubleStorage()" title="삼성에서 받은 더블스토리지 대상 목록을 붙여 넣어 재고에 표시합니다.">대상 넣기</button>
             <button class="btn small secondary" style="width:auto;" onclick="loadDsTab()">새로 읽기</button>
           </span>
         </div>
-        <p class="desc" style="margin-top:0;">더블스토리지 <b>정산 묶음</b> 목록입니다.
-          방법을 눌러 <b>여신 ↔ 현금</b>을 바꾸고, 계산서 칸에서 <b>발행일·번호</b>를 넣을 수 있습니다.
-          취소하면 여신·통장·입금요청과 재고의 정산일까지 함께 풀립니다.</p>
+        <p class="desc" style="margin-top:0;">재고에 넣은 더블스토리지 대상을 <b>받을 곳·줄 곳</b>으로 모아 봅니다.
+          체크해서 <b>정산 받음·정산 지급</b>을 하고, <b>정산 내역</b>에서 세금계산서와 취소를 다룹니다.</p>
+        <div id="ds-tab-head" style="margin-bottom:10px;"></div>
         <div id="ds-tab-body"><div class="list-empty">불러오는 중...</div></div>
       </div>
     </div>
@@ -4148,7 +4148,7 @@
         placeholder="모델명과 일련번호를 줄마다 붙여넣으세요.&#10;SM-F971N512　1038307&#10;SM-F971N512　1038308&#10;금액이 다르면 뒤에 적으세요 →  SM-F766N512　1038309　180000"></textarea>
       <div class="stack-row" style="margin-top:8px;">
         <button class="btn small" style="width:auto;" onclick="analyzeDoubleStorage()">찾기</button>
-        <button class="btn small secondary" style="width:auto;" onclick="openDsSettle()" title="대상으로 넣은 건을 입고처·판매처별로 모아 봅니다. 받은날·준날도 여기서 넣습니다.">정산 보기</button>
+        <button class="btn small secondary" style="width:auto;" onclick="openDsSettlePopup()" title="대상으로 넣은 건을 입고처·판매처별로 모아 봅니다. 받은날·준날도 여기서 넣습니다.">정산 보기</button>
         <button class="btn small secondary" style="width:auto;" onclick="closeDoubleStorage()">닫기</button>
       </div>
       <div id="ds-result" style="margin-top:12px;"></div>
@@ -20843,97 +20843,6 @@ window.deleteReqBoardItem = async function(kind, reqId){
     loadReqBoard();
   };
 
-  // ===== 정산 > 더블스토리지 =====
-  //  더블스토리지 «정산 묶음» 을 한 화면에서 봅니다. (왼쪽 메뉴 · 삼성여신 아래)
-  //   재고 목록에서 들어가지 않아도 여기서 바로 보고 고치실 수 있습니다.
-  //   보이는 값은 전부 dsSettlements 에 저장된 그대로입니다. 계산하지 않습니다.
-  window.loadDsTab = async function(){
-    const listEl = document.getElementById("ds-tab-body");
-    if(!listEl) return;
-    listEl.innerHTML = '<div class="list-empty">불러오는 중...</div>';
-    const f = function(v){ return (Number(v)||0).toLocaleString(); };
-    const rows = [];
-    try{
-      const snap = await getDocs(collection(db,"dsSettlements"));
-      snap.forEach(function(d){ rows.push({ id:d.id, ...d.data() }); });
-    }catch(e){
-      listEl.innerHTML = '<div class="list-empty">불러오지 못했습니다. ' + comboEsc(String(e && e.message || e)) + '</div>';
-      return;
-    }
-    rows.sort(function(a,b){ return String(b.date||"").localeCompare(String(a.date||"")); });
-
-    //  아직 정산하지 않은 대상 건도 함께 셉니다. (재고의 더블스토리지 금액)
-    let waitCnt = 0, waitRecv = 0, waitPay = 0;
-    try{
-      const inv = asSnap(await readColCached("inventory","inventoryItems"));
-      inv.forEach(function(d){
-        const v = d.data();
-        if(v.deleted === true) return;
-        if(!(Number(v.dsAmount) > 0)) return;
-        const amt = Number(v.dsAmount)||0;
-        if(!v.dsRecvId){ waitRecv += amt; waitCnt++; }
-        if(String(v.destination||"") !== "포피플" && !v.dsPayId) waitPay += amt;
-      });
-    }catch(e){}
-
-    const tIn  = rows.filter(function(r){ return r.direction === "in";  })
-                     .reduce(function(n,r){ return n + (Number(r.amount)||0); }, 0);
-    const tOut = rows.filter(function(r){ return r.direction === "out"; })
-                     .reduce(function(n,r){ return n + (Number(r.amount)||0); }, 0);
-    const noTax = rows.filter(function(r){ return !r.taxDate; }).length;
-
-    const card = function(label, val, color, note){
-      return '<div class="stat-card" style="flex:1;min-width:150px;border:1px solid var(--line);background:#fff;padding:9px 12px;">'
-        + '<div style="font-size:11.5px;color:var(--gray);margin-bottom:3px;">' + label + '</div>'
-        + '<div style="font-size:18px;font-weight:800;color:' + (color||'var(--navy)') + ';">' + val + '</div>'
-        + (note ? '<div style="font-size:10.5px;color:var(--gray);margin-top:2px;">' + note + '</div>' : '')
-        + '</div>';
-    };
-
-    listEl.innerHTML =
-      '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;">'
-      + card("받은 것", f(tIn),  "#1565c0", rows.filter(function(r){ return r.direction==="in"; }).length + "건")
-      + card("준 것",   f(tOut), "var(--danger)", rows.filter(function(r){ return r.direction==="out"; }).length + "건")
-      + card("차액", f(tIn - tOut), (tIn - tOut) >= 0 ? "#2e7d32" : "var(--danger)", "받은 것 − 준 것")
-      + card("아직 못 받은 것", f(waitRecv), waitRecv ? "#b8860b" : "var(--gray)", waitCnt + "대 · 정산 전")
-      + card("계산서 미발행", noTax + "건", noTax ? "var(--danger)" : "#2e7d32", "정산 " + rows.length + "건 중")
-      + '</div>'
-
-      + (rows.length === 0
-         ? '<div class="list-empty">기록한 정산이 없습니다.<br>'
-           + '<span style="color:var(--gray);">재고에 더블스토리지 금액을 넣고 <b>정산 만들기</b> 를 누르시면 여기 쌓입니다.</span></div>'
-         : '<div style="overflow-x:auto;"><table class="data-table" style="width:auto;"><thead><tr>'
-           + '<th>정산일</th><th>구분</th><th>거래처</th><th class="ta-right">대수</th>'
-           + '<th class="ta-right">금액</th><th>방법</th><th>세금계산서</th><th>작성</th><th></th>'
-           + '</tr></thead><tbody>'
-           + rows.map(function(r){
-               const isIn = (r.direction === "in");
-               return '<tr>'
-                 + '<td>' + comboEsc(r.date||"-") + '</td>'
-                 + '<td style="color:' + (isIn ? '#1565c0' : 'var(--danger)') + ';font-weight:700;">'
-                   + (isIn ? "받음" : "지급") + '</td>'
-                 + '<td><b>' + comboEsc(r.partner||"-") + '</b></td>'
-                 + '<td class="ta-right">' + (Number(r.qty)||0) + '</td>'
-                 + '<td class="ta-right">' + f(r.amount) + '</td>'
-                 + '<td><button class="btn small secondary" style="width:auto;font-size:11px;"'
-                   + ' title="여신 ↔ 현금을 바꿉니다. 돈 쪽도 함께 옮겨집니다."'
-                   + ' onclick="dsSettleChangeMethod(\'' + comboEsc(r.id) + '\')">'
-                   + comboEsc(settleLabel(r.method)) + '</button></td>'
-                 + '<td>' + (r.taxDate
-                     ? '<span style="color:#2e7d32;font-weight:700;"'
-                       + (r.taxNo ? ' title="계산서번호 ' + comboEsc(r.taxNo) + '"' : '') + '>'
-                       + comboEsc(r.taxDate) + '</span>'
-                       + ' <button class="btn small secondary" style="width:auto;font-size:11px;"'
-                       + ' onclick="dsSettleTax(\'' + comboEsc(r.id) + '\')">수정</button>'
-                     : '<button class="btn small secondary" style="width:auto;font-size:11px;color:#8a6d0b;"'
-                       + ' onclick="dsSettleTax(\'' + comboEsc(r.id) + '\')">미발행 — 등록</button>') + '</td>'
-                 + '<td style="font-size:11px;color:var(--gray);">' + comboEsc(r.createdBy||"-") + '</td>'
-                 + '<td><button class="btn small secondary" style="width:auto;"'
-                   + ' onclick="dsSettleCancel(\'' + comboEsc(r.id) + '\')">취소</button></td></tr>';
-             }).join("")
-           + '</tbody></table></div>');
-  };
-
   window.loadReqBoard = async function(){
     if(!hasPerm(currentUserPerms, "settlementSettings") && !hasPerm(currentUserPerms, "menuReqBoard")) return;   // 입출금리스트 전용
     const listEl = document.getElementById("reqboard-list");
@@ -32142,7 +32051,8 @@ window.showDepositUses = async function(id){
   }
 
   window.dsSettleRun = async function(direction){
-    const body = document.getElementById("suplog-body");
+    const body = dsBody();
+    if(!body) return;
     const picked = Array.from(body.querySelectorAll(".ds-ck:checked"))
       //  «화면에 보이는» 목록에서 찾습니다. 거른 뒤에도 번호가 맞습니다.
       .map(function(c){ return (dsShownRows||[])[Number(c.value)]; }).filter(Boolean);
@@ -32254,8 +32164,9 @@ window.showDepositUses = async function(id){
 
   //  정산 내역 — 지금까지 기록한 정산 묶음을 봅니다. 여기서 취소도 합니다.
   window.dsSettleList = async function(){
-    const head = document.getElementById("suplog-head");
-    const body = document.getElementById("suplog-body");
+    const head = dsHead();
+    const body = dsBody();
+    if(!head || !body) return;
     setSupLogTitle("더블스토리지 정산 내역");
     head.innerHTML = '<b>불러오는 중...</b>';
     body.innerHTML = "";
@@ -32315,7 +32226,7 @@ window.showDepositUses = async function(id){
     body.querySelectorAll("[data-ds-m]").forEach(function(b){
       b.onclick = function(){ dsSettleChangeMethod(b.dataset.dsM); };
     });
-    document.getElementById("suplog-overlay").style.display = "flex";
+    dsShowOverlay();
   };
 
   //  정산 묶음에 세금계산서 발행 내용을 적습니다.
@@ -32373,14 +32284,15 @@ window.showDepositUses = async function(id){
   //  «늘 보일 업체» 를 고릅니다. 보기 설정과 같은 방식입니다.
   //   대상 건이 없어도 줄이 남아, 보고용 표에서 빠지지 않습니다.
   window.openDsFixedParties = async function(){
-    const head = document.getElementById("suplog-head");
-    const body = document.getElementById("suplog-body");
+    const head = dsHead();
+    const body = dsBody();
+    if(!head || !body) return;
     setSupLogTitle("더블스토리지 — 늘 보일 업체");
     head.innerHTML = '<b>늘 보일 업체</b>'
       + '<br><span style="color:var(--gray);">체크한 업체는 대상 건이 <b>0 건이어도</b> 표에 «-» 로 남습니다.<br>'
       + '체크를 안 하셔도 건이 있으면 자동으로 나옵니다.</span>';
     body.innerHTML = '<div class="list-empty">업체를 읽는 중...</div>';
-    document.getElementById("suplog-overlay").style.display = "flex";
+    dsShowOverlay();
     let names = [];
     try{
       await fetchCompanies();
@@ -32589,6 +32501,28 @@ window.showDepositUses = async function(id){
   let dsShownRows = [];
   //  정산 묶음별 «세금계산서» 상태입니다. 건별 목록에 보여주려고 담아둡니다.
   let dsTaxById = {};
+  //  더블스토리지 화면을 «어디에» 그릴지 정합니다.
+  //   팝업(suplog)과 메뉴 화면(정산 > 더블스토리지)이 «같은 코드» 를 씁니다.
+  //   화면을 두 벌로 만들면 한쪽만 고쳐져 어긋나므로, 그릴 곳만 바꿔 끼웁니다.
+  let dsHeadId = "suplog-head", dsBodyId = "suplog-body", dsInTab = false;
+  function dsHead(){ return document.getElementById(dsHeadId); }
+  function dsBody(){ return document.getElementById(dsBodyId); }
+  //  팝업에 그릴 때만 창을 엽니다. 메뉴 화면에서는 창을 열지 않습니다.
+  function dsShowOverlay(){
+    if(dsInTab) return;
+    const ov = document.getElementById("suplog-overlay");
+    if(ov) ov.style.display = "flex";
+  }
+  //  메뉴 화면(정산 > 더블스토리지) — 팝업과 «똑같은» 내용을 그 자리에 그립니다.
+  window.loadDsTab = async function(){
+    dsHeadId = "ds-tab-head"; dsBodyId = "ds-tab-body"; dsInTab = true;
+    try{ await openDsSettle(); }
+    finally{ /* 그릴 곳은 그대로 둡니다. 이 화면에 계속 그려야 하니까요. */ }
+  };
+  //  팝업으로 돌아갑니다. (재고 목록 등 다른 곳에서 열 때)
+  function dsUsePopup(){ dsHeadId = "suplog-head"; dsBodyId = "suplog-body"; dsInTab = false; }
+  //  팝업으로 여는 길 — 재고 목록의 「정산 보기」 가 씁니다.
+  window.openDsSettlePopup = function(){ dsUsePopup(); return openDsSettle(); };
 
   window.setDsFilter = function(which, v){
     if(which === "in") dsFilterIn = v || "";
@@ -32597,8 +32531,8 @@ window.showDepositUses = async function(id){
   };
 
   window.openDsSettle = async function(){
-    const head = document.getElementById("suplog-head");
-    const body = document.getElementById("suplog-body");
+    const head = dsHead();
+    const body = dsBody();
     if(!head || !body){ alert("화면을 찾지 못했습니다."); return; }
     //  더블스토리지 창을 닫고 정산 창을 엽니다.
     //   전에는 두 창이 겹쳐 정산 창이 뒤에 깔려, 앞 창을 닫아야 보였습니다.
@@ -32606,7 +32540,7 @@ window.showDepositUses = async function(id){
     setSupLogTitle("더블스토리지 정산");
     head.innerHTML = '<b>불러오는 중...</b>';
     body.innerHTML = "";
-    document.getElementById("suplog-overlay").style.display = "flex";
+    dsShowOverlay();
     const rows = [];
     try{
       //  (화면키, 저장소이름) 순서입니다. 전에 거꾸로 넣어 빈 결과를 읽었습니다.
@@ -32638,8 +32572,9 @@ window.showDepositUses = async function(id){
   };
 
   function renderDsSettle(){
-    const head = document.getElementById("suplog-head");
-    const body = document.getElementById("suplog-body");
+    const head = dsHead();
+    const body = dsBody();
+    if(!head || !body) return;
     //  받을 곳 · 줄 곳을 각각 거를 수 있습니다. 둘 다 「전체」 면 모두 봅니다.
     const dsAll = dsSettleRows || [];
     const rows = dsAll.filter(function(r){
@@ -32833,7 +32768,8 @@ window.showDepositUses = async function(id){
   }
 
   window.dsSetDate = async function(which){
-    const body = document.getElementById("suplog-body");
+    const body = dsBody();
+    if(!body) return;
     const picked = Array.from(body.querySelectorAll(".ds-ck:checked"))
       //  «화면에 보이는» 목록에서 찾습니다. 거른 뒤에도 번호가 맞습니다.
       .map(function(c){ return (dsShownRows||[])[Number(c.value)]; }).filter(Boolean);
