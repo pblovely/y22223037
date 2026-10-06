@@ -400,7 +400,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-10-06 v1238</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-10-06 v1240</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -37920,6 +37920,10 @@ let ghostBankCache = [];
                 .map(function(k){ return comboEsc(k) + ' ' + byWhy[k] + '대'; }).join('  ·  ')
             + '</span>' : '';
         })()
+      + '<br><span style="color:var(--gray);font-size:11.5px;">'
+      + '비어 있는 칸 - 입고가 <b>' + rows.filter(function(r){ return r.noBuy; }).length + '대</b>'
+      + ' · 선할인 <b>' + rows.filter(function(r){ return r.noPre; }).length + '대</b>'
+      + ' · 둘 다 <b>' + rows.filter(function(r){ return r.noBuy && r.noPre; }).length + '대</b></span>'
       + '<br><span style="color:var(--gray);font-size:11.5px;">출고가 · 판매가 · 판매할인은 건드리지 않습니다.</span>'
       + '<br><span style="color:var(--gray);font-size:11.5px;">'
       + '「주문 묶음 결제금액 ÷ 수량」 은 <b>주문 목록 「입고가」 열에 보이는 그 금액</b> 입니다. '
@@ -37927,8 +37931,12 @@ let ghostBankCache = [];
       + '여러 줄이면 줄별 단가를 가릴 수 없어 쓰지 않습니다. '
       + '<b>선할인은 채우지 않습니다</b> — 타할인을 모르면 선할인과 나눌 수 없어 추측이 됩니다.</span>';
     body.innerHTML =
-      (canFix.length ? '<div style="margin-bottom:8px;"><button class="btn small" style="width:auto;" onclick="fixNoBuyPriceAll()">'
-        + '채울 수 있는 것 전부 채우기 (' + canFix.length + '대)</button></div>' : '')
+      '<div style="margin-bottom:8px;">'
+      + (canFix.length ? '<button class="btn small" style="width:auto;" onclick="fixNoBuyPriceAll()">'
+          + '채울 수 있는 것 전부 채우기 (' + canFix.length + '대)</button> ' : '')
+      + '<button class="btn small secondary" style="width:auto;" onclick="copyNoBuyRaw()"'
+      + ' title="재고 · 주문 줄 · 주문 묶음 · 예약에 실제로 들어 있는 값을 그대로 복사합니다.">'
+      + '들어 있는 값 그대로 복사 (앞 20대)</button></div>'
       + '<div style="overflow-x:auto;max-height:380px;overflow-y:auto;">'
       + '<table class="data-table" style="width:auto;"><thead><tr>'
       + '<th>입고일</th><th>일련번호</th><th>전산모델명</th><th>입고처</th>'
@@ -37955,6 +37963,55 @@ let ghostBankCache = [];
         }).join("")
       + '</tbody></table></div>';
     document.getElementById("suplog-overlay").style.display = "flex";
+  };
+
+  //  재고 · 주문 줄 · 주문 묶음 · 예약에 «실제로 들어 있는 값» 을 그대로 복사합니다.
+  //   추측하지 않고 눈으로 보려고 만든 것입니다. 아무것도 바꾸지 않습니다.
+  window.copyNoBuyRaw = function(){
+    const rows = (noBuyPriceCache || []).slice(0, 20);
+    if(rows.length === 0){ alert("복사할 것이 없습니다."); return; }
+    const L = [];
+    L.push("입고가·선할인이 비어 있는 재고 — 앞 " + rows.length + "대 (전체 "
+      + (noBuyPriceCache||[]).length + "대)");
+    L.push("");
+    rows.forEach(function(r, i){
+      L.push("[" + (i+1) + "] " + (r.sn||"-") + "  " + (r.model||"-")
+        + "  입고처 " + (r.src||"-") + "  입고일 " + (r.inDate||"-"));
+      L.push("    재고      출고가 " + (Number(r.listPrice)||0).toLocaleString()
+        + " · 입고가 " + (r.noBuy ? "비어 있음" : "들어 있음")
+        + " · 선할인 " + (r.noPre ? "비어 있음" : "들어 있음"));
+      L.push("    주문 줄   " + (r.oInfo || "-"));
+      L.push("    주문 묶음 " + (r.bInfo || "-"));
+      L.push("    예약      " + (r.rInfo || "-"));
+      L.push("    채울 값   " + (r.want != null || r.wBuy != null
+        ? ("입고가 " + (r.wBuy != null ? Number(r.wBuy).toLocaleString() : "-")
+           + " · 선할인 " + (r.wPre != null ? Number(r.wPre).toLocaleString() : "-")
+           + " · 선할인% " + (r.wPct != null ? r.wPct : "-")
+           + "  (" + (r.how||"") + ")")
+        : ("없음 — " + (r.why || "이유 미기록"))));
+      L.push("");
+    });
+    const txt = L.join("\n");
+    const done = function(){ alert("복사했습니다. 붙여넣어 주세요.\n\n" + rows.length + "대 분량입니다."); };
+    try{
+      if(navigator.clipboard && navigator.clipboard.writeText){
+        navigator.clipboard.writeText(txt).then(done, function(){ fallback(); });
+      }else fallback();
+    }catch(e){ fallback(); }
+    function fallback(){
+      //  복사가 막힌 브라우저에서는 창에 띄워 직접 긁어가실 수 있게 합니다.
+      const ov = document.createElement("div");
+      ov.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:2000;"
+        + "display:flex;align-items:center;justify-content:center;padding:20px;";
+      const ta = document.createElement("textarea");
+      ta.value = txt;
+      ta.style.cssText = "width:100%;max-width:820px;height:70vh;font-family:monospace;"
+        + "font-size:12px;padding:10px;border:1px solid var(--line);box-sizing:border-box;";
+      ov.appendChild(ta);
+      ov.onclick = function(e){ if(e.target === ov) ov.remove(); };
+      document.body.appendChild(ov);
+      ta.select();
+    }
   };
 
   window.fixNoBuyPriceAll = async function(){
@@ -38040,8 +38097,12 @@ let ghostBankCache = [];
             + '</span>' : '';
         })();
     body.innerHTML =
-      (canFix.length ? '<div style="margin-bottom:8px;"><button class="btn small" style="width:auto;" onclick="fixNoSalePriceAll()">'
-        + '채울 수 있는 것 전부 채우기 (' + canFix.length + '대)</button></div>' : '')
+      '<div style="margin-bottom:8px;">'
+      + (canFix.length ? '<button class="btn small" style="width:auto;" onclick="fixNoSalePriceAll()">'
+          + '채울 수 있는 것 전부 채우기 (' + canFix.length + '대)</button> ' : '')
+      + '<button class="btn small secondary" style="width:auto;" onclick="copyNoSaleRaw()"'
+      + ' title="재고 · 판매요청 · 묶음 · 예약에 실제로 들어 있는 값을 그대로 복사합니다.">'
+      + '들어 있는 값 그대로 복사 (앞 20대)</button></div>'
       + '<div style="overflow-x:auto;max-height:380px;overflow-y:auto;">'
       + '<table class="data-table" style="width:auto;"><thead><tr>'
       + '<th>판매일</th><th>일련번호</th><th>전산모델명</th><th>판매처</th><th>상태</th>'
@@ -38067,6 +38128,50 @@ let ghostBankCache = [];
       + (rows.length > 400 ? '<div style="font-size:11.5px;color:var(--gray);margin-top:6px;">'
           + '위에 400대까지만 보여드립니다. [전부 채우기] 는 모두 처리합니다.</div>' : '');
     document.getElementById("suplog-overlay").style.display = "flex";
+  };
+
+  //  판매가 쪽도 «실제로 들어 있는 값» 을 그대로 복사합니다. 아무것도 바꾸지 않습니다.
+  window.copyNoSaleRaw = function(){
+    const rows = (noSalePriceCache || []).slice(0, 20);
+    if(rows.length === 0){ alert("복사할 것이 없습니다."); return; }
+    const L = [];
+    L.push("판매·개통인데 판매가가 비어 있는 재고 — 앞 " + rows.length + "대 (전체 "
+      + (noSalePriceCache||[]).length + "대)");
+    L.push("");
+    rows.forEach(function(r, i){
+      L.push("[" + (i+1) + "] " + (r.sn||"-") + "  " + (r.model||"-")
+        + "  " + (r.st||"-") + "  판매처 " + (r.dest||"-") + "  판매일 " + (r.out||"-"));
+      L.push("    재고      출고가 " + (Number(r.listPrice)||0).toLocaleString()
+        + " · 입고가 " + (r.buy == null ? "비어 있음" : Number(r.buy).toLocaleString())
+        + " · 판매가 비어 있음");
+      L.push("    판매요청  " + (r.srInfo || "-"));
+      L.push("    묶음      " + (r.bInfo || "-"));
+      L.push("    예약      " + (r.rvInfo || "-"));
+      L.push("    채울 값   " + (r.want != null
+        ? (Number(r.want).toLocaleString() + "  (" + (r.how||"") + ")")
+        : ("없음 — " + (r.why || "이유 미기록"))));
+      L.push("");
+    });
+    const txt = L.join("\n");
+    const fin = function(){ alert("복사했습니다. 붙여넣어 주세요.\n\n" + rows.length + "대 분량입니다."); };
+    const fallback = function(){
+      const ov = document.createElement("div");
+      ov.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:2000;"
+        + "display:flex;align-items:center;justify-content:center;padding:20px;";
+      const ta = document.createElement("textarea");
+      ta.value = txt;
+      ta.style.cssText = "width:100%;max-width:820px;height:70vh;font-family:monospace;"
+        + "font-size:12px;padding:10px;border:1px solid var(--line);box-sizing:border-box;";
+      ov.appendChild(ta);
+      ov.onclick = function(e){ if(e.target === ov) ov.remove(); };
+      document.body.appendChild(ov);
+      ta.select();
+    };
+    try{
+      if(navigator.clipboard && navigator.clipboard.writeText)
+        navigator.clipboard.writeText(txt).then(fin, fallback);
+      else fallback();
+    }catch(e){ fallback(); }
   };
 
   window.fixNoSalePriceAll = async function(){
@@ -39422,42 +39527,71 @@ let ghostBankCache = [];
               if(!bb) return null;
               const T = Number(bb.depositRequired);
               if(!(T > 0)) return null;
-              //  출고가와 수량이 살아 있는 줄만 봅니다.
-              const lns = (ordLinesByBatch[bid] || []).filter(function(x){
+              const all = ordLinesByBatch[bid] || [];
+              //  출고가·수량이 살아 있는 줄만 봅니다.
+              const lns = all.filter(function(x){
                 return Number(x.listPrice) > 0 && Number(x.quantity) > 0; });
-              if(lns.length === 0) return null;
               //  빠진 줄이 있으면 합계가 맞을 수 없어 손대지 않습니다.
-              if(lns.length !== (ordLinesByBatch[bid] || []).length) return null;
+              if(lns.length === 0 || lns.length !== all.length){
+                batchSolve[bid] = { fail:"줄의 출고가·수량이 비어 있음" };
+                return null;
+              }
               const Lsum = lns.reduce(function(n,x){
                 return n + Number(x.listPrice) * Number(x.quantity); }, 0);
-              //  결제금액이 출고가 합계보다 크면 할인이 아닙니다. 손대지 않습니다.
-              if(!(Lsum > 0) || T > Lsum) return null;
-              const r0 = (Lsum - T) / Lsum * 100;
-              const bases = ["unit","supply"];
+              if(!(Lsum > 0) || T > Lsum){
+                batchSolve[bid] = { fail:"결제금액이 출고가 합계보다 큼" };
+                return null;
+              }
+              //  타할인은 묶음 결제금액에 안 들어갑니다. 선할인만 맞춰봅니다.
+              const src = String(bb.source || "");
+              //  묶음에 적힌 기준을 «먼저» 봅니다. 그게 원래 쓰인 기준입니다.
+              const bases = [];
+              if(isPickDiscBase(bb.discountBase)) bases.push(String(bb.discountBase));
+              ["supply","total","unit"].forEach(function(b){
+                if(bases.indexOf(b) < 0) bases.push(b); });
+              //  0.01% 씩 훑어 «묶음 결제금액을 그대로 다시 만들어내는» 율을 찾습니다.
+              //   비교는 실제 금액을 만든 그 함수(creditFromLines)로 합니다.
+              //   제 식으로 비교하면 삼성 방식(모델별 수량 합산·부가세 1회)과
+              //   반올림 자리가 달라 영원히 안 맞습니다.
               for(let bi = 0; bi < bases.length; bi++){
                 const base = bases[bi];
-                //  대략 나온 율 주변을 0.01% 씩 훑습니다. (±0.60%)
-                for(let k = -60; k <= 60; k++){
-                  const pct = Number((r0 + k/100).toFixed(2));
-                  if(pct < 0 || pct > 100) continue;
-                  let sum = 0; const per = {};
-                  for(let i = 0; i < lns.length; i++){
-                    const L = Number(lns[i].listPrice);
-                    const d = Number(amtOnBaseVat(pct, L, base)) || 0;
-                    const unit = L - d;
-                    if(!(unit > 0)){ sum = -1; break; }
-                    per[lns[i].__id] = unit;
-                    sum += unit * Number(lns[i].quantity);
-                  }
-                  //  «1원까지» 맞아야 씁니다. 1원이라도 다르면 안 씁니다.
-                  if(sum === T){
-                    batchSolve[bid] = { pct:pct, base:base, per:per,
-                                        lines:lns.length, Lsum:Lsum, T:T };
+                for(let t = 1; t <= 3000; t++){
+                  const pct = Number((t / 100).toFixed(2));
+                  const trial = lns.map(function(x){
+                    const L = Number(x.listPrice);
+                    return { listPrice: L, quantity: Number(x.quantity),
+                             systemModel: x.systemModel,
+                             systemColor: x.systemColor,
+                             manufacturerColor: x.manufacturerColor,
+                             preDiscountPct: pct,
+                             preDiscountAmt: Number(amtOnBaseVat(pct, L, base)) || 0,
+                             otherDiscountAmt: 0,
+                             discountBase: base };
+                  });
+                  let got = 0;
+                  try{ got = Number(creditFromLines(src, trial, base)) || 0; }catch(e){ continue; }
+                  //  «1원까지» 같아야 씁니다.
+                  if(got === T){
+                    const per = {}, perAmt = {};
+                    lns.forEach(function(x){
+                      const L = Number(x.listPrice);
+                      const d = Number(amtOnBaseVat(pct, L, base)) || 0;
+                      perAmt[x.__id] = d;             // 선할인 (대당, 부가세 포함)
+                      per[x.__id]    = L - d;         // 선할인만 뺀 금액 (대당)
+                    });
+                    batchSolve[bid] = { pct:pct, base:base, per:per, perAmt:perAmt,
+                                        lines:lns.length, Lsum:Lsum, T:T, src:src };
                     return batchSolve[bid];
                   }
                 }
               }
+              batchSolve[bid] = { fail:"결제금액을 다시 만들어내는 할인율을 못 찾음" };
               return null;
+            }
+            //  왜 못 되살렸는지 꺼내 보는 쪽지입니다.
+            function solveFail(bid){
+              const v = batchSolve[bid];
+              return (v && v.fail) ? v.fail : "";
             }
 
             Object.keys(items).forEach(function(id){
@@ -39495,21 +39629,37 @@ let ghostBankCache = [];
                 }
               }
               //  품목이 여러 줄이어도, 결제금액을 1원까지 재현하는 %를 찾으면 되살립니다.
-              let sol = null;
-              if(noBuy && !wBuy && bKey && it.orderId){
+              //   찾아낸 선할인%·선할인 금액은 그 자체로 확실합니다.
+              //   입고가는 «타할인» 을 알아야 낼 수 있습니다. (입고가 = 출고가 − 선할인 − 타할인)
+              let sol = null, othMissing = false;
+              if((noBuy || noPre) && bKey && it.orderId){
                 sol = solveBatch(bKey);
-                if(sol && sol.per[it.orderId] != null)
-                  wBuy = { v: sol.per[it.orderId], how:"주문 묶음 금액으로 되살림 (검산 0원)" };
+                if(sol && sol.per && sol.per[it.orderId] != null){
+                  if(noPre && !wPre) wPre = { v: sol.perAmt[it.orderId], how:"주문 묶음 금액으로 되살림" };
+                  if(noPre && !wPct) wPct = { v: sol.pct,                how:"주문 묶음 금액으로 되살림" };
+                  //  타할인이 비어 있으면 0 으로 보지 않습니다. 입고가를 내지 않습니다.
+                  const oth = (it.otherDiscountAmt == null || it.otherDiscountAmt === "")
+                            ? null : Number(it.otherDiscountAmt);
+                  if(oth == null) othMissing = true;
+                  if(noBuy && !wBuy && oth != null)
+                    wBuy = { v: sol.per[it.orderId] - oth, how:"주문 묶음 금액으로 되살림" };
+                }
               }
               //  왜 못 채우는지 적어둡니다. 그래야 다음에 무엇을 보실지 압니다.
               let why = "";
               if(!wBuy && !wPre && !wPct){
                 if(!it.orderId) why = "주문에 안 이어짐";
                 else if(!o)     why = "주문이 없어짐 (또는 취소)";
-                else if(bKey && obById2[bKey] && (ordLinesByBatch[bKey]||[]).length > 1)
-                  //  묶음 금액은 있는데 되살려도 검산이 안 맞은 경우입니다.
+                //  주문 줄에 값이 «있는지» 를 먼저 말합니다. 있으면 끌어오면 되는 겁니다.
+                else if(noBuy && o.purchasePrice != null && o.purchasePrice !== "")
+                  why = "주문 줄에 입고가 " + Number(o.purchasePrice).toLocaleString() + " 있음 - 끌어올 수 있음";
+                else if(noPre && ((o.preDiscountAmt != null && o.preDiscountAmt !== "")
+                               || (o.preDiscountPct != null && o.preDiscountPct !== "")))
+                  why = "주문 줄에 선할인 있음 - 끌어올 수 있음";
+                else if(bKey && obById2[bKey] && solveFail(bKey))
+                  //  왜 못 되살렸는지 그대로 적습니다.
                   why = "묶음 금액 " + (Number(obById2[bKey].depositRequired)||0).toLocaleString()
-                      + " 있음 · 품목 " + (ordLinesByBatch[bKey]||[]).length + "줄 — 되살려도 검산이 안 맞음";
+                      + " 있음 · 품목 " + (ordLinesByBatch[bKey]||[]).length + "줄 — " + solveFail(bKey);
                 else if(bKey && obById2[bKey] && !(Number(obById2[bKey].depositRequired) > 0))
                   why = "주문 묶음 결제금액도 비어 있음";
                 else if(bKey && obById2[bKey])
@@ -39517,6 +39667,9 @@ let ghostBankCache = [];
                 else if(!rv && (o.purchasePrice == null || o.purchasePrice === "")) why = "주문에도 비어 있음";
                 else            why = "주문·예약 모두 비어 있음";
               }
+              //  선할인은 되살렸는데 타할인을 몰라 입고가만 못 내는 경우입니다.
+              if(!wBuy && (wPre || wPct) && othMissing)
+                why = "선할인은 되살림 · 타할인이 비어 있어 입고가를 낼 수 없음";
               if(!wBuy && !wPre && !wPct && !noBuy && !noPre) return;
               //  주문·예약에 «실제로 무엇이 들어 있는지» 그대로 담아둡니다.
               //   추측하지 않고 눈으로 보고 판단하실 수 있게 합니다.
