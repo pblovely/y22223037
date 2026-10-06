@@ -400,7 +400,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-09-06 v1233</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-10-06 v1235</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -927,6 +927,19 @@
           <button class="btn small" style="width:auto;" onclick="runDataCheck()">전체 점검</button>
         </div>
         <p class="desc" style="margin-top:0;">데이터가 서로 어긋난 곳을 찾습니다. 정리는 <b>뒤에서부터</b> — 재고 매칭 → 판매요청 → 주문 순서로 푸는 것이 안전합니다.</p>
+
+        <!-- ===== 기준표 한눈에 보기 ===== -->
+        <div style="border:1px solid var(--navy);background:#f4f7fb;padding:10px 12px;margin-bottom:12px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;">
+            <div style="font-weight:700;">기준표 — 이 시스템이 쓰는 모든 기준
+              <span class="info-tip" title="할인 기준·재고상태·통신사·여신 구분·정산 방법·부가세율이 모두 한 곳에 적혀 있습니다. 화면마다 따로 적지 않으므로, 여기 값이 모든 화면에 그대로 쓰입니다.">ⓘ</span></div>
+            <button class="btn small secondary" style="width:auto;" onclick="showStdTable()">펼쳐 보기</button>
+          </div>
+          <p class="desc" style="margin:4px 0 0 0;">기준을 바꾸실 일이 생기면 <b>이 표 한 곳만</b> 고치면 모든 화면에 함께 반영됩니다.
+            전에는 같은 기준이 화면마다 따로 적혀 있어서, 한 곳만 고치면 다른 화면은 옛 기준으로 남아 숫자·이름이 달라졌습니다.</p>
+          <div id="std-table-box" style="display:none;margin-top:10px;"></div>
+        </div>
+
         <div id="datacheck-result"><div class="list-empty">위 <b>전체 점검</b>을 눌러주세요.</div></div>
         <div id="datacheck-detail"></div>
 
@@ -3472,7 +3485,7 @@
               <option value="b2b_credit">삼성여신 사용 (미리 쌓아둔 여신에서 자동 차감, 출금요청 불필요)</option>
             </select>
           </div>
-          <div class="stack-row" id="order-b2b-hint-row" style="display:none;"><label>잔여 여신</label><span id="order-b2b-hint" style="flex:1;padding:5px 8px;font-size:12.5px;"></span></div>
+          <div class="stack-row" id="order-b2b-hint-row" style="display:none;"><label>쓸 수 있는 여신</label><span id="order-b2b-hint" style="flex:1;padding:5px 8px;font-size:12.5px;"></span></div>
         </div>
 
         <p class="desc" style="margin-top:14px;margin-bottom:4px;font-weight:700;color:var(--navy);">주문 품목</p>
@@ -4286,6 +4299,235 @@ const firebaseConfig = {
   const auth = getAuth(app);
   const db = getFirestore(app);
 
+  /* ══════════════════════════════════════════════════════════════════════════
+     기준표  ─  이 파일의 «모든 기준» 을 여기 한 곳에 모았습니다.
+     ──────────────────────────────────────────────────────────────────────────
+     바꿀 일이 생기면 «여기만» 고치면 모든 화면에 함께 반영됩니다.
+     전에는 같은 기준이 화면마다 따로 적혀 있어서, 한 곳만 고치면
+     다른 화면은 옛 기준 그대로 남아 숫자·이름이 달라졌습니다.
+
+       ① STD.discBase    할인 기준          (출고가 / 공급가·삼전)
+       ② STD.itemStatus  재고 현재상태      (보유중 / 판매 / 개통 / 반품)
+       ③ STD.telecom     통신사             (LG / SK / KT · 자체개통 가능여부)
+       ④ STD.b2bCat      여신 장부 구분     (채움 / 사용 / 담보 / 조정)
+       ⑤ STD.settle      정산 방법          (여신 / 현금)
+       ⑥ STD.entryType   재고 입력 종류     (일련번호 / 수량)
+
+     ※ 새 항목을 만들 때는 반드시 여기에 «먼저» 적어주세요.
+        여기에 없는 값은 화면에서 「확인 필요」 로 보입니다.
+        (임의로 다른 값으로 바꾸거나 추측해서 채우지 않습니다.)
+     ══════════════════════════════════════════════════════════════════════════ */
+  const STD = {
+
+    //  ① 할인 기준 ─────────────────────────────────────────────────────────
+    //    unit   출고가(개당)  : 할인 = 출고가 × %
+    //    total  출고가(합계)  : 할인 = 출고가 합계 × %
+    //    supply 공급가(삼전)  : 공급단가 = round(출고가 ÷ 1.1) → × % → 부가세 한 번
+    //    flat   출고가(정액)  : % 가 아니라 금액을 그대로 씀
+    //    ※ supply 와 unit 은 % 는 같아도 반올림 위치가 달라 금액이 다릅니다.
+    //       삼성 매입거래명세서와 1원까지 맞추려면 supply 여야 합니다.
+    discBase: {
+      list : ["unit","total","supply","flat"],
+      label: { unit:"출고가(개당)", total:"출고가(합계)",
+               supply:"공급가(삼전)", flat:"출고가(정액)" },
+      //  고르는 칸(select)에 넣는 목록입니다. flat 은 그 재고 한 건에서만 씁니다.
+      pick : ["unit","total","supply"],
+      //  기준이 비어 있거나 고를 수 없는 값일 때 쓰는 기본값입니다.
+      //   ※ 기본값을 «저장» 하지는 않습니다. 계산할 때만 이 값으로 봅니다.
+      fallback: "unit",
+      //  이 기준들은 «부가세를 뺀» 금액에 % 를 매깁니다. (율은 아래 vatRate)
+      exVat: ["supply"]
+    },
+
+    //  ② 재고 현재상태 ──────────────────────────────────────────────────────
+    itemStatus: {
+      list: ["보유중","판매","개통","반품"],
+      hold: ["보유중"],          // 아직 우리 재고
+      out : ["판매","개통"],      // 재고에서 빠진 것
+      back: ["반품"],             // 되돌려 보낸 것
+      color: { "보유중":"#1565c0", "판매":"#2e7d32", "개통":"#6a1b9a", "반품":"var(--danger)" }
+    },
+
+    //  ③ 통신사 ─────────────────────────────────────────────────────────────
+    //    SK·KT 향은 포피플에서 «자체개통 불가» 입니다. 타 대리점 판매만 합니다.
+    telecom: {
+      list : ["LG","SK","KT"],                  // 보이는 기본 순서
+      label: { LG:"LG유플러스", SK:"SK텔레콤", KT:"KT" },
+      canActivate: { LG:true, SK:false, KT:false },
+      //  엑셀에서 올라오는 다른 이름들을 위 세 값으로 맞춥니다.
+      alias: { "LG":"LG","LG유플러스":"LG","U+":"LG","엘지":"LG",
+               "SK":"SK","SKT":"SK","SK텔레콤":"SK","KT":"KT" }
+    },
+
+    //  ④ 여신 장부 구분 ─────────────────────────────────────────────────────
+    //    잔여여신        = 채운 돈 − 쓴 돈 + 조정
+    //    쓸 수 있는 여신 = 잔여여신 − 현금담보
+    b2bCat: {
+      plus: ["deposit","loan_deposit","interest_received",
+             "club_incentive","return_credit","double_storage"],
+      use : ["order_use"],
+      hold: { collateral_cash: 1, collateral_return: -1 },
+      adj : ["adjust"],
+      //  잔액에 들어가지 않는 것 (대출비용 — 따로 봅니다)
+      cost: ["b2b_fee_payment","b2b_fee_mp","b2b_interest"],
+      //  여신과 아무 상관 없는 것 — 잔액에도, 대출비용에도 안 들어갑니다.
+      none: ["loan_repay","other"]
+    },
+
+    //  ⑤ 정산 방법 ─────────────────────────────────────────────────────────
+    settle: {
+      list : ["credit","cash"],
+      label: { credit:"여신", cash:"현금(통장)" }
+    },
+
+    //  ⑥ 재고 입력 종류 ─────────────────────────────────────────────────────
+    //    imei  일련번호 1개 = 문서 1건 (수량은 언제나 1)
+    //    bulk  수량으로 넣는 것 (액세서리 등)
+    entryType: { list:["imei","bulk"], label:{ imei:"일련번호", bulk:"수량" } },
+
+    //  ⑦ 부가세율 ───────────────────────────────────────────────────────────
+    //    금액은 모두 «부가세 포함» 으로 저장합니다.
+    //    공급가 = 출고가 ÷ vatRate · 부가세 = 공급가 × (vatRate − 1)
+    //    ※ 율이 바뀌면 «여기만» 고치면 됩니다. 계산식·안내문 모두 이 값을 봅니다.
+    //       (modcheck 가 다른 곳에 율을 적어두지 않았는지 매번 확인합니다)
+    vatRate: 1.1
+  };
+  window.STD = STD;
+
+  //  기준표를 보는 공통 함수들 — 화면에서 목록을 다시 적지 않습니다.
+  //   목록에 없는 값이 오면 null · "확인 필요" 를 돌려줍니다. 추측하지 않습니다.
+  function isDiscBase(b){ return STD.discBase.list.indexOf(String(b||"")) >= 0; }
+  function discBaseLabel(b){
+    const k = String(b||"");
+    if(!k) return "";                                  // 빈칸 = 미입력
+    return STD.discBase.label[k] || "확인 필요";
+  }
+  function isItemOut(st){   return STD.itemStatus.out.indexOf(String(st||""))  >= 0; }
+  function isItemHold(st){  return STD.itemStatus.hold.indexOf(String(st||"")) >= 0; }
+  //  업체정보 등에서 가져온 기준을 씁니다. 고를 수 없는 값이면 기본값으로 봅니다.
+  //   (전에는 이 판정이 6곳에 따로 적혀 있었습니다)
+  function pickDiscBase(b){
+    const k = String(b||"");
+    return (STD.discBase.pick.indexOf(k) >= 0) ? k : STD.discBase.fallback;
+  }
+  function isPickDiscBase(b){ return STD.discBase.pick.indexOf(String(b||"")) >= 0; }
+  //  공급단가 — 출고가에서 부가세를 뺀 뒤 «원 단위로 반올림» 합니다.
+  //   삼성 매입거래명세서가 쓰는 값입니다. 반올림 위치가 달라지면 금액이 틀어집니다.
+  function supplyUnitOf(listPrice){ return Math.round((Number(listPrice)||0) / STD.vatRate); }
+  //  그 기준으로 % 를 곱할 금액 — 공급가면 공급단가(반올림)를 씁니다.
+  function isExVatBase(b){ return STD.discBase.exVat.indexOf(String(b||"")) >= 0; }
+  function baseAmtRound(listPrice, base){
+    const L = Number(listPrice)||0;
+    return isExVatBase(base) ? supplyUnitOf(L) : L;
+  }
+  //  같은 것인데 «반올림 없이» 냅니다. % 를 낼 때 쓰는 자리가 따로 있습니다.
+  function baseAmtRaw(listPrice, base){
+    const L = Number(listPrice)||0;
+    return isExVatBase(base) ? (L / STD.vatRate) : L;
+  }
+  function telecomLabel(t){ return STD.telecom.label[String(t||"")] || String(t||""); }
+  function telecomCanActivate(t){ return STD.telecom.canActivate[String(t||"")] === true; }
+  function settleLabel(m){  return STD.settle.label[String(m||"")] || String(m||"-"); }
+  window.isDiscBase = isDiscBase;
+  window.pickDiscBase = pickDiscBase;
+  window.supplyUnitOf = supplyUnitOf;
+  window.baseAmtRound = baseAmtRound;
+  window.baseAmtRaw = baseAmtRaw;
+  window.isExVatBase = isExVatBase;
+
+  //  기준표를 화면에 그대로 보여드립니다. 코드를 열지 않아도 한눈에 보입니다.
+  //   표의 내용은 위 STD 를 그대로 읽습니다. 여기서 따로 적지 않습니다.
+  window.showStdTable = function(){
+    const box = document.getElementById("std-table-box");
+    if(!box) return;
+    if(box.style.display !== "none"){ box.style.display = "none"; return; }
+    const esc = (typeof comboEsc === "function") ? comboEsc : function(x){ return String(x==null?"":x); };
+    const tbl = function(title, note, rows){
+      return '<div style="margin-bottom:12px;">'
+        + '<div style="font-weight:700;font-size:12.5px;margin-bottom:3px;">' + esc(title) + '</div>'
+        + (note ? '<div class="desc" style="margin:0 0 4px 0;">' + note + '</div>' : '')
+        + '<table class="data-table" style="width:auto;background:#fff;"><tbody>'
+        + rows.map(function(r){
+            return '<tr><td style="font-family:monospace;font-size:11.5px;white-space:nowrap;">' + esc(r[0]) + '</td>'
+              + '<td style="white-space:nowrap;"><b>' + esc(r[1]) + '</b></td>'
+              + '<td style="font-size:11.5px;color:var(--gray);">' + esc(r[2]||"") + '</td></tr>';
+          }).join("")
+        + '</tbody></table></div>';
+    };
+    let h = "";
+
+    h += tbl("① 할인 기준",
+      "할인%를 <b>어디에</b> 곱할지입니다. 공급가(삼전)와 출고가(개당)는 %가 같아도 반올림 위치가 달라 금액이 1원~수십원 다릅니다. 삼성 매입거래명세서와 1원까지 맞추려면 <b>공급가(삼전)</b> 이어야 합니다.",
+      STD.discBase.list.map(function(k){
+        return [k, STD.discBase.label[k],
+          (isExVatBase(k) ? "출고가 ÷ " + STD.vatRate + " 에 % 를 곱합니다" : "출고가에 % 를 곱합니다")
+          + (STD.discBase.pick.indexOf(k) < 0 ? " · 업체정보에서는 고를 수 없습니다" : "")
+          + (k === STD.discBase.fallback ? " · 기준이 비었을 때 계산에 쓰는 기본값" : "")];
+      }));
+
+    h += tbl("② 재고 현재상태",
+      "상태 목록 자체는 <b>관리자 &gt; 기준정보</b> 에서 늘리거나 줄일 수 있습니다. 아래는 그 중 <b>업무상 뜻이 정해진</b> 상태입니다.",
+      STD.itemStatus.list.map(function(k){
+        const m = (STD.itemStatus.out.indexOf(k) >= 0) ? "재고에서 빠진 것"
+                : (STD.itemStatus.hold.indexOf(k) >= 0) ? "아직 우리 재고 (현재고)"
+                : (STD.itemStatus.back.indexOf(k) >= 0) ? "되돌려 보낸 것" : "뜻이 정해지지 않음";
+        return [k, k, m];
+      }));
+
+    h += tbl("③ 통신사",
+      "SK·KT 향 단말기는 포피플에서 <b>자체개통할 수 없습니다.</b> 해당 통신사 취급 대리점에 판매만 합니다.",
+      STD.telecom.list.map(function(k){
+        return [k, STD.telecom.label[k],
+          (STD.telecom.canActivate[k] ? "포피플 자체개통 가능 · 타 대리점 판매도 가능"
+                                      : "포피플 자체개통 불가 — 타 대리점 판매만")];
+      }));
+
+    h += tbl("④ 여신 장부 구분",
+      "<b>쓸 수 있는 여신 = 채운 돈 − 쓴 돈 + 조정 − 현금담보</b> 입니다. 모든 화면이 이 계산 하나만 씁니다.",
+      [].concat(
+        STD.b2bCat.plus.map(function(k){ return [k, B2B_CAT_NAME(k), "여신을 채웁니다 (＋)"]; }),
+        STD.b2bCat.use.map(function(k){  return [k, B2B_CAT_NAME(k), "여신을 씁니다 (−)"]; }),
+        Object.keys(STD.b2bCat.hold).map(function(k){
+          return [k, B2B_CAT_NAME(k), "삼성에 맡겨 둔 돈 — 잔액에는 있지만 주문에 못 씁니다 ("
+            + (STD.b2bCat.hold[k] > 0 ? "넣음" : "돌려받음") + ")"]; }),
+        STD.b2bCat.adj.map(function(k){  return [k, B2B_CAT_NAME(k), "＋／− 부호 있는 조정"]; }),
+        STD.b2bCat.cost.map(function(k){ return [k, B2B_CAT_NAME(k), "잔액에 들어가지 않습니다 (대출비용으로 따로 봅니다)"]; }),
+        STD.b2bCat.none.map(function(k){ return [k, B2B_CAT_NAME(k), "여신과 상관 없습니다"]; })
+      ));
+
+    h += tbl("⑤ 정산 방법", "더블스토리지 등 정산을 여신으로 받을지 통장으로 받을지입니다.",
+      STD.settle.list.map(function(k){ return [k, STD.settle.label[k], ""]; }));
+
+    h += tbl("⑥ 재고 입력 종류", "단말기는 <b>일련번호 1개 = 1줄</b> 입니다. 수량을 합산하지 않습니다.",
+      STD.entryType.list.map(function(k){
+        return [k, STD.entryType.label[k],
+          (k === "imei") ? "일련번호 1개가 1줄 · 수량은 언제나 1" : "수량으로 넣는 것 (액세서리 등)"];
+      }));
+
+    h += tbl("⑦ 부가세율", "금액은 모두 <b>부가세 포함</b> 으로 저장합니다. 율이 바뀌면 이 값 하나만 고치면 됩니다.",
+      [["vatRate", String(STD.vatRate), "공급가 = 출고가 ÷ " + STD.vatRate
+        + " · 부가세 = 공급가 × " + Number((STD.vatRate - 1).toFixed(4))]]);
+
+    box.innerHTML = h;
+    box.style.display = "";
+  };
+  //  여신 구분의 «보이는 이름» 은 B2B_CATEGORY_LABELS 한 곳에만 있습니다.
+  //   거기에 없는 구분이면 코드를 그대로 보여주고 「이름 확인 필요」 라고 적습니다.
+  function B2B_CAT_NAME(k){
+    try{
+      if(typeof B2B_CATEGORY_LABELS === "object" && B2B_CATEGORY_LABELS[k])
+        return B2B_CATEGORY_LABELS[k];
+    }catch(e){}
+    return String(k) + " (이름 확인 필요)";
+  }
+  window.isPickDiscBase = isPickDiscBase;
+  window.discBaseLabel = discBaseLabel;
+  window.isItemOut = isItemOut;
+  window.isItemHold = isItemHold;
+  window.telecomLabel = telecomLabel;
+  window.telecomCanActivate = telecomCanActivate;
+  window.settleLabel = settleLabel;
+
   //  개통을 취소하면 «개통 등록으로 넣은 값»을 전부 되돌립니다.
   //   개통 등록에서 넣는 칸과 하나씩 짝을 맞춥니다.
   //     status · 개통일 · 가입번호 · 공시지원금 · 귀속월
@@ -4301,7 +4543,7 @@ const firebaseConfig = {
   //    ③ 판매처의 업체정보 기준
   //   기준이 비면 출고가로 계산되어, 취소하고 다시 팔 때 금액이 달라졌습니다.
   function saleBaseFor(it, dest){
-    const ok = function(b){ return b === "unit" || b === "total" || b === "supply" || b === "flat"; };
+    const ok = isDiscBase;   // 목록은 기준표(STD.discBase.list) 한 곳만 봅니다
     if(it && ok(String(it.saleDiscountBase||""))) return String(it.saleDiscountBase);
     if(it && ok(String(it.discountBase||"")))     return String(it.discountBase);
     try{
@@ -4963,13 +5205,13 @@ const firebaseConfig = {
     if(!L || !(p > 0)) return null;
     //  할인 금액은 부가세 포함입니다.
     //   출고가 기준: 출고가 × %      공급가 기준: 공급단가 × % × 1.1
-    const su = Math.round(L / 1.1);
+    const su = supplyUnitOf(L);
     const byList = Math.round(L * p / 100);
-    const bySupply = Math.round(Math.round(su * p / 100) * 1.1);
+    const bySupply = Math.round(Math.round(su * p / 100) * STD.vatRate);
     if(byList === bySupply) return null;              // 두 값이 같으면 구분이 안 됩니다
     if(Math.abs(a - byList) <= 1)   return { k:"unit" };
     if(Math.abs(a - bySupply) <= 1) return { k:"supply" };
-    const pList = (a / L) * 100, pSupply = (a / 1.1 / su) * 100;
+    const pList = (a / L) * 100, pSupply = (a / STD.vatRate / su) * 100;
     const useList = Math.abs(pList - p) <= Math.abs(pSupply - p);
     const realPct = Number((useList ? pList : pSupply).toFixed(2));
     if(realPct === Number(p.toFixed(2))) return { k: useList ? "unit" : "supply" };
@@ -4981,10 +5223,8 @@ const firebaseConfig = {
     // 저장해 둔 기준이 있으면 그것을 먼저 보여드립니다.
     {
       const saved = String((it && it.saleDiscountBase) || "");
-      if(saved === "supply" || saved === "total" || saved === "unit" || saved === "flat"){
-        const lab = (saved === "supply") ? "공급가(삼전)"
-                  : (saved === "total") ? "출고가(합계)"
-                  : (saved === "flat") ? "출고가(정액)" : "출고가(개당)";
+      if(isDiscBase(saved)){
+        const lab = discBaseLabel(saved);   // 이름표는 기준표 한 곳만 봅니다
         // 「입고동일」 이면 그 표시를 먼저 보여드립니다.
         if(it && it.salePriceFollowsBuy === true) return "입고동일";
         return lab;
@@ -5007,8 +5247,8 @@ const firebaseConfig = {
     if(!(Number(a) > 0)) return "판매할인 금액 없음";
     const r = baseOfPctAmt(L, p, a);
     if(!r) return "구분 안 됨";
-    if(r.k === "off") return (r.base === "supply" ? "공급가(삼전)" : "출고가(개당)") + " " + r.pct + "%";
-    return (r.k === "supply") ? "공급가(삼전)" : "출고가(개당)";
+    if(r.k === "off") return discBaseLabel(r.base) + " " + r.pct + "%";
+    return discBaseLabel(r.k);
   }
   window.actualSaleBase = actualSaleBase;
 
@@ -5020,11 +5260,9 @@ const firebaseConfig = {
   //     ④ 그 밖에 → 빈칸 (모르는 것)
   //   전에는 ② 를 ① 보다 먼저 봐서, 잘못 저장된 「출고가(개당)」 이 이겼습니다.
   function saleBaseLabel(it){
-    const ok = function(b){ return b === "unit" || b === "total" || b === "supply" || b === "flat"; };
+    const ok = isDiscBase;   // 목록은 기준표(STD.discBase.list) 한 곳만 봅니다
     const nm = function(b){
-      return b === "supply" ? "공급가(삼전)"
-           : b === "total"  ? "출고가(합계)"
-           : b === "flat"   ? "출고가(정액)" : "출고가(개당)";
+      return discBaseLabel(b);   // 이름표는 기준표 한 곳만 봅니다
     };
     if(!it) return "";
     if(it.salePriceFollowsBuy === true){
@@ -5052,8 +5290,8 @@ const firebaseConfig = {
     const L = Number((it && it.listPrice)) || 0;
     // 저장해 둔 기준이 있으면 그것을 먼저 보여드립니다. (업체정보는 처음 들어오는 값일 뿐입니다)
     const saved = String((it && it.discountBase) || "");
-    if(saved === "supply" || saved === "total" || saved === "unit"){
-      const lab = (saved === "supply") ? "공급가(삼전)" : (saved === "total" ? "출고가(합계)" : (saved === "flat" ? "출고가(정액)" : "출고가(개당)"));
+    if(isDiscBase(saved)){   // 전에 flat 이 빠져 있어 「출고가(정액)」 이 안 나왔습니다
+      const lab = discBaseLabel(saved);
       // 금액이 부가세 포함으로 통일되어 두 기준의 차이가 1원뿐입니다.
       //  금액으로 기준을 되짚을 수 없으므로 저장된 기준을 그대로 보여드립니다.
       return { kind:"one", base: saved, savedLabel: lab };
@@ -5067,18 +5305,18 @@ const firebaseConfig = {
     //  할인 금액은 부가세 포함입니다.
     //   출고가 기준: 출고가 × %
     //   공급가 기준: 공급단가 × % × 1.1  (삼성 방식)
-    const su = Math.round(L / 1.1);
+    const su = supplyUnitOf(L);
     const one = (pct, amt)=>{
       const p = Number(pct)||0, a = Number(amt)||0;
       if(!(p > 0)) return null;                       // %가 없으면 가릴 수 없습니다
       const byList   = Math.round(L * p / 100);
-      const bySupply = Math.round(Math.round(su * p / 100) * 1.1);
+      const bySupply = Math.round(Math.round(su * p / 100) * STD.vatRate);
       if(byList === bySupply) return null;            // 두 값이 같으면 구분이 안 됩니다
       if(Math.abs(a - byList) <= 1)   return { k:"unit" };
       if(Math.abs(a - bySupply) <= 1) return { k:"supply" };
       // 딱 안 맞으면 그 금액이 실제로 몇 %인지 냅니다.
       const pList   = (a / L) * 100;
-      const pSupply = (a / 1.1 / su) * 100;
+      const pSupply = (a / STD.vatRate / su) * 100;
       const useList = Math.abs(pList - p) <= Math.abs(pSupply - p);
       const realPct = Number((useList ? pList : pSupply).toFixed(2));
       if(realPct === Number(p.toFixed(2))) return { k: useList ? "unit" : "supply" };
@@ -5089,8 +5327,8 @@ const firebaseConfig = {
     const list  = [pre, other].filter(Boolean);
     if(list.length === 0) return { kind:"none" };
     const lab = v => !v ? "-" : (v.k === "off")
-      ? ((v.base === "supply" ? "공급가(삼전)" : "출고가(개당)") + " " + v.pct + "%")
-      : (v.k === "supply" ? "공급가(삼전)" : "출고가(개당)");
+      ? (discBaseLabel(v.base) + " " + v.pct + "%")
+      : discBaseLabel(v.k);
     // 하나라도 딱 안 맞으면 실제 비율을 보여줍니다.
     if(list.some(x=> x.k === "off")){
       if(pre && other) return { kind:"mixed", preLab: lab(pre), otherLab: lab(other) };
@@ -5107,11 +5345,8 @@ const firebaseConfig = {
     //  저장해 둔 기준이 있으면 할인 금액이 없어도 그대로 보여줍니다.
     //   (예전에는 할인이 0 이면 무조건 «-» 로 나와서, 저장했는데도 안 들어간 것처럼 보였습니다)
     const saved = String((it && it.discountBase) || "");
-    if(saved === "flat")   return "출고가(정액)";
-    if(saved === "flat")   return "출고가(정액)";
-    if(saved === "supply") return "공급가(삼전)";
-    if(saved === "total")  return "출고가(합계)";
-    if(saved === "unit")   return "출고가(개당)";
+    //  이름표는 기준표(STD.discBase.label) 한 곳만 봅니다. 여기 다시 적지 않습니다.
+    if(isDiscBase(saved)) return discBaseLabel(saved);
     const L = Number(it && it.listPrice)||0;
     if(!L) return "출고가 없음";
     const pp = Number(it && it.purchaseDiscount)||0, op = Number(it && it.otherDiscountPct)||0;
@@ -5119,7 +5354,7 @@ const firebaseConfig = {
     // 저장된 기준도 없고 할인도 없으면 가릴 것이 없습니다.
     if(!(pp > 0) && !(op > 0) && !(pa > 0) && !(oa > 0)) return "-";
     const base = (typeof itemDiscountBase === "function") ? itemDiscountBase(it) : "unit";
-    return (base === "supply") ? "공급가(삼전)" : (base === "total" ? "출고가(합계)" : (base === "flat" ? "출고가(정액)" : "출고가(개당)"));
+    return discBaseLabel(base);
   }
   window.discountBaseLabel = discountBaseLabel;
 
@@ -5279,7 +5514,7 @@ const firebaseConfig = {
         }
         return p.label + (p.state === "part" ? " " + (p.received||0).toLocaleString() : "");
       },
-      getRaw:it=>{ const p = payStatusOf(it); return p ? p.label : ((it.status==="판매"||it.status==="개통") ? "판매요청 없음" : ""); } },
+      getRaw:it=>{ const p = payStatusOf(it); return p ? p.label : (isItemOut(it.status) ? "판매요청 없음" : ""); } },
     { key:"payDate", label:"입금일",
       get:it=>{ const p = payStatusOf(it); return (p && p.state === "done") ? (p.reqDate||"-") : "-"; },
       getRaw:it=>{ const p = payStatusOf(it); return (p && p.state === "done") ? (p.reqDate||"") : ""; } },
@@ -5488,7 +5723,7 @@ const firebaseConfig = {
   // 전체 합계 칸 배경색 — 고른 값은 내 계정에만 저장됩니다.
   const DASH_SUM_BG = { none:"", gray:"#f4f4f4", blue:"#eef4fb", yellow:"#fff8e1", green:"#eef7ee", pink:"#fdeef3" };
   // 통신사 보이는 순서 — 사이트 설정에서 바꿉니다. 목록에 없는 통신사는 뒤에 붙습니다.
-  const DEFAULT_CARRIER_ORDER = ["LG","SK","KT"];
+  const DEFAULT_CARRIER_ORDER = STD.telecom.list.slice();   // 기준표 한 곳만 봅니다
   let carrierOrder = DEFAULT_CARRIER_ORDER.slice();
   function sortCarriers(list){
     const rank = (c)=>{
@@ -6875,7 +7110,7 @@ const firebaseConfig = {
   async function ensureDefaultCarriers(){
     const snap = await getDocs(collection(db, "carriers"));
     if(snap.empty){
-      for(const name of ["SK","KT","LG"]){ await addDoc(collection(db,"carriers"), { name }); }
+      for(const name of STD.telecom.list){ await addDoc(collection(db,"carriers"), { name }); }
     }
   }
   function loadCarrierList(){
@@ -7976,7 +8211,7 @@ const firebaseConfig = {
       systemModel: document.getElementById("me-system-input").value.trim(),
       baseModel: document.getElementById("me-base-input").value.trim(),
       capacity: normalizeCapacity(document.getElementById("me-capacity-input").value),
-      priceIncVat, priceExVat: priceIncVat ? Math.round(priceIncVat/1.1) : null,
+      priceIncVat, priceExVat: priceIncVat ? supplyUnitOf(priceIncVat) : null,
       nickname: document.getElementById("me-nick-input").value.trim(),
       manufacturer: document.getElementById("me-manufacturer-select").value,
       kind: String((document.getElementById("me-kind-select")||{}).value || ""),
@@ -8567,7 +8802,7 @@ const firebaseConfig = {
       return;
     }
     const priceIncVat = priceInput?Number(priceInput):null;
-    const priceExVat = priceIncVat ? Math.round(priceIncVat/1.1) : null;
+    const priceExVat = priceIncVat ? supplyUnitOf(priceIncVat) : null;
 
     let result;
     try{
@@ -8867,7 +9102,7 @@ const firebaseConfig = {
     let done = 0, skip = 0;
     for(const r of rows){
       try{
-        const priceExVat = r.priceIncVat ? Math.round(r.priceIncVat/1.1) : null;
+        const priceExVat = r.priceIncVat ? supplyUnitOf(r.priceIncVat) : null;
         const res = await upsertModel({
           petName:r.petName, systemModel:r.systemModel, baseModel:r.baseModel,
           capacity:r.capacity, priceIncVat:r.priceIncVat, priceExVat,
@@ -8936,7 +9171,7 @@ const firebaseConfig = {
       if(!petName && !systemModel && !baseModel){ skipped++; continue; }
 
       const priceIncVat = priceRaw ? Number(priceRaw) : null;
-      const priceExVat = priceIncVat ? Math.round(priceIncVat/1.1) : null;
+      const priceExVat = priceIncVat ? supplyUnitOf(priceIncVat) : null;
 
       const result = await upsertModel(
         { petName, systemModel, baseModel, capacity, priceIncVat, priceExVat, nickname, manufacturer }
@@ -9066,8 +9301,8 @@ const firebaseConfig = {
     //   그래서 계산에서는 「출고가(개당)」 과 같게 두되,
     //   기준을 바꿔 다시 계산하는 자리에서는 이 기준을 건너뜁니다.
     if(String(base) === "supply"){
-      const su = Math.round(L / 1.1);
-      return Math.round(Math.round(su * Number(pct) / 100) * 1.1);
+      const su = supplyUnitOf(L);
+      return Math.round(Math.round(su * Number(pct) / 100) * STD.vatRate);
     }
     return Math.round(L * Number(pct) / 100);
   };
@@ -9084,9 +9319,9 @@ const firebaseConfig = {
     const L = Number(listPrice)||0;
     const p = Number(price)||0;
     if(!L || !p) return null;
-    const su = Math.round(L / 1.1);
+    const su = supplyUnitOf(L);
     if(!su) return null;
-    return Number(((((L - p) / 1.1) / su) * 100).toFixed(2));
+    return Number(((((L - p) / STD.vatRate) / su) * 100).toFixed(2));
   }
   window.samsungPctOf = samsungPctOf;
 
@@ -9135,7 +9370,7 @@ const firebaseConfig = {
       salePrice: buy,
       saleDiscountAmt: (L > 0) ? (L - buy) : null,
       saleDiscountPct: (pp + op) ? Number((pp + op).toFixed(2)) : null,
-      saleDiscountBase: (base === "unit" || base === "total" || base === "supply" || base === "flat") ? base : null
+      saleDiscountBase: isDiscBase(base) ? base : null
     };
   }
   window.sameBuySale = sameBuySale;
@@ -9144,8 +9379,8 @@ const firebaseConfig = {
     const a = Number(amt)||0;
     if(!L) return "";
     if(String(base) === "supply"){
-      const su = Math.round(L / 1.1);
-      return su ? Number(((a / 1.1 / su) * 100).toFixed(2)) : "";
+      const su = supplyUnitOf(L);
+      return su ? Number(((a / STD.vatRate / su) * 100).toFixed(2)) : "";
     }
     return Number(((a / L) * 100).toFixed(2));
   };
@@ -9157,8 +9392,8 @@ const firebaseConfig = {
     const L = Number(listPrice)||0;
     const B0 = discBase(L);
     if(B0 < L){
-      const su = Math.round(L / 1.1);
-      return su ? ((Number(amtRaw)/1.1/su)*100).toFixed(2) : "";
+      const su = supplyUnitOf(L);
+      return su ? ((Number(amtRaw)/STD.vatRate/su)*100).toFixed(2) : "";
     }
     return L ? ((Number(amtRaw)/L)*100).toFixed(2) : "";
   }
@@ -9192,9 +9427,9 @@ const firebaseConfig = {
     const L = Number(listPrice)||0;
     const b = override || (function(){
       const c = (companiesCache||[]).find(x=> String(x.name||"").trim() === String(companyName||"").trim());
-      return (c && (c.discountBase === "total" || c.discountBase === "supply")) ? c.discountBase : "unit";
+      return pickDiscBase(c && c.discountBase);
     })();
-    return (b === "supply") ? L/1.1 : L;
+    return baseAmtRaw(L, b);
   };
 
   //  할인 기준이 「공급가」면 VAT를 뺀 금액에 %를 겁니다. (삼성전자 방식)
@@ -9226,7 +9461,7 @@ const firebaseConfig = {
         || pick("item-base-select") || pick("resv-base-select") || "";
     }catch(e){}
     if(!b) b = itemBaseOverride || (currentOrderSourceInfo && currentOrderSourceInfo.base) || "";
-    return (b === "supply") ? (Number(listPrice)||0)/1.1 : (Number(listPrice)||0);
+    return baseAmtRaw(listPrice, b);
   }
   function amtFromPct(pctRaw, listPrice){
     if(pctRaw === "" || pctRaw == null) return "";
@@ -9239,16 +9474,16 @@ const firebaseConfig = {
     const sup = (B0 < L);                    // discBase 가 작아졌으면 공급가 기준입니다
     if(sup){
       //  삼성 방식과 똑같이 — 공급단가를 반올림한 뒤 %를 곱하고, 부가세를 붙입니다.
-      const su = Math.round(L / 1.1);
+      const su = supplyUnitOf(L);
       const en = Math.round(su * Number(pctRaw) / 100);
-      return Math.round(en * 1.1);
+      return Math.round(en * STD.vatRate);
     }
     return Math.round(L * Number(pctRaw)/100);
   }
   //  판매할인%를 곱할 금액입니다. 매입과 따로 정합니다.
   function saleDiscBase(listPrice){
     const b = itemSaleBaseOverride || "";
-    return (b === "supply") ? (Number(listPrice)||0)/1.1 : (Number(listPrice)||0);
+    return baseAmtRaw(listPrice, b);
   }
   function saleAmtFromPct(pctRaw, listPrice){
     if(pctRaw === "" || pctRaw == null) return "";
@@ -9589,13 +9824,13 @@ const firebaseConfig = {
       //  저장할 때 엉뚱한 기준이 들어가 금액이 어긋납니다.
       const own = String(it.discountBase||"");
       const bs = document.getElementById("item-base-select");
-      if(bs) bs.value = (own === "unit" || own === "total" || own === "supply") ? own : "";
+      if(bs) bs.value = isDiscBase(own) ? own : "";
       itemBaseOverride = (bs ? String(bs.value||"") : "") || null; }
     { // 판매 기준 — 이 재고에 저장된 값만 씁니다.
       //  아직 안 파셨으면 비워둡니다. 판매하실 때 그 판매처 기준이 들어갑니다.
       const ownS = String(it.saleDiscountBase||"");
       const bs2 = document.getElementById("item-salebase-select");
-      if(bs2) bs2.value = (ownS === "unit" || ownS === "total" || ownS === "supply") ? ownS : "";
+      if(bs2) bs2.value = isDiscBase(ownS) ? ownS : "";
       itemSaleBaseOverride = (bs2 ? String(bs2.value||"") : "") || null; }
     { const e = document.getElementById("item-samebuy-input");
       if(e) e.checked = (it.salePriceFollowsBuy === true);
@@ -10181,10 +10416,12 @@ const firebaseConfig = {
             : '<span style="color:var(--gray);">-</span>') + '</td>' +
         (function(){
           //  대당·합계는 둘 다 출고가(VAT 포함) 기준입니다. 공급가만 삼성전자 방식입니다.
-          const lab = (base)=> base === "supply" ? '<span style="color:#2e7d32;font-weight:700;">공급가(삼전)</span>'
-                    : base === "total"  ? '<span style="color:var(--navy);">출고가(합계)</span>'
-                    : base === "unit"   ? '<span style="color:var(--navy);">출고가(개당)</span>'
-                    : '<span style="color:var(--gray);">미지정</span>';
+          //  이름은 기준표에서 가져오고 색만 여기서 입힙니다.
+          const lab = function(base){
+            if(!isDiscBase(base)) return '<span style="color:var(--gray);">미지정</span>';
+            const c0 = (base === "supply") ? 'color:#2e7d32;font-weight:700;' : 'color:var(--navy);';
+            return '<span style="' + c0 + '">' + discBaseLabel(base) + '</span>';
+          };
           const rate = (c.cashRate === "" || c.cashRate == null) ? null : Number(c.cashRate);
           return '<td style="white-space:nowrap;">'
               + (c.isSource ? lab(String(c.discountBase||""))
@@ -10264,9 +10501,9 @@ const firebaseConfig = {
     document.getElementById("co-is-dest").checked = c.isDest === true;
     { const e = document.getElementById("co-is-credit"); if(e) e.checked = c.isCreditTarget === true; }
     { const e = document.getElementById("co-discbase-input");
-      if(e){ e.value = (c.discountBase === "total" || c.discountBase === "supply") ? c.discountBase : "unit"; e.disabled = !!readOnly; } }
+      if(e){ e.value = pickDiscBase(c.discountBase); e.disabled = !!readOnly; } }
     { const e = document.getElementById("co-salebase-input");
-      if(e){ e.value = (c.saleDiscountBase === "total" || c.saleDiscountBase === "supply") ? c.saleDiscountBase : "unit"; e.disabled = !!readOnly; } }
+      if(e){ e.value = pickDiscBase(c.saleDiscountBase); e.disabled = !!readOnly; } }
     document.getElementById("company-modal-title").textContent = readOnly ? "업체 보기" : (companyId ? "업체 수정" : "업체 등록");
     // 읽기 전용이면 저장 버튼을 감춥니다.
     const saveBtn = document.querySelector('#company-modal-overlay button[onclick="submitCompany()"]');
@@ -10366,10 +10603,13 @@ const firebaseConfig = {
     payload.isSource = document.getElementById("co-is-source").checked;
     payload.isDest = document.getElementById("co-is-dest").checked;
     payload.isCreditTarget = !!(document.getElementById("co-is-credit")||{}).checked;
+    //  ⚠ 확인 필요 — 고르는 칸에는 「출고가(정액)」 이 있는데, 여기서 저장할 때
+    //     「출고가(개당)」 으로 바뀝니다. 지금 동작을 그대로 두었습니다.
+    //     (업체정보에 정액 기준을 저장할지는 정해지지 않았습니다.)
     { const v = (document.getElementById("co-discbase-input")||{}).value;
-      payload.discountBase = (v === "total" || v === "supply") ? v : "unit"; }
+      payload.discountBase = pickDiscBase(v); }
     { const v = (document.getElementById("co-salebase-input")||{}).value;
-      payload.saleDiscountBase = (v === "total" || v === "supply") ? v : "unit"; }
+      payload.saleDiscountBase = pickDiscBase(v); }
 
     if(!payload.name){
       showModelMsg("co-result-msg", "업체명은 반드시 입력해주세요.", true);
@@ -10757,7 +10997,7 @@ const firebaseConfig = {
     if(!c){ try{ await fetchCompanies(); }catch(e){}
       c = (companiesCache||[]).find(function(x){ return String(x.name||"").trim() === nm; }); }
     const b = String((c && c.discountBase) || "");
-    return (b === "supply" || b === "total") ? b : "unit";
+    return pickDiscBase(b);
   }
   //  업체정보 기준을 화면 칸에 자동으로 넣지 않습니다.
   //   넣으신 값만 저장되도록, 여기서는 아무것도 하지 않습니다.
@@ -10813,7 +11053,7 @@ const firebaseConfig = {
       if(isLocked && !doLocked) return;
       const L = lp ? (Number(lp.value)||0) : (Number(tr.dataset.listPrice)||0);
       if(!(L > 0)) return;
-      const bs = (base === "supply") ? Math.round(L / 1.1) : L;
+      const bs = baseAmtRound(L, base);
       //  잠긴 줄도 고치기로 하셨으면 값은 바꿉니다. (칸은 회색 그대로 둡니다)
       const set = (cls, v)=>{ const el = tr.querySelector(cls); if(el) el.value = v; };
       const num = (cls)=>{ const el = tr.querySelector(cls);
@@ -10837,7 +11077,7 @@ const firebaseConfig = {
     if(el){
       el.style.display = "block";
       el.innerHTML = '<span style="color:var(--navy);">매입할인 기준을 <b>'
-        + (base === "supply" ? "공급가(삼전)" : (base === "total" ? "출고가(합계)" : (base === "flat" ? "출고가(정액)" : "출고가(개당)")))
+        + discBaseLabel(base)
         + '</b> 로 바꿔 ' + n + '줄을 다시 계산했습니다.'
         + (lockedTrs.length ? ' <span style="color:var(--gray);">(도착된 ' + lockedTrs.length + '줄 포함)</span>' : '')
         + ' <b>수정 저장</b> 을 눌러야 재고·판매요청·여신까지 반영됩니다.</span>';
@@ -10906,7 +11146,7 @@ const firebaseConfig = {
       c = (companiesCache||[]).find(x=> String(x.name||"").trim() === name) || null;
     }
     const rate = c && c.cashRate !== "" && c.cashRate != null ? Number(c.cashRate) : null;
-    const base = (c && (c.discountBase === "total" || c.discountBase === "supply")) ? c.discountBase : "unit";
+    const base = pickDiscBase(c && c.discountBase);
     currentOrderSourceInfo = c ? { name, rate, base } : null;
     //  업체정보 기준을 칸에 넣지 않습니다. 직접 고르셔야 합니다.
     //   (예전에는 자동으로 들어가 엉뚱한 기준으로 저장되곤 했습니다)
@@ -10915,7 +11155,7 @@ const firebaseConfig = {
         try{ await lockBaseIfCredit("order-base-select", name); }catch(e){}
         bs.title = c && c.discountBase
           ? ("업체정보에 저장된 기준: "
-             + (c.discountBase === "supply" ? "공급가(삼전)" : c.discountBase === "total" ? "출고가(합계)" : c.discountBase === "flat" ? "출고가(정액)" : "출고가(개당)"))
+             + discBaseLabel(c.discountBase))
           : "";
       } }
     // 무엇을 읽었는지 화면에 보여드립니다. (기준이 안 따라올 때 원인을 바로 알 수 있게)
@@ -10925,7 +11165,7 @@ const firebaseConfig = {
         el0.style.display = "block";
         el0.innerHTML = c
           ? ('<b>' + comboEsc(name) + '</b> 업체정보를 읽었습니다 · 매입할인 기준 <b style="color:#2e7d32;">'
-             + (base === "supply" ? "공급가(삼전)" : (base === "total" ? "출고가(합계)" : (base === "flat" ? "출고가(정액)" : "출고가(개당)")))
+             + discBaseLabel(base)
              + '</b>' + (rate ? ' · 현금할인 ' + rate + '%' : ''))
           : ('<b style="color:var(--danger);">' + comboEsc(name)
              + '</b> 업체정보를 못 찾았습니다. (읽은 업체 ' + (companiesCache||[]).length
@@ -10943,8 +11183,7 @@ const firebaseConfig = {
       }else{
         el.style.display = "block";
         el.innerHTML = '<b>' + comboEsc(name) + '</b> 현금할인 <b>' + rate + '%</b> · 계산 기준 <b>'
-          + (base === "supply" ? "공급가(삼전)"
-             : base === "total" ? "출고가(합계)" : "출고가(개당)") + '</b>'
+          + discBaseLabel(base) + '</b>'
           + '<br><span style="color:var(--gray);">참고용입니다. <b>칸에 자동으로 넣지 않습니다.</b> 선할인%는 직접 넣어주세요.</span>';
       }
     }
@@ -11137,7 +11376,7 @@ const firebaseConfig = {
           const cS = (companiesCache||[]).find(function(x){
             return String(x.name||"").trim() === String(dest||"").trim(); });
           const bs = String((cS && cS.discountBase) || "");
-          return (bs === "supply" || bs === "total") ? bs : "unit";
+          return pickDiscBase(bs);
         }catch(e){ return "unit"; } })(),
         saleDiscountAmt: document.getElementById("os-saleamt").value ? osNum("os-saleamt") : null,
         saleDiscountPct: document.getElementById("os-salepct").value ? Number(osNum("os-salepct").toFixed(2)) : null,
@@ -11673,7 +11912,7 @@ const firebaseConfig = {
             const bbP = String((document.getElementById("order-base-select")||{}).value || "unit");
             const sbP = sameP ? bbP
               : String((document.getElementById("order-salebase-select")||{}).value || bbP);
-            const divP = (sbP === "supply") ? Math.round(L2 / 1.1) : L2;
+            const divP = baseAmtRound(L2, sbP);
             return divP ? Number((((L2 - sp2) / divP) * 100).toFixed(2)) : null;
           }
           const v = tr.querySelector(".ol-salediscountpct").value;
@@ -11722,7 +11961,7 @@ const firebaseConfig = {
       try{
         const bal = await getB2BBalance();
         if(depositRequired > bal && !confirm(
-          "잔여 여신이 부족합니다.\n\n  필요 " + depositRequired.toLocaleString() +
+          "쓸 수 있는 여신이 부족합니다.\n\n  필요 " + depositRequired.toLocaleString() +
           "\n  잔여 " + bal.toLocaleString() +
           "\n  부족 " + (depositRequired - bal).toLocaleString() +
           "\n\n그래도 등록하시겠습니까?")) return;
@@ -11771,7 +12010,7 @@ const firebaseConfig = {
         const cS = (companiesCache||[]).find(function(x){
           return String(x.name||"").trim() === dst; });
         const bs = String((cS && cS.saleDiscountBase) || "");
-        if(bs === "supply" || bs === "total" || bs === "unit") orderSaleBaseSel = bs;
+        if(isDiscBase(bs)) orderSaleBaseSel = bs;
       }
     }catch(e){}
     const orderRefs = [];
@@ -13802,7 +14041,7 @@ const firebaseConfig = {
       }
     }catch(e){ alert("재고를 읽지 못했습니다."); return; }
 
-    const sold = items.filter(x=> x.status === "판매" || x.status === "개통");
+    const sold = items.filter(x=> isItemOut(x.status));
     // 지워지면 되살릴 수 없으므로, 다시 판매처리하실 수 있게 내용을 먼저 담아둡니다.
     const soldMemo = sold.map(x=> ({
       serial: String(x.serialNumber||""),
@@ -14186,8 +14425,8 @@ const firebaseConfig = {
         + '</tr></thead><tbody>';
       amtFixRows.forEach((r,i)=>{
         const co = (companiesCache||[]).find(x=> String(x.name||"").trim() === String(r.b.source||"").trim());
-        const base = (co && co.discountBase === "supply") ? "공급가(삼전)"
-                   : (co && co.discountBase === "total") ? "출고가(합계)" : "출고가(개당)";
+        //  전에는 total·flat 을 「출고가(개당)」 으로 잘못 보여줬습니다.
+        const base = discBaseLabel(co && co.discountBase);
         const gap = v => v ? '<span style="color:var(--danger);font-weight:700;">' + (v>0?"+":"") + v.toLocaleString() + '</span>' : '<span style="color:var(--gray);">-</span>';
         h += '<tr>'
           + '<td><input type="checkbox" class="amtfix-ck" value="'+i+'" checked></td>'
@@ -14934,13 +15173,10 @@ const firebaseConfig = {
         '<td style="white-space:nowrap;">' + comboEsc((function(){
             const bs = String(o.discountBase || b.discountBase || "");
             if(bs === "flat")   return "출고가(정액)";
-            if(bs === "supply") return "공급가(삼전)";
-            if(bs === "total")  return "출고가(합계)";
-            if(bs === "flat")   return "출고가(정액)";
-            if(bs === "unit")   return "출고가(개당)";
+            if(isDiscBase(bs)) return discBaseLabel(bs);
             try{
               const bb = itemDiscountBase({ source: b.source || "" });
-              return bb === "supply" ? "공급가(삼전)" : (bb === "total" ? "출고가(합계)" : (bb === "flat" ? "출고가(정액)" : "출고가(개당)"));
+              return discBaseLabel(bb);
             }catch(e){ return "출고가(개당)"; }
           })()) + '</td>' +
         '<td class="ta-right">'+discFmt(o.listPrice)+'</td>' +
@@ -14970,7 +15206,7 @@ const firebaseConfig = {
               if(L0 > 0 && sp0 > 0){
                 const amt0 = L0 - sp0;
                 const sb0 = String(o.saleDiscountBase || o.discountBase || "unit");
-                const div0 = (sb0 === "supply") ? Math.round(L0 / 1.1) : L0;
+                const div0 = baseAmtRound(L0, sb0);
                 if(div0) return discPctFmt(Number(((amt0 / div0) * 100).toFixed(2)));
               }
             }
@@ -16256,7 +16492,7 @@ const firebaseConfig = {
           const cSale = (companiesCache||[]).find(function(x){
             return String(x.name||"").trim() === String(o.destination||"").trim(); });
           const bs = String((cSale && cSale.discountBase) || "");
-          arrSaleBase = (bs === "supply" || bs === "total") ? bs : "unit";
+          arrSaleBase = pickDiscBase(bs);
         }catch(e){}
         const ids = [];
         for(let i=0; i<serials.length; i+=300){
@@ -16636,7 +16872,7 @@ const firebaseConfig = {
       const cS = (companiesCache||[]).find(function(x){
         return String(x.name||"").trim() === String(o.destination||"").trim(); });
       const bs2 = String((cS && cS.discountBase) || "");
-      arrSaleBase2 = (bs2 === "supply" || bs2 === "total") ? bs2 : "unit";
+      arrSaleBase2 = pickDiscBase(bs2);
     }catch(e){}
     entries.forEach(e=>{
       const c = (freshModel.colors||[]).find(x=>x.systemColor===e.colorName || x.manufacturerColor===e.colorName);
@@ -16934,18 +17170,18 @@ const firebaseConfig = {
   //  업체 설정을 바꿔도 이미 그 건에서 정해둔 기준은 바뀌지 않습니다.
   function itemDiscountBase(it){
     const own = String((it && it.discountBase) || "");
-    if(own === "supply" || own === "total" || own === "unit") return own;
+    if(isDiscBase(own)) return own;
     const c = (companiesCache||[]).find(x=>
       String(x.name||"").trim() === String((it && it.source)||"").trim());
     const b = String((c && c.discountBase) || "");
-    return (b === "supply" || b === "total") ? b : "unit";
+    return pickDiscBase(b);
   }
   window.itemDiscountBase = itemDiscountBase;
 
   // 그 기준으로 할인율을 곱할 금액을 냅니다. (공급가면 VAT를 뺍니다)
   function itemDiscountAmountBase(it, listPrice){
     const L = Number(listPrice != null ? listPrice : (it && it.listPrice)) || 0;
-    return (itemDiscountBase(it) === "supply") ? (L/1.1) : L;
+    return baseAmtRaw(L, itemDiscountBase(it));
   }
   //  이 재고의 기준으로 % → 부가세 포함 할인 금액을 냅니다.
   function itemAmtFromPct(it, listPrice, pct){
@@ -16974,7 +17210,7 @@ const firebaseConfig = {
     if(base !== "unit" && base !== "total" && base !== "supply"){
       // 줄에 적힌 기준도 봅니다. 전부 같을 때만 씁니다.
       const bs = [...new Set((lines||[]).map(function(l){ return String(l.discountBase||""); })
-        .filter(function(v){ return v === "unit" || v === "total" || v === "supply"; }))];
+        .filter(isDiscBase))];
       base = (bs.length === 1) ? bs[0] : String((c && c.discountBase) || "");
     }
     // 업체정보에서 「여신 대상 (삼성전자 계열)」로 체크한 곳은
@@ -17030,7 +17266,7 @@ const firebaseConfig = {
       });
       return Object.keys(grp).reduce(function(n, k){
         const g = grp[k];
-        const supplyUnit = Math.round(g.L / 1.1);
+        const supplyUnit = supplyUnitOf(g.L);
         const enuri = Math.round(supplyUnit * rate / 100);
         const unitPrice = supplyUnit - enuri;      // 매입단가 (대당)
         const supply = unitPrice * g.q;            // 공급가 (묶은 수량)
@@ -18990,7 +19226,7 @@ const firebaseConfig = {
         })()
       + '</tbody></table>'
       + '<div style="font-size:11.5px;color:var(--gray);margin-top:6px;line-height:1.7;">'
-      + '<b>삼성 방식</b> — 공급단가(출고가÷1.1 반올림) → 에누리 → 부가세 반올림 → 대당 매입가격 × 수량.<br>'
+      + '<b>삼성 방식</b> — 공급단가(출고가÷' + STD.vatRate + ' 반올림) → 에누리 → 부가세 반올림 → 대당 매입가격 × 수량.<br>'
       + '차이가 있으면 <b>주문 관리를 한 번 열어</b> 여신을 다시 계산하시면 장부가 삼성 방식으로 맞춰집니다.<br>'
       + '그래도 남으면 그 주문의 <b>출고가·선할인</b>이 삼성과 다른 것입니다.</div>'
       + '</div>';
@@ -20135,24 +20371,51 @@ const firebaseConfig = {
     }
     const bal = await getB2BBalance();
     logAction("여신 주문사용 정리", "삭제 "+toDelete.length+" / 수정 "+toFix.length+" / 추가 "+toAdd.length);
-    alert("정리했습니다.\n\n잔여 여신 " + bal.toLocaleString());
+    alert("정리했습니다.\n\n쓸 수 있는 여신 " + bal.toLocaleString());
     if(typeof loadB2BTab === "function") loadB2BTab();
     loadOrderList();
   };
 
-  // 잔여 여신 = 충전·클럽인센티브 − 주문사용
+  //  ───────────────────────────────────────────────────────────────
+  //  여신 장부의 구분을 «한 곳에서만» 정합니다.
+  //   전에는 화면마다 구분 이름을 따로 적어 두어, 같은 장부인데
+  //   화면마다 잔액이 달랐습니다. (더블스토리지가 거래내역에는 있는데
+  //   「쓸 수 있는 여신」 에는 안 더해지던 것이 그 때문입니다.)
+  //   새 구분을 만들 때는 반드시 아래 목록에 먼저 적어주세요.
+  //  구분 목록은 맨 위 «기준표(STD.b2bCat)» 한 곳에만 적습니다.
+  const B2B_PLUS = STD.b2bCat.plus;    // 여신을 채우는 것
+  const B2B_USE  = STD.b2bCat.use;     // 여신을 쓰는 것
+  const B2B_HOLD = STD.b2bCat.hold;    // 맡겨 둔 돈(지금은 못 씀)
+  const B2B_ADJ  = STD.b2bCat.adj;     // ＋／− 부호 있는 조정
+  function b2bIsPlus(c){ return B2B_PLUS.indexOf(String(c||"")) >= 0; }
+  function b2bIsUse(c){  return B2B_USE.indexOf(String(c||"")) >= 0; }
+  //  여신 잔액을 «한 가지 방법으로만» 셉니다. 화면마다 다시 세지 않습니다.
+  //   plus 채운 돈 · use 쓴 돈 · hold 맡겨 둔 돈 · adj 조정
+  //   remaining 잔여여신 = 채운 − 쓴 + 조정
+  //   usable    쓸 수 있는 여신 = 잔여여신 − 맡겨 둔 돈
+  function b2bCredit(entries){
+    let plus = 0, use = 0, hold = 0, adj = 0;
+    (entries||[]).forEach(function(e){
+      const amt = Number(e && e.amount)||0;
+      const c = String(e && e.category || "");
+      if(b2bIsPlus(c))      plus += amt;
+      else if(b2bIsUse(c))  use  += amt;
+      else if(B2B_HOLD[c]){ plus += amt * B2B_HOLD[c]; hold += amt * B2B_HOLD[c]; }
+      else if(B2B_ADJ.indexOf(c) >= 0) adj += amt;
+    });
+    const remaining = plus - use + adj;
+    return { plus:plus, use:use, hold:hold, adj:adj,
+             remaining:remaining, usable: remaining - hold };
+  }
+  //  ───────────────────────────────────────────────────────────────
+
+  // 쓸 수 있는 여신 — 위 b2bCredit 한 곳만 씁니다.
   //  여신은 삼성전자스타 한 곳에만 있으므로 전체를 셉니다.
   window.getB2BBalance = async function(){
     const snap = await getDocs(collection(db,"b2bLedger"));
-    let plus = 0, use = 0;
-    snap.forEach(d=>{
-      const e = d.data();
-      const amt = Number(e.amount)||0;
-      if(e.category==="deposit" || e.category==="loan_deposit" || e.category==="interest_received"
-         || e.category==="club_incentive" || e.category==="double_storage") plus += amt;
-      else if(e.category==="order_use") use += amt;
-    });
-    return plus - use;
+    const list = [];
+    snap.forEach(function(d){ list.push(d.data()); });
+    return b2bCredit(list).usable;
   };
 
   // 출금요청을 취소합니다. 주문 관리·정산 관리 어느 쪽에서든 부를 수 있습니다.
@@ -20648,11 +20911,16 @@ window.deleteReqBoardItem = async function(kind, reqId){
     });
 
     const PRE = { deposit:"선입금", loan_deposit:"대출금 충전", interest_received:"이자 수령" };
-    let creditIn = 0, creditUse = 0, creditClub = 0;
+    //  여신 잔액은 b2bCredit 한 곳에서만 셉니다. 여기서 다시 세지 않습니다.
+    //   (전에는 선입금·클럽장려금·주문사용만 세어, 반품복구·더블스토리지·
+    //    조정·현금담보가 빠진 다른 숫자가 나왔습니다.)
+    const _ledList = [];
+    ledSnap.forEach(function(x){ _ledList.push(x.data()); });
+    const creditSum  = b2bCredit(_ledList);
+    const creditLeft = creditSum.usable;
     ledSnap.forEach(x=>{
       const e = x.data(); const amt = Number(e.amount)||0;
       if(PRE[e.category]){
-        creditIn += amt;
         // 통장 출금 기록과 이어져 있는지 표시합니다.
         //  입출금 내역에서 「삼성여신」을 골라 넣으면 이어집니다. 여신 화면에서 직접 넣으면 안 이어집니다.
         const hasBank = !!e.fromBankDepositId;
@@ -20672,10 +20940,8 @@ window.deleteReqBoardItem = async function(kind, reqId){
           taxDate:"", taxAmount:0, status: isInflow ? "여신충전" : "미반영",
           finished:true, onHold:false, holdReason:"",
           canceled:false, recs:[], inSum:false, canProcess:false, canEdit:false });
-      }else if(e.category === "order_use") creditUse += amt;
-      else if(e.category === "club_incentive") creditClub += amt;
+      }
     });
-    const creditLeft = creditIn + creditClub - creditUse;
 
     // <입출금 내역>을 함께 보여줍니다.
     //  기본은 「미배분」만 나옵니다. 배분이 끝난 돈은 요청 줄에 이미 나오므로 겹치지 않게 뺍니다.
@@ -21012,9 +21278,12 @@ window.deleteReqBoardItem = async function(kind, reqId){
         card("받아야 할 돈 (남음)", sLeftIn.toLocaleString(), "#1565c0", "보류 제외 <b>" + (sLeftIn - holdIn).toLocaleString() + "</b>") +
         card("차액", gap.toLocaleString(), gap>=0 ? "#2e7d32" : "var(--danger)", "보류 제외 <b>" + gapNow.toLocaleString() + "</b>") +
         card("이미 보낸 돈", sDone.toLocaleString(), "#1565c0", "출금 처리 + 여신결제") +
-        card("여신 잔액", creditLeft.toLocaleString(), creditLeft < 0 ? "var(--danger)" : "#2e7d32",
-             "선입금 " + creditIn.toLocaleString() + " − 주문사용 " + creditUse.toLocaleString()
-             + (creditClub ? " + 장려금 " + creditClub.toLocaleString() : ""));
+        //  여신 관리 화면과 «같은 숫자» 입니다. b2bCredit 한 곳에서 셉니다.
+        card("쓸 수 있는 여신", creditLeft.toLocaleString(), creditLeft < 0 ? "var(--danger)" : "#2e7d32",
+             "채운 돈 " + creditSum.plus.toLocaleString()
+             + " − 주문사용 " + creditSum.use.toLocaleString()
+             + (creditSum.adj !== 0 ? " · 조정 " + (creditSum.adj > 0 ? "+" : "") + creditSum.adj.toLocaleString() : "")
+             + (creditSum.hold ? " − 현금담보 " + creditSum.hold.toLocaleString() : ""));
     }
 
     // 아랫줄 — 고른 업체(또는 기간)만의 합계
@@ -25482,7 +25751,7 @@ window.showDepositUses = async function(id){
   };
   window.setResvCarrier = function(c){
     resvCarrier = c;
-    ["LG","SK","KT"].forEach(x=>{
+    STD.telecom.list.forEach(x=>{
       const b = document.getElementById("resv-carrier-"+x);
       if(b) b.className = "btn small" + (x===c ? "" : " secondary");
     });
@@ -27004,7 +27273,7 @@ window.showDepositUses = async function(id){
     const c = (companiesCache||[]).find(function(x){
       return String(x.name||"").trim() === name; }) || null;
     const b = String((c && c.discountBase) || "");
-    const base = (b === "supply" || b === "total") ? b : "unit";
+    const base = pickDiscBase(b);
     const id = (resvKind === "buy") ? "resv-paste-base" : "resv-paste-salebase";
     const sel = document.getElementById(id);
     if(sel) sel.value = base;
@@ -27025,7 +27294,7 @@ window.showDepositUses = async function(id){
     const same = prices.length > 0 && prices.every(function(v){ return v === prices[0]; });
     const L = same ? prices[0] : 0;
     const base = String((document.getElementById("resv-paste-base")||{}).value || "unit");
-    const amtBase = (base === "supply") ? Math.round(L / 1.1) : L;
+    const amtBase = baseAmtRound(L, base);
     if(amtBase > 0){
       if(from === "amt"){
         const a = aEl.value === "" ? null : Number(aEl.value);
@@ -27081,7 +27350,7 @@ window.showDepositUses = async function(id){
     //  대당 = 출고가 · 공급가 = 출고가÷1.1 · 합계 = 출고가 합계
     const totalAll = (resvPendingRows||[]).reduce(function(n,r){
       return n + (Number(r.listPrice)||0) * (Number(r.orderedQty)||0); }, 0);
-    const baseAmt = (base === "supply") ? Math.round(L / 1.1)
+    const baseAmt = (base === "supply") ? supplyUnitOf(L)
                   : (base === "total")  ? totalAll : L;
 
     if(from === "price"){
@@ -27199,7 +27468,7 @@ window.showDepositUses = async function(id){
   };
   window.setResvPasteCarrier = function(c){
     resvCarrier = c;
-    ["LG","SK","KT"].forEach(x=>{
+    STD.telecom.list.forEach(x=>{
       const b = document.getElementById("rp-car-"+x);
       if(b) b.className = "btn small" + (x===c ? "" : " secondary");
     });
@@ -27340,7 +27609,7 @@ window.showDepositUses = async function(id){
             return { ...d, salePrice: L - amtT, saleDiscountAmt: amtT,
                      saleDiscountPct: Number(pctT.toFixed(2)), saleDiscountBase: "total" };
           }
-          const baseAmt = (sBase === "supply") ? Math.round(L / 1.1) : L;
+          const baseAmt = baseAmtRound(L, sBase);
           let amt = null, pct = null, price = null;
           if(sPrice != null){
             price = sPrice; amt = L - sPrice;
@@ -27540,7 +27809,7 @@ window.showDepositUses = async function(id){
         resvPendingRows = resvPendingRows.map(function(d){
           const L = Number(d.listPrice)||0;
           if(!(L > 0)) return d;
-          const amtBase = (tBase === "supply") ? Math.round(L / 1.1) : L;
+          const amtBase = baseAmtRound(L, tBase);
           const pre = (tPreP != null) ? Math.round(amtBase * tPreP / 100) : (tPreA || 0);
           const oth = (tOthP != null) ? Math.round(amtBase * tOthP / 100) : (tOthA || 0);
           const buy = L - pre - oth;
@@ -27580,7 +27849,7 @@ window.showDepositUses = async function(id){
               return { ...d, salePrice: L - amtT, saleDiscountAmt: amtT,
                        saleDiscountPct: Number(pctT.toFixed(2)), saleDiscountBase: "total" };
             }
-            const baseAmt = (sBase === "supply") ? Math.round(L / 1.1) : L;
+            const baseAmt = baseAmtRound(L, sBase);
             let amt = null, pct = null, price = null;
             if(sPrice != null){
               price = sPrice;
@@ -28506,7 +28775,7 @@ window.showDepositUses = async function(id){
         + '<option value="b2b_credit"'+(b.paymentMethod==="b2b_credit"?' selected':'')+'>삼성여신 사용 (여신에서 자동 차감)</option>'
         + '</select></div>';
       // 잔여 여신 — 새 주문 창과 같게 보여드립니다.
-      h += '<div class="stack-row" id="be-b2b-hint-row" style="display:none;"><label>잔여 여신</label>'
+      h += '<div class="stack-row" id="be-b2b-hint-row" style="display:none;"><label>쓸 수 있는 여신</label>'
         + '<span id="be-b2b-hint" style="flex:1;padding:5px 8px;font-size:12.5px;"></span></div>';
     }else{
       h += '<div class="stack-row"><label>판매처</label><select id="be-party">'+opts(b.destination)+'</select></div>';
@@ -28930,7 +29199,7 @@ window.showDepositUses = async function(id){
     const sameOn = !!(cbS && cbS.checked) || tr.dataset.sameBuy === "1";
     const sb = sameOn ? buyBase
       : String((document.getElementById("be-bulk-salebase")||{}).value || "unit");
-    const div = (sb === "supply") ? Math.round(L / 1.1) : L;
+    const div = baseAmtRound(L, sb);
 
     if(sameOn){
       if(buyNow > 0){
@@ -29032,7 +29301,7 @@ window.showDepositUses = async function(id){
         const buy = bp ? (Number(bp.value)||0) : (Number(tr.dataset.purchasePrice)||0);
         if(buy > 0){
           set(".be-saleprice", buy);
-          const bDiv2 = (buyBase === "supply") ? Math.round(L / 1.1) : L;
+          const bDiv2 = baseAmtRound(L, buyBase);
           const amt2 = L - buy;
           set(".be-saleamt", amt2);
           set(".be-salepct", bDiv2 ? Number(((amt2 / bDiv2) * 100).toFixed(2)) : "");
@@ -29060,7 +29329,7 @@ window.showDepositUses = async function(id){
         if(same2 && buy2 > 0){
           const sp3 = tr.querySelector(".be-saleprice");
           if(sp3) sp3.value = buy2;
-          const div2 = (buyBase === "supply") ? Math.round(L / 1.1) : L;
+          const div2 = baseAmtRound(L, buyBase);
           const a3 = L - buy2;
           const sa3 = tr.querySelector(".be-saleamt");
           const sp4 = tr.querySelector(".be-salepct");
@@ -29078,7 +29347,7 @@ window.showDepositUses = async function(id){
         const L0 = Number((first.querySelector(".be-listprice")||{}).value) || 0;
         const p0 = (first.querySelector(".be-preamt")||{}).value || "-";
         const o0 = (first.querySelector(".be-otheramt")||{}).value || "-";
-        const baseLab = buyBase === "supply" ? "공급가(삼전)" : (buyBase === "total" ? "출고가(합계)" : (buyBase === "flat" ? "출고가(정액)" : "출고가(개당)"));
+        const baseLab = discBaseLabel(buyBase);
         detail = "\n\n[첫 줄 기준]\n"
           + "  매입할인 기준  " + baseLab + "\n"
           + "  넣으신 값  선할인" + (prePct !== "" ? "% " + prePct : " " + (preAmt||"-"))
@@ -29086,7 +29355,7 @@ window.showDepositUses = async function(id){
           + "  나온 값    선할인 " + Number(p0||0).toLocaleString()
           + " · 타할인 " + Number(o0||0).toLocaleString() + "\n"
           + "  출고가 " + L0.toLocaleString()
-          + (buyBase === "supply" ? " · 공급가 " + Math.round(L0/1.1).toLocaleString() : "");
+          + (buyBase === "supply" ? " · 공급가 " + supplyUnitOf(L0).toLocaleString() : "");
       }
       alert(n + "줄에 적용했습니다." + detail
         + "\n\n<수정 저장> 을 눌러야 재고·판매요청·여신까지 반영됩니다.");
@@ -29268,7 +29537,7 @@ window.showDepositUses = async function(id){
                 const cS = (companiesCache||[]).find(function(x){
                   return String(x.name||"").trim() === String(dsv||"").trim(); });
                 const sb = String((cS && cS.saleDiscountBase) || "");
-                if(sb === "supply" || sb === "total" || sb === "unit") p.saleDiscountBase = sb;
+                if(isPickDiscBase(sb)) p.saleDiscountBase = sb;
               }catch(e){}
             }
           }
@@ -29365,7 +29634,7 @@ window.showDepositUses = async function(id){
           let bal = null;
           try{ bal = await withTimeout(getB2BBalance(), 12000, "여신 잔액"); }catch(e){}
           if(bal !== null && amt > bal && !confirm(
-            "잔여 여신이 부족합니다.\n\n  필요 " + amt.toLocaleString() + "\n  잔여 " + bal.toLocaleString()
+            "쓸 수 있는 여신이 부족합니다.\n\n  필요 " + amt.toLocaleString() + "\n  쓸 수 있는 여신 " + bal.toLocaleString()
             + "\n  부족 " + (amt - bal).toLocaleString() + "\n\n그래도 여신 사용으로 바꾸시겠습니까?")) return;
           if(!confirm("여신 사용으로 바꿉니다.\n\n· 여신에서 " + amt.toLocaleString() + " 이 차감됩니다.\n· 출금요청 대상에서 빠지고 결제완료로 처리됩니다.\n\n진행하시겠습니까?")) return;
           await withTimeout(replaceB2BOrderUse(id, amt, d1 || todayStr(), party), 20000, "여신 차감");
@@ -29774,7 +30043,7 @@ window.showDepositUses = async function(id){
       const bsv2 = String((document.getElementById("be-base")||{}).value || "");
       if(bsv2){
         baseMsg = "  매입할인 기준 "
-          + (bsv2==="supply" ? "공급가(삼전)" : bsv2==="total" ? "출고가(합계)" : "출고가(개당)")
+          + discBaseLabel(bsv2)
           + " · 품목 " + Object.keys(perLine).length + "줄"
           + " · 재고 " + (fixItems ? itemTargets.length + "대 반영" : "안 바꿈");
       }
@@ -29785,7 +30054,7 @@ window.showDepositUses = async function(id){
       const bsv3 = String((document.getElementById("be-base")||{}).value || "");
       if(bsv3 && kind === "order"){
         alert("매입할인 기준을 저장했습니다.\n\n"
-          + "  기준  " + (bsv3==="supply"?"공급가(삼전)":bsv3==="total"?"출고가(합계)":"출고가(개당)") + "\n"
+          + "  기준  " + discBaseLabel(bsv3) + "\n"
           + "  주문 품목  " + Object.keys(perLine).length + "줄\n"
           + "  재고  " + (fixItems ? itemTargets.length + "대에 반영" : "0대 (못 찾음)") + "\n\n"
           + (fixItems && itemTargets.length
@@ -30152,7 +30421,7 @@ window.showDepositUses = async function(id){
       let carrier = "", carrierIdx = -1;
       cells.forEach((c, idx)=>{
         const n = normCarrier(c);
-        if(["LG","SK","KT"].includes(n)){ carrier = n; carrierIdx = idx; }
+        if(STD.telecom.list.includes(n)){ carrier = n; carrierIdx = idx; }
       });
 
       // 수량: 통신사 뒤의 숫자 우선, 없으면 마지막 숫자
@@ -31761,7 +32030,8 @@ window.showDepositUses = async function(id){
   window.dsSettleRun = async function(direction){
     const body = document.getElementById("suplog-body");
     const picked = Array.from(body.querySelectorAll(".ds-ck:checked"))
-      .map(function(c){ return dsSettleRows[Number(c.value)]; }).filter(Boolean);
+      //  «화면에 보이는» 목록에서 찾습니다. 거른 뒤에도 번호가 맞습니다.
+      .map(function(c){ return (dsShownRows||[])[Number(c.value)]; }).filter(Boolean);
     if(picked.length === 0){ alert("정산할 건을 체크해주세요."); return; }
     if(!hasPerm(currentUserPerms, "paymentProcess")){ alert("권한이 없습니다."); return; }
     const isIn = (direction === "in");
@@ -31882,7 +32152,6 @@ window.showDepositUses = async function(id){
       rows.sort(function(a,b){ return String(b.date||"").localeCompare(String(a.date||"")); });
     }catch(e){}
     const f = function(n){ return (Number(n)||0).toLocaleString(); };
-    const mName = { credit:"여신", cash:"현금(통장)" };
     const tIn  = rows.filter(function(r){ return r.direction === "in"; })
                      .reduce(function(n,r){ return n + (Number(r.amount)||0); }, 0);
     const tOut = rows.filter(function(r){ return r.direction === "out"; })
@@ -31908,7 +32177,7 @@ window.showDepositUses = async function(id){
               + '<td class="ta-right">' + f(r.amount) + '</td>'
               + '<td><button class="btn small secondary" style="width:auto;font-size:11px;" data-ds-m="'
                 + comboEsc(r.id) + '" title="여신 ↔ 현금을 바꿉니다. 돈 쪽도 함께 옮겨집니다.">'
-                + comboEsc(mName[r.method]||r.method||"-") + '</button></td>' 
+                + comboEsc(settleLabel(r.method)) + '</button></td>' 
               + '<td>' + comboEsc(r.month||"-") + '</td>'
               //  세금계산서 — 발행일·번호를 적어두면 여기서 바로 보입니다.
               + '<td>' + (r.taxDate
@@ -32062,7 +32331,7 @@ window.showDepositUses = async function(id){
     if(!confirm("정산 방법을 바꿉니다.\n\n"
       + "  거래처   " + (v.partner||"-") + "\n"
       + "  금액     " + (Number(v.amount)||0).toLocaleString() + "\n"
-      + "  방법     " + (cur === "credit" ? "여신" : "현금") + "  →  " + (next === "credit" ? "여신" : "현금") + "\n\n"
+      + "  방법     " + settleLabel(cur) + "  →  " + settleLabel(next) + "\n\n"
       + (cur === "credit" ? "  여신 충전이 지워지고 입금요청이 만들어집니다.\n" : "")
       + (cur === "cash" ? "  입금요청이 취소되고 여신에 충전됩니다.\n" : "")
       + "\n진행할까요?")) return;
@@ -32126,7 +32395,7 @@ window.showDepositUses = async function(id){
       return;
     }
     logAction("더블스토리지 정산 방법 바꿈",
-      (v.partner||"-") + " / " + (cur === "credit" ? "여신" : "현금") + " → " + (next === "credit" ? "여신" : "현금"));
+      (v.partner||"-") + " / " + settleLabel(cur) + " → " + settleLabel(next));
     clearCache("inventory"); clearCache("b2b"); clearDashCache();
     alert("바꿨습니다.");
     dsSettleList();
@@ -32147,7 +32416,16 @@ window.showDepositUses = async function(id){
       + (v.ledgerId ? "  여신 충전도 함께 풀립니다.\n" : "")
       + (v.bankId ? "  통장 내역도 함께 지워집니다.\n" : "")
       + (v.depositRequestId ? "  입금요청도 함께 취소됩니다.\n" : "")
-      + "  재고의 정산일도 지워집니다.\n\n진행할까요?")) return;
+      + "  재고의 정산일도 지워집니다.\n"
+      //  계산서를 이미 발행한 정산입니다. 기록이 사라지므로 먼저 알려드립니다.
+      //   (취소를 막지는 않습니다. 발행한 계산서는 세무상 따로 처리가 필요합니다.)
+      + (v.taxDate
+          ? "\n  ⚠ 세금계산서가 이미 발행되어 있습니다.\n"
+            + "     발행일 " + v.taxDate + (v.taxNo ? " · " + v.taxNo : "") + "\n"
+            + "     이 기록도 함께 사라집니다. 계산서 자체는\n"
+            + "     세무상 따로 수정·취소해야 합니다.\n"
+          : "")
+      + "\n진행할까요?")) return;
     try{
       if(v.ledgerId){ try{ await deleteDoc(doc(db,"b2bLedger", v.ledgerId)); }catch(e){} }
       if(v.bankId){   try{ await deleteDoc(doc(db,"bankDeposits", v.bankId)); }catch(e){} }
@@ -32180,6 +32458,12 @@ window.showDepositUses = async function(id){
   //   자체개통(포피플)은 줄 곳이 없어 포피플 몫으로 모입니다.
   let dsSettleRows = [];
   let dsFilterIn = "", dsFilterOut = "";    // 받을 곳 · 줄 곳 거르기
+  //  «지금 화면에 보이는» 목록입니다. 체크박스 번호는 이것을 가리킵니다.
+  //   전에는 거르기 전 전체 목록에서 찾아, 거른 뒤 체크하면
+  //   엉뚱한 재고가 정산되거나 날짜가 들어갔습니다.
+  let dsShownRows = [];
+  //  정산 묶음별 «세금계산서» 상태입니다. 건별 목록에 보여주려고 담아둡니다.
+  let dsTaxById = {};
 
   window.setDsFilter = function(which, v){
     if(which === "in") dsFilterIn = v || "";
@@ -32191,6 +32475,9 @@ window.showDepositUses = async function(id){
     const head = document.getElementById("suplog-head");
     const body = document.getElementById("suplog-body");
     if(!head || !body){ alert("화면을 찾지 못했습니다."); return; }
+    //  더블스토리지 창을 닫고 정산 창을 엽니다.
+    //   전에는 두 창이 겹쳐 정산 창이 뒤에 깔려, 앞 창을 닫아야 보였습니다.
+    { const ov0 = document.getElementById("ds-overlay"); if(ov0) ov0.style.display = "none"; }
     setSupLogTitle("더블스토리지 정산");
     head.innerHTML = '<b>불러오는 중...</b>';
     body.innerHTML = "";
@@ -32211,6 +32498,17 @@ window.showDepositUses = async function(id){
       });
     }catch(e){}
     dsSettleRows = rows;
+    //  정산 묶음의 «세금계산서» 상태를 함께 읽어 둡니다.
+    //   건별 목록의 「계산서」 칸이 이것을 보고 발행·미발행을 보여줍니다.
+    dsTaxById = {};
+    try{
+      (await getDocs(collection(db,"dsSettlements"))).forEach(function(d){
+        const v = d.data() || {};
+        //  발행일이 있으면 발행된 것입니다. 없으면 빈 글자 그대로 둡니다.
+        //   (빈칸 = 아직 발행 안 함. 임의로 채우지 않습니다.)
+        dsTaxById[d.id] = v.taxDate ? String(v.taxDate) : "";
+      });
+    }catch(e){}
     renderDsSettle();
   };
 
@@ -32224,6 +32522,8 @@ window.showDepositUses = async function(id){
       if(dsFilterOut && (r.dest || "")  !== dsFilterOut) return false;
       return true;
     });
+    //  화면에 그린 목록을 그대로 담아둡니다. 체크박스가 이것을 가리킵니다.
+    dsShownRows = rows;
     const f = function(n){ return (Number(n)||0).toLocaleString(); };
     if(dsAll.length === 0){
       head.innerHTML = '<b>더블스토리지 정산</b>';
@@ -32369,7 +32669,7 @@ window.showDepositUses = async function(id){
       + '<table class="data-table" style="width:auto;"><thead><tr>'
       + '<th style="width:30px;"><input type="checkbox" id="ds-all"></th>'
       + '<th>일련번호</th><th>전산모델명</th><th>받을곳</th><th>받은날</th>'
-      + '<th>줄곳</th><th>준날</th><th class="ta-right">금액</th><th>귀속월</th>'
+      + '<th>줄곳</th><th>준날</th><th class="ta-right">금액</th><th>계산서</th>'
       + '</tr></thead><tbody>'
       + rows.map(function(r, ix){
           //  이미 정산된 건은 «두 번 들어가지 않게» 체크를 막습니다.
@@ -32387,7 +32687,18 @@ window.showDepositUses = async function(id){
             + '<td>' + (r.dest === "포피플" ? '<span style="color:var(--gray);">해당없음</span>'
                 : (r.pay ? comboEsc(r.pay) : '<span style="color:var(--danger);">미지급</span>')) + '</td>'
             + '<td class="ta-right">' + f(r.amt) + '</td>'
-            + '<td>' + comboEsc(r.month||"-") + '</td></tr>';
+            + '<td>' + (function(){
+                //  그 건이 묶인 정산의 세금계산서 상태입니다.
+                if(!r.recvId && !r.payId) return '<span style="color:var(--gray);">정산 전</span>';
+                const t1 = r.recvId ? (dsTaxById[r.recvId] || "") : "";
+                const t2 = r.payId  ? (dsTaxById[r.payId]  || "") : "";
+                const need = [];
+                if(r.recvId && !t1) need.push("받은 것");
+                if(r.payId  && !t2) need.push("준 것");
+                if(need.length) return '<span style="color:var(--danger);font-weight:700;">미발행</span>'
+                  + '<span style="color:var(--gray);font-size:10.5px;"> ' + need.join("·") + '</span>';
+                return '<span style="color:#2e7d32;">' + comboEsc([t1,t2].filter(Boolean).join(" / ")) + '</span>';
+              })() + '</td></tr>';
         }).join("")
       + '</tbody></table></div>';
     const all = document.getElementById("ds-all");
@@ -32399,7 +32710,8 @@ window.showDepositUses = async function(id){
   window.dsSetDate = async function(which){
     const body = document.getElementById("suplog-body");
     const picked = Array.from(body.querySelectorAll(".ds-ck:checked"))
-      .map(function(c){ return dsSettleRows[Number(c.value)]; }).filter(Boolean);
+      //  «화면에 보이는» 목록에서 찾습니다. 거른 뒤에도 번호가 맞습니다.
+      .map(function(c){ return (dsShownRows||[])[Number(c.value)]; }).filter(Boolean);
     if(picked.length === 0){ alert("넣을 건을 체크해주세요."); return; }
     if(!hasPerm(currentUserPerms, "paymentProcess")){ alert("권한이 없습니다."); return; }
     const label = (which === "recv") ? "받은날" : "준날";
@@ -33028,7 +33340,7 @@ window.showDepositUses = async function(id){
         + '<td>'+comboEsc(it.destination||"-")+'</td>'
         + '<td class="ta-right">'+c.L.toLocaleString()+'</td>'
         + '<td class="ta-right">'+c.soldPrice.toLocaleString()+'</td>'
-        + '<td>'+(c.base === "supply" ? "공급가(삼전)" : "출고가(개당)")+'</td>'
+        + '<td>'+discBaseLabel(c.base)+'</td>'
         + '<td class="ta-right">'+Math.round(c.pre).toLocaleString()+'</td>'
         + '<td class="ta-right">'+(c.pct == null ? "-" : c.pct + "%")+'</td>'
         + '<td class="ta-right">'
@@ -35460,7 +35772,7 @@ window.showDepositUses = async function(id){
     // 판매된 것이 섞였는지 알려드립니다.
     const sold = [];
     crossSnCache.forEach(g=> g.list.forEach(x=>{
-      if(ids.includes(x.id) && (x.it.status === "판매" || x.it.status === "개통")) sold.push(x);
+      if(ids.includes(x.id) && isItemOut(x.it.status)) sold.push(x);
     }));
     if(!confirm("재고 " + ids.length + "건을 삭제함으로 표시합니다.\n\n"
       + (sold.length ? "※ 그중 " + sold.length + "건은 이미 판매·개통된 재고입니다. 꼭 확인해주세요.\n\n" : "")
@@ -35674,7 +35986,7 @@ window.showDepositUses = async function(id){
   window.showBaseFillList = function(){
     const el = document.getElementById("datacheck-detail");
     if(!el || baseFillCache.length === 0){ if(el) el.innerHTML = '<div class="list-empty">채울 것이 없습니다.</div>'; return; }
-    const lab = v => (v === "supply") ? "공급가(삼전)" : (v === "unit") ? "출고가(개당)" : "-";
+    const lab = v => (discBaseLabel(v) || "-");
     // 기준을 골라주셔야 채울 수 있는 건 (%가 저장돼 있지 않아 역산이 안 되는 것)
     const askN = baseFillCache.filter(r=> r.saleAsk || r.buyAsk).length;
     let h = '<div style="border:1px solid var(--navy);padding:10px 12px;margin-top:10px;">'
@@ -35734,7 +36046,7 @@ window.showDepositUses = async function(id){
   // 확인하시라고 엑셀로 내려드립니다. (자료는 바꾸지 않습니다)
   window.downloadBaseFillExcel = function(){
     if(baseFillCache.length === 0){ alert("받을 것이 없습니다."); return; }
-    const lab = v => (v === "supply") ? "공급가(삼전)" : (v === "unit") ? "출고가(개당)" : "";
+    const lab = v => discBaseLabel(v);
     const head = ["일련번호","전산모델명","색상","입고처","판매처","상태","입고일","판매일",
                   "출고가","선할인","선할인%","타할인","타할인%","입고가","역산 매입 기준",
                   "판매가","판매할인","판매할인%","역산 판매 기준"];
@@ -35760,9 +36072,9 @@ window.showDepositUses = async function(id){
   window.fillBaseAsk = async function(want){
     const rows = baseFillCache.filter(r=> r.saleAsk || r.buyAsk);
     if(rows.length === 0){ alert("골라서 채울 건이 없습니다."); return; }
-    const lab = (want === "supply") ? "공급가(삼전)" : "출고가(개당)";
+    const lab = discBaseLabel(want);
     const calcPct = (L, amt)=>{
-      const B = (want === "supply") ? (L/1.1) : L;
+      const B = baseAmtRaw(L, want);
       const v0 = pctOnBase(amt, L, want);
       return (v0 === "" || v0 == null) ? null : Number(v0);
     };
@@ -35841,7 +36153,7 @@ window.showDepositUses = async function(id){
           if(r.buyWant)  patch.discountBase = r.buyWant;
           if(r.saleWant) patch.saleDiscountBase = r.saleWant;
           bt.update(doc(db,"inventoryItems", r.id), keepMoney(patch));
-          const lab = v => (v === "supply") ? "공급가(삼전)" : "출고가(개당)";
+          const lab = v => discBaseLabel(v);
           ihRows.push({ id:r.id, serialNumber:r.it.serialNumber||"", systemModel:r.it.systemModel||"",
             detail: "할인 기준을 실제 금액에서 찾아 채움"
               + (r.buyWant  ? " · 매입 " + lab(r.buyWant) : "")
@@ -36926,7 +37238,7 @@ window.showDepositUses = async function(id){
       // 남길 것을 골라 둡니다 — 판매·개통 > 주문 연결 > 정보 많음 > 먼저 들어온 것
       const score = it => {
         let sc = 0;
-        if(it.status === "판매" || it.status === "개통") sc += 1000;
+        if(isItemOut(it.status)) sc += 1000;
         if(it.orderId || it.fromOrderId) sc += 500;
         if(Number(it.listPrice)||0) sc += 50;
         if(Number(it.purchasePrice)||0) sc += 50;
@@ -36951,7 +37263,7 @@ window.showDepositUses = async function(id){
           + '<td>' + comboEsc(it.source||"-") + '</td>'
           + '<td>' + comboEsc(it.inDate||"-") + '</td>'
           + '<td>' + comboEsc(it.outDate||"-") + '</td>'
-          + '<td' + (it.status === "판매" || it.status === "개통" ? ' style="color:var(--danger);font-weight:700;"' : '') + '>'
+          + '<td' + (isItemOut(it.status) ? ' style="color:var(--danger);font-weight:700;"' : '') + '>'
             + comboEsc(it.status||"-") + '</td>'
           + '<td>' + comboEsc(it.destination||"-") + '</td>'
           + '<td>' + comboEsc(it.location||"-") + '</td>'
@@ -36977,7 +37289,7 @@ window.showDepositUses = async function(id){
     // 무엇을 지우는지 먼저 보여드립니다.
     const rows = [];
     Object.keys(dupSerialCache).forEach(sn=> dupSerialCache[sn].forEach(it=>{ if(ids.indexOf(it.id) >= 0) rows.push(it); }));
-    const sold = rows.filter(it=> it.status === "판매" || it.status === "개통");
+    const sold = rows.filter(it=> isItemOut(it.status));
     if(!confirm("재고 " + ids.length + "건을 지웁니다.\n\n"
       + rows.slice(0,10).map(it=> "  " + (it.serialNumber||"-") + "  " + docModelLabel(it) + "  " + (it.status||"-")).join("\n")
       + (rows.length > 10 ? "\n  ... 외 " + (rows.length-10) + "건" : "")
@@ -38452,7 +38764,7 @@ let ghostBankCache = [];
   window.showOrderBaseDiffList = function(){
     const rows = orderBaseDiffCache || [];
     if(rows.length === 0){ alert("어긋난 주문이 없습니다."); return; }
-    const lab = b => b === "supply" ? "공급가(삼전)" : (b === "total" ? "출고가(합계)" : (b === "flat" ? "출고가(정액)" : "출고가(개당)"));
+    const lab = b => discBaseLabel(b);
     alert("주문의 할인 금액이 기준과 다른 건 " + rows.length + "개\n\n"
       + rows.slice(0,15).map(function(r){
           return "  " + r.date + "  " + r.src + "  " + r.model + " " + r.color
@@ -38783,7 +39095,7 @@ let ghostBankCache = [];
           rows.push({ id, it, L,
             curPre, wantPre, curOther, wantOther,
             curBuy: Number(it.purchasePrice)||0, wantBuy,
-            base: (c.discountBase === "supply") ? "공급가(삼전)" : "출고가(개당)",
+            base: discBaseLabel(c.discountBase),
             paid: paid,
             source: String(it.source||"-") });
         });
@@ -38807,7 +39119,7 @@ let ghostBankCache = [];
               if(!L) return;
               const base = String(o.discountBase || (bt && bt.discountBase) || "");
               if(base !== "supply" && base !== "unit" && base !== "total") return;
-              const B = (base === "supply") ? Math.round(L / 1.1) : L;
+              const B = baseAmtRound(L, base);
               //  「출고가(정액)」 은 금액을 직접 넣으신 것이라 % 로 견주지 않습니다.
               if(String(o.discountBase||"") === "flat") return;
               //  「출고가(정액)」 은 금액을 직접 넣으신 것이라 %로 견주지 않습니다.
@@ -39178,7 +39490,7 @@ let ghostBankCache = [];
               const it = items[id];
               if(it.deleted === true) return;
               const st = String(it.status||"");
-              if(st !== "판매" && st !== "개통") return;          // 나간 재고만 봅니다
+              if(!isItemOut(st)) return;          // 나간 재고만 봅니다
               if(it.salePrice != null && it.salePrice !== "") return;
               //  채울 수 있는 값을 찾습니다. 없으면 직접 넣으셔야 합니다.
               let want = null, how = "";
@@ -41341,7 +41653,7 @@ let ghostBankCache = [];
         // 삼성전자는 공급가(VAT 뺀 금액)에 할인율을 곱합니다. 같은 칸에 함께 보여드립니다.
       card("할인%", (discPctAll==null ? "" : discPctAll.toFixed(2)+"%"), null,
            "(출고가−판매가) ÷ 출고가<br><span style=\"color:#2e7d32;font-weight:700;\">삼성전자기준 "
-           + (cmpListAmt ? (((cmpListAmt - cmpSaleAmt) / 1.1) / Math.round(cmpListAmt / 1.1) * 100).toFixed(2) + "%" : "-") + "</span>", "discpct") +
+           + (cmpListAmt ? (((cmpListAmt - cmpSaleAmt) / STD.vatRate) / supplyUnitOf(cmpListAmt) * 100).toFixed(2) + "%" : "-") + "</span>", "discpct") +
         card("예상 차액", (cmpSaleAmt - cmpListAmt).toLocaleString(), (cmpSaleAmt-cmpListAmt)>=0 ? "#2e7d32" : "var(--danger)", "판매가 − 출고가", "diff");
       applyCustomTabLabels();
     }
@@ -41467,7 +41779,7 @@ let ghostBankCache = [];
       //  삼성 기준 — 깎인 금액도 «부가세를 빼고» 공급가로 나눕니다.
       //   전에는 금액은 그대로 두고 분모만 1.1 로 나눠 값이 부풀었습니다.
       const calc = c => (c.listAmt && c.saleAmt > 0)
-        ? (((c.listAmt - c.saleAmt) / 1.1) / Math.round(c.listAmt / 1.1) * 100) : null;
+        ? (((c.listAmt - c.saleAmt) / STD.vatRate) / supplyUnitOf(c.listAmt) * 100) : null;
       let h = '<tr style="background:#fff;"><td style="font-weight:700;color:#2e7d32;">삼성전자기준 할인% '
         + '<span style="color:var(--gray);font-weight:400;font-size:11px;">(출고가−판매가) ÷ 공급가</span></td>';
       const gv = calc({ listAmt:grandListAmt, saleAmt:grandSaleAmt });
@@ -41517,7 +41829,7 @@ let ghostBankCache = [];
             + '<td class="ta-right" style="color:#1565c0;">' + (c.saleAmt ? c.saleAmt.toLocaleString() : '-')
               + (c.noPrice>0 ? ' <span style="color:var(--danger);" title="판매가 미입력 '+c.noPrice+'건 제외">!</span>' : '') + '</td>'
             + '<td class="ta-right">' + (pct==null ? '-' : pct.toFixed(2)+'%') + '</td>'
-          + '<td class="ta-right" style="color:#2e7d32;">' + (pct==null ? '-' : (pct*1.1).toFixed(2)+'%') + '</td>' 
+          + '<td class="ta-right" style="color:#2e7d32;">' + (pct==null ? '-' : (pct*STD.vatRate).toFixed(2)+'%') + '</td>' 
             + '<td class="ta-right" style="color:' + (diff>=0 ? '#2e7d32' : 'var(--danger)') + ';">'
               + (diff ? diff.toLocaleString() : '-') + '</td></tr>';
         });
@@ -41532,7 +41844,7 @@ let ghostBankCache = [];
           + '<td class="ta-right">' + (tL ? tL.toLocaleString() : '-') + '</td>'
           + '<td class="ta-right" style="color:#1565c0;">' + (tS ? tS.toLocaleString() : '-') + '</td>'
           + '<td class="ta-right">' + (tPct==null ? '-' : tPct.toFixed(2)+'%') + '</td>'
-        + '<td class="ta-right" style="color:#2e7d32;">' + (tPct==null ? '-' : (tPct*1.1).toFixed(2)+'%') + '</td>' 
+        + '<td class="ta-right" style="color:#2e7d32;">' + (tPct==null ? '-' : (tPct*STD.vatRate).toFixed(2)+'%') + '</td>' 
           + '<td class="ta-right" style="color:' + (tDiff>=0 ? '#2e7d32' : 'var(--danger)') + ';">'
             + (tDiff ? tDiff.toLocaleString() : '-') + '</td></tr>';
         dh += '</tbody></table></div>';
@@ -42664,7 +42976,7 @@ let ghostBankCache = [];
     const rows = keys.map(function(k){
       const g = grp[k];
       const r = (rate != null) ? rate : 0;
-      const su = Math.round(g.L / 1.1);
+      const su = supplyUnitOf(g.L);
       const en = Math.round(su * r / 100);
       const unit = su - en;
       const sup = unit * g.q;
@@ -42677,7 +42989,7 @@ let ghostBankCache = [];
       const L = Number(l.listPrice)||0, q = Number(l.quantity)||0;
       if(!L || !q) return;
       const r = (rate != null) ? rate : 0;
-      const su = Math.round(L / 1.1), en = Math.round(su * r / 100), unit = su - en;
+      const su = supplyUnitOf(L), en = Math.round(su * r / 100), unit = su - en;
       const sup = unit * q;
       splitTot += sup + Math.round(sup * 0.1);
     });
@@ -43466,27 +43778,32 @@ let ghostBankCache = [];
     let collateralCash = 0;   // 현금담보 (예치 − 반환) — 삼성에 맡겨 둔, 지금은 못 쓰는 돈
     entries.forEach(e=>{
       const amt = Number(e.amount)||0;
-      if(e.category==="deposit" || e.category==="loan_deposit" || e.category==="interest_received"
-         || e.category==="return_credit") depositTotal += amt;
-      else if(e.category==="order_use") orderUseTotal += amt;
-      else if(e.category==="b2b_fee_payment" || e.category==="b2b_fee_mp" || e.category==="b2b_interest") loanCostTotal += amt;
-      else if(e.category==="club_incentive"){
+      //  클럽장려금은 분기별로 따로 보여드려야 해서 먼저 갈라냅니다.
+      if(e.category==="club_incentive"){
         clubIncentiveTotal += amt;
         // 받은 날짜로 분기를 냅니다. 보통 분기 끝나고 3개월 뒤에 들어옵니다.
         const dt = String(e.date||"").replace(/\D/g,"");
         const key = (dt.length === 8) ? (dt.slice(0,4)+dt.slice(4,6)) : "-";
         clubRecvByDate[key] = (clubRecvByDate[key]||0) + amt;
       }
+      //  구분 목록은 B2B_PLUS · B2B_USE 한 곳만 봅니다. 여기에 다시 적지 않습니다.
+      //   (더블스토리지·반품복구도 그 목록에 있어 함께 들어옵니다.)
+      else if(b2bIsPlus(e.category)) depositTotal += amt;
+      else if(b2bIsUse(e.category)) orderUseTotal += amt;
+      else if(STD.b2bCat.cost.indexOf(e.category) >= 0) loanCostTotal += amt;
       else if(e.category==="adjust") adjustTotal += amt;     // 조정은 부호 있는 금액입니다 (＋/−)
       else if(e.category==="collateral_cash"){ depositTotal += amt; collateralCash += amt; }      // 삼성에 넣은 돈이라 잔액에는 들어갑니다
       else if(e.category==="collateral_return"){ depositTotal -= amt; collateralCash -= amt; }    // 돌려받으면 둘 다 줄어듭니다
       else otherTotal += amt;
     });
+    // 잔액은 b2bCredit 한 곳에서만 셉니다. 위 합계는 «보여주기용 세부» 입니다.
+    //  (화면마다 따로 세면 같은 장부인데 숫자가 달라집니다.)
+    const creditSum = b2bCredit(entries);
     // 조정을 뺀 잔액도 같이 둡니다. 「원래 얼마였는지」를 알 수 있게 화면에 함께 보여줍니다.
-    const creditBeforeAdjust = depositTotal + clubIncentiveTotal - orderUseTotal;
-    const remainingCredit = creditBeforeAdjust + adjustTotal;
+    const creditBeforeAdjust = creditSum.plus - creditSum.use;
+    const remainingCredit = creditSum.remaining;
     // 현금담보는 거래가 끝나야 돌려받는 돈이라, 지금 주문에 쓸 수 없습니다.
-    const usableCredit = remainingCredit - collateralCash;
+    const usableCredit = creditSum.usable;
     // 담보 계산서로 아직 안 빌린 금액 (고른 거래처 기준)
     const colLeft = colRows.reduce((n,c)=>{
       const co = String(c.company||"").trim();
@@ -43504,7 +43821,7 @@ let ghostBankCache = [];
     try{
       const lc = await getDocs(collection(db,"b2bLoanCost"));
       lc.forEach(d=>{ const e = d.data();
-        if(e.category==="b2b_fee_payment" || e.category==="b2b_fee_mp" || e.category==="b2b_interest"){
+        if(STD.b2bCat.cost.indexOf(e.category) >= 0){
           if(!b2bPartnerPick || (String(e.partner||"").trim() || "(대상 미지정)") === b2bPartnerPick)
             loanCostAll += (Number(e.amount)||0);
         }
@@ -43525,9 +43842,9 @@ let ghostBankCache = [];
       const pn = String(e.partner||"").trim() || "(대상 미지정)";
       if(!byPartner[pn]) byPartner[pn] = { inAmt:0, useAmt:0 };
       const amt = Number(e.amount)||0;
-      if(e.category==="deposit" || e.category==="loan_deposit"
-         || e.category==="interest_received" || e.category==="club_incentive" || e.category==="return_credit") byPartner[pn].inAmt += amt;
-      else if(e.category==="order_use") byPartner[pn].useAmt += amt;
+      //  구분 목록은 B2B_PLUS · B2B_USE 한 곳만 봅니다. 여기에 다시 적지 않습니다.
+      if(b2bIsPlus(e.category)) byPartner[pn].inAmt += amt;
+      else if(b2bIsUse(e.category)) byPartner[pn].useAmt += amt;
       else if(e.category==="adjust") byPartner[pn].adjAmt = (byPartner[pn].adjAmt||0) + amt;
       else if(e.category==="collateral_cash"){ byPartner[pn].inAmt += amt; byPartner[pn].colAmt = (byPartner[pn].colAmt||0) + amt; }
       else if(e.category==="collateral_return"){ byPartner[pn].inAmt -= amt; byPartner[pn].colAmt = (byPartner[pn].colAmt||0) - amt; }
@@ -44191,7 +44508,7 @@ let ghostBankCache = [];
       const DEF = { "2022-2Q":"1.30", "2022-3Q":"1.56" };   // 확인된 분기
       wrap.innerHTML = '<div style="font-size:12.5px;line-height:1.8;">'
         + '<b>입고일이 속한 분기의 지급률</b>을 넣어주세요. 재고마다 그 분기 값으로 채웁니다.<br>'
-        + '<span style="color:var(--gray);">타할인 금액 = 공급가(출고가÷1.1) × 지급률. '
+        + '<span style="color:var(--gray);">타할인 금액 = 공급가(출고가÷' + STD.vatRate + ') × 지급률. '
         + '이미 타할인이 들어 있는 재고는 건드리지 않습니다.</span></div>'
         + '<table class="data-table" style="width:auto;margin-top:6px;"><thead><tr>'
         + '<th>입고 분기</th><th class="ta-right">대수</th><th>지급률 %</th></tr></thead><tbody>'
@@ -44332,9 +44649,9 @@ let ghostBankCache = [];
     const baseOf = (name)=>{
       // 재고에 저장된 기준이 먼저입니다. 없으면 업체정보 값을 씁니다.
       if(String(name||"").trim() === String(it.source||"").trim())
-        return (itemDiscountBase(it) === "supply") ? (L/1.1) : L;
+        return baseAmtRaw(L, itemDiscountBase(it));
       const c = (companiesCache||[]).find(x=> String(x.name||"").trim() === String(name||"").trim());
-      return (c && c.discountBase === "supply") ? (L/1.1) : L;
+      return baseAmtRaw(L, c && c.discountBase);
     };
     const buyBase  = baseOf(it.source);          // 입고처 기준 (선할인·타할인)
     //  「판매가 = 입고가」로 맞춰둔 재고는 매입 조건 그대로 넘기는 것이라
@@ -44344,20 +44661,18 @@ let ghostBankCache = [];
       if(!c) return L;
       // 「입고처와 동일」이면 그 단말기를 사온 곳의 기준을 따릅니다.
       if(c.saleDiscountBase === "follow") return buyBase;
-      return (c.saleDiscountBase === "supply") ? (L/1.1) : L;
+      return baseAmtRaw(L, c.saleDiscountBase);
     };
     // 재고에 저장해 둔 판매할인 기준이 있으면 그것을 먼저 씁니다.
     //  (업체정보 기준은 처음 들어오는 값일 뿐입니다)
     const savedSaleBase = String(it.saleDiscountBase || "");
     const saleBase = (it.salePriceFollowsBuy === true) ? buyBase
-      : ((savedSaleBase === "supply") ? (L/1.1)
-        : (savedSaleBase === "unit" || savedSaleBase === "total") ? L
+      : (isPickDiscBase(savedSaleBase) ? baseAmtRaw(L, savedSaleBase)
         : baseOfSale(it.destination));
     //  금액은 부가세 포함, % 는 기준(공급가/출고가)으로 냅니다.
-    const buyB  = String((it && it.discountBase) || "") || "unit";
+    const buyB  = String((it && it.discountBase) || "") || STD.discBase.fallback;
     const saleB = (it.salePriceFollowsBuy === true) ? buyB
-      : ((savedSaleBase === "supply" || savedSaleBase === "unit" || savedSaleBase === "total")
-          ? savedSaleBase : buyB);
+      : (isPickDiscBase(savedSaleBase) ? savedSaleBase : buyB);
     const pct = (amt) => L ? (function(){ const v = pctOnBase(amt, L, saleB);
       return (v === "" || v == null) ? null : Number(v); })() : null;
     const amt = (r)   => L ? (Number(amtOnBaseVat(num(r), L, saleB))||0) : null;
@@ -44623,7 +44938,7 @@ let ghostBankCache = [];
           + '</select>';
       }else if(f.type === "options"){
         // 값과 화면에 보일 이름이 다른 항목(할인 계산 기준 등)을 위해 이름표를 씁니다.
-        const OPT_LABEL = { unit:"출고가(개당)", total:"출고가(합계)", supply:"공급가(삼전)" };
+        const OPT_LABEL = STD.discBase.label;   // 기준표 한 곳만 봅니다
         input = '<select id="'+meId(f.key)+'"'
           + (f.link ? ' onchange="multiRecalc(\''+f.link+'\')"' : '')
           + ' style="flex:1;border:none;padding:5px 8px;font-size:12.5px;">'
@@ -44918,7 +45233,7 @@ let ghostBankCache = [];
         if((Number(it.otherDiscountAmt)||0) > 0){ skipHave++; return; }   // 이미 들어 있으면 건드리지 않습니다
         const r = rate[qOf(it)];
         if(!(r > 0)){ skipNoRate++; return; }
-        const amt = Math.round((L/1.1) * r / 100);      // 공급가 기준
+        const amt = Math.round(baseAmtRaw(L, "supply") * r / 100);      // 공급가 기준
         plan.push({ it, pct:r, amt, buy: L - (Number(it.purchaseDiscountAmt)||0) - amt });
       });
       if(plan.length === 0){
@@ -44934,7 +45249,7 @@ let ghostBankCache = [];
       if(!confirm("재고 " + plan.length + "대에 클럽장려금 타할인을 채웁니다.\n\n"
         + prev + (plan.length > 5 ? "\n  ... 외 " + (plan.length-5) + "대" : "")
         + "\n\n타할인 합계 " + plan.reduce((n,x)=> n+x.amt, 0).toLocaleString()
-        + "\n공급가(출고가÷1.1)에 지급률을 곱합니다. 입고가도 그만큼 내려갑니다.\n"
+        + "\n공급가(출고가÷" + STD.vatRate + ")에 지급률을 곱합니다. 입고가도 그만큼 내려갑니다.\n"
         + (skipHave ? "\n이미 타할인이 있는 " + skipHave + "대는 건너뜁니다." : "")
         + (skipNoRate ? "\n지급률을 안 넣은 " + skipNoRate + "대는 건너뜁니다." : "")
         + "\n\n진행할까요?")) return;
@@ -44975,8 +45290,7 @@ let ghostBankCache = [];
     // 할인 계산 기준 — 그 재고에 기준을 저장하고 금액까지 그 기준으로 다시 냅니다.
     if(fieldDef.type === "basefix"){
       const want = String(newVal||"");
-      const baseLabel = (want === "supply") ? "공급가(삼전)"
-                      : (want === "total")  ? "출고가(합계)" : "출고가(개당)";
+      const baseLabel = discBaseLabel(want);
       const list = ids.map(id=> (lastRenderedItems||[]).find(x=> x.id === id)).filter(Boolean);
       if(list.length === 0){ alert("고른 재고가 없습니다."); return; }
 
@@ -45003,7 +45317,7 @@ let ghostBankCache = [];
 
       const calc = (it)=>{
         const L = Number(it.listPrice)||0;
-        const B = (want === "supply") ? (L/1.1) : L;
+        const B = baseAmtRaw(L, want);
         const pp = Number(it.purchaseDiscount)||0, op = Number(it.otherDiscountPct)||0;
         const pre = L ? (Number(amtOnBaseVat(pp, L, want))||0) : (Number(it.purchaseDiscountAmt)||0);
         const other = L ? (Number(amtOnBaseVat(op, L, want))||0) : (Number(it.otherDiscountAmt)||0);
@@ -45186,7 +45500,7 @@ let ghostBankCache = [];
     // 삼성 반품 — 재고를 「반품」으로 두고 여신을 되돌려 받습니다.
     if(fieldDef.type === "return"){
       const picked = ids.map(id=> (lastRenderedItems||[]).find(x=> x.id === id)).filter(Boolean);
-      const sold = picked.filter(x=> x.status === "판매" || x.status === "개통" || x.saleRequestId);
+      const sold = picked.filter(x=> isItemOut(x.status) || x.saleRequestId);
       if(sold.length){
         alert("판매·개통된 재고가 " + sold.length + "대 있습니다.\n\n"
           + sold.slice(0,5).map(x=> "· " + (x.serialNumber||"-") + " " + (x.destination||"")).join("\n")
@@ -45552,7 +45866,7 @@ let ghostBankCache = [];
           }else if(key === "otherDiscountPct"){
             // 타할인(클럽장려금)은 공급가 기준입니다.
             p2.otherDiscountPct = parsedVal;
-            if(L) p2.otherDiscountAmt = Math.round((L/1.1) * parsedVal / 100);
+            if(L) p2.otherDiscountAmt = Math.round(baseAmtRaw(L, "supply") * parsedVal / 100);
           }else if(key === "otherDiscountAmt"){
             p2.otherDiscountAmt = parsedVal;
             if(L){ const v9 = pctOnBase(parsedVal, L, "supply");
@@ -47462,7 +47776,7 @@ let ghostBankCache = [];
 
     { key:"receivable",  group:"자금",   label:"받아야 할 돈",        note:"입금요청 남은금액" },
     { key:"payable",     group:"자금",   label:"줘야 할 돈",          note:"출금요청 남은금액" },
-    { key:"creditLeft",  group:"자금",   label:"여신 잔액",           note:"선입금 − 주문사용", signed:true },
+    { key:"creditLeft",  group:"자금",   label:"쓸 수 있는 여신",     note:"채운 돈 − 주문사용 ± 조정 − 현금담보", signed:true },
     { key:"stockAmt",    group:"자금",   label:"미판매 재고 금액",    note:"입고가 기준" },
     { key:"stockCnt",    group:"자금",   label:"미판매 재고 대수",    note:"판매일 없는 재고", unit:true }
   ];
@@ -48001,16 +48315,19 @@ let ghostBankCache = [];
         if(!it.outDate){ stockCnt += qty; if(it.purchasePrice) stockAmt += Number(it.purchasePrice)*qty; }
       });
       // 여신 장부에서 장려금·대출비용을 가져옵니다.
-      let clubGot=0, loanCost=0, depIn=0, orderUse=0;
+      let clubGot=0, loanCost=0, creditUsable=0;
       try{
         const ls = await getDocs(collection(db,"b2bLedger"));
+        const lsList = [];
         ls.forEach(x=>{
           const e=x.data(), a=Number(e.amount)||0;
+          lsList.push(e);
           if(e.category==="club_incentive") clubGot += a;
-          else if(e.category==="b2b_fee_payment"||e.category==="b2b_fee_mp"||e.category==="b2b_interest") loanCost += a;
-          else if(e.category==="deposit"||e.category==="loan_deposit"||e.category==="interest_received") depIn += a;
-          else if(e.category==="order_use") orderUse += a;
+          else if(STD.b2bCat.cost.indexOf(e.category) >= 0) loanCost += a;
         });
+        //  여신 잔액은 b2bCredit 한 곳에서만 셉니다.
+        //   (전에는 여기서 따로 세어, 여신 관리 화면과 숫자가 달랐습니다.)
+        creditUsable = b2bCredit(lsList).usable;
       }catch(e){}
       // 요청 남은금액 (받아야 할 돈·줘야 할 돈)
       let receivable=0, payable=0;
@@ -48034,7 +48351,7 @@ let ghostBankCache = [];
         preRate:   listAmt ? preDiscountSum/listAmt*100 : 0,
         otherRate: listAmt ? otherDiscountSum/listAmt*100 : 0,
         totalRate: listAmt ? (preDiscountSum+otherDiscountSum)/listAmt*100 : 0,
-        receivable, payable, creditLeft: depIn - orderUse,
+        receivable, payable, creditLeft: creditUsable,
         stockAmt, stockCnt
       });
     }
@@ -49397,7 +49714,7 @@ let ghostBankCache = [];
   };
 
   // ---------- 엑셀 일괄 업로드 ----------
-  const CARRIER_ALIASES = { "LG":"LG","LG유플러스":"LG","U+":"LG","엘지":"LG","SK":"SK","SKT":"SK","SK텔레콤":"SK","KT":"KT" };
+  const CARRIER_ALIASES = STD.telecom.alias;   // 기준표 한 곳만 봅니다
   const TEMPLATE_HEADERS = ["입고처","주문일","입고일","판매예정일","판매일","통신사","제조사","전산모델명","일련번호","색상","위치","현재상태","출고가","입고가","입고할인율","판매처","판매가","판매할인율","수익","모델명","기가수","삼성코드","IMEI"];
 
   window.downloadExcelTemplate = function(){
@@ -49593,7 +49910,7 @@ let ghostBankCache = [];
             const c = (companiesCache||[]).find(function(x){
               return String(x.name||"").trim() === String(dest||"").trim(); });
             const b = String((c && c.discountBase) || "");
-            return (b === "supply" || b === "total") ? b : "unit";
+            return pickDiscBase(b);
           }catch(e){ return "unit"; }
         })(),
         imei:"", status, orderDate:"", inDate, expectedSaleDate:"", outDate: dest?outDate:"",
@@ -50327,7 +50644,7 @@ let ghostBankCache = [];
   function renderRebase(){
     const want = String(document.getElementById("rebase-target").value||"unit");
     const lab = function(v){
-      return v === "supply" ? "공급가(삼전)" : v === "total" ? "출고가(합계)" : v === "flat" ? "출고가(정액)" : v === "unit" ? "출고가(개당)" : "비어 있음";
+      return (discBaseLabel(v) || "비어 있음");
     };
     const el = document.getElementById("rebase-body");
     let diffSum = 0;
@@ -50439,7 +50756,7 @@ let ghostBankCache = [];
       diffSum += (rebaseBuy(r) - (Number(r.curBuy)||0)) * (Number(r.qty)||0);
       itemN += (r.itemIds||[]).length;
     });
-    const lab = want === "supply" ? "공급가(삼전)" : want === "total" ? "출고가(합계)" : want === "flat" ? "출고가(정액)" : "출고가(개당)";
+    const lab = discBaseLabel(want);
     if(!confirm("고른 " + picked.length + "개 품목의 매입할인 기준을\n「" + lab + "」 으로 바꿉니다.\n\n"
       + "  주문 품목 " + picked.length + "개\n"
       + "  이어진 재고 " + itemN + "대\n"
@@ -52803,7 +53120,7 @@ window.toggleActAll = function(on){
     Object.keys(allMap).forEach(k=>{
       const mine = allMap[k].filter(x=> String(x.carrier||"").toUpperCase() === car);
       if(mine.length){
-        foundMap[k] = mine.find(x=> x.status !== "판매" && x.status !== "개통") || mine[0];
+        foundMap[k] = mine.find(x=> !isItemOut(x.status)) || mine[0];
       }else{
         otherMap[k] = [...new Set(allMap[k].map(x=> String(x.carrier||"-")))];
       }
@@ -52842,7 +53159,7 @@ window.toggleActAll = function(on){
 
     html += '<div class="stack-form">';
     html += '<div class="stack-row"><label>통신사</label><select id="paste-sale-carrier-select" onchange="onPasteSaleCarrier(this.value)">'
-      + ["LG","SK","KT"].map(c=> '<option value="'+c+'"'+(c===car?' selected':'')+'>'+c+'</option>').join("")
+      + STD.telecom.list.map(c=> '<option value="'+c+'"'+(c===car?' selected':'')+'>'+c+'</option>').join("")
       + '</select> <span style="color:var(--gray);font-size:11.5px;margin-left:6px;">고른 통신사의 재고만 판매처리합니다.</span></div>';
     html += '<div class="stack-row"><label>판매처</label><select id="paste-sale-dest-select" onchange="onPasteSaleDestBase()"></select></div>';
     setTimeout(()=>{ try{
@@ -52968,7 +53285,7 @@ window.toggleActAll = function(on){
     if(!(base > 0)) return;
     const bSel = String((document.getElementById("paste-sale-base")||{}).value||"unit");
     // 판매할인%를 곱할 금액입니다. 공급가 기준이면 VAT를 뺍니다.
-    const unit = (base / rows.length) / ((bSel === "supply") ? 1.1 : 1);
+    const unit = (base / rows.length) / (isExVatBase(bSel) ? STD.vatRate : 1);
     if(from === "amt"){
       const a = Number(aEl.value);
       pEl.value = (aEl.value === "" || !(a > 0)) ? "" : Number(((a / unit) * 100).toFixed(2));
@@ -53084,7 +53401,7 @@ window.toggleActAll = function(on){
         }else{
           // 판매할인 — 넣으셨으면 그대로 적고, 수익은 할인 뒤 금액으로 계산합니다.
           if(discAmt > 0){
-            const dBase = (baseSel === "supply") ? (Number(salePrice)/1.1) : Number(salePrice);
+            const dBase = baseAmtRaw(salePrice, baseSel);
             patch.saleDiscountAmt = discAmt;
             patch.saleDiscount = dBase ? Number(((discAmt / dBase) * 100).toFixed(2)) : null;
             //  판매할인 기준을 함께 적습니다. 비면 출고가로 계산되어 금액이 달라집니다.
@@ -53518,7 +53835,7 @@ window.toggleActAll = function(on){
               const c = (companiesCache||[]).find(function(x){
                 return String(x.name||"").trim() === String(dest||"").trim(); });
               const b = String((c && c.discountBase) || "");
-              return (b === "supply" || b === "total") ? b : "unit";
+              return pickDiscBase(b);
             }catch(e){ return "unit"; }
           })(),
           profit, imei, status, orderDate, inDate, expectedSaleDate, outDate,
