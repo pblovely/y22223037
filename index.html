@@ -400,7 +400,7 @@
     <div class="title" id="site-title-topbar">유통폰 관리 대시보드</div>
     <div class="user-info">
       <span id="build-stamp" title="지금 브라우저가 쓰고 있는 파일의 버전입니다. 파일을 교체했는데 이 숫자가 그대로면 Ctrl+Shift+R 로 새로고침해주세요."
-        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-10-06 v1240</span>
+        style="font-size:11px;color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.35);padding:2px 7px;">파일 2026-10-06 v1242</span>
       <span id="topbar-username">-</span>
       <span class="btn-row"><button onclick="openSerialFind()" title="일련번호로 지금 어디에 묶여 있는지 찾습니다">일련번호 찾기</button><button onclick="openPersonalSettingsModal()">개인설정</button><button onclick="handleLogout()">로그아웃</button></span>
     </div>
@@ -38108,7 +38108,7 @@ let ghostBankCache = [];
       + '<th>판매일</th><th>일련번호</th><th>전산모델명</th><th>판매처</th><th>상태</th>'
       + '<th class="ta-right">출고가</th><th class="ta-right">입고가</th>'
       + '<th class="ta-right">→ 채울 판매가</th>'
-      + '<th>판매요청에 남은 것</th><th>묶음에 남은 것</th><th>예약에 남은 것</th>'
+      + '<th>판매요청에 남은 것</th><th>묶음에 남은 것</th><th>입금요청에 남은 것</th><th>예약에 남은 것</th>'
       + '</tr></thead><tbody>' 
       + rows.slice(0,400).map(function(r){
           return '<tr' + (r.want == null ? ' style="background:#fdecea;"' : '') + '>'
@@ -38122,6 +38122,9 @@ let ghostBankCache = [];
             + '<td class="ta-right" style="color:#2e7d32;font-weight:700;">' + f(r.want) + '</td>'
             + '<td style="font-size:11px;color:var(--gray);">' + comboEsc(r.srInfo||"-") + '</td>'
             + '<td style="font-size:11px;color:var(--gray);">' + comboEsc(r.bInfo||"-") + '</td>'
+            + '<td style="font-size:11px;' + (r.want != null && r.how && r.how.indexOf("입금요청") >= 0
+                ? 'color:#2e7d32;font-weight:700;' : 'color:var(--gray);') + '">'
+              + comboEsc(r.dpInfo||"-") + '</td>'
             + '<td style="font-size:11px;color:var(--gray);">' + comboEsc(r.rvInfo||"-") + '</td></tr>';
         }).join("")
       + '</tbody></table></div>'
@@ -38146,6 +38149,7 @@ let ghostBankCache = [];
         + " · 판매가 비어 있음");
       L.push("    판매요청  " + (r.srInfo || "-"));
       L.push("    묶음      " + (r.bInfo || "-"));
+      L.push("    입금요청  " + (r.dpInfo || "-"));
       L.push("    예약      " + (r.rvInfo || "-"));
       L.push("    채울 값   " + (r.want != null
         ? (Number(r.want).toLocaleString() + "  (" + (r.how||"") + ")")
@@ -38179,8 +38183,13 @@ let ghostBankCache = [];
     if(rows.length === 0){ alert("채울 수 있는 것이 없습니다."); return; }
     if(!hasPerm(currentUserPerms, "paymentProcess")){ alert("권한이 없습니다."); return; }
     if(!confirm("재고 " + rows.length + "대의 판매가를 채웁니다.\n\n"
-      + "  입고동일        → 입고가\n"
-      + "  주문에 값이 있음  → 그 값\n\n"
+      + "[무엇을 근거로 채우는지]\n"
+      + (function(){
+          const by = {};
+          rows.forEach(function(r){ const k = r.how || "(근거 없음)"; by[k] = (by[k]||0)+1; });
+          return Object.keys(by).sort(function(x,y){ return by[y]-by[x]; })
+            .map(function(k){ return "  · " + k + "  " + by[k] + "대"; }).join("\n");
+        })() + "\n\n"
       + "  건드리지 않는 것   출고가 · 입고가 · 매입할인\n\n"
       + "채운 뒤 «판매요청 금액» 점검도 돌려주세요.\n\n진행할까요?")) return;
     const head = document.getElementById("suplog-head");
@@ -38193,6 +38202,11 @@ let ghostBankCache = [];
           const p = { salePrice: Number(r.want) };
           if(r.listPrice > 0) p.saleDiscountAmt = r.listPrice - Number(r.want);
           if(r.buy != null) p.profit = Number(r.want) - r.buy;
+          //  자체개통은 «개통 등록과 똑같이» 넣습니다. 할인 0 · 기준 출고가(개당).
+          if(r.actSelf === true){
+            p.saleDiscountAmt = 0; p.saleDiscount = 0; p.saleDiscountBase = "unit";
+            if(!String(r.dest||"").trim()) p.destination = "포피플";
+          }
           bt.update(doc(db,"inventoryItems", r.id), keepMoney(p));
         });
         await withTimeout(bt.commit(), 20000, "판매가 채우기");
@@ -39753,6 +39767,28 @@ let ghostBankCache = [];
             });
             //  ② 예약에 적힌 판매가 — 예약은 안 지워졌습니다.
             //   재고 → 주문 → 예약 으로 거슬러 올라가 찾습니다.
+            //  ③-2 입금요청에 적힌 금액 — 판매 관리·입출금 화면에 보이는 그 금액입니다.
+            //    판매요청 묶음 금액이 지워져도 입금요청에는 남아 있습니다.
+            //    «그 묶음 하나만» 가리키고 기타금액이 없는 요청만 씁니다.
+            //    (여러 묶음을 묶은 요청은 묶음별로 가릴 수 없어 쓰지 않습니다.)
+            const depByBatch = {};
+            (await getDocs(collection(db,"saleDepositRequests"))).forEach(function(d){
+              const v = d.data();
+              if(v.status === "취소") return;
+              const refs = (v.saleBatchRefs||[]).map(function(x){
+                return String((x && x.id) || x || ""); }).filter(Boolean);
+              if(refs.length !== 1) return;
+              if((Number(v.otherAmount)||0) !== 0) return;   // 기타금액이 섞이면 가릴 수 없습니다
+              const tot = Number(v.totalAmount);
+              if(!(tot > 0)) return;
+              const bid = refs[0];
+              //  같은 묶음에 요청이 여러 건이면 어느 것인지 가릴 수 없어 비워둡니다.
+              if(depByBatch[bid] === undefined)
+                depByBatch[bid] = { id:d.id, tot:tot, got:Number(v.receivedAmount)||0,
+                                    done:(v.depositCompleted === true),
+                                    date:String(v.requestDate||"") };
+              else depByBatch[bid] = null;
+            });
             const resvById = {};
             (await getDocs(collection(db,"reservations"))).forEach(function(d){
               const v = d.data();
@@ -39782,9 +39818,25 @@ let ghostBankCache = [];
               if(it.salePrice != null && it.salePrice !== "") return;
               //  채울 수 있는 값을 찾습니다. 없으면 직접 넣으셔야 합니다.
               let want = null, how = "";
+              //  ⓞ 포피플 자체개통 — 판매가는 «출고가» 입니다.
+              //     개통 등록이 넣는 것과 똑같은 규칙입니다. (코드: submitPasteActivate)
+              //       status 개통 · 판매처 포피플 · 판매가 = 출고가
+              //       판매할인 0 · 판매할인% 0 · 기준 출고가(개당)
+              //     계산도 추측도 아닙니다. 개통이면 그 값입니다.
+              //     SK·KT 향은 자체개통이 없으므로 개통이면 포피플 건입니다.
+              let actSelf = false;
+              if(st === "개통" && Number(it.listPrice) > 0){
+                const dst = String(it.destination||"").trim();
+                if(dst === "포피플" || dst === ""){
+                  want = Number(it.listPrice);
+                  how = (dst === "포피플") ? "자체개통 → 출고가"
+                                           : "자체개통 → 출고가 (판매처가 비어 있음)";
+                  actSelf = true;
+                }
+              }
               //  남아 있는 곳을 차례로 봅니다. 확실한 것부터입니다.
               const sr = (it.saleRequestId && srById[it.saleRequestId]) || srByItem[id] || null;
-              if(sr && sr.salePrice != null && sr.salePrice !== ""){
+              if(want == null && sr && sr.salePrice != null && sr.salePrice !== ""){
                 want = Number(sr.salePrice); how = "판매요청에 적힌 판매가";
               }
               if(want == null && it.salePriceFollowsBuy === true && Number(it.purchasePrice) > 0){
@@ -39811,6 +39863,21 @@ let ghostBankCache = [];
               if(want == null && histSale[id]){
                 want = histSale[id].val; how = "단말 이력에 남은 판매가";
               }
+              //  입금요청에 적힌 금액 — 묶음 금액이 지워져도 여기는 남아 있습니다.
+              //   그 묶음에 판매요청 줄이 하나뿐이고 수량으로 나누어떨어질 때만 씁니다.
+              let dep = null;
+              if(want == null && sr && sr.batchId){
+                dep = depByBatch[String(sr.batchId)] || null;
+                if(dep){
+                  const lnsD = srLinesByBatch[String(sr.batchId)] || [];
+                  if(lnsD.length === 1){
+                    const qD = Number(lnsD[0].quantity)||0;
+                    if(qD > 0 && dep.tot % qD === 0){
+                      want = dep.tot / qD; how = "입금요청 금액 ÷ 수량";
+                    }
+                  }
+                }
+              }
               //  판매요청 묶음에 적힌 요청금액 — 줄이 하나뿐이면 그 금액 ÷ 수량이 판매가입니다.
               if(want == null && sr && sr.batchId && srbById[sr.batchId]){
                 const bb = srbById[sr.batchId];
@@ -39825,7 +39892,12 @@ let ghostBankCache = [];
               //   전에는 「판매요청에도 비어 있음」 하나로 뭉개져서,
               //   묶음 금액이 있는지 없는지조차 알 수 없었습니다.
               let why2 = "";
-              if(want == null){
+              if(want == null && st === "개통"){
+                //  개통인데 못 채운 경우를 따로 말합니다.
+                if(!(Number(it.listPrice) > 0)) why2 = "개통인데 출고가가 비어 있음";
+                else why2 = "개통인데 판매처가 «" + String(it.destination||"") + "» — 자체개통이 아님";
+              }
+              if(want == null && !why2){
                 const bk2 = (sr && sr.batchId) ? String(sr.batchId) : "";
                 const bb4 = bk2 ? (srbById[bk2] || null) : null;
                 const ln4 = bk2 ? (srLinesByBatch[bk2] || []) : [];
@@ -39835,7 +39907,17 @@ let ghostBankCache = [];
                 else if(!bb4)       why2 = "판매요청 묶음이 없어짐 (또는 취소)";
                 else if(ln4.length > 1)
                   why2 = "묶음 금액은 있는데 품목이 " + ln4.length + "줄 — 단가를 가릴 수 없음";
-                else if(!(tt4 > 0)) why2 = "판매요청 묶음 금액도 비어 있음";
+                else if(!(tt4 > 0)){
+                  //  묶음 금액이 비었어도 입금요청에 금액이 있으면 끌어올 수 있습니다.
+                  const dp = depByBatch[bk2];
+                  if(dp === null) why2 = "묶음 금액 비었고 · 입금요청이 여러 건이라 가릴 수 없음";
+                  else if(dp && ln4.length > 1)
+                    why2 = "입금요청 금액 " + dp.tot.toLocaleString()
+                         + " 있음 · 품목 " + ln4.length + "줄 — 단가를 가릴 수 없음";
+                  else if(dp) why2 = "입금요청 금액 " + dp.tot.toLocaleString()
+                         + " 있음 · 수량으로 나누어떨어지지 않음";
+                  else        why2 = "판매요청 묶음 · 입금요청 모두 금액이 비어 있음";
+                }
                 else                why2 = "묶음 금액이 수량으로 나누어떨어지지 않음";
               }
               //  판매요청·묶음·예약에 «실제로 무엇이 들어 있는지» 그대로 담아둡니다.
@@ -39863,17 +39945,29 @@ let ghostBankCache = [];
                    + (lns0.length === 1 ? (" · 수량 " + (Number(lns0[0].quantity)||0)) : "")
                    + " · 상태 " + (sh(bb0,"status") || "비어 있음"))
                 : ((sr && sr.batchId) ? "묶음이 없어짐 (또는 취소)" : "묶음에 안 이어짐");
+              //  입금요청에 «실제로 무엇이 들어 있는지» 그대로 보여드립니다.
+              const dpInfo = (function(){
+                const bk3 = (sr && sr.batchId) ? String(sr.batchId) : "";
+                if(!bk3) return "묶음에 안 이어짐";
+                const dp = depByBatch[bk3];
+                if(dp === null) return "이 묶음에 입금요청이 여러 건 — 가릴 수 없음";
+                if(!dp) return "입금요청 없음 (또는 여러 묶음을 묶은 요청)";
+                return "요청금액 " + dp.tot.toLocaleString()
+                     + " · 받은 금액 " + dp.got.toLocaleString()
+                     + " · " + (dp.done ? "입금완료" : "미완료")
+                     + (dp.date ? " · 요청일 " + dp.date : "");
+              })();
               const rvInfo = rv0
                 ? ("판매가 " + (sh(rv0,"salePrice") || "비어 있음")
                    + " · 입고동일 " + (rv0.salePriceFollowsBuy === true ? "예" : "아니오")
                    + " · 선할인% " + (sh(rv0,"preDiscountPct") || "비어 있음"))
                 : "예약 안 이어짐";
-              npRows.push({ id, why: why2, srInfo, bInfo, rvInfo,
+              npRows.push({ id, why: why2, srInfo, bInfo, rvInfo, dpInfo,
                 sn: it.serialNumber||"", model: it.systemModel||"",
                 dest: it.destination||"", st, out: it.outDate||"",
                 listPrice: Number(it.listPrice)||0,
                 buy: (it.purchasePrice == null || it.purchasePrice === "") ? null : Number(it.purchasePrice),
-                want, how });
+                want, how, actSelf });
             });
             npRows.sort(function(a,b){ return String(b.out).localeCompare(String(a.out)); });
           }catch(e){}
